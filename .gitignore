@@ -1,0 +1,24 @@
+# Node
+node_modules/
+**/node_modules/
+
+# Builds
+frontend/build/
+frontend/dist/
+backend/server.out
+
+# Logs
+*.log
+logs/
+backend/server.log
+frontend/dev.log
+
+# Env
+.env
+**/.env
+
+# OS
+.DS_Store
+
+# Chat Logs are tracked
+!docs/chat-logs/
