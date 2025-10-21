@@ -1,0 +1,193 @@
+const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
+
+const UserSchema = new mongoose.Schema({
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  password: {
+    type: String,
+    required: true,
+    minlength: 6
+  },
+  firstName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  role: {
+    type: String,
+    enum: [
+      "patients.read", "patients.write", "patients.delete",
+      "appointments.read", "appointments.write", "appointments.delete",
+      "billing.read", "billing.write", "billing.delete",
+      "documents.read", "documents.write", "documents.delete",
+      "users.read", "users.write", "users.delete",
+      "settings.read", "settings.write",
+      "reports.read", "reports.write",
+      "security.read", "security.write",
+      "resources.read", "resources.write", "resources.delete"'admin', 'doctor', 'staff'],
+    default: 'staff'
+  },
+  permissions: [{
+    type: String,
+    enum: [
+      "patients.read", "patients.write", "patients.delete",
+      "appointments.read", "appointments.write", "appointments.delete",
+      "billing.read", "billing.write", "billing.delete",
+      "documents.read", "documents.write", "documents.delete",
+      "users.read", "users.write", "users.delete",
+      "settings.read", "settings.write",
+      "reports.read", "reports.write",
+      "security.read", "security.write",
+      "resources.read", "resources.write", "resources.delete"
+      'patients.read', 'patients.write', 'patients.delete',
+      'appointments.read', 'appointments.write', 'appointments.delete',
+      'billing.read', 'billing.write',
+      'documents.read', 'documents.write', 'documents.delete',
+      'users.read', 'users.write', 'users.delete',
+      'settings.read', 'settings.write',
+      'reports.read'
+    ]
+  }],
+  isActive: {
+    type: Boolean,
+    default: true
+  },
+  lastLogin: {
+    type: Date
+  },
+  profile: {
+    title: { type: String, trim: true },
+    specialization: { type: String, trim: true },
+    phone: { type: String, trim: true },
+    address: {
+      street: { type: String, trim: true },
+      city: { type: String, trim: true },
+      postalCode: { type: String, trim: true },
+      country: { type: String, default: 'Österreich' }
+    },
+    onlineBookingEnabled: { type: Boolean, default: false },
+    onlineBookingSettings: {
+      advanceBookingDays: { type: Number, default: 30 },
+      maxAdvanceBookingDays: { type: Number, default: 90 },
+      minAdvanceBookingHours: { type: Number, default: 24 },
+      maxConcurrentBookings: { type: Number, default: 1 },
+      duration: { type: Number, default: 30 }, // Standard-Dauer in Minuten
+      price: { type: Number, default: 0 },
+      requiresApproval: { type: Boolean, default: false },
+      breakTimes: [{
+        start: String,
+        end: String,
+        days: [{ type: String, enum: [
+      "patients.read", "patients.write", "patients.delete",
+      "appointments.read", "appointments.write", "appointments.delete",
+      "billing.read", "billing.write", "billing.delete",
+      "documents.read", "documents.write", "documents.delete",
+      "users.read", "users.write", "users.delete",
+      "settings.read", "settings.write",
+      "reports.read", "reports.write",
+      "security.read", "security.write",
+      "resources.read", "resources.write", "resources.delete"'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] }]
+      }],
+      blockedDates: [{ type: Date }]
+    }
+  },
+  // 2FA Security
+  twoFactorAuth: {
+    enabled: { type: Boolean, default: false },
+    secret: { type: String, trim: true },
+    backupCodes: [{ type: String, trim: true }],
+    lastUsed: { type: Date }
+  },
+  // Login Security
+  loginSecurity: {
+    failedAttempts: { type: Number, default: 0 },
+    lockedUntil: { type: Date },
+    lastLogin: { type: Date },
+    lastLoginIP: { type: String, trim: true },
+    sessionTimeout: { type: Number, default: 8 * 60 * 60 * 1000 }, // 8 Stunden in ms
+    allowedIPs: [{ type: String, trim: true }], // IP-Whitelist (optional)
+    requirePasswordChange: { type: Boolean, default: false },
+    passwordChangedAt: { type: Date }
+  },
+  preferences: {
+    language: { type: String, default: 'de' },
+    timezone: { type: String, default: 'Europe/Vienna' },
+    dateFormat: { type: String, default: 'DD.MM.YYYY' },
+    theme: { type: String, default: 'light' }
+  }
+}, {
+  timestamps: true,
+  toJSON: { virtuals: true },
+  toObject: { virtuals: true }
+});
+
+// Virtual for full name
+UserSchema.virtual('fullName').get(function() {
+  return `${this.firstName} ${this.lastName}`;
+});
+
+// Pre-save middleware to hash password
+UserSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(parseInt(process.env.BCRYPT_ROUNDS) || 12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Method to compare password
+UserSchema.methods.comparePassword = async function(candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Method to get default permissions based on role
+UserSchema.methods.getDefaultPermissions = function() {
+  const rolePermissions = {
+    admin: [
+      'patients.read', 'patients.write', 'patients.delete',
+      'appointments.read', 'appointments.write', 'appointments.delete',
+      'billing.read', 'billing.write',
+      'documents.read', 'documents.write', 'documents.delete',
+      'users.read', 'users.write', 'users.delete',
+      'settings.read', 'settings.write',
+      'reports.read'
+    ],
+    doctor: [
+      'patients.read', 'patients.write',
+      'appointments.read', 'appointments.write',
+      'billing.read', 'billing.write',
+      'documents.read', 'documents.write',
+      'reports.read'
+    ],
+    staff: [
+      'patients.read', 'patients.write',
+      'appointments.read', 'appointments.write',
+      'billing.read',
+      'documents.read', 'documents.write'
+    ]
+  };
+  
+  return rolePermissions[this.role] || [];
+};
+
+// Index for better performance
+UserSchema.index({ email: 1 });
+UserSchema.index({ role: 1 });
+UserSchema.index({ isActive: 1 });
+
+module.exports = mongoose.model('User', UserSchema);
