@@ -32,7 +32,18 @@ const InvoiceSchema = new mongoose.Schema({
       country: { type: String, default: 'Österreich' }
     },
     insuranceNumber: { type: String },
-    insuranceType: { type: String, enum: ['gesetzlich', 'privat', 'selbstzahler'] }
+      insuranceProvider: { 
+        type: String, 
+        enum: [
+          'ÖGK (Österreichische Gesundheitskasse)',
+          'BVAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)',
+          'SVS (Sozialversicherung der Selbständigen)',
+          'KFA (Krankenfürsorgeanstalt der Bediensteten der Stadt Wien)',
+          'PVA (Pensionsversicherungsanstalt)',
+          'Privatversicherung',
+          'Selbstzahler'
+        ]
+      }
   },
   
   // Abrechnungstyp
@@ -42,6 +53,15 @@ const InvoiceSchema = new mongoose.Schema({
     required: true 
   },
   
+  // Diagnosen (für Abrechnungen)
+  diagnoses: [{
+    diagnosisId: { type: mongoose.Schema.Types.ObjectId, ref: 'PatientDiagnosis' },
+    code: { type: String, required: true },
+    display: { type: String, required: true },
+    isPrimary: { type: Boolean, default: false },
+    date: { type: Date, required: true }
+  }],
+  
   // Leistungen
   services: [{
     date: { type: Date, required: true },
@@ -50,7 +70,7 @@ const InvoiceSchema = new mongoose.Schema({
     quantity: { type: Number, required: true, default: 1 },
     unitPrice: { type: Number, required: true },
     totalPrice: { type: Number, required: true },
-    category: { type: String, enum: ['konsultation', 'behandlung', 'medikament', 'labor', 'bildgebung', 'sonstiges'] }
+    category: { type: String } // Erlaubt alle Kategorien aus ServiceCatalog
   }],
   
   // Beträge
@@ -82,11 +102,29 @@ const InvoiceSchema = new mongoose.Schema({
     honorNote: { type: Boolean, default: false },
     wahlarztCode: { type: String },
     reimbursementAmount: { type: Number, default: 0 },
-    patientAmount: { type: Number, required: true }
+    patientAmount: { type: Number, default: 0 }
   },
   
   // Notizen
   notes: { type: String },
+  
+  // RKSVO-Daten (Registerkasse)
+  rksvoData: {
+    tseSignature: {
+      tseSerial: { type: String },
+      signatureCounter: { type: Number },
+      signature: { type: String },
+      timestamp: { type: Date },
+      signatureAlgorithm: { type: String }
+    },
+    qrCode: { type: String },
+    generatedAt: { type: Date }
+  },
+  
+  // E-Mail-Versand
+  emailSent: { type: Boolean, default: false },
+  emailSentAt: { type: Date },
+  emailMessageId: { type: String },
   
   // Metadaten
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

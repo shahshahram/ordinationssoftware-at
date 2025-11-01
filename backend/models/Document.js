@@ -5,7 +5,7 @@ const DocumentSchema = new mongoose.Schema({
   title: { type: String, required: true, trim: true },
   type: { 
     type: String, 
-    enum: ['rezept', 'ueberweisung', 'arztbrief', 'befund', 'formular', 'rechnung', 'sonstiges'],
+    enum: ['rezept', 'ueberweisung', 'arztbrief', 'befund', 'formular', 'rechnung', 'sonstiges', 'attest', 'konsiliarbericht', 'zuweisung', 'rueckueberweisung', 'operationsbericht', 'heilmittelverordnung', 'krankenstandsbestaetigung', 'bildgebende_zuweisung', 'impfbestaetigung', 'patientenaufklaerung', 'therapieplan', 'verlaufsdokumentation', 'pflegebrief', 'kostenuebernahmeantrag', 'gutachten'],
     required: true 
   },
   category: { type: String, trim: true },

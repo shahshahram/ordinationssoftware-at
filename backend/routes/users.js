@@ -3,6 +3,8 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const StaffProfile = require('../models/StaffProfile');
 const auth = require('../middleware/auth');
+const { authorize } = require('../utils/rbac');
+const { ACTIONS, RESOURCES } = require('../utils/rbac');
 const router = express.Router();
 
 // @route   GET /api/users
@@ -10,11 +12,18 @@ const router = express.Router();
 // @access  Private (Admin only)
 router.get('/', auth, async (req, res) => {
   try {
-    // Check if user is admin
-    if (!req.user.permissions || !req.user.permissions.includes('users.read')) {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.USER, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
-        message: 'Zugriff verweigert - users.read Berechtigung erforderlich'
+        message: `Zugriff verweigert - ${authResult.reason}`
       });
     }
 
@@ -103,11 +112,18 @@ router.post('/', auth, [
     // DEBUG: Log incoming request
     console.log('🔍 POST /api/users - Request Body:', JSON.stringify(req.body, null, 2));
     
-    // Check if user has users.write permission
-    if (!req.user.permissions || !req.user.permissions.includes('users.write')) {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.CREATE, RESOURCES.USER, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
-        message: 'Zugriff verweigert - users.write Berechtigung erforderlich'
+        message: `Zugriff verweigert - ${authResult.reason}`
       });
     }
 
@@ -184,11 +200,18 @@ router.post('/', auth, [
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
   try {
-    // Check if user has users.write permission
-    if (!req.user.permissions || !req.user.permissions.includes('users.write')) {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.USER, req.params.id, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
-        message: 'Zugriff verweigert - users.write Berechtigung erforderlich'
+        message: `Zugriff verweigert - ${authResult.reason}`
       });
     }
 
@@ -232,11 +255,18 @@ router.put('/:id', auth, async (req, res) => {
 // @access  Private (Admin only)
 router.delete('/:id', auth, async (req, res) => {
   try {
-    // Check if user has users.delete permission
-    if (!req.user.permissions || !req.user.permissions.includes('users.delete')) {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.DELETE, RESOURCES.USER, req.params.id, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
-        message: 'Zugriff verweigert - users.delete Berechtigung erforderlich'
+        message: `Zugriff verweigert - ${authResult.reason}`
       });
     }
 
@@ -358,11 +388,18 @@ router.put('/:id/password', auth, [
 // @access  Private (Admin only)
 router.put('/:id/toggle-status', auth, async (req, res) => {
   try {
-    // Check if user has users.write permission
-    if (!req.user.permissions || !req.user.permissions.includes('users.write')) {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.USER, req.params.id, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
-        message: 'Zugriff verweigert - users.write Berechtigung erforderlich'
+        message: `Zugriff verweigert - ${authResult.reason}`
       });
     }
 
@@ -404,11 +441,18 @@ router.put('/:id/toggle-status', auth, async (req, res) => {
 // @access  Private (Admin only)
 router.get('/statistics', auth, async (req, res) => {
   try {
-    // Check if user is admin
-    if (!req.user.permissions || !req.user.permissions.includes('users.read')) {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.USER, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
-        message: 'Zugriff verweigert - users.read Berechtigung erforderlich'
+        message: `Zugriff verweigert - ${authResult.reason}`
       });
     }
 

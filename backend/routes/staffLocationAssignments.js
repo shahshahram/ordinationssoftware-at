@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
+const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
 const StaffLocationAssignment = require('../models/StaffLocationAssignment');
 const StaffProfile = require('../models/StaffProfile');
 const Location = require('../models/Location');
@@ -10,7 +11,15 @@ const AuditLog = require('../models/AuditLog');
 // Alle Standort-Zuweisungen abrufen
 router.get('/', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('staff-location-assignments.read')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Personalverwaltung'
@@ -59,7 +68,15 @@ router.post('/', [
   body('allowed_services').optional().isArray().withMessage('allowed_services muss Array sein')
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('staff-location-assignments.write')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.CREATE, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Standort-Zuweisungen'
@@ -144,7 +161,15 @@ router.put('/:id', [
   body('allowed_services').optional().isArray().withMessage('allowed_services muss Array sein')
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('staff-location-assignments.write')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.STAFF, req.params.id, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Standort-Zuweisungen'
@@ -204,7 +229,15 @@ router.put('/:id', [
 // Standort-Zuweisung löschen
 router.delete('/:id', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('staff-location-assignments.write')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.DELETE, RESOURCES.STAFF, req.params.id, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Standort-Zuweisungen'
@@ -251,7 +284,15 @@ router.delete('/:id', auth, async (req, res) => {
 // Mitarbeiter-Standorte abrufen
 router.get('/staff/:staff_id', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('staff-location-assignments.read')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.STAFF, req.params.staff_id, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Personalverwaltung'
@@ -279,7 +320,15 @@ router.get('/staff/:staff_id', auth, async (req, res) => {
 // Standort-Mitarbeiter abrufen
 router.get('/location/:location_id', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('staff-location-assignments.read')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.STAFF, req.params.location_id, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Personalverwaltung'

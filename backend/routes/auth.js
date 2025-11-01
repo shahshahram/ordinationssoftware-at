@@ -183,41 +183,45 @@ router.post('/login', [
       }
     }
 
-    // Create JWT
+    // Create JWT and refresh token
     const payload = {
-      user: {
-        id: user.id
-      }
+      userId: user.id,
+      email: user.email,
+      role: user.role
     };
 
-    jwt.sign(
+    const token = jwt.sign(
       payload,
       process.env.JWT_SECRET || 'fallback-secret-key',
-      { expiresIn: process.env.JWT_EXPIRE || '24h' },
-      (err, token) => {
-        if (err) throw err;
-        
-        // Update last login for MongoDB users
-        if (!isMockUser) {
-          user.lastLogin = new Date();
-          user.save().catch(err => console.log('Could not update last login:', err));
-        }
-
-        res.json({
-          success: true,
-          message: 'Erfolgreich angemeldet',
-          token,
-          user: {
-            id: user.id,
-            email: user.email,
-            firstName: user.firstName,
-            lastName: user.lastName,
-            role: user.role,
-            permissions: user.permissions || user.getDefaultPermissions?.() || []
-          }
-        });
-      }
+      { expiresIn: '1h' }
     );
+
+    const refreshToken = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET || 'fallback-secret-key',
+      { expiresIn: '7d' }
+    );
+    
+    // Update last login for MongoDB users
+    if (!isMockUser) {
+      user.lastLogin = new Date();
+      user.save().catch(err => console.log('Could not update last login:', err));
+    }
+
+    res.json({
+      success: true,
+      message: 'Erfolgreich angemeldet',
+      token,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        permissions: user.permissions || user.getDefaultPermissions?.() || []
+      }
+    });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({
@@ -232,7 +236,7 @@ router.post('/login', [
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    console.log('Load user request for ID:', req.user.id);
+    console.log('Load user request for ID:', req.user._id || req.user.id);
     
     // Mock users for fallback
     const mockUsers = {
@@ -266,7 +270,7 @@ router.get('/me', auth, async (req, res) => {
 
     try {
       // Try to find user in MongoDB first
-      user = await User.findById(req.user.id).select('-password');
+      user = await User.findById(req.user._id || req.user.id).select('-password');
       if (user) {
         console.log('Found user in MongoDB:', user.email);
         // Convert MongoDB user to the expected format
@@ -285,7 +289,8 @@ router.get('/me', auth, async (req, res) => {
 
     // If no MongoDB user found, try mock users
     if (!user) {
-      user = mockUsers[req.user.id];
+      const userId = req.user._id || req.user.id;
+      user = mockUsers[userId];
       if (user) {
         console.log('Found user in mock data:', user.email);
       }
@@ -935,6 +940,66 @@ router.get('/dsgvo/processing-activities', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server Fehler'
+    });
+  }
+});
+
+// @route   POST /api/auth/refresh
+// @desc    Refresh access token
+// @access  Public
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Refresh token erforderlich'
+      });
+    }
+
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'fallback_secret');
+    
+    // Find user
+    const user = await User.findById(decoded.userId).select('-password');
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: 'Ungültiger refresh token'
+      });
+    }
+
+    // Generate new tokens
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '1h' }
+    );
+
+    const newRefreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET || 'fallback_secret',
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      success: true,
+      token,
+      refreshToken: newRefreshToken,
+      user: {
+        id: user._id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    logger.error('Token refresh error:', error);
+    res.status(401).json({
+      success: false,
+      message: 'Ungültiger refresh token'
     });
   }
 });

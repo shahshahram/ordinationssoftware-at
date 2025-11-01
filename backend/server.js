@@ -45,6 +45,20 @@ const icd10Routes = require('./routes/icd10');
 const diagnosesRoutes = require('./routes/diagnoses');
 const icd10CatalogRoutes = require('./routes/icd10Catalog');
 const icd10PersonalListsRoutes = require('./routes/icd10PersonalLists');
+const slotReservationRoutes = require('./routes/slotReservation');
+const documentTemplateRoutes = require('./routes/documentTemplates');
+const pdfGenerationRoutes = require('./routes/pdfGeneration');
+// const oneClickBillingRoutes = require('./routes/oneClickBilling'); // Temporär deaktiviert
+const patientsExtendedRoutes = require('./routes/patientsExtended');
+const medicationCatalogRoutes = require('./routes/medicationCatalog');
+const rbacRoutes = require('./routes/rbac');
+const rbacDiscoveryRoutes = require('./routes/rbacDiscovery');
+const inventoryRoutes = require('./routes/inventory');
+const setupRoutes = require('./routes/setup');
+const settingsRoutes = require('./routes/settings');
+
+// RBAC Auto-Discovery Service
+const rbacAutoDiscovery = require('./services/rbacAutoDiscovery');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -52,7 +66,7 @@ const logger = require('./utils/logger');
 const backupService = require('./utils/backupService');
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 5001;
 
 // Security middleware
 app.use(helmet({
@@ -78,7 +92,7 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://yourdomain.com'] 
-    : ['http://localhost:3000'],
+    : ['http://localhost:3000', 'http://localhost:3001', 'http://192.168.178.163:3000'],
   credentials: true
 }));
 
@@ -115,6 +129,7 @@ app.use('/api/patients', patientRoutes);
 app.use('/api/appointments', appointmentRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/billing', billingRoutes);
+app.use('/api/checkin', require('./routes/checkin'));
 app.use('/api/documents', documentRoutes);
 app.use('/api/online-booking', onlineBookingRoutes);
 app.use('/api/elga', elgaRoutes);
@@ -145,6 +160,17 @@ app.use('/api/icd10', icd10Routes);
 app.use('/api/diagnoses', diagnosesRoutes);
 app.use('/api/icd10-catalog', icd10CatalogRoutes);
 app.use('/api/icd10/personal-lists', icd10PersonalListsRoutes);
+app.use('/api/slot-reservations', slotReservationRoutes);
+app.use('/api/document-templates', documentTemplateRoutes);
+app.use('/api/pdf', pdfGenerationRoutes);
+// app.use('/api/billing', oneClickBillingRoutes); // Temporär deaktiviert
+app.use('/api/patients-extended', patientsExtendedRoutes);
+app.use('/api/rbac', rbacRoutes);
+app.use('/api/rbac/discovery', rbacDiscoveryRoutes);
+app.use('/api/inventory', inventoryRoutes);
+app.use('/api/setup', setupRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/medications', medicationCatalogRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -185,10 +211,19 @@ process.on('SIGTERM', () => {
   });
 });
 
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   logger.info(`🚀 Ordinationssoftware Server läuft auf Port ${PORT}`);
   logger.info(`📊 Health Check: http://localhost:${PORT}/api/health`);
   logger.info(`🌍 Environment: ${process.env.NODE_ENV}`);
+  logger.info(`🌐 Server erreichbar auf allen Interfaces`);
+  
+  // Starte RBAC Auto-Discovery Service
+  try {
+    await rbacAutoDiscovery.start();
+    logger.info('✅ RBAC Auto-Discovery Service gestartet');
+  } catch (error) {
+    logger.error('❌ Fehler beim Starten des RBAC Auto-Discovery Services:', error);
+  }
 });
 
 module.exports = app;

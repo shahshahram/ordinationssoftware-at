@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Medical Data Transfer</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 5px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .result { margin: 10px 0; padding: 10px; background: #f8f9fa; border-left: 4px solid #007bff; }
+        .error { border-left-color: #dc3545; background: #f8d7da; }
+        .success { border-left-color: #28a745; background: #d4edda; }
+    </style>
+</head>
+<body>
+    <h1>Test Medical Data Transfer</h1>
+    
+    <div class="test-section">
+        <h3>Test Patient Creation with Medical Data</h3>
+        <button onclick="testPatientCreation()">Create Test Patient</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function testPatientCreation() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '<div class="result">Creating test patient...</div>';
+
+            const testData = {
+                firstName: 'Test',
+                lastName: 'Patient',
+                dateOfBirth: '1990-01-01',
+                gender: 'm',
+                socialSecurityNumber: '1234567890',
+                insuranceProvider: 'ÖGK (Österreichische Gesundheitskasse)',
+                phone: '+43123456789',
+                email: 'test@example.com',
+                address: {
+                    street: 'Teststraße 1',
+                    zipCode: '1010',
+                    city: 'Wien',
+                    country: 'Österreich'
+                },
+                // Medical data
+                bloodType: 'A+',
+                height: 180,
+                weight: 75,
+                isPregnant: false,
+                isBreastfeeding: false,
+                hasPacemaker: false,
+                hasDefibrillator: false,
+                implants: [],
+                smokingStatus: 'current-smoker',
+                cigarettesPerDay: 10,
+                yearsOfSmoking: 5,
+                quitSmokingDate: null,
+                // Arrays for medical data
+                allergies: ['Pollen', 'Hausstaubmilben'],
+                currentMedications: ['Aspirin', 'Vitamin D'],
+                medicalHistory: ['Diabetes', 'Bluthochdruck'],
+                // Emergency contact
+                emergencyContact: {
+                    name: 'Test Kontakt',
+                    phone: '+43123456788',
+                    relationship: 'Partner'
+                },
+                // Primary care physician
+                primaryCarePhysician: {
+                    name: 'Dr. Test',
+                    location: 'Wien'
+                },
+                // Vaccination status
+                vaccinationStatus: {
+                    tetanus: true,
+                    covid: true,
+                    hepatitis: false,
+                    flu: true,
+                    others: 'Masern, Mumps'
+                },
+                // Administrative data
+                referralSource: 'self',
+                referralDoctor: '',
+                visitReason: 'Routine-Untersuchung',
+                // Consent
+                dataProtectionConsent: true,
+                electronicCommunicationConsent: true
+            };
+
+            console.log('Sending test data:', testData);
+
+            try {
+                const response = await fetch('http://localhost:5001/api/patients-extended', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer ' + localStorage.getItem('token')
+                    },
+                    body: JSON.stringify(testData)
+                });
+
+                const result = await response.json();
+                console.log('Response:', result);
+
+                if (response.ok) {
+                    resultDiv.innerHTML = `
+                        <div class="result success">
+                            <strong>Success!</strong> Patient created with ID: ${result.data._id}
+                            <br>Medical data saved:
+                            <br>- Allergies: ${JSON.stringify(result.data.allergies)}
+                            <br>- Medications: ${JSON.stringify(result.data.currentMedications)}
+                            <br>- Medical History: ${JSON.stringify(result.data.medicalHistory)}
+                            <br>- Smoking Status: ${result.data.smokingStatus}
+                            <br>- Cigarettes Per Day: ${result.data.cigarettesPerDay}
+                            <br>- Years of Smoking: ${result.data.yearsOfSmoking}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <div class="result error">
+                            <strong>Error:</strong> ${result.message}
+                            <br>Details: ${JSON.stringify(result.errors || result.details)}
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                resultDiv.innerHTML = `
+                    <div class="result error">
+                        <strong>Network Error:</strong> ${error.message}
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+

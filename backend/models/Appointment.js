@@ -4,7 +4,7 @@ const AppointmentSchema = new mongoose.Schema({
   // Grunddaten
   patient: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Patient', 
+    ref: 'PatientExtended', 
     required: true 
   },
   
@@ -19,7 +19,7 @@ const AppointmentSchema = new mongoose.Schema({
   },
   duration: { 
     type: Number, 
-    required: true, 
+    required: false, // Wird automatisch berechnet
     min: 5 // Mindestdauer 5 Minuten
   },
 
@@ -38,6 +38,24 @@ const AppointmentSchema = new mongoose.Schema({
     ref: 'Device' 
   }],
   
+  // Service und zugewiesene Benutzer
+  service: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ServiceCatalog'
+  },
+  assigned_users: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
+  assigned_devices: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Device'
+  }],
+  assigned_rooms: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Room'
+  }],
+  
   // Buchungsart
   bookingType: {
     type: String,
@@ -54,17 +72,13 @@ const AppointmentSchema = new mongoose.Schema({
   // Terminart und Status
   type: { 
     type: String, 
-    enum: [
-      'konsultation', 
-      'untersuchung', 
-      'operation', 
-      'nachsorge', 
-      'beratung', 
-      'gruppentermin',
-      'online_termin',
-      'hausbesuch'
-    ], 
-    required: true 
+    required: true,
+    trim: true
+  },
+  serviceCode: {
+    type: String,
+    ref: 'ServiceCatalog',
+    trim: true
   },
   status: { 
     type: String, 
@@ -260,7 +274,7 @@ const AppointmentSchema = new mongoose.Schema({
   createdBy: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
-    required: true 
+    required: false // Wird automatisch gesetzt
   },
   lastModifiedBy: { 
     type: mongoose.Schema.Types.ObjectId, 

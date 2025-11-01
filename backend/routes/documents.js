@@ -51,8 +51,8 @@ router.get('/', auth, async (req, res) => {
     const filter = {};
     if (type) filter.type = type;
     if (status) filter.status = status;
-    if (patientId) filter.patient = patientId;
-    if (doctorId) filter.doctor = doctorId;
+    if (patientId) filter['patient.id'] = patientId;
+    if (doctorId) filter['doctor.id'] = doctorId;
 
     const documents = await Document.find(filter)
       .populate('patient', 'firstName lastName dateOfBirth')
@@ -76,6 +76,34 @@ router.get('/', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Dokumente'
+    });
+  }
+});
+
+// @route   GET /api/documents/:id
+// @desc    Get single document by ID
+// @access  Private
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const document = await Document.findById(req.params.id)
+      .populate('patient', 'firstName lastName dateOfBirth')
+      .populate('doctor', 'firstName lastName');
+
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dokument nicht gefunden'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: document
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden des Dokuments'
     });
   }
 });

@@ -18,7 +18,8 @@ module.exports = async function(req, res, next) {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
     // Load user from database to get current permissions
-    const user = await User.findById(decoded.user.id).select('-password');
+    const userId = decoded.userId || decoded.user?.id;
+    const user = await User.findById(userId).select('-password');
     if (!user) {
       return res.status(401).json({
         success: false,

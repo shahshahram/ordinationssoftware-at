@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
+const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
 const Room = require('../models/Room');
+const Resource = require('../models/Resource');
 const AuditLog = require('../models/AuditLog');
 
 // Helper to create audit log
@@ -29,11 +31,20 @@ const createAuditLog = async (userId, action, entityType, entityId, details = {}
 // @desc    Get all rooms
 // @access  Private (requires 'resources.read' permission)
 router.get('/', auth, async (req, res) => {
-  if (!req.user.permissions.includes('resources.read') && !req.user.permissions.includes('admin')) {
-    return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
-  }
-  
   try {
+    // RBAC-Berechtigung prüfen (außer für Admin)
+    if (req.user.role !== 'admin') {
+      const context = {
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date()
+      };
+      
+      const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+      if (!authResult.allowed) {
+        return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
+      }
+    }
     const { type, isBookable, isOnlineBookable, search } = req.query;
     let query = {};
 
@@ -47,10 +58,52 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
+    // Load rooms from Room model
     const rooms = await Room.find(query)
+      .populate('location_id', 'name code')
       .sort({ name: 1 });
 
-    res.status(200).json({ success: true, data: rooms });
+    // Transform location_id to location for frontend compatibility
+    const transformedRooms = rooms.map(room => {
+      const roomObj = room.toObject();
+      return {
+        ...roomObj,
+        location: roomObj.location_id ? {
+          _id: roomObj.location_id._id || roomObj.location_id,
+          name: roomObj.location_id.name || '',
+          code: roomObj.location_id.code || ''
+        } : undefined
+      };
+    });
+
+    // Load resources with type 'room' and transform to Room format
+    const roomResources = await Resource.find({ type: 'room' });
+    
+    const transformedResources = roomResources.map(resource => {
+      console.log('Transforming room resource:', resource.name, 'Properties:', JSON.stringify(resource.properties));
+      return {
+        _id: resource._id,
+        name: resource.name,
+        number: '',
+        capacity: resource.properties?.capacity || 1,
+        type: 'other',
+        location: resource.properties?.location ? {
+          _id: '',
+          name: resource.properties.location || '',
+          code: ''
+        } : undefined
+      };
+    });
+    
+    console.log('Transformed room resources:', transformedResources.length);
+
+    // Merge rooms and resources
+    const allRooms = [...transformedRooms, ...transformedResources];
+
+    console.log('Räume API - Anzahl Räume:', allRooms.length);
+    console.log('Räume API - Beispiel Raum mit location:', allRooms[0]?.location);
+
+    res.status(200).json({ success: true, data: allRooms });
   } catch (error) {
     console.error('Error fetching rooms:', error);
     res.status(500).json({ success: false, message: 'Fehler beim Abrufen der Räume', error: error.message });

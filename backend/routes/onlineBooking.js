@@ -5,6 +5,9 @@ const Patient = require('../models/Patient');
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const WeeklySchedule = require('../models/WeeklySchedule');
+const ServiceCatalog = require('../models/ServiceCatalog');
+const Device = require('../models/Device');
+const Room = require('../models/Room');
 const AvailabilityService = require('../services/availabilityService');
 const auth = require('../middleware/auth');
 const router = express.Router();
@@ -181,6 +184,9 @@ router.post('/book', [
   body('appointment.startTime').notEmpty(),
   body('appointment.type').notEmpty().trim(),
   body('appointment.reason').notEmpty().trim(),
+  body('appointment.serviceId').optional().isMongoId(),
+  body('appointment.assigned_devices').optional().isArray(),
+  body('appointment.assigned_rooms').optional().isArray(),
   body('doctor.id').isMongoId()
 ], async (req, res) => {
   try {
@@ -202,6 +208,88 @@ router.post('/book', [
         success: false,
         message: 'Arzt nicht gefunden'
       });
+    }
+
+    // Prüfe Service falls angegeben
+    let serviceDoc = null;
+    if (appointment.serviceId) {
+      serviceDoc = await ServiceCatalog.findById(appointment.serviceId);
+      if (!serviceDoc) {
+        return res.status(404).json({
+          success: false,
+          message: 'Service nicht gefunden'
+        });
+      }
+
+      // Prüfe ob Service online buchbar ist
+      if (!serviceDoc.online_bookable) {
+        return res.status(400).json({
+          success: false,
+          message: 'Dieser Service kann nicht online gebucht werden'
+        });
+      }
+
+      // Prüfe Geräte-Kontingent falls erforderlich
+      if (serviceDoc.requires_device_selection) {
+        if (!appointment.assigned_devices || appointment.assigned_devices.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Für diesen Service müssen Geräte ausgewählt werden'
+          });
+        }
+
+        // Prüfe ob genügend Geräte ausgewählt wurden
+        if (appointment.assigned_devices.length < serviceDoc.device_quantity_required) {
+          return res.status(400).json({
+            success: false,
+            message: `Für diesen Service werden mindestens ${serviceDoc.device_quantity_required} Geräte benötigt`
+          });
+        }
+
+        // Prüfe ob Geräte verfügbar sind
+        const validDevices = await Device.find({ 
+          _id: { $in: appointment.assigned_devices },
+          isActive: true
+        });
+        
+        if (validDevices.length !== appointment.assigned_devices.length) {
+          return res.status(400).json({
+            success: false,
+            message: 'Ein oder mehrere Geräte sind nicht verfügbar'
+          });
+        }
+      }
+
+      // Prüfe Raum-Kontingent falls erforderlich
+      if (serviceDoc.requires_room_selection) {
+        if (!appointment.assigned_rooms || appointment.assigned_rooms.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'Für diesen Service müssen Räume ausgewählt werden'
+          });
+        }
+
+        // Prüfe ob genügend Räume ausgewählt wurden
+        if (appointment.assigned_rooms.length < serviceDoc.room_quantity_required) {
+          return res.status(400).json({
+            success: false,
+            message: `Für diesen Service werden mindestens ${serviceDoc.room_quantity_required} Räume benötigt`
+          });
+        }
+
+        // Prüfe ob Räume verfügbar sind
+        const validRooms = await Room.find({ 
+          _id: { $in: appointment.assigned_rooms },
+          isActive: true
+        });
+        
+        if (validRooms.length !== appointment.assigned_rooms.length) {
+          return res.status(400).json({
+            success: false,
+            message: 'Ein oder mehrere Räume sind nicht verfügbar'
+          });
+        }
+      }
     }
 
     // Prüfe Verfügbarkeit
@@ -240,7 +328,10 @@ router.post('/book', [
         duration: appointment.duration || 30,
         type: appointment.type,
         reason: appointment.reason,
-        notes: appointment.notes
+        notes: appointment.notes,
+        serviceId: appointment.serviceId,
+        assigned_devices: appointment.assigned_devices || [],
+        assigned_rooms: appointment.assigned_rooms || []
       },
       doctor: {
         id: doctor.id,

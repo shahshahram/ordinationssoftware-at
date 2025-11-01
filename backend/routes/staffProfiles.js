@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
+const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
 const StaffProfile = require('../models/StaffProfile');
 const User = require('../models/User');
 const StaffLocationAssignment = require('../models/StaffLocationAssignment');
@@ -10,8 +11,15 @@ const AuditLog = require('../models/AuditLog');
 // Alle Personalprofile abrufen
 router.get('/', auth, async (req, res) => {
   try {
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('users.read')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Personalprofile'
@@ -20,6 +28,37 @@ router.get('/', auth, async (req, res) => {
 
     const { page = 1, limit = 10, search = '', role = '', active = '' } = req.query;
     const query = {};
+
+    // Automatische Synchronisation: Erstelle StaffProfile für alle aktiven User
+    try {
+      const activeUsers = await User.find({ isActive: true });
+      for (const user of activeUsers) {
+        const existingProfile = await StaffProfile.findOne({ userId: user._id });
+        if (!existingProfile) {
+          // Automatisch StaffProfile erstellen
+          const staffProfile = new StaffProfile({
+            userId: user._id,
+            displayName: `${user.firstName} ${user.lastName}`,
+            roleHint: user.role || 'staff',
+            isActive: user.isActive,
+            colorHex: user.color_hex || '#6B7280'
+          });
+          await staffProfile.save();
+          console.log(`✅ Auto-created StaffProfile for user: ${user.email}`);
+        } else {
+          // Aktualisiere bestehendes StaffProfile falls User-Infos geändert wurden
+          if (existingProfile.displayName !== `${user.firstName} ${user.lastName}`) {
+            existingProfile.displayName = `${user.firstName} ${user.lastName}`;
+            existingProfile.isActive = user.isActive;
+            await existingProfile.save();
+            console.log(`✅ Updated StaffProfile for user: ${user.email}`);
+          }
+        }
+      }
+    } catch (syncError) {
+      console.error('Error during staff profile sync:', syncError);
+      // Continue despite sync errors
+    }
 
     // Suchfilter
     if (search) {
@@ -200,6 +239,65 @@ router.get('/:id', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen des Personalprofils',
+      error: error.message
+    });
+  }
+});
+
+// Manuelle Synchronisation: Erstelle StaffProfiles für alle aktiven User
+router.post('/sync', auth, async (req, res) => {
+  try {
+    const activeUsers = await User.find({ isActive: true });
+    let createdCount = 0;
+    let updatedCount = 0;
+
+    for (const user of activeUsers) {
+      const existingProfile = await StaffProfile.findOne({ userId: user._id });
+      if (!existingProfile) {
+        // Automatisch StaffProfile erstellen
+        const staffProfile = new StaffProfile({
+          userId: user._id,
+          displayName: `${user.firstName} ${user.lastName}`,
+          roleHint: user.role || 'staff',
+          isActive: user.isActive,
+          colorHex: user.color_hex || '#6B7280'
+        });
+        await staffProfile.save();
+        createdCount++;
+        console.log(`✅ Auto-created StaffProfile for user: ${user.email}`);
+      } else {
+        // Aktualisiere bestehendes StaffProfile falls User-Infos geändert wurden
+        let needsUpdate = false;
+        if (existingProfile.displayName !== `${user.firstName} ${user.lastName}`) {
+          existingProfile.displayName = `${user.firstName} ${user.lastName}`;
+          needsUpdate = true;
+        }
+        if (existingProfile.isActive !== user.isActive) {
+          existingProfile.isActive = user.isActive;
+          needsUpdate = true;
+        }
+        if (existingProfile.roleHint !== user.role && user.role) {
+          existingProfile.roleHint = user.role;
+          needsUpdate = true;
+        }
+        if (needsUpdate) {
+          await existingProfile.save();
+          updatedCount++;
+          console.log(`✅ Updated StaffProfile for user: ${user.email}`);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Synchronisation abgeschlossen: ${createdCount} erstellt, ${updatedCount} aktualisiert`,
+      data: { created: createdCount, updated: updatedCount }
+    });
+  } catch (error) {
+    console.error('Sync error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei der Synchronisation',
       error: error.message
     });
   }

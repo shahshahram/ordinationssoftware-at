@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
+const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
 const Location = require('../models/Location');
 const LocationHours = require('../models/LocationHours');
 const LocationClosure = require('../models/LocationClosure');
@@ -13,8 +14,15 @@ const AuditLog = require('../models/AuditLog');
 // Alle Standorte abrufen
 router.get('/', auth, async (req, res) => {
   try {
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('locations.read')) {
+    // RBAC-Berechtigung prüfen
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Standortverwaltung'
@@ -80,7 +88,14 @@ router.get('/', auth, async (req, res) => {
 // Alle Öffnungszeiten abrufen
 router.get('/hours', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.read')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Standortverwaltung'
@@ -104,7 +119,14 @@ router.get('/hours', auth, async (req, res) => {
 // Alle Schließzeiten abrufen
 router.get('/closures', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.read')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Standortverwaltung'
@@ -128,7 +150,14 @@ router.get('/closures', auth, async (req, res) => {
 // Öffnungszeiten für einen Standort erstellen
 router.post('/:id/hours', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Öffnungszeiten'
@@ -178,7 +207,14 @@ router.post('/:id/hours', auth, async (req, res) => {
 // Schließzeiten für einen Standort erstellen
 router.post('/:id/closures', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Schließzeiten'
@@ -228,7 +264,14 @@ router.post('/:id/closures', auth, async (req, res) => {
 // Öffnungszeiten löschen
 router.delete('/hours/:hoursId', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Öffnungszeiten'
@@ -259,7 +302,14 @@ router.delete('/hours/:hoursId', auth, async (req, res) => {
 // Schließzeiten löschen
 router.delete('/closures/:closureId', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Schließzeiten'
@@ -290,7 +340,14 @@ router.delete('/closures/:closureId', auth, async (req, res) => {
 // Einzelnen Standort abrufen
 router.get('/:id', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.read')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Standortverwaltung'
@@ -336,7 +393,14 @@ router.post('/', [
   body('timezone').optional().isIn(['Europe/Vienna', 'Europe/Berlin', 'Europe/Zurich']).withMessage('Ungültige Zeitzone')
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.create')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.CREATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Erstellen von Standorten'
@@ -396,7 +460,14 @@ router.put('/:id', [
   body('timezone').optional().isIn(['Europe/Vienna', 'Europe/Berlin', 'Europe/Zurich']).withMessage('Ungültige Zeitzone')
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Aktualisieren von Standorten'
@@ -462,7 +533,14 @@ router.put('/:id', [
 // Standort löschen
 router.delete('/:id', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.delete')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.DELETE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Löschen von Standorten'
@@ -525,7 +603,14 @@ router.post('/:id/hours', [
   body('timezone').optional().isIn(['Europe/Vienna', 'Europe/Berlin', 'Europe/Zurich'])
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Öffnungszeiten'
@@ -577,7 +662,14 @@ router.post('/:id/closures', [
   body('reason').optional().trim()
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Schließzeiten'
@@ -628,7 +720,14 @@ router.put('/:id/hours/:hoursId', [
   body('timezone').optional().isIn(['Europe/Vienna', 'Europe/Berlin', 'Europe/Zurich'])
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Öffnungszeiten'
@@ -679,7 +778,14 @@ router.put('/:id/closures/:closureId', [
   body('reason').optional().trim()
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Schließzeiten'
@@ -725,7 +831,14 @@ router.put('/:id/closures/:closureId', [
 // Standort-Statistiken abrufen
 router.get('/:id/stats', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.read')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Standortverwaltung'
@@ -797,7 +910,14 @@ router.get('/:id/stats', auth, async (req, res) => {
 // Standort-Verfügbarkeit prüfen
 router.get('/:id/availability', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.read')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Standortverwaltung'
@@ -862,7 +982,14 @@ router.get('/:id/availability', auth, async (req, res) => {
 // Bulk-Operationen für Standorte
 router.post('/bulk-update', auth, async (req, res) => {
   try {
-    if (!req.user.permissions.includes('locations.write')) {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Verwalten von Standorten'

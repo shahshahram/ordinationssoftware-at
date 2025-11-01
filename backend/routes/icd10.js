@@ -5,8 +5,26 @@ const DiagnosisUsageStats = require('../models/DiagnosisUsageStats');
 const auth = require('../middleware/auth');
 const ICD10Cache = require('../utils/icd10Cache');
 
+// Optional Auth Middleware
+const optionalAuth = async (req, res, next) => {
+  const token = req.header('x-auth-token') || req.header('Authorization')?.replace('Bearer ', '');
+  if (token) {
+    try {
+      const jwt = require('jsonwebtoken');
+      const User = require('../models/User');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.userId || decoded.user?.id;
+      const user = await User.findById(userId).select('-password');
+      if (user) req.user = user;
+    } catch (err) {
+      // Auth optional, weiter ohne User
+    }
+  }
+  next();
+};
+
 // GET /api/icd10/search - ICD-10 Code-Suche
-router.get('/search', auth, async (req, res) => {
+router.get('/search', optionalAuth, async (req, res) => {
   try {
     const { 
       q = '', 
@@ -36,16 +54,23 @@ router.get('/search', auth, async (req, res) => {
       ICD10Cache.setSearchResult(q, options.year, options, results);
     }
 
-    // Audit-Log
-    const AuditLog = require('../models/AuditLog');
-    await AuditLog.create({
-      userId: req.user._id,
-      userEmail: req.user.email,
-      userRole: req.user.role,
-      action: 'icd10.search',
-      description: 'ICD-10 Code-Suche durchgeführt',
-      details: { query: q, year, billableOnly, chapters: chapterArray }
-    });
+    // Audit-Log (optional, nur wenn User eingeloggt ist)
+    if (req.user) {
+      try {
+        const AuditLog = require('../models/AuditLog');
+        await AuditLog.create({
+          userId: req.user._id,
+          userEmail: req.user.email,
+          userRole: req.user.role,
+          action: 'icd10.search',
+          description: 'ICD-10 Code-Suche durchgeführt',
+          details: { query: q, year, billableOnly, chapters: chapterArray }
+        });
+      } catch (auditError) {
+        // Audit-Log ist optional
+        console.error('Audit-Log Fehler:', auditError);
+      }
+    }
 
     res.json({
       success: true,
@@ -66,7 +91,7 @@ router.get('/search', auth, async (req, res) => {
 });
 
 // GET /api/icd10/top - TOP-10 / Häufig verwendete Codes
-router.get('/top', auth, async (req, res) => {
+router.get('/top', optionalAuth, async (req, res) => {
   try {
     const { 
       scope = 'user', 
@@ -80,8 +105,8 @@ router.get('/top', auth, async (req, res) => {
     
     // Bestimme scopeId basierend auf scope
     if (scope === 'user') {
-      actualScopeId = req.user._id.toString();
-    } else if (scope === 'location' && req.user.locationId) {
+      actualScopeId = req.user?._id?.toString() || 'anonymous';
+    } else if (scope === 'location' && req.user?.locationId) {
       actualScopeId = req.user.locationId.toString();
     } else if (scope === 'global') {
       actualScopeId = null;
@@ -95,9 +120,25 @@ router.get('/top', auth, async (req, res) => {
 
     const topCodes = await DiagnosisUsageStats.getTopCodes(scope, actualScopeId, options);
 
+    // Enrich with full ICD-10 data
+    const enrichedTopCodes = await Promise.all(topCodes.map(async (stat) => {
+      const fullCode = await Icd10Catalog.findOne({ 
+        code: stat.code, 
+        releaseYear: stat.catalogYear 
+      });
+      return {
+        ...stat.toObject(),
+        title: fullCode?.title || stat.code,
+        longTitle: fullCode?.longTitle || fullCode?.title || stat.code,
+        isBillable: fullCode?.isBillable || true,
+        chapter: fullCode?.chapter || '',
+        synonyms: fullCode?.synonyms || []
+      };
+    }));
+
     res.json({
       success: true,
-      data: topCodes
+      data: enrichedTopCodes
     });
   } catch (error) {
     console.error('ICD-10 top codes error:', error);
@@ -109,7 +150,7 @@ router.get('/top', auth, async (req, res) => {
 });
 
 // GET /api/icd10/recent - Kürzlich verwendete Codes
-router.get('/recent', auth, async (req, res) => {
+router.get('/recent', optionalAuth, async (req, res) => {
   try {
     const { 
       scope = 'user', 
@@ -121,8 +162,8 @@ router.get('/recent', auth, async (req, res) => {
     let actualScopeId = scopeId;
     
     if (scope === 'user') {
-      actualScopeId = req.user._id.toString();
-    } else if (scope === 'location' && req.user.locationId) {
+      actualScopeId = req.user?._id?.toString() || 'anonymous';
+    } else if (scope === 'location' && req.user?.locationId) {
       actualScopeId = req.user.locationId.toString();
     } else if (scope === 'global') {
       actualScopeId = null;
@@ -135,9 +176,25 @@ router.get('/recent', auth, async (req, res) => {
 
     const recentCodes = await DiagnosisUsageStats.getRecentlyUsed(scope, actualScopeId, options);
 
+    // Enrich with full ICD-10 data
+    const enrichedRecentCodes = await Promise.all(recentCodes.map(async (stat) => {
+      const fullCode = await Icd10Catalog.findOne({ 
+        code: stat.code, 
+        releaseYear: stat.catalogYear 
+      });
+      return {
+        ...stat.toObject(),
+        title: fullCode?.title || stat.code,
+        longTitle: fullCode?.longTitle || fullCode?.title || stat.code,
+        isBillable: fullCode?.isBillable || true,
+        chapter: fullCode?.chapter || '',
+        synonyms: fullCode?.synonyms || []
+      };
+    }));
+
     res.json({
       success: true,
-      data: recentCodes
+      data: enrichedRecentCodes
     });
   } catch (error) {
     console.error('ICD-10 recent codes error:', error);
@@ -201,7 +258,7 @@ router.get('/chapters', auth, async (req, res) => {
 });
 
 // POST /api/icd10/usage - Nutzungsstatistik aktualisieren
-router.post('/usage', auth, async (req, res) => {
+router.post('/usage', optionalAuth, async (req, res) => {
   try {
     const { code, catalogYear, context = null } = req.body;
     const { scope = 'user', scopeId = '' } = req.query;
@@ -209,8 +266,8 @@ router.post('/usage', auth, async (req, res) => {
     let actualScopeId = scopeId;
     
     if (scope === 'user') {
-      actualScopeId = req.user._id.toString();
-    } else if (scope === 'location' && req.user.locationId) {
+      actualScopeId = req.user?._id?.toString() || 'anonymous';
+    } else if (scope === 'location' && req.user?.locationId) {
       actualScopeId = req.user.locationId.toString();
     } else if (scope === 'global') {
       actualScopeId = null;

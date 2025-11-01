@@ -1,0 +1,43 @@
+# E-Mail-Konfiguration für Ordinationssoftware
+# Diese Datei sollte in .env kopiert und mit echten Werten gefüllt werden
+
+# SMTP-Server Konfiguration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+SMTP_FROM=your-email@gmail.com
+
+# Alternative SMTP-Anbieter:
+# 
+# Gmail:
+# SMTP_HOST=smtp.gmail.com
+# SMTP_PORT=587
+# SMTP_USER=your-email@gmail.com
+# SMTP_PASS=your-app-password
+#
+# Outlook/Hotmail:
+# SMTP_HOST=smtp-mail.outlook.com
+# SMTP_PORT=587
+# SMTP_USER=your-email@outlook.com
+# SMTP_PASS=your-password
+#
+# Yahoo:
+# SMTP_HOST=smtp.mail.yahoo.com
+# SMTP_PORT=587
+# SMTP_USER=your-email@yahoo.com
+# SMTP_PASS=your-app-password
+#
+# Eigener SMTP-Server:
+# SMTP_HOST=mail.your-domain.com
+# SMTP_PORT=587
+# SMTP_USER=noreply@your-domain.com
+# SMTP_PASS=your-password
+
+# Hinweise:
+# - Für Gmail: App-Passwort verwenden, nicht das normale Passwort
+# - Für Outlook: Möglicherweise 2FA aktivieren und App-Passwort verwenden
+# - Für Yahoo: App-Passwort erforderlich
+# - Sicherheit: Diese Datei niemals in Git committen!
+
+

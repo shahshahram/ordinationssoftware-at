@@ -3,6 +3,7 @@ const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
 const Device = require('../models/Device');
+const Resource = require('../models/Resource');
 const AuditLog = require('../models/AuditLog');
 
 // Helper to create audit log
@@ -29,7 +30,7 @@ const createAuditLog = async (userId, action, entityType, entityId, details = {}
 // @desc    Get all devices
 // @access  Private (requires 'resources.read' permission)
 router.get('/', auth, async (req, res) => {
-  if (!req.user.permissions.includes('resources.read') && !req.user.permissions.includes('admin')) {
+  if (!req.user.permissions.includes('resources.read') && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
   }
   
@@ -47,10 +48,52 @@ router.get('/', auth, async (req, res) => {
       ];
     }
 
+    // Load devices from Device model
     const devices = await Device.find(query)
+      .populate('location_id', 'name code')
       .sort({ name: 1 });
 
-    res.status(200).json({ success: true, data: devices });
+    // Transform location_id to location for frontend compatibility
+    const transformedDevices = devices.map(device => {
+      const deviceObj = device.toObject();
+      return {
+        ...deviceObj,
+        location: deviceObj.location_id ? {
+          _id: deviceObj.location_id._id || deviceObj.location_id,
+          name: deviceObj.location_id.name || '',
+          code: deviceObj.location_id.code || ''
+        } : undefined
+      };
+    });
+
+    // Load resources with type 'equipment' and transform to Device format
+    const equipmentResources = await Resource.find({ type: 'equipment' });
+    
+    const transformedResources = equipmentResources.map(resource => {
+      console.log('Transforming equipment resource:', resource.name, 'Properties:', JSON.stringify(resource.properties));
+      return {
+        _id: resource._id,
+        name: resource.name,
+        type: 'other',
+        status: resource.properties?.status || 'available',
+        description: resource.description,
+        location: resource.properties?.location ? {
+          _id: '',
+          name: resource.properties.location || '',
+          code: ''
+        } : undefined
+      };
+    });
+    
+    console.log('Transformed equipment resources:', transformedResources.length);
+
+    // Merge devices and resources
+    const allDevices = [...transformedDevices, ...transformedResources];
+
+    console.log('Geräte API - Anzahl Geräte:', allDevices.length);
+    console.log('Geräte API - Beispiel Gerät mit location:', allDevices[0]?.location);
+
+    res.status(200).json({ success: true, data: allDevices });
   } catch (error) {
     console.error('Error fetching devices:', error);
     res.status(500).json({ success: false, message: 'Fehler beim Abrufen der Geräte', error: error.message });
@@ -61,7 +104,7 @@ router.get('/', auth, async (req, res) => {
 // @desc    Get single device by ID
 // @access  Private (requires 'resources.read' permission)
 router.get('/:id', auth, async (req, res) => {
-  if (!req.user.permissions.includes('resources.read') && !req.user.permissions.includes('admin')) {
+  if (!req.user.permissions.includes('resources.read') && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
   }
   
@@ -88,7 +131,7 @@ router.post('/', auth, [
   body('category').isIn(['medical', 'diagnostic', 'therapeutic', 'administrative', 'other']).withMessage('Ungültige Kategorie'),
   body('colorHex').optional().matches(/^#[0-9A-F]{6}$/i).withMessage('Farbe muss im Format #RRGGBB sein'),
 ], async (req, res) => {
-  if (!req.user.permissions.includes('resources.write') && !req.user.permissions.includes('admin')) {
+  if (!req.user.permissions.includes('resources.write') && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
   }
 
@@ -118,7 +161,7 @@ router.put('/:id', auth, [
   body('category').optional().isIn(['medical', 'diagnostic', 'therapeutic', 'administrative', 'other']).withMessage('Ungültige Kategorie'),
   body('colorHex').optional().matches(/^#[0-9A-F]{6}$/i).withMessage('Farbe muss im Format #RRGGBB sein'),
 ], async (req, res) => {
-  if (!req.user.permissions.includes('resources.write') && !req.user.permissions.includes('admin')) {
+  if (!req.user.permissions.includes('resources.write') && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
   }
 
@@ -150,7 +193,7 @@ router.put('/:id', auth, [
 // @desc    Delete a device
 // @access  Private (requires 'resources.delete' permission)
 router.delete('/:id', auth, async (req, res) => {
-  if (!req.user.permissions.includes('resources.delete') && !req.user.permissions.includes('admin')) {
+  if (!req.user.permissions.includes('resources.delete') && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
   }
   
@@ -198,7 +241,7 @@ router.get('/online-bookable', async (req, res) => {
 // @desc    Get devices by type
 // @access  Private (requires 'resources.read' permission)
 router.get('/type/:type', auth, async (req, res) => {
-  if (!req.user.permissions.includes('resources.read') && !req.user.permissions.includes('admin')) {
+  if (!req.user.permissions.includes('resources.read') && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
   }
   
@@ -215,7 +258,7 @@ router.get('/type/:type', auth, async (req, res) => {
 // @desc    Get devices needing maintenance
 // @access  Private (requires 'resources.read' permission)
 router.get('/maintenance/needed', auth, async (req, res) => {
-  if (!req.user.permissions.includes('resources.read') && !req.user.permissions.includes('admin')) {
+  if (!req.user.permissions.includes('resources.read') && req.user.role !== 'admin') {
     return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
   }
   

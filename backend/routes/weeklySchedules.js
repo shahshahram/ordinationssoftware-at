@@ -157,7 +157,8 @@ router.post('/', auth, [
 
 // PUT /api/weekly-schedules/:id - Update weekly schedule
 router.put('/:id', auth, [
-  body('weekStart').optional().isISO8601().withMessage('Gültiges Wochendatum ist erforderlich'),
+  body('validFrom').optional().isISO8601().withMessage('Gültiges Datum ist erforderlich'),
+  body('validTo').optional().isISO8601().withMessage('Gültiges Datum ist erforderlich'),
   body('schedules').optional().isArray().withMessage('Arbeitszeiten müssen ein Array sein'),
   body('schedules.*.day').optional().notEmpty().withMessage('Tag ist erforderlich'),
   body('schedules.*.isWorking').optional().isBoolean().withMessage('Arbeitsstatus muss boolean sein'),
@@ -182,9 +183,21 @@ router.put('/:id', auth, [
       });
     }
 
-    const updateData = { ...req.body };
-    if (updateData.weekStart) {
-      updateData.weekStart = new Date(updateData.weekStart);
+    const updateData = {};
+    
+    // Map schedules from frontend format to backend format
+    if (req.body.schedules) {
+      updateData.schedules = req.body.schedules;
+    }
+    
+    if (req.body.validFrom) {
+      updateData.validFrom = new Date(req.body.validFrom);
+    }
+    
+    if (req.body.validTo) {
+      updateData.validTo = new Date(req.body.validTo);
+    } else if (req.body.validTo === null) {
+      updateData.validTo = null;
     }
 
     const updatedSchedule = await WeeklySchedule.findByIdAndUpdate(
@@ -199,20 +212,20 @@ router.put('/:id', auth, [
       userEmail: req.user.email,
       userRole: req.user.role,
       action: 'weekly_schedules.update',
-      description: 'Wöchentliche Arbeitszeiten aktualisiert',
+      description: 'Wiederkehrende Arbeitszeiten-Vorlage aktualisiert',
       details: { scheduleId: req.params.id, changes: updateData }
     });
 
     res.json({
       success: true,
-      message: 'Wöchentliche Arbeitszeiten erfolgreich aktualisiert',
+      message: 'Wiederkehrende Arbeitszeiten erfolgreich aktualisiert',
       data: updatedSchedule
     });
   } catch (error) {
     console.error('WeeklySchedule update error:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Aktualisieren der wöchentlichen Arbeitszeiten'
+      message: 'Fehler beim Aktualisieren der wiederkehrenden Arbeitszeiten'
     });
   }
 });

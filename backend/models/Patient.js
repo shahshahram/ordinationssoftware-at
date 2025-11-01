@@ -21,7 +21,19 @@ const PatientSchema = new mongoose.Schema({
   
   // Versicherungsdaten
   insuranceNumber: { type: String, trim: true },
-  insuranceType: { type: String, enum: ['gesetzlich', 'privat', 'selbstzahler'], default: 'gesetzlich' },
+      insuranceProvider: { 
+        type: String, 
+        enum: [
+          'ÖGK (Österreichische Gesundheitskasse)',
+          'BVAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)',
+          'SVS (Sozialversicherung der Selbständigen)',
+          'KFA (Krankenfürsorgeanstalt der Bediensteten der Stadt Wien)',
+          'PVA (Pensionsversicherungsanstalt)',
+          'Privatversicherung',
+          'Selbstzahler'
+        ],
+        default: 'ÖGK (Österreichische Gesundheitskasse)'
+      },
   
   // Status
   status: { type: String, enum: ['aktiv', 'inaktiv', 'wartend'], default: 'aktiv' },
@@ -45,7 +57,78 @@ const PatientSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   lastVisit: { type: Date },
-  totalVisits: { type: Number, default: 0 }
+  totalVisits: { type: Number, default: 0 },
+  
+  // ACL (Access Control List) für Object-level Sicherheit
+  acl: {
+    // Rollen die Zugriff auf diesen Patienten haben
+    allowedRoles: [{ type: String }],
+    
+    // Spezifische Benutzer die Zugriff haben
+    allowedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    
+    // Explizit verweigerte Rollen
+    deniedRoles: [{ type: String }],
+    
+    // Explizit verweigerte Benutzer
+    deniedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+    
+    // Bedingungen für den Zugriff
+    conditions: {
+      // Zeitbeschränkungen
+      timeRestricted: { type: Boolean, default: false },
+      timeStart: { type: Date },
+      timeEnd: { type: Date },
+      
+      // Ortsbeschränkungen
+      locationRestricted: { type: Boolean, default: false },
+      allowedLocations: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Location' }],
+      
+      // IP-Beschränkungen
+      ipRestricted: { type: Boolean, default: false },
+      allowedIPs: [{ type: String }],
+      
+      // Zusätzliche Bedingungen
+      requiresConsent: { type: Boolean, default: false },
+      consentDate: { type: Date },
+      consentExpiry: { type: Date }
+    },
+    
+    // Metadaten der ACL
+    metadata: {
+      createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      createdAt: { type: Date, default: Date.now },
+      lastModified: { type: Date },
+      reason: { type: String }, // Grund für spezielle ACL-Regeln
+      version: { type: Number, default: 1 }
+    }
+  },
+  
+  // Sensibilitätsstufe für medizinische Daten
+  sensitivityLevel: {
+    type: String,
+    enum: ['normal', 'sensitive', 'highly_sensitive', 'restricted'],
+    default: 'normal'
+  },
+  
+  // Datenschutz-Einstellungen
+  dataProtection: {
+    // DSGVO Einverständnis
+    gdprConsent: { type: Boolean, default: false },
+    gdprConsentDate: { type: Date },
+    
+    // Datenweitergabe-Einverständnis
+    dataSharingConsent: { type: Boolean, default: false },
+    dataSharingConsentDate: { type: Date },
+    
+    // Forschungsdaten-Einverständnis
+    researchConsent: { type: Boolean, default: false },
+    researchConsentDate: { type: Date },
+    
+    // Automatische Löschung nach X Jahren
+    autoDeleteAfterYears: { type: Number, default: 10 },
+    autoDeleteDate: { type: Date }
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

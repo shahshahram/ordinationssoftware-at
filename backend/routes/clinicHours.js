@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
+const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
 const ClinicHours = require('../models/ClinicHours');
 const AuditLog = require('../models/AuditLog');
 
@@ -29,11 +30,25 @@ const createAuditLog = async (userId, action, entityType, entityId, details = {}
 // @desc    Get all clinic hours
 // @access  Private (requires 'settings.read' permission)
 router.get('/', auth, async (req, res) => {
-  if (!req.user.permissions.includes('settings.read') && !req.user.permissions.includes('admin')) {
-    return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
-  }
-  
   try {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.SETTINGS, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: `Zugriff verweigert - ${authResult.reason}`,
+        requiredPermission: 'settings.read',
+        userRole: req.user.role,
+        userPermissions: req.user.permissions
+      });
+    }
+
     const clinicHours = await ClinicHours.find()
       .sort({ validFrom: 1 });
 
@@ -48,11 +63,25 @@ router.get('/', auth, async (req, res) => {
 // @desc    Get single clinic hours by ID
 // @access  Private (requires 'settings.read' permission)
 router.get('/:id', auth, async (req, res) => {
-  if (!req.user.permissions.includes('settings.read') && !req.user.permissions.includes('admin')) {
-    return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
-  }
-  
   try {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.SETTINGS, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: `Zugriff verweigert - ${authResult.reason}`,
+        requiredPermission: 'settings.read',
+        userRole: req.user.role,
+        userPermissions: req.user.permissions
+      });
+    }
+
     const clinicHours = await ClinicHours.findById(req.params.id);
 
     if (!clinicHours) {
@@ -76,16 +105,30 @@ router.post('/', auth, [
   body('weekdays').isArray().withMessage('Wochentage müssen ein Array sein'),
   body('weekdays.*').isInt({ min: 0, max: 6 }).withMessage('Wochentage müssen zwischen 0 und 6 liegen'),
 ], async (req, res) => {
-  if (!req.user.permissions.includes('settings.write') && !req.user.permissions.includes('admin')) {
-    return res.status(403).json({ success: false, message: 'Nicht autorisiert: Fehlende Berechtigung' });
-  }
-
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ success: false, message: 'Validierungsfehler', errors: errors.array() });
-  }
-
   try {
+    // Check RBAC permissions
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.SETTINGS, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: `Zugriff verweigert - ${authResult.reason}`,
+        requiredPermission: 'settings.write',
+        userRole: req.user.role,
+        userPermissions: req.user.permissions
+      });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: 'Validierungsfehler', errors: errors.array() });
+    }
+
     const newClinicHours = new ClinicHours(req.body);
     await newClinicHours.save();
 

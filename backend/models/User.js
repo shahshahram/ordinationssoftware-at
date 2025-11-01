@@ -26,38 +26,20 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'doctor', 'nurse', 'receptionist', 'assistant', 'staff'],
-    default: 'staff'
+    enum: ['super_admin', 'admin', 'arzt', 'assistent', 'rezeption', 'billing', 'patient'],
+    default: 'assistent'
   },
   permissions: [{
     type: String,
-    enum: [
-      'patients.read', 'patients.write', 'patients.delete',
-      'appointments.read', 'appointments.write', 'appointments.delete',
-      'billing.read', 'billing.write', 'billing.delete',
-      'documents.read', 'documents.write', 'documents.delete',
-      'users.read', 'users.write', 'users.delete',
-      'settings.read', 'settings.write',
-      'reports.read', 'reports.write',
-      'security.read', 'security.write',
-      'resources.read', 'resources.write', 'resources.delete',
-      'service-catalog.read', 'service-catalog.write', 'service-catalog.delete',
-      'services.read', 'services.write', 'services.delete',
-      'bookings.read', 'bookings.write', 'bookings.delete',
-      'service-categories.read', 'service-categories.write', 'service-categories.delete',
-      'appointment-participants.read', 'appointment-participants.write', 'appointment-participants.delete',
-      'appointment-services.read', 'appointment-services.write', 'appointment-services.delete',
-      'appointment-resources.read', 'appointment-resources.write', 'appointment-resources.delete',
-      'staff.read', 'staff.write', 'staff.delete', 'staff.toggle_status',
-      'shifts.read', 'shifts.write', 'shifts.delete', 'shifts.toggle_status',
-      'absences.read', 'absences.create', 'absences.update', 'absences.delete', 'absences.approve',
-      'availability.read', 'availability.check', 'availability.utilization', 'availability.staff',
-      'clinic-hours.read', 'clinic-hours.write', 'clinic-hours.delete',
-      'rooms.read', 'rooms.write', 'rooms.delete',
-      'devices.read', 'devices.write', 'devices.delete',
-      'locations.read', 'locations.write', 'locations.delete',
-      'staff-location-assignments.read', 'staff-location-assignments.write', 'staff-location-assignments.delete'
-    ]
+    // Dynamische Permissions - keine Enum-Beschränkung für Auto-Discovery
+    validate: {
+      validator: function(v) {
+        // Erlaube alle Permissions, die dem Format resource.action entsprechen
+        return /^[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+$/.test(v) || 
+               /^[a-zA-Z0-9_-]+$/.test(v); // Oder einfache Permissions
+      },
+      message: 'Permission muss dem Format "resource.action" entsprechen'
+    }
   }],
   isActive: {
     type: Boolean,
@@ -128,6 +110,59 @@ const UserSchema = new mongoose.Schema({
     allowedIPs: [{ type: String }],
     requirePasswordChange: { type: Boolean, default: false },
     passwordChangedAt: { type: Date }
+  },
+  
+  // RBAC & ACL Support
+  rbac: {
+    // Zusätzliche Rollen für spezifische Ressourcen
+    resourceRoles: [{
+      resource: { type: String, required: true },
+      resourceId: { type: mongoose.Schema.Types.ObjectId },
+      role: { type: String, required: true },
+      grantedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      grantedAt: { type: Date, default: Date.now },
+      expiresAt: { type: Date }
+    }],
+    
+    // Custom Permissions für spezifische Ressourcen
+    customPermissions: [{
+      resource: { type: String, required: true },
+      resourceId: { type: mongoose.Schema.Types.ObjectId },
+      actions: [{ type: String, required: true }],
+      conditions: {
+        timeRestricted: { type: Boolean, default: false },
+        timeStart: { type: Date },
+        timeEnd: { type: Date },
+        locationRestricted: { type: Boolean, default: false },
+        allowedLocations: [{ type: mongoose.Schema.Types.ObjectId }],
+        ipRestricted: { type: Boolean, default: false },
+        allowedIPs: [{ type: String }]
+      },
+      grantedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      grantedAt: { type: Date, default: Date.now },
+      expiresAt: { type: Date }
+    }],
+    
+    // Delegation: Benutzer kann seine Permissions an andere delegieren
+    delegations: [{
+      delegateTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+      permissions: [{ type: String, required: true }],
+      resources: [{ type: String }],
+      expiresAt: { type: Date },
+      createdAt: { type: Date, default: Date.now }
+    }],
+    
+    // Audit: Wer hat wann welche Permissions geändert
+    permissionHistory: [{
+      action: { type: String, enum: ['granted', 'revoked', 'modified', 'migrated', 'created', 'auto_granted'], required: true },
+      permission: { type: String, required: true },
+      resource: { type: String },
+      resourceId: { type: mongoose.Schema.Types.ObjectId },
+      changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Optional für System-Aktionen
+      changedAt: { type: Date, default: Date.now },
+      reason: { type: String },
+      previousValue: { type: mongoose.Schema.Types.Mixed }
+    }]
   }
 }, {
   timestamps: true
@@ -178,6 +213,64 @@ UserSchema.methods.hasAnyPermission = function(permissions) {
 UserSchema.methods.hasAllPermissions = function(permissions) {
   if (!this.permissions || !Array.isArray(permissions)) return false;
   return permissions.every(permission => this.permissions.includes(permission));
+};
+
+// Method to get default permissions based on role
+UserSchema.methods.getDefaultPermissions = function() {
+  const rolePermissions = {
+    super_admin: [
+      'patients.read', 'patients.write', 'patients.delete',
+      'appointments.read', 'appointments.write', 'appointments.delete',
+      'billing.read', 'billing.write', 'billing.delete',
+      'documents.read', 'documents.write', 'documents.delete',
+      'users.read', 'users.write', 'users.delete',
+      'settings.read', 'settings.write',
+      'reports.read', 'reports.write',
+      'system.read', 'system.write'
+    ],
+    admin: [
+      'patients.read', 'patients.write', 'patients.delete',
+      'appointments.read', 'appointments.write', 'appointments.delete',
+      'billing.read', 'billing.write',
+      'documents.read', 'documents.write', 'documents.delete',
+      'users.read', 'users.write', 'users.delete',
+      'settings.read', 'settings.write',
+      'reports.read'
+    ],
+    arzt: [
+      'patients.read', 'patients.write',
+      'appointments.read', 'appointments.write',
+      'billing.read', 'billing.write',
+      'documents.read', 'documents.write',
+      'reports.read'
+    ],
+    assistent: [
+      'patients.read', 'patients.write',
+      'appointments.read', 'appointments.write',
+      'billing.read',
+      'documents.read', 'documents.write'
+    ],
+    rezeption: [
+      'patients.read', 'patients.write',
+      'appointments.read', 'appointments.write',
+      'billing.read',
+      'documents.read', 'documents.write'
+    ],
+    billing: [
+      'patients.read',
+      'appointments.read',
+      'billing.read', 'billing.write', 'billing.delete',
+      'documents.read'
+    ],
+    patient: [
+      'patients.read',
+      'appointments.read', 'appointments.write',
+      'documents.read',
+      'billing.read'
+    ]
+  };
+  
+  return rolePermissions[this.role] || [];
 };
 
 module.exports = mongoose.model('User', UserSchema);

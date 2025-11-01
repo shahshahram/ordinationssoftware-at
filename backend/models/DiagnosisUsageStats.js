@@ -163,7 +163,6 @@ DiagnosisUsageStatsSchema.statics.getTopCodes = function(scope, scopeId, options
   return this.find(query)
     .sort(sortQuery)
     .limit(limit)
-    .populate('code', 'title display')
     .exec();
 };
 
@@ -181,7 +180,6 @@ DiagnosisUsageStatsSchema.statics.getRecentlyUsed = function(scope, scopeId, opt
   })
   .sort({ lastUsed: -1 })
   .limit(limit)
-  .populate('code', 'title display')
   .exec();
 };
 

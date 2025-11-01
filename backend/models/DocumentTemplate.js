@@ -1,89 +1,145 @@
 const mongoose = require('mongoose');
 
 const DocumentTemplateSchema = new mongoose.Schema({
-  // Grunddaten
-  name: { type: String, required: true, trim: true },
-  description: { type: String, trim: true },
-  type: { 
-    type: String, 
-    enum: ['rezept', 'ueberweisung', 'arztbrief', 'befund', 'formular', 'rechnung', 'sonstiges'],
-    required: true 
+  name: {
+    type: String,
+    required: true,
+    trim: true
   },
-  category: { type: String, trim: true },
-  
-  // Template-Inhalt
+  description: {
+    type: String,
+    trim: true
+  },
+  category: {
+    type: String,
+    required: true,
+    enum: [
+      'arztbrief',
+      'attest', 
+      'befund',
+      'konsiliarbericht',
+      'ueberweisung',
+      'zuweisung',
+      'rueckueberweisung',
+      'operationsbericht',
+      'rezept',
+      'heilmittelverordnung',
+      'krankenstandsbestaetigung',
+      'bildgebende_zuweisung',
+      'impfbestaetigung',
+      'patientenaufklaerung',
+      'therapieplan',
+      'verlaufsdokumentation',
+      'pflegebrief',
+      'kostenuebernahmeantrag',
+      'gutachten'
+    ]
+  },
   content: {
-    html: { type: String, required: true },
-    text: { type: String },
-    variables: [{ 
-      name: { type: String, required: true },
-      type: { type: String, enum: ['text', 'date', 'number', 'select', 'textarea'], required: true },
-      label: { type: String, required: true },
-      required: { type: Boolean, default: false },
-      options: [{ type: String }], // Für select-Typ
-      defaultValue: { type: String },
-      validation: { type: Object }
-    }]
+    type: String,
+    required: true
   },
-  
-  // Layout und Styling
-  styling: {
-    fontFamily: { type: String, default: 'Arial' },
-    fontSize: { type: Number, default: 12 },
-    margins: {
-      top: { type: Number, default: 20 },
-      right: { type: Number, default: 20 },
-      bottom: { type: Number, default: 20 },
-      left: { type: Number, default: 20 }
+  placeholders: [{
+    name: {
+      type: String,
+      required: true
     },
-    header: { type: String },
-    footer: { type: String }
+    description: {
+      type: String,
+      required: true
+    },
+    type: {
+      type: String,
+      enum: ['text', 'date', 'number', 'boolean', 'select'],
+      default: 'text'
+    },
+    required: {
+      type: Boolean,
+      default: false
+    },
+    defaultValue: {
+      type: String,
+      default: ''
+    },
+    options: [String] // For select type
+  }],
+  version: {
+    type: Number,
+    default: 1
   },
-  
-  // ELGA-Integration
-  elgaCompatible: { type: Boolean, default: false },
-  elgaMapping: { type: Object },
-  
-  // Verfügbarkeit
-  isActive: { type: Boolean, default: true },
-  isPublic: { type: Boolean, default: false },
-  isSystem: { type: Boolean, default: false },
-  
-  // Berechtigungen
-  permissions: {
-    roles: [{ type: String }],
-    users: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
+  isActive: {
+    type: Boolean,
+    default: true
   },
-  
-  // Metadaten
-  version: { type: Number, default: 1 },
-  tags: [{ type: String }],
-  usageCount: { type: Number, default: 0 },
-  
-  // Metadaten
-  createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  lastModifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  tags: [String],
+  metadata: {
+    type: mongoose.Schema.Types.Mixed,
+    default: {}
+  }
 }, {
   timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  versionKey: false
 });
 
-// Index für bessere Performance
-DocumentTemplateSchema.index({ name: 1 });
-DocumentTemplateSchema.index({ type: 1 });
-DocumentTemplateSchema.index({ category: 1 });
-DocumentTemplateSchema.index({ isActive: 1 });
-DocumentTemplateSchema.index({ isPublic: 1 });
+// Index for efficient searching
+DocumentTemplateSchema.index({ name: 'text', description: 'text', category: 1 });
+DocumentTemplateSchema.index({ isActive: 1, category: 1 });
+DocumentTemplateSchema.index({ createdBy: 1 });
 
-// Methoden
-DocumentTemplateSchema.methods.incrementUsage = function() {
-  this.usageCount += 1;
-  return this.save();
+// Virtual for template usage count
+DocumentTemplateSchema.virtual('usageCount', {
+  ref: 'Document',
+  localField: '_id',
+  foreignField: 'templateId',
+  count: true
+});
+
+// Method to get template with placeholders
+DocumentTemplateSchema.methods.getTemplateWithPlaceholders = function() {
+  return {
+    id: this._id,
+    name: this.name,
+    description: this.description,
+    category: this.category,
+    content: this.content,
+    placeholders: this.placeholders,
+    version: this.version,
+    tags: this.tags,
+    metadata: this.metadata
+  };
 };
 
-DocumentTemplateSchema.methods.getVariableNames = function() {
-  return this.content.variables.map(variable => variable.name);
+// Static method to find templates by category
+DocumentTemplateSchema.statics.findByCategory = function(category) {
+  return this.find({ category, isActive: true }).sort({ name: 1 });
+};
+
+// Static method to search templates
+DocumentTemplateSchema.statics.searchTemplates = function(query, category = null) {
+  const searchQuery = {
+    isActive: true,
+    $or: [
+      { name: { $regex: query, $options: 'i' } },
+      { description: { $regex: query, $options: 'i' } },
+      { tags: { $in: [new RegExp(query, 'i')] } }
+    ]
+  };
+
+  if (category) {
+    searchQuery.category = category;
+  }
+
+  return this.find(searchQuery).sort({ name: 1 });
 };
 
 module.exports = mongoose.model('DocumentTemplate', DocumentTemplateSchema);

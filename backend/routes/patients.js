@@ -1,12 +1,14 @@
 const express = require('express');
 const Patient = require('../models/Patient');
 const auth = require('../middleware/auth');
+const { rbacMiddleware } = require('../middleware/rbac');
+const { ACTIONS, RESOURCES } = require('../utils/rbac');
 const router = express.Router();
 
 // @route   GET /api/patients
 // @desc    Get all patients
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', auth, rbacMiddleware.canViewPatients, async (req, res) => {
   try {
     const patients = await Patient.find().populate('createdBy', 'firstName lastName');
     res.json({
@@ -25,7 +27,7 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/patients/:id
 // @desc    Get single patient
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', auth, rbacMiddleware.canViewPatients, async (req, res) => {
   try {
     const patient = await Patient.findById(req.params.id).populate('createdBy', 'firstName lastName');
     
@@ -51,8 +53,53 @@ router.get('/:id', auth, async (req, res) => {
 // @route   POST /api/patients
 // @desc    Create new patient
 // @access  Private
-router.post('/', auth, async (req, res) => {
+router.post('/', auth, rbacMiddleware.canCreatePatients, async (req, res) => {
   try {
+    // Duplikatprüfung vor dem Erstellen
+    const duplicateQuery = {
+      firstName: req.body.firstName,
+      lastName: req.body.lastName,
+      dateOfBirth: req.body.dateOfBirth
+    };
+
+    // Prüfe auf Duplikat basierend auf Name und Geburtsdatum
+    const existingPatient = await Patient.findOne(duplicateQuery);
+    
+    if (existingPatient) {
+      return res.status(409).json({
+        success: false,
+        message: 'Ein Patient mit diesem Namen und Geburtsdatum existiert bereits',
+        duplicate: {
+          id: existingPatient._id,
+          firstName: existingPatient.firstName,
+          lastName: existingPatient.lastName,
+          dateOfBirth: existingPatient.dateOfBirth,
+          insuranceNumber: existingPatient.insuranceNumber
+        }
+      });
+    }
+
+    // Zusätzliche Prüfung auf Versicherungsnummer falls vorhanden
+    if (req.body.insuranceNumber) {
+      const duplicateByInsurance = await Patient.findOne({
+        insuranceNumber: req.body.insuranceNumber
+      });
+
+      if (duplicateByInsurance) {
+        return res.status(409).json({
+          success: false,
+          message: 'Ein Patient mit dieser Versicherungsnummer existiert bereits',
+          duplicate: {
+            id: duplicateByInsurance._id,
+            firstName: duplicateByInsurance.firstName,
+            lastName: duplicateByInsurance.lastName,
+            dateOfBirth: duplicateByInsurance.dateOfBirth,
+            insuranceNumber: duplicateByInsurance.insuranceNumber
+          }
+        });
+      }
+    }
+
     const patientData = {
       ...req.body,
       createdBy: req.user.id
@@ -79,7 +126,7 @@ router.post('/', auth, async (req, res) => {
 // @route   PUT /api/patients/:id
 // @desc    Update patient
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', auth, rbacMiddleware.canUpdatePatients, async (req, res) => {
   try {
     const patient = await Patient.findByIdAndUpdate(
       req.params.id,
@@ -110,7 +157,7 @@ router.put('/:id', auth, async (req, res) => {
 // @route   DELETE /api/patients/:id
 // @desc    Delete patient
 // @access  Private
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', auth, rbacMiddleware.canDeletePatients, async (req, res) => {
   try {
     const patient = await Patient.findByIdAndDelete(req.params.id);
 

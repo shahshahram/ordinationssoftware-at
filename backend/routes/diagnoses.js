@@ -5,8 +5,26 @@ const Icd10Catalog = require('../models/Icd10Catalog');
 const DiagnosisUsageStats = require('../models/DiagnosisUsageStats');
 const auth = require('../middleware/auth');
 
+// Optional Auth Middleware
+const optionalAuth = async (req, res, next) => {
+  const token = req.header('x-auth-token') || req.header('Authorization')?.replace('Bearer ', '');
+  if (token) {
+    try {
+      const jwt = require('jsonwebtoken');
+      const User = require('../models/User');
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const userId = decoded.userId || decoded.user?.id;
+      const user = await User.findById(userId).select('-password');
+      if (user) req.user = user;
+    } catch (err) {
+      // Auth optional, weiter ohne User
+    }
+  }
+  next();
+};
+
 // GET /api/diagnoses/patient/:patientId - Diagnosen eines Patienten
-router.get('/patient/:patientId', auth, async (req, res) => {
+router.get('/patient/:patientId', optionalAuth, async (req, res) => {
   try {
     const { patientId } = req.params;
     const { status, encounterId, isPrimary, page = 1, limit = 20 } = req.query;
@@ -101,7 +119,7 @@ router.get('/:id', auth, async (req, res) => {
 });
 
 // POST /api/diagnoses - Neue Diagnose erstellen
-router.post('/', auth, async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const {
       patientId,
@@ -245,7 +263,7 @@ router.patch('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/diagnoses/:id - Diagnose löschen
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -304,7 +322,7 @@ router.get('/encounter/:encounterId', auth, async (req, res) => {
 });
 
 // POST /api/diagnoses - Neue Diagnose erstellen
-router.post('/', auth, async (req, res) => {
+router.post('/', optionalAuth, async (req, res) => {
   try {
     const {
       patientId,
@@ -398,7 +416,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // PUT /api/diagnoses/:id - Diagnose aktualisieren
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const updates = req.body;
@@ -471,7 +489,7 @@ router.put('/:id', auth, async (req, res) => {
 });
 
 // DELETE /api/diagnoses/:id - Diagnose löschen
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -514,7 +532,7 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 // POST /api/diagnoses/:id/link-service - Diagnose mit Leistung verknüpfen
-router.post('/:id/link-service', auth, async (req, res) => {
+router.post('/:id/link-service', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { serviceId, context = 'medical' } = req.body;
@@ -544,7 +562,7 @@ router.post('/:id/link-service', auth, async (req, res) => {
 });
 
 // POST /api/diagnoses/:id/export - Diagnose für Export vorbereiten
-router.post('/:id/export', auth, async (req, res) => {
+router.post('/:id/export', optionalAuth, async (req, res) => {
   try {
     const { id } = req.params;
     const { target, payload } = req.body;

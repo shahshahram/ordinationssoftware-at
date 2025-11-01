@@ -11,14 +11,36 @@ const AuditLogSchema = new mongoose.Schema({
     type: String, 
     required: true,
     enum: [
+      // Authentication & User Management
       'LOGIN', 'LOGOUT', 'LOGIN_FAILED', 'ACCOUNT_LOCKED', 'ACCOUNT_UNLOCKED',
       'PASSWORD_CHANGED', 'PASSWORD_RESET', '2FA_ENABLED', '2FA_DISABLED',
       'PROFILE_UPDATED', 'USER_CREATED', 'USER_DELETED', 'USER_ACTIVATED', 'USER_DEACTIVATED',
+      
+      // RBAC & Authorization
+      'authorization', 'permission_granted', 'permission_denied', 'role_assigned', 'role_revoked',
+      'acl_created', 'acl_updated', 'acl_deleted', 'policy_updated',
+      'permission_auto_granted', 'rbac_changes_detected', 'rbac_discovery_started', 'rbac_discovery_stopped',
+      
+      // Patient Management
       'PATIENT_CREATED', 'PATIENT_UPDATED', 'PATIENT_DELETED', 'PATIENT_VIEWED',
+      'patient.read', 'patient.create', 'patient.update', 'patient.delete',
+      
+      // Appointment Management
       'APPOINTMENT_CREATED', 'APPOINTMENT_UPDATED', 'APPOINTMENT_DELETED', 'APPOINTMENT_VIEWED',
+      'appointment.read', 'appointment.create', 'appointment.update', 'appointment.delete',
+      'appointment.book', 'appointment.cancel', 'appointment.reschedule',
+      
+      // Document Management
       'DOCUMENT_CREATED', 'DOCUMENT_UPDATED', 'DOCUMENT_DELETED', 'DOCUMENT_VIEWED', 'DOCUMENT_DOWNLOADED',
+      'document.read', 'document.create', 'document.update', 'document.delete',
+      'document.generate', 'document.print', 'document.share', 'document.export',
+      
+      // Billing Management
       'INVOICE_CREATED', 'INVOICE_UPDATED', 'INVOICE_DELETED', 'INVOICE_VIEWED',
-      'DATA_EXPORT', 'DATA_DELETION', 'AUDIT_LOG_EXPORT',
+      'billing.read', 'billing.create', 'billing.update', 'billing.delete', 'billing.generate',
+      
+      // System & Data Management
+      'DATA_EXPORT', 'DATA_DELETION', 'AUDIT_LOG_EXPORT', 'SYSTEM_BACKUP', 'SYSTEM_RESTORE',
       'staff_profiles.read', 'staff_profiles.create', 'staff_profiles.update', 'staff_profiles.delete', 'staff_profiles.toggle_status', 'staff_profiles.statistics',
       'work_shifts.read', 'work_shifts.create', 'work_shifts.update', 'work_shifts.delete', 'work_shifts.toggle_status',
       'absences.read', 'absences.create', 'absences.update', 'absences.delete', 'absences.approve',
