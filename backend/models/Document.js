@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { determineDocumentClass, isMedicalDocumentType, isContinuousDocumentType } = require('../utils/documentHelpers');
 
 const DocumentSchema = new mongoose.Schema({
   // Grunddaten
@@ -9,6 +10,26 @@ const DocumentSchema = new mongoose.Schema({
     required: true 
   },
   category: { type: String, trim: true },
+  
+  // Dokument-Klassifizierung (NEU für Versionierung)
+  documentClass: {
+    type: String,
+    enum: ['static_medical', 'static_non_medical', 'continuous_medical'],
+    index: true
+  },
+  isMedicalDocument: {
+    type: Boolean,
+    index: true
+  },
+  isContinuousDocument: {
+    type: Boolean,
+    default: false
+  },
+  continuousDocumentType: {
+    type: String,
+    enum: ['anamnese', 'medical_status', null],
+    default: null
+  },
   
   // Patient
   patient: {
@@ -69,9 +90,57 @@ const DocumentSchema = new mongoose.Schema({
   // Status und Workflow
   status: { 
     type: String, 
-    enum: ['draft', 'ready', 'sent', 'received', 'archived'],
-    default: 'draft' 
+    enum: ['draft', 'ready', 'sent', 'received', 'archived', 'under_review', 'released', 'withdrawn'],
+    default: 'draft',
+    index: true
   },
+  
+  // Versionierung (NEU)
+  currentVersion: {
+    versionNumber: {
+      type: String,
+      default: '1.0.0'
+    },
+    versionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DocumentVersion',
+      default: null
+    },
+    releasedAt: {
+      type: Date,
+      default: null
+    },
+    releasedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null
+    }
+  },
+  
+  // Freigabe-Lock (NEU)
+  isReleased: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  releasedVersion: {
+    type: String
+  },
+  
+  // Versions-Historie (NEU)
+  versionHistory: [{
+    versionNumber: String,
+    versionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DocumentVersion'
+    },
+    status: String,
+    createdAt: Date,
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    }
+  }],
   priority: { 
     type: String, 
     enum: ['niedrig', 'normal', 'hoch', 'dringend'],
@@ -98,7 +167,7 @@ const DocumentSchema = new mongoose.Schema({
   
   // Metadaten
   documentNumber: { type: String, unique: true },
-  version: { type: Number, default: 1 },
+  version: { type: Number, default: 1 }, // Legacy - wird durch currentVersion.versionNumber ersetzt
   isTemplate: { type: Boolean, default: false },
   templateCategory: { type: String },
   
@@ -135,6 +204,38 @@ DocumentSchema.pre('save', async function(next) {
     const typePrefix = this.type.toUpperCase().substring(0, 3);
     this.documentNumber = `${typePrefix}-${year}-${String(count + 1).padStart(6, '0')}`;
   }
+  
+  // Automatische Klassifizierung beim ersten Speichern (NEU)
+  if (this.isNew) {
+    if (!this.documentClass) {
+      this.documentClass = determineDocumentClass(this.type);
+    }
+    if (this.isMedicalDocument === undefined) {
+      this.isMedicalDocument = isMedicalDocumentType(this.type);
+    }
+    if (this.isContinuousDocument === undefined) {
+      this.isContinuousDocument = isContinuousDocumentType(this.type);
+    }
+    if (this.isContinuousDocument && !this.continuousDocumentType) {
+      // Bestimme continuousDocumentType basierend auf type
+      if (this.type === 'anamnese') {
+        this.continuousDocumentType = 'anamnese';
+      } else if (this.type === 'medical_status') {
+        this.continuousDocumentType = 'medical_status';
+      }
+    }
+    
+    // Initialisiere currentVersion wenn nicht vorhanden
+    if (!this.currentVersion || !this.currentVersion.versionNumber) {
+      this.currentVersion = {
+        versionNumber: '1.0.0',
+        versionId: null,
+        releasedAt: null,
+        releasedBy: null
+      };
+    }
+  }
+  
   next();
 });
 
@@ -158,6 +259,28 @@ DocumentSchema.methods.addAuditEntry = function(action, user, changes, reason) {
 
 DocumentSchema.methods.getFileSize = function() {
   return this.attachments.reduce((total, file) => total + file.size, 0);
+};
+
+/**
+ * Prüft ob das Dokument bearbeitet werden kann (NEU)
+ */
+DocumentSchema.methods.canBeEdited = function() {
+  // RELEASED Dokumente können nicht bearbeitet werden
+  if (this.isReleased && this.status === 'released') {
+    return false;
+  }
+  // UNDER_REVIEW Dokumente können nicht bearbeitet werden
+  if (this.status === 'under_review') {
+    return false;
+  }
+  return true;
+};
+
+/**
+ * Prüft ob eine neue Version erstellt werden muss (NEU)
+ */
+DocumentSchema.methods.requiresNewVersion = function() {
+  return this.isReleased && this.status === 'released';
 };
 
 module.exports = mongoose.model('Document', DocumentSchema);

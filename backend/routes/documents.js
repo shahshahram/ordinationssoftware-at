@@ -5,6 +5,7 @@ const DocumentTemplate = require('../models/DocumentTemplate');
 const Patient = require('../models/Patient');
 const User = require('../models/User');
 const auth = require('../middleware/auth');
+const documentVersionService = require('../services/documentVersionService');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -251,17 +252,12 @@ router.post('/templates', auth, [
 });
 
 // @route   PUT /api/documents/:id
-// @desc    Update a document
+// @desc    Update a document (mit Versionierung)
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
   try {
-    const document = await Document.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, lastModifiedBy: req.user._id },
-      { new: true, runValidators: true }
-    ).populate('patient', 'firstName lastName dateOfBirth')
-     .populate('doctor', 'firstName lastName');
-
+    const document = await Document.findById(req.params.id);
+    
     if (!document) {
       return res.status(404).json({
         success: false,
@@ -269,14 +265,40 @@ router.put('/:id', auth, async (req, res) => {
       });
     }
 
+    // Prüfe ob Dokument bearbeitet werden kann
+    if (!document.canBeEdited()) {
+      return res.status(400).json({
+        success: false,
+        message: `Dokument kann nicht bearbeitet werden. Status: ${document.status}. Für freigegebene Dokumente muss eine neue Version erstellt werden.`,
+        requiresNewVersion: document.requiresNewVersion()
+      });
+    }
+
+    // Verwende Version-Service für Update
+    const updatedDocument = await documentVersionService.updateDocument(
+      req.params.id,
+      req.body,
+      req.user,
+      {
+        reason: req.body.reason,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      }
+    );
+
+    await updatedDocument.populate('patient', 'firstName lastName dateOfBirth');
+    await updatedDocument.populate('doctor', 'firstName lastName');
+    await updatedDocument.populate('currentVersion.versionId');
+
     res.json({
       success: true,
-      data: document
+      data: updatedDocument
     });
   } catch (error) {
+    console.error('Document update error:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Aktualisieren des Dokuments'
+      message: error.message || 'Fehler beim Aktualisieren des Dokuments'
     });
   }
 });
@@ -415,6 +437,288 @@ router.delete('/:id/attachments/:filename', auth, async (req, res) => {
     res.json({ success: true, message: 'Anhang entfernt' });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Fehler beim Entfernen des Anhangs' });
+  }
+});
+
+// ============================================
+// VERSIONIERUNGS-ENDPUNKTE (NEU)
+// ============================================
+
+// @route   GET /api/documents/:id/versions
+// @desc    Get all versions of a document
+// @access  Private
+router.get('/:id/versions', auth, async (req, res) => {
+  try {
+    const { limit = 50, sort = 'desc' } = req.query;
+    
+    const versions = await documentVersionService.getDocumentVersions(req.params.id, {
+      limit: parseInt(limit),
+      sort: sort === 'asc' ? { createdAt: 1 } : { createdAt: -1 }
+    });
+
+    res.json({
+      success: true,
+      data: versions,
+      count: versions.length
+    });
+  } catch (error) {
+    console.error('Get versions error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Laden der Versionen'
+    });
+  }
+});
+
+// @route   GET /api/documents/:id/versions/:versionNumber
+// @desc    Get specific version of a document
+// @access  Private
+router.get('/:id/versions/:versionNumber', auth, async (req, res) => {
+  try {
+    const version = await documentVersionService.getDocumentVersion(
+      req.params.id,
+      req.params.versionNumber
+    );
+
+    if (!version) {
+      return res.status(404).json({
+        success: false,
+        message: `Version ${req.params.versionNumber} nicht gefunden`
+      });
+    }
+
+    res.json({
+      success: true,
+      data: version
+    });
+  } catch (error) {
+    console.error('Get version error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Laden der Version'
+    });
+  }
+});
+
+// @route   GET /api/documents/:id/comparison/:version1/:version2
+// @desc    Compare two versions of a document
+// @access  Private
+router.get('/:id/comparison/:version1/:version2', auth, async (req, res) => {
+  try {
+    const comparison = await documentVersionService.compareVersions(
+      req.params.id,
+      req.params.version1,
+      req.params.version2
+    );
+
+    res.json({
+      success: true,
+      data: comparison
+    });
+  } catch (error) {
+    console.error('Compare versions error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Vergleichen der Versionen'
+    });
+  }
+});
+
+// @route   POST /api/documents/:id/new-version
+// @desc    Create a new version of a released document
+// @access  Private
+router.post('/:id/new-version', auth, [
+  body('changeReason').optional().isString().withMessage('Änderungsgrund muss ein String sein')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const { changeReason, ...updates } = req.body;
+
+    const document = await documentVersionService.createNewVersion(
+      req.params.id,
+      updates,
+      req.user,
+      {
+        changeReason,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent')
+      }
+    );
+
+    await document.populate('patient', 'firstName lastName dateOfBirth');
+    await document.populate('doctor', 'firstName lastName');
+    await document.populate('currentVersion.versionId');
+
+    res.json({
+      success: true,
+      message: `Neue Version ${document.currentVersion.versionNumber} erstellt`,
+      data: document
+    });
+  } catch (error) {
+    console.error('Create new version error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Fehler beim Erstellen der neuen Version'
+    });
+  }
+});
+
+// @route   POST /api/documents/:id/submit-review
+// @desc    Submit document for review (DRAFT → UNDER_REVIEW)
+// @access  Private
+router.post('/:id/submit-review', auth, async (req, res) => {
+  try {
+    const document = await documentVersionService.submitForReview(req.params.id, req.user);
+
+    await document.populate('patient', 'firstName lastName dateOfBirth');
+    await document.populate('doctor', 'firstName lastName');
+
+    res.json({
+      success: true,
+      message: 'Dokument zur Prüfung eingereicht',
+      data: document
+    });
+  } catch (error) {
+    console.error('Submit for review error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Fehler beim Einreichen zur Prüfung'
+    });
+  }
+});
+
+// @route   POST /api/documents/:id/release
+// @desc    Release a document (UNDER_REVIEW → RELEASED)
+// @access  Private
+router.post('/:id/release', auth, [
+  body('comment').optional().isString().withMessage('Kommentar muss ein String sein')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const document = await documentVersionService.releaseDocument(
+      req.params.id,
+      req.user,
+      req.body.comment || ''
+    );
+
+    await document.populate('patient', 'firstName lastName dateOfBirth');
+    await document.populate('doctor', 'firstName lastName');
+    await document.populate('currentVersion.versionId');
+    await document.populate('currentVersion.releasedBy', 'firstName lastName');
+
+    res.json({
+      success: true,
+      message: `Dokument Version ${document.currentVersion.versionNumber} freigegeben`,
+      data: document
+    });
+  } catch (error) {
+    console.error('Release document error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Fehler beim Freigeben des Dokuments'
+    });
+  }
+});
+
+// @route   POST /api/documents/:id/withdraw
+// @desc    Withdraw a document (→ WITHDRAWN)
+// @access  Private
+router.post('/:id/withdraw', auth, [
+  body('reason').notEmpty().withMessage('Rückzugs-Grund ist erforderlich')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const document = await documentVersionService.withdrawDocument(
+      req.params.id,
+      req.user,
+      req.body.reason
+    );
+
+    await document.populate('patient', 'firstName lastName dateOfBirth');
+    await document.populate('doctor', 'firstName lastName');
+
+    res.json({
+      success: true,
+      message: 'Dokument zurückgezogen',
+      data: document
+    });
+  } catch (error) {
+    console.error('Withdraw document error:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Fehler beim Zurückziehen des Dokuments'
+    });
+  }
+});
+
+// @route   GET /api/documents/:id/audit-trail
+// @desc    Get complete audit trail of a document
+// @access  Private
+router.get('/:id/audit-trail', auth, async (req, res) => {
+  try {
+    const document = await Document.findById(req.params.id);
+    
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dokument nicht gefunden'
+      });
+    }
+
+    // Kombiniere Audit Trail aus Dokument und Versionen
+    const versions = await documentVersionService.getDocumentVersions(req.params.id);
+    
+    const auditTrail = [
+      ...(document.auditTrail || []).map(entry => ({
+        type: 'document',
+        ...entry.toObject ? entry.toObject() : entry
+      })),
+      ...versions.map(version => ({
+        type: 'version',
+        action: `Version ${version.versionNumber} ${version.versionStatus}`,
+        user: version.createdBy,
+        timestamp: version.createdAt,
+        versionNumber: version.versionNumber,
+        versionStatus: version.versionStatus,
+        releasedAt: version.releasedAt,
+        releasedBy: version.releasedBy
+      }))
+    ].sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+
+    res.json({
+      success: true,
+      data: auditTrail
+    });
+  } catch (error) {
+    console.error('Get audit trail error:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Laden des Audit Trails'
+    });
   }
 });
 
