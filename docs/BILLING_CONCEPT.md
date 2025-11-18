@@ -412,3 +412,7 @@ function calculateCopay(service, patient) {
 
 
 
+
+
+
+

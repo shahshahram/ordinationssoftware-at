@@ -872,3 +872,7 @@ router.put('/api/v2/documents/:id', updateDocumentV2);  // Nur neues System
 
 **Dieses Konzept dient als Leitfaden für die Implementierung.**
 
+
+
+
+

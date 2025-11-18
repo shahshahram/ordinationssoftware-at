@@ -40,3 +40,7 @@ fi
 echo "🏁 Script beendet am $(date)" | tee -a "$LOG_FILE"
 
 
+
+
+
+

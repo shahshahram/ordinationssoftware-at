@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="AT"/>
+  <typeId root="2.16.840.1.113883.1.3" extension="POCD_HD000040"/>
+  <templateId root="1.2.40.0.34.11.1"/>
+  <templateId root="1.2.40.0.34.11.2"/>
+  <id root="c0e13f02-e1a2-4cd5-8b62-a1c678f4070e" extension="AMB-1762074753582-9FAA2E5C"/>
+  <code code="{}" codeSystem="1.2.40.0.34.10.39"/>
+  <title>Ambulanzbefund - Herbert Mustermann</title>
+  <effectiveTime value="20251102091237+0000"/>
+  <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
+  <languageCode code="de-AT"/>
+  
+  <!-- Patient -->
+  <recordTarget>
+    <patientRole>
+      <id root="2.16.840.1.113883.2.7" extension="1111241261"/>
+      <patient>
+        <name>
+          <given>Herbert</given>
+          <family>Mustermann</family>
+        </name>
+        <birthTime value="19611224"/>
+      </patient>
+    </patientRole>
+  </recordTarget>
+  
+  <!-- Autor -->
+  <author>
+    <time value="20251102091237+0000"/>
+    <assignedAuthor>
+      <id root="0f7b12f1-0986-48ac-a5e1-b51ab96e2392" extension="68f3e2bc48a0c83b82953c06"/>
+      <assignedPerson>
+        <name>
+          <given>Admin</given>
+          <family>Administrator</family>
+        </name>
+      </assignedPerson>
+      <representedOrganization>
+        <name>Amadeus Spital</name>
+      </representedOrganization>
+    </assignedAuthor>
+  </author>
+  
+  <!-- Custodian -->
+  <custodian>
+    <assignedCustodian>
+      <representedCustodianOrganization>
+        <id root="5da19d5b-af3f-4583-b475-af80455cba11" extension="6906384b40cae18300feba4a"/>
+        <name>Amadeus Spital</name>
+      </representedCustodianOrganization>
+    </assignedCustodian>
+  </custodian>
+  
+  <!-- Dokumenten-Information -->
+  <component>
+    <structuredBody>
+      
+      <!-- Primärdiagnose -->
+      <component>
+        <section>
+          <code code="29548-5" codeSystem="2.16.840.1.113883.6.1" displayName="Diagnose"/>
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <code code="101.1" codeSystem="2.16.840.1.113883.6.90" displayName="Revisionsgrund: Osteolyse Acetabulum"/>
+            </act>
+          </entry>
+        </section>
+      </component>
+      
+      
+      <!-- Sekundärdiagnosen -->
+      <component>
+        <section>
+          <code code="29548-5" codeSystem="2.16.840.1.113883.6.1" displayName="Sekundärdiagnosen"/>
+          
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <code code="E10.1" codeSystem="2.16.840.1.113883.6.90" displayName="Diabetes mellitus Typ 1 mit Azetonämie"/>
+            </act>
+          </entry>
+        </section>
+      </component>
+      
+      <!-- Formulardaten als Text -->
+      <component>
+        <section>
+          <code code="11534-6" codeSystem="2.16.840.1.113883.6.1" displayName="Ambulanzbefund"/>
+          <text>
+            <![CDATA[
+{
+  "assessment": {
+    "primaryDiagnosis": {
+      "code": "101.1",
+      "display": "Revisionsgrund: Osteolyse Acetabulum",
+      "codingScheme": "ICD-10"
+    },
+    "secondaryDiagnoses": [
+      {
+        "code": "E10.1",
+        "display": "Diabetes mellitus Typ 1 mit Azetonämie",
+        "codingScheme": "ICD-10"
+      }
+    ],
+    "clinicalImpression": "gut"
+  },
+  "anamnesis": {
+    "chiefComplaint": "Test",
+    "historyOfPresentIllness": "test"
+  },
+  "examination": {
+    "general": "test",
+    "vitalSigns": {
+      "bloodPressure": "180/90",
+      "heartRate": 90,
+      "temperature": 36
+    }
+  },
+  "plan": {
+    "therapy": "test"
+  }
+}
+            ]]>
+          </text>
+        </section>
+      </component>
+    </structuredBody>
+  </component>
+</ClinicalDocument>

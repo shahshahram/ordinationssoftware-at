@@ -44,9 +44,11 @@ const collisionDetectionRoutes = require('./routes/collisionDetection');
 const icd10Routes = require('./routes/icd10');
 const diagnosesRoutes = require('./routes/diagnoses');
 const icd10CatalogRoutes = require('./routes/icd10Catalog');
+const elgaValuesetsRoutes = require('./routes/elgaValuesets');
 const icd10PersonalListsRoutes = require('./routes/icd10PersonalLists');
 const slotReservationRoutes = require('./routes/slotReservation');
 const documentTemplateRoutes = require('./routes/documentTemplates');
+const xdsRoutes = require('./routes/xds');
 const pdfGenerationRoutes = require('./routes/pdfGeneration');
 // const oneClickBillingRoutes = require('./routes/oneClickBilling'); // Temporär deaktiviert
 const patientsExtendedRoutes = require('./routes/patientsExtended');
@@ -56,14 +58,23 @@ const rbacDiscoveryRoutes = require('./routes/rbacDiscovery');
 const inventoryRoutes = require('./routes/inventory');
 const setupRoutes = require('./routes/setup');
 const settingsRoutes = require('./routes/settings');
-
-// RBAC Auto-Discovery Service
-const rbacAutoDiscovery = require('./services/rbacAutoDiscovery');
+const ambulanzbefundeRoutes = require('./routes/ambulanzbefunde');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
 const backupService = require('./utils/backupService');
+
+// RBAC Auto-Discovery Service
+const rbacAutoDiscovery = require('./services/rbacAutoDiscovery');
+
+// Module Manager (optional)
+const USE_MODULE_MANAGER = process.env.USE_MODULE_MANAGER === 'true';
+let moduleManager = null;
+if (USE_MODULE_MANAGER) {
+  moduleManager = require('./services/moduleManager');
+  logger.info('📦 Module Manager aktiviert - Module werden dynamisch geladen');
+}
 
 const app = express();
 const PORT = process.env.PORT || 5001;
@@ -111,10 +122,7 @@ app.use(compression());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Database connection
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(process.env.MONGODB_URI)
 .then(() => {
   logger.info('MongoDB erfolgreich verbunden');
 })
@@ -123,54 +131,86 @@ mongoose.connect(process.env.MONGODB_URI, {
   process.exit(1);
 });
 
-// Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/patients', patientRoutes);
-app.use('/api/appointments', appointmentRoutes);
-app.use('/api/resources', resourceRoutes);
-app.use('/api/billing', billingRoutes);
-app.use('/api/checkin', require('./routes/checkin'));
-app.use('/api/documents', documentRoutes);
-app.use('/api/online-booking', onlineBookingRoutes);
-app.use('/api/elga', elgaRoutes);
-app.use('/api/ecard', ecardRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/backup', backupRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/audit-logs', auditLogRoutes);
-app.use('/api/staff-profiles', staffProfileRoutes);
-app.use('/api/work-shifts', workShiftRoutes);
-app.use('/api/absences', absenceRoutes);
-app.use('/api/availability', availabilityRoutes);
-app.use('/api/service-catalog', serviceCatalogRoutes);
-app.use('/api/service-bookings', serviceBookingRoutes);
-app.use('/api/service-categories', serviceCategoryRoutes);
-app.use('/api/weekly-schedules', weeklyScheduleRoutes);
-app.use('/api/appointment-participants', appointmentParticipantRoutes);
-app.use('/api/appointment-services', appointmentServiceRoutes);
-app.use('/api/appointment-resources', appointmentResourceRoutes);
-app.use('/api/clinic-hours', clinicHoursRoutes);
-app.use('/api/rooms', roomsRoutes);
-app.use('/api/devices', devicesRoutes);
-app.use('/api/locations', locationsRoutes);
-app.use('/api/staff-location-assignments', staffLocationAssignmentsRoutes);
-app.use('/api/location-weekly-schedules', locationWeeklySchedulesRoutes);
-app.use('/api/collision-detection', collisionDetectionRoutes);
-app.use('/api/icd10', icd10Routes);
-app.use('/api/diagnoses', diagnosesRoutes);
-app.use('/api/icd10-catalog', icd10CatalogRoutes);
-app.use('/api/icd10/personal-lists', icd10PersonalListsRoutes);
-app.use('/api/slot-reservations', slotReservationRoutes);
-app.use('/api/document-templates', documentTemplateRoutes);
-app.use('/api/pdf', pdfGenerationRoutes);
-// app.use('/api/billing', oneClickBillingRoutes); // Temporär deaktiviert
-app.use('/api/patients-extended', patientsExtendedRoutes);
-app.use('/api/rbac', rbacRoutes);
-app.use('/api/rbac/discovery', rbacDiscoveryRoutes);
-app.use('/api/inventory', inventoryRoutes);
-app.use('/api/setup', setupRoutes);
-app.use('/api/settings', settingsRoutes);
-app.use('/api/medications', medicationCatalogRoutes);
+// Routes - Statische Registrierung für sofortige Verfügbarkeit
+// Module Manager kann später für dynamische Steuerung verwendet werden
+registerStaticRoutes(app);
+
+/**
+ * Statische Route-Registrierung (Fallback)
+ */
+function registerStaticRoutes(app) {
+  app.use('/api/auth', authRoutes);
+  app.use('/api/patients', patientRoutes);
+  app.use('/api/appointments', appointmentRoutes);
+  app.use('/api/resources', resourceRoutes);
+  app.use('/api/billing', billingRoutes);
+  app.use('/api/checkin', require('./routes/checkin'));
+  app.use('/api/documents', documentRoutes);
+  app.use('/api/online-booking', onlineBookingRoutes);
+  app.use('/api/elga', elgaRoutes);
+  app.use('/api/ecard', ecardRoutes);
+  app.use('/api/users', userRoutes);
+  app.use('/api/backup', backupRoutes);
+  app.use('/api/reports', reportRoutes);
+  app.use('/api/audit-logs', auditLogRoutes);
+  app.use('/api/staff-profiles', staffProfileRoutes);
+  app.use('/api/work-shifts', workShiftRoutes);
+  app.use('/api/absences', absenceRoutes);
+  app.use('/api/availability', availabilityRoutes);
+  app.use('/api/service-catalog', serviceCatalogRoutes);
+  app.use('/api/service-bookings', serviceBookingRoutes);
+  app.use('/api/service-categories', serviceCategoryRoutes);
+  app.use('/api/weekly-schedules', weeklyScheduleRoutes);
+  app.use('/api/appointment-participants', appointmentParticipantRoutes);
+  app.use('/api/appointment-services', appointmentServiceRoutes);
+  app.use('/api/appointment-resources', appointmentResourceRoutes);
+  app.use('/api/clinic-hours', clinicHoursRoutes);
+  app.use('/api/rooms', roomsRoutes);
+  app.use('/api/devices', devicesRoutes);
+  app.use('/api/locations', locationsRoutes);
+  app.use('/api/staff-location-assignments', staffLocationAssignmentsRoutes);
+  app.use('/api/location-weekly-schedules', locationWeeklySchedulesRoutes);
+  app.use('/api/collision-detection', collisionDetectionRoutes);
+  app.use('/api/icd10', icd10Routes);
+  app.use('/api/diagnoses', diagnosesRoutes);
+  app.use('/api/icd10-catalog', icd10CatalogRoutes);
+  app.use('/api/icd10/personal-lists', icd10PersonalListsRoutes);
+  app.use('/api/elga-valuesets', elgaValuesetsRoutes);
+  app.use('/api/slot-reservations', slotReservationRoutes);
+  app.use('/api/document-templates', documentTemplateRoutes);
+  app.use('/api/xds', xdsRoutes);
+  app.use('/api/pdf', pdfGenerationRoutes);
+  // app.use('/api/billing', oneClickBillingRoutes); // Temporär deaktiviert
+  app.use('/api/patients-extended', patientsExtendedRoutes);
+  app.use('/api/rbac', rbacRoutes);
+  app.use('/api/rbac/discovery', rbacDiscoveryRoutes);
+  app.use('/api/inventory', inventoryRoutes);
+  app.use('/api/setup', setupRoutes);
+  app.use('/api/settings', settingsRoutes);
+  app.use('/api/medications', medicationCatalogRoutes);
+  app.use('/api/ambulanzbefunde', ambulanzbefundeRoutes);
+  
+  // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)
+  if (USE_MODULE_MANAGER) {
+    app.use('/api/modules', require('./routes/modules'));
+  }
+}
+
+// Dynamische Modul-Registrierung (nach DB-Verbindung)
+if (USE_MODULE_MANAGER && moduleManager) {
+  mongoose.connection.once('open', async () => {
+    try {
+      // Lade aktive Module
+      await moduleManager.loadActiveModules();
+      logger.info('✅ Module Manager: Module-Status geladen');
+      
+      // Hinweis: Für vollständige Deaktivierung von Routen wäre ein Server-Neustart nötig
+      // Alternativ: Middleware zum Prüfen des Modul-Status in jeder Route
+    } catch (error) {
+      logger.error('❌ Fehler beim Laden der Module:', error);
+    }
+  });
+}
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

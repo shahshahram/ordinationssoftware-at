@@ -536,3 +536,7 @@ elgaData: {
 
 **Stand: Diese Analyse basiert auf dem aktuellen Code-Zustand und zeigt alle implementierten/übernommenen ELGA-Standards, Terminologien und Stylesheets.**
 
+
+
+
+

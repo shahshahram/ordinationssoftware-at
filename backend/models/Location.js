@@ -58,6 +58,70 @@ const locationSchema = new mongoose.Schema({
   is_active: {
     type: Boolean,
     default: true
+  },
+  
+  // XDS Registry Konfiguration
+  xdsRegistry: {
+    enabled: {
+      type: Boolean,
+      default: false
+    },
+    registryUrl: {
+      type: String,
+      trim: true
+    },
+    repositoryLocation: {
+      type: String,
+      trim: true
+    },
+    repositoryUniqueId: {
+      type: String,
+      trim: true
+    },
+    homeCommunityId: {
+      type: String,
+      trim: true
+    },
+    // Berechtigungsregeln für XDS-Operationen
+    permissions: {
+      create: {
+        roles: [String],
+        default: ['admin', 'super_admin', 'doctor', 'arzt']
+      },
+      update: {
+        roles: [String],
+        default: ['admin', 'super_admin', 'doctor', 'arzt']
+      },
+      deprecate: {
+        roles: [String],
+        default: ['admin', 'super_admin']
+      },
+      delete: {
+        roles: [String],
+        default: ['admin', 'super_admin']
+      },
+      retrieve: {
+        roles: [String],
+        default: ['admin', 'super_admin', 'doctor', 'arzt', 'nurse', 'assistent']
+      },
+      query: {
+        roles: [String],
+        default: ['admin', 'super_admin', 'doctor', 'arzt', 'nurse', 'assistent']
+      }
+    },
+    // Konfiguration für Patient-Upload
+    allowPatientUpload: {
+      type: Boolean,
+      default: false
+    },
+    patientUploadMaxSize: {
+      type: Number,
+      default: 10485760 // 10 MB
+    },
+    patientUploadAllowedTypes: {
+      type: [String],
+      default: ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
+    }
   }
 }, {
   timestamps: true

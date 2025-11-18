@@ -218,3 +218,7 @@ def process_billing_job(job_id) {
 **Status**: Konzept dokumentiert, wartet auf Implementierung
 
 
+
+
+
+

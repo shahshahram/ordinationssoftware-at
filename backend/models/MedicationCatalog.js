@@ -143,3 +143,7 @@ MedicationCatalogSchema.index({ searchText: 'text' });
 module.exports = mongoose.model('MedicationCatalog', MedicationCatalogSchema);
 
 
+
+
+
+
