@@ -3,16 +3,26 @@ const logger = require('../utils/logger');
 
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
+    // Unterstütze sowohl MONGO_URI als auch MONGODB_URI
+    const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
+    
+    if (!mongoUri) {
+      logger.error('MONGO_URI oder MONGODB_URI ist nicht definiert in .env');
+      throw new Error('MONGO_URI or MONGODB_URI environment variable is required');
+    }
+    
+    const conn = await mongoose.connect(mongoUri, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 30000, // 30 Sekunden Timeout
+      socketTimeoutMS: 45000,
     });
 
     logger.info(`MongoDB Connected: ${conn.connection.host}`);
+    return conn;
   } catch (error) {
     logger.error(`MongoDB Verbindungsfehler: ${error.message}`);
-    // Don't exit process, let the app run without database
-    // process.exit(1);
+    throw error; // Re-throw für Scripts
   }
 };
 

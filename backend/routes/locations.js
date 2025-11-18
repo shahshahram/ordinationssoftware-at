@@ -483,19 +483,128 @@ router.put('/:id', [
       });
     }
 
-    const location = await Location.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, updatedAt: new Date() },
-      { new: true, runValidators: true }
-    );
-
+    // Bereite Update-Objekt vor - explizite Behandlung von verschachtelten Objekten
+    const updateData = { ...req.body };
+    
+    // Debug-Logging für alle Updates
+    console.log('[Location Update] Request Body:', JSON.stringify(req.body, null, 2));
+    console.log('[Location Update] xdsRegistry in Body:', req.body.xdsRegistry !== undefined ? 'YES' : 'NO');
+    if (req.body.xdsRegistry !== undefined) {
+      console.log('[Location Update] xdsRegistry value:', JSON.stringify(req.body.xdsRegistry, null, 2));
+    }
+    
+    // Stelle sicher, dass xdsRegistry korrekt behandelt wird
+    // Lade das Dokument immer, um verschachtelte Objekte korrekt zu behandeln
+    const location = await Location.findById(req.params.id);
     if (!location) {
       return res.status(404).json({
         success: false,
         message: 'Standort nicht gefunden'
       });
     }
-
+    
+    console.log('[Location Update] Current location xdsRegistry before update:', JSON.stringify(location.xdsRegistry, null, 2));
+    
+    // Wenn xdsRegistry im Body ist, aktualisiere es explizit
+    if (req.body.xdsRegistry !== undefined) {
+      // Stelle sicher, dass xdsRegistry existiert
+      if (!location.xdsRegistry) {
+        location.xdsRegistry = {
+          enabled: false,
+          permissions: {
+            create: { roles: ['admin', 'super_admin', 'doctor', 'arzt'] },
+            update: { roles: ['admin', 'super_admin', 'doctor', 'arzt'] },
+            deprecate: { roles: ['admin', 'super_admin'] },
+            delete: { roles: ['admin', 'super_admin'] },
+            retrieve: { roles: ['admin', 'super_admin', 'doctor', 'arzt', 'nurse', 'assistent'] },
+            query: { roles: ['admin', 'super_admin', 'doctor', 'arzt', 'nurse', 'assistent'] }
+          },
+          allowPatientUpload: false,
+          patientUploadMaxSize: 10485760,
+          patientUploadAllowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
+        };
+      }
+      
+      // Stelle sicher, dass permissions existieren, auch wenn xdsRegistry schon vorhanden ist
+      if (!location.xdsRegistry.permissions) {
+        location.xdsRegistry.permissions = {
+          create: { roles: ['admin', 'super_admin', 'doctor', 'arzt'] },
+          update: { roles: ['admin', 'super_admin', 'doctor', 'arzt'] },
+          deprecate: { roles: ['admin', 'super_admin'] },
+          delete: { roles: ['admin', 'super_admin'] },
+          retrieve: { roles: ['admin', 'super_admin', 'doctor', 'arzt', 'nurse', 'assistent'] },
+          query: { roles: ['admin', 'super_admin', 'doctor', 'arzt', 'nurse', 'assistent'] }
+        };
+        console.log('[Location Update] Initialized missing xdsRegistry.permissions with defaults');
+      }
+      
+      // Merge xdsRegistry Felder - überschreibe ALLE Felder die im Request sind
+      const xdsUpdate = req.body.xdsRegistry;
+      if (xdsUpdate.enabled !== undefined) {
+        location.xdsRegistry.enabled = xdsUpdate.enabled;
+        console.log('[Location Update] Set xdsRegistry.enabled to:', xdsUpdate.enabled);
+      }
+        if (req.body.xdsRegistry.registryUrl !== undefined) {
+          location.xdsRegistry.registryUrl = req.body.xdsRegistry.registryUrl || '';
+        }
+        if (req.body.xdsRegistry.repositoryLocation !== undefined) {
+          location.xdsRegistry.repositoryLocation = req.body.xdsRegistry.repositoryLocation || '';
+        }
+        if (req.body.xdsRegistry.repositoryUniqueId !== undefined) {
+          location.xdsRegistry.repositoryUniqueId = req.body.xdsRegistry.repositoryUniqueId || '';
+        }
+        if (req.body.xdsRegistry.homeCommunityId !== undefined) {
+          location.xdsRegistry.homeCommunityId = req.body.xdsRegistry.homeCommunityId || '';
+        }
+        if (req.body.xdsRegistry.allowPatientUpload !== undefined) {
+          location.xdsRegistry.allowPatientUpload = req.body.xdsRegistry.allowPatientUpload;
+        }
+        if (req.body.xdsRegistry.patientUploadMaxSize !== undefined) {
+          location.xdsRegistry.patientUploadMaxSize = req.body.xdsRegistry.patientUploadMaxSize;
+        }
+        if (req.body.xdsRegistry.patientUploadAllowedTypes !== undefined) {
+          location.xdsRegistry.patientUploadAllowedTypes = req.body.xdsRegistry.patientUploadAllowedTypes;
+        }
+        // Merge permissions falls vorhanden
+        if (req.body.xdsRegistry.permissions) {
+          if (!location.xdsRegistry.permissions) {
+            location.xdsRegistry.permissions = {};
+          }
+          Object.keys(req.body.xdsRegistry.permissions).forEach(key => {
+            if (req.body.xdsRegistry.permissions[key]) {
+              location.xdsRegistry.permissions[key] = {
+                ...location.xdsRegistry.permissions[key],
+                ...req.body.xdsRegistry.permissions[key]
+              };
+            }
+          });
+        }
+    }
+    
+    // Aktualisiere andere Felder (außer xdsRegistry, das wurde oben behandelt)
+    Object.keys(updateData).forEach(key => {
+      if (key !== 'xdsRegistry' && key !== '_id' && key !== '__v' && key !== 'createdAt') {
+        if (updateData[key] !== undefined) {
+          location[key] = updateData[key];
+        }
+      }
+    });
+    
+    location.updatedAt = new Date();
+    
+    // Markiere xdsRegistry als modified für MongoDB (wichtig für verschachtelte Objekte)
+    if (req.body.xdsRegistry !== undefined) {
+      location.markModified('xdsRegistry');
+      console.log('[Location Update] Marked xdsRegistry as modified');
+    }
+    
+    console.log('[Location Update] Saving location, xdsRegistry will be:', JSON.stringify(location.xdsRegistry, null, 2));
+    await location.save();
+    
+    // Lade das gespeicherte Dokument neu, um sicherzustellen, dass es korrekt gespeichert wurde
+    const savedLocation = await Location.findById(req.params.id);
+    console.log('[Location Update] Saved location xdsRegistry:', JSON.stringify(savedLocation?.xdsRegistry, null, 2));
+    
     // Audit-Log
     await AuditLog.create({
       userId: req.user.id,
@@ -510,9 +619,9 @@ router.put('/:id', [
       userAgent: req.get('User-Agent')
     });
 
-    res.json({
+    return res.json({
       success: true,
-      data: location,
+      data: savedLocation || location,
       message: 'Standort erfolgreich aktualisiert'
     });
   } catch (error) {

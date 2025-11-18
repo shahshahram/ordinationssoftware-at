@@ -125,22 +125,63 @@ router.get('/search', auth, async (req, res) => {
     const searchTerm = q.trim();
     console.log(`Medikamenten-Suche: "${searchTerm}"`);
 
+    // Escape Regex-Sonderzeichen im Suchbegriff
+    const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const escapedSearchTermStart = escapedSearchTerm;
+
     // MongoDB Text Search mit Regex für bessere Performance
     const query = {
       $or: [
-        { name: { $regex: searchTerm, $options: 'i' } },
-        { designation: { $regex: searchTerm, $options: 'i' } },
-        { activeIngredient: { $regex: searchTerm, $options: 'i' } },
-        { atcCode: { $regex: searchTerm, $options: 'i' } },
-        { searchText: { $regex: searchTerm, $options: 'i' } }
+        { name: { $regex: escapedSearchTerm, $options: 'i' } },
+        { designation: { $regex: escapedSearchTerm, $options: 'i' } },
+        { activeIngredient: { $regex: escapedSearchTerm, $options: 'i' } },
+        { atcCode: { $regex: escapedSearchTerm, $options: 'i' } },
+        { searchText: { $regex: escapedSearchTerm, $options: 'i' } }
       ]
     };
 
-    const medications = await MedicationCatalog.find(query)
-      .select('name designation activeIngredient strength strengthUnit form atcCode requiresPrescription')
-      .limit(parseInt(limit))
-      .sort({ name: 1 })
-      .lean();
+    // Erweiterte Suche: Aggregation Pipeline für bessere Sortierung
+    // Priorisiert: 1. Name, 2. Wirkstoff, 3. Bezeichnung, 4. ATC-Code
+    const medications = await MedicationCatalog.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          // Relevanz-Score: Höhere Priorität für exakte Treffer
+          relevanceScore: {
+            $add: [
+              // Name-Treffer: 100 Punkte
+              { $cond: [{ $regexMatch: { input: '$name', regex: escapedSearchTerm, options: 'i' } }, 100, 0] },
+              // Wirkstoff-Treffer: 80 Punkte (hohe Priorität)
+              { $cond: [{ $regexMatch: { input: '$activeIngredient', regex: escapedSearchTerm, options: 'i' } }, 80, 0] },
+              // Bezeichnung-Treffer: 60 Punkte
+              { $cond: [{ $regexMatch: { input: '$designation', regex: escapedSearchTerm, options: 'i' } }, 60, 0] },
+              // ATC-Code-Treffer: 40 Punkte
+              { $cond: [{ $regexMatch: { input: '$atcCode', regex: escapedSearchTerm, options: 'i' } }, 40, 0] },
+              // Name beginnt mit Suchbegriff: Bonus 20 Punkte
+              { $cond: [{ $regexMatch: { input: '$name', regex: `^${escapedSearchTermStart}`, options: 'i' } }, 20, 0] },
+              // Wirkstoff beginnt mit Suchbegriff: Bonus 15 Punkte
+              { $cond: [{ $regexMatch: { input: '$activeIngredient', regex: `^${escapedSearchTermStart}`, options: 'i' } }, 15, 0] }
+            ]
+          }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          name: 1,
+          designation: 1,
+          activeIngredient: 1,
+          strength: 1,
+          strengthUnit: 1,
+          form: 1,
+          atcCode: 1,
+          requiresPrescription: 1,
+          relevanceScore: 1
+        }
+      },
+      { $sort: { relevanceScore: -1, name: 1 } },
+      { $limit: parseInt(limit) }
+    ]);
 
     console.log(`Medikamenten-Suche: ${medications.length} Ergebnisse gefunden`);
     

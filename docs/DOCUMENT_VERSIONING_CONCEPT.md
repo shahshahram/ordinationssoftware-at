@@ -725,3 +725,7 @@ Rezeption:
 
 **Dieses Konzept ist als Diskussionsgrundlage gedacht und sollte vor der Implementierung finalisiert werden.**
 
+
+
+
+
