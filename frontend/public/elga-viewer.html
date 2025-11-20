@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELGA CDA Dokument - Entlassungsbrief</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #0066cc;
+            padding-bottom: 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background-color: #ffebee;
+            border: 1px solid #f44336;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #c62828;
+        }
+        .info {
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #1565c0;
+        }
+        #output {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ELGA CDA Dokument - Entlassungsbrief (Ärztlich)</h1>
+        
+        <div id="status" class="loading">
+            Lade XML-Dokument und wende XSL-Transformation an...
+        </div>
+        
+        <div id="output"></div>
+    </div>
+
+    <script>
+        // XML und XSL-Dateien laden und transformieren
+        const loadXML = async (xmlPath, xslPath) => {
+            try {
+                // XML und XSL parallel laden
+                const [xmlResponse, xslResponse] = await Promise.all([
+                    fetch(xmlPath),
+                    fetch(xslPath)
+                ]);
+
+                if (!xmlResponse.ok) {
+                    throw new Error(`Fehler beim Laden der XML-Datei: ${xmlResponse.statusText}`);
+                }
+                if (!xslResponse.ok) {
+                    throw new Error(`Fehler beim Laden der XSL-Datei: ${xslResponse.statusText}`);
+                }
+
+                const xmlText = await xmlResponse.text();
+                const xslText = await xslResponse.text();
+
+                // XML und XSL parsen
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+                const xslDoc = parser.parseFromString(xslText, 'text/xml');
+
+                // Prüfe auf Parsing-Fehler
+                const xmlErrors = xmlDoc.querySelector('parsererror');
+                const xslErrors = xslDoc.querySelector('parsererror');
+                
+                if (xmlErrors) {
+                    throw new Error('XML-Parsing-Fehler: ' + xmlErrors.textContent);
+                }
+                if (xslErrors) {
+                    throw new Error('XSL-Parsing-Fehler: ' + xslErrors.textContent);
+                }
+
+                // XSLT-Prozessor für moderne Browser
+                let result;
+                
+                if (window.XSLTProcessor) {
+                    // Moderne Browser: XSLTProcessor
+                    const processor = new XSLTProcessor();
+                    processor.importStylesheet(xslDoc);
+                    result = processor.transformToDocument(xmlDoc);
+                    
+                    // HTML-Ausgabe
+                    document.getElementById('output').innerHTML = new XMLSerializer().serializeToString(result);
+                } else if (xmlDoc.transformNode) {
+                    // Legacy Internet Explorer
+                    result = xmlDoc.transformNode(xslDoc);
+                    document.getElementById('output').innerHTML = result;
+                } else {
+                    throw new Error('Ihr Browser unterstützt keine XSLT-Transformation. Bitte verwenden Sie einen modernen Browser (Chrome, Firefox, Safari, Edge).');
+                }
+
+                // Status ausblenden
+                document.getElementById('status').style.display = 'none';
+                
+            } catch (error) {
+                document.getElementById('status').innerHTML = `<div class="error">
+                    <strong>Fehler:</strong><br>
+                    ${error.message}<br><br>
+                    <strong>Hinweise:</strong><br>
+                    - Stellen Sie sicher, dass beide Dateien (XML und XSL) im selben Verzeichnis sind<br>
+                    - Moderne Browser benötigen einen lokalen Webserver (z.B. http://localhost:3000)<br>
+                    - Öffnen Sie diese Seite über einen HTTP-Server, nicht direkt als file://
+                </div>`;
+                console.error('Fehler bei der XSLT-Transformation:', error);
+            }
+        };
+
+        // Beim Laden der Seite Transformation starten
+        window.addEventListener('DOMContentLoaded', () => {
+            const xmlPath = './ELGA-023-Entlassungsbrief_aerztlich_EIS-FullSupport.xml';
+            const xslPath = './ELGA_Stylesheet_v1.0.xsl';
+            
+            loadXML(xmlPath, xslPath);
+        });
+    </script>
+</body>
+</html>
+
+
+
+

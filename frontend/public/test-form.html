@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Form Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .debug {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .debug pre {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .chip {
+            display: inline-block;
+            background-color: #e3f2fd;
+            border: 1px solid #2196f3;
+            border-radius: 16px;
+            padding: 4px 8px;
+            margin: 2px;
+            font-size: 12px;
+        }
+        .chip-remove {
+            margin-left: 4px;
+            cursor: pointer;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Form Debug</h1>
+    <p>Diese Seite simuliert das Problem mit den Autocomplete-Komponenten.</p>
+    
+    <form id="testForm">
+        <div class="form-group">
+            <label for="allergies">Allergien (kommagetrennt):</label>
+            <input type="text" id="allergies" placeholder="z.B. Pollen, Nüsse, Milch">
+            <div id="allergies-chips"></div>
+        </div>
+        
+        <div class="form-group">
+            <label for="medications">Aktuelle Medikamente (kommagetrennt):</label>
+            <input type="text" id="medications" placeholder="z.B. Aspirin, Ibuprofen, Paracetamol">
+            <div id="medications-chips"></div>
+        </div>
+        
+        <div class="form-group">
+            <label for="conditions">Vorerkrankungen (kommagetrennt):</label>
+            <input type="text" id="conditions" placeholder="z.B. Diabetes, Bluthochdruck, Asthma">
+            <div id="conditions-chips"></div>
+        </div>
+        
+        <button type="button" onclick="testFormData()">Formular testen</button>
+        <button type="button" onclick="clearForm()">Formular leeren</button>
+    </form>
+    
+    <div class="debug">
+        <h3>Debug Information</h3>
+        <div id="debugOutput">
+            <p>Klicken Sie auf "Formular testen", um die Daten zu sehen.</p>
+        </div>
+    </div>
+
+    <script>
+        let formData = {
+            allergies: [],
+            currentMedications: [],
+            preExistingConditions: []
+        };
+
+        function updateChips(field, value) {
+            const container = document.getElementById(field + '-chips');
+            container.innerHTML = '';
+            
+            value.forEach((item, index) => {
+                const chip = document.createElement('div');
+                chip.className = 'chip';
+                chip.innerHTML = item + '<span class="chip-remove" onclick="removeChip(\'' + field + '\', ' + index + ')">×</span>';
+                container.appendChild(chip);
+            });
+        }
+
+        function removeChip(field, index) {
+            formData[field].splice(index, 1);
+            updateChips(field, formData[field]);
+            updateDebugOutput();
+        }
+
+        function addToArray(field, value) {
+            if (value.trim() && !formData[field].includes(value.trim())) {
+                formData[field].push(value.trim());
+                updateChips(field, formData[field]);
+                updateDebugOutput();
+            }
+        }
+
+        function updateDebugOutput() {
+            console.log('formData updated:', formData);
+            console.log('Allergies:', formData.allergies);
+            console.log('Current Medications:', formData.currentMedications);
+            console.log('Pre-existing Conditions:', formData.preExistingConditions);
+            
+            document.getElementById('debugOutput').innerHTML = `
+                <h4>Formular-Daten:</h4>
+                <pre>${JSON.stringify(formData, null, 2)}</pre>
+                
+                <h4>Arrays:</h4>
+                <p><strong>Allergien:</strong> ${formData.allergies.length} Einträge - ${JSON.stringify(formData.allergies)}</p>
+                <p><strong>Medikamente:</strong> ${formData.currentMedications.length} Einträge - ${JSON.stringify(formData.currentMedications)}</p>
+                <p><strong>Vorerkrankungen:</strong> ${formData.preExistingConditions.length} Einträge - ${JSON.stringify(formData.preExistingConditions)}</p>
+            `;
+        }
+
+        function testFormData() {
+            // Simuliere das Hinzufügen von Daten
+            addToArray('allergies', 'Pollen');
+            addToArray('allergies', 'Nüsse');
+            addToArray('currentMedications', 'Aspirin');
+            addToArray('currentMedications', 'Ibuprofen');
+            addToArray('preExistingConditions', 'Diabetes');
+        }
+
+        function clearForm() {
+            formData = {
+                allergies: [],
+                currentMedications: [],
+                preExistingConditions: []
+            };
+            document.getElementById('allergies').value = '';
+            document.getElementById('medications').value = '';
+            document.getElementById('conditions').value = '';
+            updateChips('allergies', []);
+            updateChips('medications', []);
+            updateChips('conditions', []);
+            updateDebugOutput();
+        }
+
+        // Event Listeners für Enter-Taste
+        document.getElementById('allergies').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addToArray('allergies', this.value);
+                this.value = '';
+            }
+        });
+
+        document.getElementById('medications').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addToArray('currentMedications', this.value);
+                this.value = '';
+            }
+        });
+
+        document.getElementById('conditions').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addToArray('preExistingConditions', this.value);
+                this.value = '';
+            }
+        });
+
+        // Initialisiere Debug-Output
+        updateDebugOutput();
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

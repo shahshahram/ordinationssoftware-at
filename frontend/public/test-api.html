@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .button { background: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <h1>API Test</h1>
+    <button class="button" onclick="testAPI()">Test API</button>
+    <div id="result" class="result" style="display: none;"></div>
+
+    <script>
+        async function testAPI() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = 'Testing...';
+            resultDiv.className = 'result';
+
+            try {
+                console.log('Testing API connection...');
+                
+                // Test 1: Health check
+                const healthResponse = await fetch('http://192.168.178.163:5001/api/health', {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                console.log('Health check status:', healthResponse.status);
+                
+                if (!healthResponse.ok) {
+                    throw new Error(`Health check failed: ${healthResponse.status}`);
+                }
+                
+                const healthData = await healthResponse.json();
+                console.log('Health data:', healthData);
+                
+                // Test 2: Generate QR code
+                const qrResponse = await fetch('http://192.168.178.163:5001/api/checkin/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    mode: 'cors'
+                });
+                console.log('QR generation status:', qrResponse.status);
+                
+                if (!qrResponse.ok) {
+                    const errorText = await qrResponse.text();
+                    throw new Error(`QR generation failed: ${qrResponse.status} - ${errorText}`);
+                }
+                
+                const qrData = await qrResponse.json();
+                console.log('QR data:', qrData);
+                
+                // Test 3: Validate token
+                if (qrData.success && qrData.data.checkInId) {
+                    const validateResponse = await fetch(`http://192.168.178.163:5001/api/checkin/validate/${qrData.data.checkInId}`, {
+                        method: 'GET',
+                        mode: 'cors'
+                    });
+                    console.log('Validation status:', validateResponse.status);
+                    
+                    if (!validateResponse.ok) {
+                        const errorText = await validateResponse.text();
+                        throw new Error(`Validation failed: ${validateResponse.status} - ${errorText}`);
+                    }
+                    
+                    const validateData = await validateResponse.json();
+                    console.log('Validation data:', validateData);
+                    
+                    resultDiv.textContent = `✅ All tests passed! QR Code: ${qrData.data.qrCode}`;
+                    resultDiv.className = 'result success';
+                } else {
+                    throw new Error('QR generation did not return valid data');
+                }
+                
+            } catch (error) {
+                console.error('Test failed:', error);
+                resultDiv.textContent = `❌ Test failed: ${error.message}`;
+                resultDiv.className = 'result error';
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

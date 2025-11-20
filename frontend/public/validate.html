@@ -1,0 +1,1055 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stammdaten Validierung - Ordinationssoftware</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 1.8em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .patient-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid #4CAF50;
+        }
+
+        .patient-info h2 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .info-label {
+            font-weight: 600;
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            color: #333;
+            font-size: 1em;
+            padding: 8px 12px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .info-value.editable {
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .info-value.editable:hover {
+            background: #f0f8ff;
+            border-color: #4CAF50;
+        }
+
+        .edit-icon {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+
+        .info-value.editable:hover .edit-icon {
+            opacity: 1;
+        }
+
+        .edit-input {
+            width: 100%;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-size: inherit;
+            color: inherit;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section h3 {
+            color: #333;
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 5px;
+        }
+
+        .chip-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .chip {
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 6px 12px;
+            border-radius: 16px;
+            font-size: 0.9em;
+            border: 1px solid #bbdefb;
+        }
+
+        .pregnancy-section {
+            background: #fff3e0;
+            border: 1px solid #ffcc02;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .pregnancy-section h4 {
+            color: #e65100;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .checkbox-container input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: #4CAF50;
+        }
+
+        .pregnancy-week {
+            margin-top: 10px;
+            display: none;
+        }
+
+        .pregnancy-week.show {
+            display: block;
+        }
+
+        .pregnancy-week input {
+            width: 100px;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin-left: 10px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 30px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #45a049;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #c3e6cb;
+            display: none;
+        }
+
+        .success-message.show {
+            display: block;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            border: 1px solid #f5c6cb;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 8px;
+            }
+            
+            .content {
+                padding: 20px;
+            }
+            
+            .info-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .actions {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 Stammdaten Validierung</h1>
+            <p>Überprüfen und aktualisieren Sie die Patientendaten</p>
+        </div>
+
+        <div class="content">
+            <div id="loadingState" class="loading">
+                <p>Lade Patientendaten...</p>
+            </div>
+
+            <div id="errorState" class="error" style="display: none;">
+                <p id="errorMessage">Fehler beim Laden der Daten</p>
+            </div>
+
+            <div id="formState" style="display: none;">
+                <div class="success-message" id="successMessage">
+                    <strong>✅ Daten erfolgreich gespeichert!</strong><br>
+                    Die Verbindung wird in 30 Sekunden automatisch getrennt.
+                </div>
+
+                <div class="patient-info">
+                    <h2>👤 Patientenstammdaten</h2>
+                    <div class="info-grid" id="patientInfo">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>🏥 Medizinische Daten</h3>
+                    <div class="info-grid" id="medicalInfo">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>⚠️ Allergien</h3>
+                    <div class="chip-container" id="allergiesContainer">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>💊 Aktuelle Medikation</h3>
+                    <div class="chip-container" id="medicationsContainer">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>📋 Medizinische Vorgeschichte</h3>
+                    <div class="chip-container" id="medicalHistoryContainer">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+
+                <div class="section">
+                    <h3>💉 Impfungen</h3>
+                    <div class="chip-container" id="vaccinationsContainer">
+                        <!-- Wird dynamisch gefüllt -->
+                    </div>
+                </div>
+
+                <div class="pregnancy-section" id="pregnancySection" style="display: none;">
+                    <h4>🤱 Schwangerschaft</h4>
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="isPregnant" onchange="togglePregnancyWeek()">
+                        <label for="isPregnant">Schwanger</label>
+                    </div>
+                    <div class="pregnancy-week" id="pregnancyWeekContainer">
+                        <label for="pregnancyWeek">Schwangerschaftswoche:</label>
+                        <input type="number" id="pregnancyWeek" min="1" max="42" placeholder="z.B. 20">
+                    </div>
+                </div>
+
+                <div class="medical-devices-section">
+                    <h4>🏥 Medizinische Implantate & Geräte</h4>
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="hasPacemaker">
+                        <label for="hasPacemaker">Schrittmacher</label>
+                    </div>
+                    <div class="checkbox-container">
+                        <input type="checkbox" id="hasDefibrillator">
+                        <label for="hasDefibrillator">Defibrillator</label>
+                    </div>
+                    <div class="implants-section">
+                        <label for="implants">Implantate (wenn ja, welche?):</label>
+                        <textarea id="implants" placeholder="z.B. Hüftprothese, Knieprothese, Herzklappe..."></textarea>
+                    </div>
+                </div>
+
+                <div class="smoking-section">
+                    <h4>🚭 Raucherstatus</h4>
+                    <div class="radio-group">
+                        <input type="radio" id="non-smoker" name="smokingStatus" value="non-smoker" checked>
+                        <label for="non-smoker">Nichtraucher</label>
+                    </div>
+                    <div class="radio-group">
+                        <input type="radio" id="former-smoker" name="smokingStatus" value="former-smoker">
+                        <label for="former-smoker">Ehemaliger Raucher</label>
+                    </div>
+                    <div class="radio-group">
+                        <input type="radio" id="current-smoker" name="smokingStatus" value="current-smoker">
+                        <label for="current-smoker">Raucher</label>
+                    </div>
+                    <div class="smoking-details" id="smokingDetails" style="display: none;">
+                        <div class="form-group">
+                            <label for="cigarettesPerDay">Zigaretten pro Tag:</label>
+                            <input type="number" id="cigarettesPerDay" min="0" max="100" placeholder="z.B. 20">
+                        </div>
+                        <div class="form-group">
+                            <label for="yearsOfSmoking">Rauchejahre:</label>
+                            <input type="number" id="yearsOfSmoking" min="0" max="100" placeholder="z.B. 10">
+                        </div>
+                        <div class="form-group" id="quitDateGroup" style="display: none;">
+                            <label for="quitSmokingDate">Aufgehört am:</label>
+                            <input type="date" id="quitSmokingDate">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="saveData()" id="saveBtn">
+                        💾 Daten speichern
+                    </button>
+                    <button class="btn btn-secondary" onclick="closePage()">
+                        ❌ Schließen
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let patientData = null;
+        let isEditing = false;
+        let editedFields = {};
+
+        // URL-Parameter auslesen
+        function getUrlParameter(name) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(name);
+        }
+
+        // Datum formatieren
+        function formatDate(dateString) {
+            if (!dateString) return '';
+            
+            try {
+                const date = new Date(dateString);
+                if (isNaN(date.getTime())) return dateString;
+                
+                return date.toLocaleDateString('de-DE', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+            } catch (error) {
+                console.error('Fehler beim Formatieren des Datums:', error);
+                return dateString;
+            }
+        }
+
+        // Daten aus URL laden und vollständige Patientendaten von der API holen
+        async function loadData() {
+            const dataParam = getUrlParameter('data');
+            if (!dataParam) {
+                showError('Keine Patientendaten gefunden');
+                return;
+            }
+
+            try {
+                const urlData = JSON.parse(decodeURIComponent(dataParam));
+                console.log('URL-Daten:', urlData);
+                
+                // Vollständige Patientendaten von der API laden
+                if (urlData.patientId) {
+                    await loadFullPatientData(urlData.patientId);
+                } else {
+                    // Fallback: URL-Daten verwenden
+                    patientData = urlData;
+                    displayData();
+                }
+            } catch (error) {
+                console.error('Fehler beim Parsen der Daten:', error);
+                showError('Fehler beim Laden der Patientendaten');
+            }
+        }
+
+        // Vollständige Patientendaten von der API laden
+        async function loadFullPatientData(patientId) {
+            try {
+                console.log('Lade vollständige Patientendaten für ID:', patientId);
+                
+                const response = await fetch(`http://192.168.178.163:5001/api/patients-extended/validate/${patientId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('API-Antwort:', result);
+                
+                if (result.success && result.data) {
+                    patientData = result.data;
+                    console.log('Vollständige Patientendaten geladen:', patientData);
+                    displayData();
+                } else {
+                    throw new Error('Patient nicht gefunden');
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden der vollständigen Patientendaten:', error);
+                showError('Fehler beim Laden der vollständigen Patientendaten: ' + error.message);
+            }
+        }
+
+        // Daten anzeigen
+        function displayData() {
+            if (!patientData) return;
+            
+            // Debug: Alle Patientendaten in der Konsole anzeigen
+            console.log('🔍 Vollständige Patientendaten:', patientData);
+            console.log('🔍 Geschlecht:', patientData.gender);
+            console.log('🔍 Allergien:', patientData.allergies);
+            console.log('🔍 Medikamente:', patientData.currentMedications);
+            console.log('🔍 Medizinische Vorgeschichte:', patientData.medicalHistory);
+
+            // Patientenstammdaten
+            const patientInfo = document.getElementById('patientInfo');
+            patientInfo.innerHTML = `
+                <div class="info-item">
+                    <div class="info-label">Vorname</div>
+                    <div class="info-value editable" data-field="firstName" onclick="startEdit(this)">
+                        ${patientData.firstName || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Nachname</div>
+                    <div class="info-value editable" data-field="lastName" onclick="startEdit(this)">
+                        ${patientData.lastName || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Geburtsdatum</div>
+                    <div class="info-value editable" data-field="dateOfBirth" onclick="startEdit(this)">
+                        ${formatDate(patientData.dateOfBirth) || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Geschlecht</div>
+                    <div class="info-value editable" data-field="gender" onclick="startEdit(this)">
+                        ${patientData.gender === 'm' ? 'Männlich' : patientData.gender === 'f' ? 'Weiblich' : patientData.gender === 'w' ? 'Weiblich' : 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                
+                ${patientData.gender === 'w' || patientData.gender === 'f' ? `
+                <div class="info-item">
+                    <div class="info-label">Schwanger</div>
+                    <div class="info-value editable" data-field="isPregnant" onclick="startEdit(this)">
+                        ${patientData.isPregnant ? 'Ja' : 'Nein'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                ${patientData.isPregnant ? `
+                <div class="info-item">
+                    <div class="info-label">Schwangerschaftswoche</div>
+                    <div class="info-value editable" data-field="pregnancyWeek" onclick="startEdit(this)">
+                        ${patientData.pregnancyWeek || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                ` : ''}
+                <div class="info-item">
+                    <div class="info-label">Stillen</div>
+                    <div class="info-value editable" data-field="isBreastfeeding" onclick="startEdit(this)">
+                        ${patientData.isBreastfeeding ? 'Ja' : 'Nein'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                ` : ''}
+                <div class="info-item">
+                    <div class="info-label">Schrittmacher</div>
+                    <div class="info-value editable" data-field="hasPacemaker" onclick="startEdit(this)">
+                        ${patientData.hasPacemaker ? 'Ja' : 'Nein'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Defibrillator</div>
+                    <div class="info-value editable" data-field="hasDefibrillator" onclick="startEdit(this)">
+                        ${patientData.hasDefibrillator ? 'Ja' : 'Nein'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Implantate</div>
+                    <div class="info-value">
+                        ${patientData.implants && patientData.implants.length > 0 
+                            ? patientData.implants.map(implant => implant.type).join(', ')
+                            : 'Keine Implantate'
+                        }
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Raucherstatus</div>
+                    <div class="info-value editable" data-field="smokingStatus" onclick="startEdit(this)">
+                        ${patientData.smokingStatus === 'non-smoker' ? 'Nichtraucher' :
+                          patientData.smokingStatus === 'former-smoker' ? 'Ehemaliger Raucher' :
+                          patientData.smokingStatus === 'current-smoker' ? 'Raucher' : 'Nicht erfasst'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                ${patientData.smokingStatus === 'current-smoker' && patientData.cigarettesPerDay ? `
+                <div class="info-item">
+                    <div class="info-label">Zigaretten/Tag</div>
+                    <div class="info-value editable" data-field="cigarettesPerDay" onclick="startEdit(this)">
+                        ${patientData.cigarettesPerDay}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                ` : ''}
+                ${patientData.smokingStatus !== 'non-smoker' && patientData.yearsOfSmoking ? `
+                <div class="info-item">
+                    <div class="info-label">Rauchejahre</div>
+                    <div class="info-value editable" data-field="yearsOfSmoking" onclick="startEdit(this)">
+                        ${patientData.yearsOfSmoking}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                ` : ''}
+                ${patientData.smokingStatus === 'former-smoker' && patientData.quitSmokingDate ? `
+                <div class="info-item">
+                    <div class="info-label">Aufgehört am</div>
+                    <div class="info-value editable" data-field="quitSmokingDate" onclick="startEdit(this)">
+                        ${formatDate(patientData.quitSmokingDate)}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                ` : ''}
+                <div class="info-item">
+                    <div class="info-label">E-Mail</div>
+                    <div class="info-value editable" data-field="email" onclick="startEdit(this)">
+                        ${patientData.email || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Telefon</div>
+                    <div class="info-value editable" data-field="phone" onclick="startEdit(this)">
+                        ${patientData.phone || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Versicherung</div>
+                    <div class="info-value editable" data-field="insuranceProvider" onclick="startEdit(this)">
+                        ${patientData.insuranceProvider || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">SV-Nummer</div>
+                    <div class="info-value editable" data-field="socialSecurityNumber" onclick="startEdit(this)">
+                        ${patientData.socialSecurityNumber || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+            `;
+
+            // Adresse
+            if (patientData.address) {
+                patientInfo.innerHTML += `
+                    <div class="info-item">
+                        <div class="info-label">Straße</div>
+                        <div class="info-value editable" data-field="address.street" onclick="startEdit(this)">
+                            ${patientData.address.street || 'Nicht angegeben'}
+                            <span class="edit-icon">✏️</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">Stadt</div>
+                        <div class="info-value editable" data-field="address.city" onclick="startEdit(this)">
+                            ${patientData.address.city || 'Nicht angegeben'}
+                            <span class="edit-icon">✏️</span>
+                        </div>
+                    </div>
+                    <div class="info-item">
+                        <div class="info-label">PLZ</div>
+                        <div class="info-value editable" data-field="address.zipCode" onclick="startEdit(this)">
+                            ${patientData.address.zipCode || 'Nicht angegeben'}
+                            <span class="edit-icon">✏️</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Medizinische Daten
+            const medicalInfo = document.getElementById('medicalInfo');
+            medicalInfo.innerHTML = `
+                <div class="info-item">
+                    <div class="info-label">Blutgruppe</div>
+                    <div class="info-value editable" data-field="bloodType" onclick="startEdit(this)">
+                        ${patientData.bloodType || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Größe (cm)</div>
+                    <div class="info-value editable" data-field="height" onclick="startEdit(this)">
+                        ${patientData.height || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Gewicht (kg)</div>
+                    <div class="info-value editable" data-field="weight" onclick="startEdit(this)">
+                        ${patientData.weight || 'Nicht angegeben'}
+                        <span class="edit-icon">✏️</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">BMI</div>
+                    <div class="info-value">
+                        ${patientData.bmi ? patientData.bmi.toFixed(1) : 'Nicht berechnet'}
+                    </div>
+                </div>
+            `;
+
+            // Schwangerschaft (nur bei Frauen)
+            if (patientData.gender === 'f') {
+                document.getElementById('pregnancySection').style.display = 'block';
+                document.getElementById('isPregnant').checked = patientData.isPregnant || false;
+                if (patientData.isPregnant) {
+                    document.getElementById('pregnancyWeekContainer').classList.add('show');
+                    document.getElementById('pregnancyWeek').value = patientData.pregnancyWeek || '';
+                }
+            }
+
+            // Arrays anzeigen
+            displayArray('allergies', 'allergiesContainer', '⚠️');
+            displayArray('currentMedications', 'medicationsContainer', '💊');
+            displayArray('medicalHistory', 'medicalHistoryContainer', '📋');
+            displayArray('vaccinations', 'vaccinationsContainer', '💉');
+
+            // Formular anzeigen
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('formState').style.display = 'block';
+        }
+
+        // Array-Daten anzeigen
+        function displayArray(fieldName, containerId, icon) {
+            const container = document.getElementById(containerId);
+            const data = patientData[fieldName];
+            
+            console.log(`🔍 ${fieldName}:`, data);
+            
+            // Prüfen ob data existiert und ein Array ist
+            if (!data || !Array.isArray(data) || data.length === 0) {
+                container.innerHTML = '<div class="chip">Keine Einträge</div>';
+                return;
+            }
+
+            container.innerHTML = data.map(item => {
+                if (typeof item === 'string') {
+                    return `<div class="chip">${icon} ${item}</div>`;
+                } else if (item && typeof item === 'object') {
+                    // Spezielle Behandlung für Allergien-Objekte
+                    if (fieldName === 'allergies' && item.type && item.description) {
+                        const severity = item.severity ? ` (${item.severity})` : '';
+                        const reaction = item.reaction ? ` - ${item.reaction}` : '';
+                        return `<div class="chip">${icon} ${item.description}${severity}${reaction}</div>`;
+                    }
+                    // Spezielle Behandlung für Medikamente-Objekte
+                    else if (fieldName === 'currentMedications' && item.name) {
+                        const dosage = item.dosage ? ` (${item.dosage})` : '';
+                        const frequency = item.frequency ? ` - ${item.frequency}` : '';
+                        return `<div class="chip">${icon} ${item.name}${dosage}${frequency}</div>`;
+                    }
+                    // Spezielle Behandlung für Impfungen-Objekte
+                    else if (fieldName === 'vaccinations' && item.name) {
+                        const date = item.date ? ` (${item.date})` : '';
+                        return `<div class="chip">${icon} ${item.name}${date}</div>`;
+                    }
+                    // Fallback für andere Objekte
+                    else if (item.name) {
+                        return `<div class="chip">${icon} ${item.name}</div>`;
+                    } else {
+                        return `<div class="chip">${icon} ${JSON.stringify(item)}</div>`;
+                    }
+                } else {
+                    return `<div class="chip">${icon} ${String(item)}</div>`;
+                }
+            }).join('');
+        }
+
+        // Bearbeitung starten
+        function startEdit(element) {
+            if (isEditing) return;
+            
+            isEditing = true;
+            const field = element.dataset.field;
+            const currentValue = element.textContent.replace('✏️', '').trim();
+            
+            // Spezielle Behandlung für verschiedene Feldtypen
+            if (field === 'gender') {
+                element.innerHTML = `
+                    <select class="edit-input" onblur="finishEdit(this, '${field}')" onkeypress="handleKeyPress(event, this, '${field}')" autofocus>
+                        <option value="m" ${currentValue === 'Männlich' ? 'selected' : ''}>Männlich</option>
+                        <option value="w" ${currentValue === 'Weiblich' ? 'selected' : ''}>Weiblich</option>
+                        <option value="d" ${currentValue === 'Divers' ? 'selected' : ''}>Divers</option>
+                    </select>
+                `;
+            } else if (field === 'isPregnant' || field === 'isBreastfeeding') {
+                element.innerHTML = `
+                    <select class="edit-input" onblur="finishEdit(this, '${field}')" onkeypress="handleKeyPress(event, this, '${field}')" autofocus>
+                        <option value="true" ${currentValue === 'Ja' ? 'selected' : ''}>Ja</option>
+                        <option value="false" ${currentValue === 'Nein' ? 'selected' : ''}>Nein</option>
+                    </select>
+                `;
+            } else if (field === 'pregnancyWeek') {
+                element.innerHTML = `
+                    <input type="number" class="edit-input" min="1" max="42" 
+                           value="${currentValue === 'Nicht angegeben' ? '' : currentValue}" 
+                           onblur="finishEdit(this, '${field}')" 
+                           onkeypress="handleKeyPress(event, this, '${field}')"
+                           autofocus>
+                `;
+            } else if (field === 'dateOfBirth') {
+                element.innerHTML = `
+                    <input type="date" class="edit-input" 
+                           value="${currentValue ? formatDateForInput(currentValue) : ''}" 
+                           onblur="finishEdit(this, '${field}')" 
+                           onkeypress="handleKeyPress(event, this, '${field}')"
+                           autofocus>
+                `;
+            } else {
+                element.innerHTML = `
+                    <input type="text" class="edit-input" value="${currentValue === 'Nicht angegeben' ? '' : currentValue}" 
+                           onblur="finishEdit(this, '${field}')" 
+                           onkeypress="handleKeyPress(event, this, '${field}')"
+                           autofocus>
+                `;
+            }
+            
+            element.querySelector('.edit-input').focus();
+        }
+
+        // Bearbeitung beenden
+        function finishEdit(input, field) {
+            let newValue = input.value.trim();
+            const element = input.parentElement;
+            
+            // Spezielle Behandlung für verschiedene Feldtypen
+            if (field === 'isPregnant' || field === 'isBreastfeeding') {
+                newValue = input.value === 'true';
+            } else if (field === 'pregnancyWeek') {
+                newValue = newValue ? parseInt(newValue) : null;
+            } else if (field === 'gender') {
+                // Geschlecht bleibt als String
+                newValue = input.value;
+            }
+            
+            // Wert speichern
+            editedFields[field] = newValue;
+            
+            // Anzeige aktualisieren
+            let displayValue = newValue;
+            if (field === 'isPregnant' || field === 'isBreastfeeding') {
+                displayValue = newValue ? 'Ja' : 'Nein';
+            } else if (field === 'gender') {
+                displayValue = newValue === 'm' ? 'Männlich' : newValue === 'w' ? 'Weiblich' : newValue === 'd' ? 'Divers' : 'Nicht angegeben';
+            } else if (field === 'pregnancyWeek') {
+                displayValue = newValue || 'Nicht angegeben';
+            } else {
+                displayValue = newValue || 'Nicht angegeben';
+            }
+            
+            element.innerHTML = `${displayValue} <span class="edit-icon">✏️</span>`;
+            element.onclick = () => startEdit(element);
+            
+            isEditing = false;
+        }
+
+        // Enter-Taste behandeln
+        function handleKeyPress(event, input, field) {
+            if (event.key === 'Enter') {
+                finishEdit(input, field);
+            }
+        }
+
+        // Schwangerschaftswoche ein-/ausblenden
+        function togglePregnancyWeek() {
+            const checkbox = document.getElementById('isPregnant');
+            const weekContainer = document.getElementById('pregnancyWeekContainer');
+            
+            if (checkbox.checked) {
+                weekContainer.classList.add('show');
+                document.getElementById('pregnancyWeek').required = true;
+            } else {
+                weekContainer.classList.remove('show');
+                document.getElementById('pregnancyWeek').required = false;
+                document.getElementById('pregnancyWeek').value = '';
+            }
+        }
+
+        // Raucherstatus-Details ein-/ausblenden
+        function toggleSmokingDetails() {
+            const smokingStatus = document.querySelector('input[name="smokingStatus"]:checked').value;
+            const detailsContainer = document.getElementById('smokingDetails');
+            const quitDateGroup = document.getElementById('quitDateGroup');
+            
+            if (smokingStatus === 'non-smoker') {
+                detailsContainer.style.display = 'none';
+            } else {
+                detailsContainer.style.display = 'block';
+                
+                if (smokingStatus === 'former-smoker') {
+                    quitDateGroup.style.display = 'block';
+                } else {
+                    quitDateGroup.style.display = 'none';
+                }
+            }
+        }
+
+        // Event Listener für Raucherstatus
+        document.addEventListener('DOMContentLoaded', function() {
+            const smokingRadios = document.querySelectorAll('input[name="smokingStatus"]');
+            smokingRadios.forEach(radio => {
+                radio.addEventListener('change', toggleSmokingDetails);
+            });
+        });
+
+        // Daten speichern
+        async function saveData() {
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+            saveBtn.textContent = '💾 Speichere...';
+
+            try {
+                // Schwangerschaftsdaten sammeln
+                if (patientData.gender === 'f') {
+                    editedFields.isPregnant = document.getElementById('isPregnant').checked;
+                    if (editedFields.isPregnant) {
+                        editedFields.pregnancyWeek = parseInt(document.getElementById('pregnancyWeek').value) || null;
+                    } else {
+                        editedFields.pregnancyWeek = null;
+                    }
+                }
+
+                // Medizinische Implantate und Geräte sammeln
+                editedFields.hasPacemaker = document.getElementById('hasPacemaker').checked;
+                editedFields.hasDefibrillator = document.getElementById('hasDefibrillator').checked;
+                
+                const implantsText = document.getElementById('implants').value.trim();
+                if (implantsText) {
+                    // Einfache Implantat-Liste als Array speichern
+                    editedFields.implants = implantsText.split(',').map(implant => ({
+                        type: implant.trim(),
+                        location: '',
+                        date: '',
+                        notes: ''
+                    }));
+                } else {
+                    editedFields.implants = [];
+                }
+
+                // Raucherstatus sammeln
+                const smokingStatus = document.querySelector('input[name="smokingStatus"]:checked').value;
+                editedFields.smokingStatus = smokingStatus;
+                
+                if (smokingStatus === 'current-smoker') {
+                    editedFields.cigarettesPerDay = parseInt(document.getElementById('cigarettesPerDay').value) || 0;
+                }
+                
+                if (smokingStatus !== 'non-smoker') {
+                    editedFields.yearsOfSmoking = parseInt(document.getElementById('yearsOfSmoking').value) || 0;
+                }
+                
+                if (smokingStatus === 'former-smoker') {
+                    const quitDate = document.getElementById('quitSmokingDate').value;
+                    editedFields.quitSmokingDate = quitDate || null;
+                }
+
+                // BMI neu berechnen wenn Größe oder Gewicht geändert wurden
+                if (editedFields.height || editedFields.weight) {
+                    const height = parseFloat(editedFields.height || patientData.height);
+                    const weight = parseFloat(editedFields.weight || patientData.weight);
+                    
+                    if (height && weight) {
+                        const bmi = weight / Math.pow(height / 100, 2);
+                        editedFields.bmi = Math.round(bmi * 10) / 10;
+                    }
+                }
+
+                // Daten an Backend senden
+                const response = await fetch('http://192.168.178.163:5001/api/patients-extended/validate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        patientId: patientData.patientId,
+                        updates: editedFields
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Fehler beim Speichern der Daten');
+                }
+
+                // Erfolgsmeldung anzeigen
+                document.getElementById('successMessage').classList.add('show');
+                
+                // Automatisches Schließen nach 30 Sekunden
+                setTimeout(() => {
+                    closePage();
+                }, 30000);
+
+            } catch (error) {
+                console.error('Fehler beim Speichern:', error);
+                alert('Fehler beim Speichern der Daten. Bitte versuchen Sie es erneut.');
+                saveBtn.disabled = false;
+                saveBtn.textContent = '💾 Daten speichern';
+            }
+        }
+
+        // Seite schließen
+        function closePage() {
+            // Seite leeren und Abschlussmeldung anzeigen
+            document.body.innerHTML = `
+                <div style="display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    <div style="text-align: center; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.2);">
+                        <div style="font-size: 4em; color: #4CAF50; margin-bottom: 20px;">✅</div>
+                        <h2 style="color: #4CAF50; margin-bottom: 15px;">Validierung abgeschlossen!</h2>
+                        <p style="color: #666; font-size: 1.1em; margin-bottom: 20px;">
+                            Vielen Dank! Das Tablet kann nun an das Praxispersonal zurückgegeben werden.
+                        </p>
+                        <p style="color: #999; font-size: 0.9em;">
+                            Die Verbindung wurde automatisch getrennt.
+                        </p>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Fehler anzeigen
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorState').style.display = 'block';
+        }
+
+        // Seite laden
+        document.addEventListener('DOMContentLoaded', loadData);
+    </script>
+</body>
+</html>

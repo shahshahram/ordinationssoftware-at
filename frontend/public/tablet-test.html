@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tablet Test - QR Code</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .qr-container {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: #f9f9f9;
+        }
+        .url-display {
+            margin: 10px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #ccc;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            width: 100%;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Tablet QR-Code Test</h1>
+        
+        <div class="info status" id="infoStatus">
+            <strong>ℹ️ Informationen:</strong><br>
+            Hostname: <span id="hostname"></span><br>
+            Port: <span id="port"></span><br>
+            User Agent: <span id="userAgent"></span>
+        </div>
+        
+        <div class="qr-container">
+            <h3>🔍 QR-Code für Validierung</h3>
+            <div class="url-display" id="urlDisplay">Lade...</div>
+            <div id="qrCode"></div>
+        </div>
+        
+        <button class="test-button" onclick="testDirectAccess()">
+            🧪 Direkten Zugriff testen
+        </button>
+        
+        <button class="test-button" onclick="generateNewQR()">
+            🔄 Neuen QR-Code generieren
+        </button>
+        
+        <div id="testResult"></div>
+    </div>
+
+    <script>
+        // Test-Daten für Validierung
+        const testData = {
+            patientId: "tablet-test-123",
+            firstName: "Tablet",
+            lastName: "Test",
+            dateOfBirth: "1990-01-01",
+            gender: "m",
+            email: "tablet@test.com",
+            phone: "123456789",
+            address: {
+                street: "Teststraße 1",
+                city: "Wien",
+                zipCode: "1010"
+            },
+            insuranceProvider: "ÖGK",
+            socialSecurityNumber: "1234567890",
+            bloodType: "A+",
+            height: 180,
+            weight: 75,
+            bmi: 23.1,
+            allergies: ["Pollen"],
+            currentMedications: ["Aspirin"],
+            medicalHistory: ["Bluthochdruck"],
+            vaccinations: ["Tetanus"],
+            medicalNotes: "Tablet Test",
+            isPregnant: false,
+            pregnancyWeek: null
+        };
+
+        // Aktuelle Verbindungsinformationen
+        const currentHost = window.location.hostname;
+        const currentPort = window.location.port || '3000';
+        const baseUrl = `http://${currentHost}:${currentPort}`;
+        
+        // Debug-Informationen anzeigen
+        document.getElementById('hostname').textContent = currentHost;
+        document.getElementById('port').textContent = currentPort;
+        document.getElementById('userAgent').textContent = navigator.userAgent.substring(0, 50) + '...';
+        
+        // QR-Code generieren
+        function generateQR() {
+            const url = `${baseUrl}/validate.html?data=${encodeURIComponent(JSON.stringify(testData))}`;
+            document.getElementById('urlDisplay').textContent = url;
+            
+            // QR-Code generieren
+            const qrCodeImg = document.createElement('img');
+            qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}`;
+            qrCodeImg.alt = "QR-Code für Validierung";
+            qrCodeImg.style.maxWidth = '250px';
+            qrCodeImg.style.height = 'auto';
+            qrCodeImg.style.border = '1px solid #ddd';
+            qrCodeImg.style.borderRadius = '8px';
+            
+            // Alten QR-Code entfernen
+            const qrContainer = document.getElementById('qrCode');
+            qrContainer.innerHTML = '';
+            qrContainer.appendChild(qrCodeImg);
+            
+            // QR-Code klickbar machen
+            qrCodeImg.onclick = function() {
+                window.open(url, '_blank');
+            };
+            
+            console.log('QR-Code URL:', url);
+        }
+        
+        // Direkten Zugriff testen
+        function testDirectAccess() {
+            const url = `${baseUrl}/validate.html?data=${encodeURIComponent(JSON.stringify(testData))}`;
+            const resultDiv = document.getElementById('testResult');
+            
+            resultDiv.innerHTML = '<div class="info status">🔄 Teste direkten Zugriff...</div>';
+            
+            fetch(url)
+                .then(response => {
+                    if (response.ok) {
+                        resultDiv.innerHTML = '<div class="success status">✅ Validierungsseite erreichbar! Öffne Seite...</div>';
+                        setTimeout(() => {
+                            window.open(url, '_blank');
+                        }, 1000);
+                    } else {
+                        resultDiv.innerHTML = `<div class="error status">❌ Fehler: ${response.status} ${response.statusText}</div>`;
+                    }
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = `<div class="error status">❌ Netzwerkfehler: ${error.message}</div>`;
+                });
+        }
+        
+        // Neuen QR-Code generieren
+        function generateNewQR() {
+            generateQR();
+            document.getElementById('testResult').innerHTML = '<div class="info status">🔄 Neuer QR-Code generiert</div>';
+        }
+        
+        // Initial QR-Code generieren
+        generateQR();
+        
+        // Status prüfen
+        fetch(`${baseUrl}/validate.html`)
+            .then(response => {
+                if (response.ok) {
+                    console.log('✅ Validierungsseite erreichbar');
+                } else {
+                    console.log('❌ Validierungsseite nicht erreichbar');
+                }
+            })
+            .catch(error => {
+                console.log('❌ Fehler beim Testen:', error);
+            });
+    </script>
+</body>
+</html>

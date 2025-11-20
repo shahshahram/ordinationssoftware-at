@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Autocomplete</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@mui/material@latest/umd/material-ui.development.js"></script>
+    <script src="https://unpkg.com/@emotion/react@latest/dist/emotion-react.umd.min.js"></script>
+    <script src="https://unpkg.com/@emotion/styled@latest/dist/emotion-styled.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .debug {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .debug pre {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+        const { useState, useEffect } = React;
+        const { Box, Typography, TextField, Autocomplete, Chip } = MaterialUI;
+
+        function TestAutocomplete() {
+            const [formData, setFormData] = useState({
+                allergies: [],
+                currentMedications: [],
+                preExistingConditions: []
+            });
+
+            const handleArrayChange = (field, value) => {
+                console.log(`handleArrayChange: ${field} =`, value);
+                console.log(`Type of value:`, typeof value);
+                console.log(`Is array:`, Array.isArray(value));
+                
+                setFormData(prev => {
+                    const newData = {
+                        ...prev,
+                        [field]: value,
+                    };
+                    console.log(`Updated array formData for ${field}:`, newData[field]);
+                    return newData;
+                });
+            };
+
+            // Debug: Überwache formData-Änderungen
+            useEffect(() => {
+                console.log('formData updated:', formData);
+                console.log('Allergies:', formData.allergies);
+                console.log('Current Medications:', formData.currentMedications);
+                console.log('Pre-existing Conditions:', formData.preExistingConditions);
+            }, [formData]);
+
+            return (
+                React.createElement(Box, { sx: { p: 2 } },
+                    React.createElement(Typography, { variant: "h4", gutterBottom: true }, "Test Autocomplete"),
+                    
+                    React.createElement(Box, { sx: { mb: 3 } },
+                        React.createElement(Typography, { variant: "h6", gutterBottom: true }, "Allergien"),
+                        React.createElement(Autocomplete, {
+                            multiple: true,
+                            freeSolo: true,
+                            options: [],
+                            value: formData.allergies || [],
+                            onChange: (_, newValue) => {
+                                console.log('Allergies changed:', newValue);
+                                console.log('Type of newValue:', typeof newValue);
+                                console.log('Is array:', Array.isArray(newValue));
+                                handleArrayChange('allergies', newValue || []);
+                            },
+                            renderTags: (value, getTagProps) =>
+                                value.map((option, index) =>
+                                    React.createElement(Chip, {
+                                        variant: "outlined",
+                                        label: typeof option === 'string' ? option : option.description || option.name || 'Unknown',
+                                        ...getTagProps({ index }),
+                                        key: index
+                                    })
+                                ),
+                            renderInput: (params) =>
+                                React.createElement(TextField, {
+                                    ...params,
+                                    label: "Allergien",
+                                    placeholder: "Allergien eingeben..."
+                                })
+                        })
+                    ),
+                    
+                    React.createElement(Box, { sx: { mb: 3 } },
+                        React.createElement(Typography, { variant: "h6", gutterBottom: true }, "Aktuelle Medikamente"),
+                        React.createElement(Autocomplete, {
+                            multiple: true,
+                            freeSolo: true,
+                            options: [],
+                            value: formData.currentMedications || [],
+                            onChange: (_, newValue) => {
+                                console.log('Current medications changed:', newValue);
+                                console.log('Type of newValue:', typeof newValue);
+                                console.log('Is array:', Array.isArray(newValue));
+                                handleArrayChange('currentMedications', newValue || []);
+                            },
+                            renderTags: (value, getTagProps) =>
+                                value.map((option, index) =>
+                                    React.createElement(Chip, {
+                                        variant: "outlined",
+                                        label: typeof option === 'string' ? option : option.name || option.description || 'Unknown',
+                                        ...getTagProps({ index }),
+                                        key: index
+                                    })
+                                ),
+                            renderInput: (params) =>
+                                React.createElement(TextField, {
+                                    ...params,
+                                    label: "Medikamente",
+                                    placeholder: "Medikamente eingeben..."
+                                })
+                        })
+                    ),
+                    
+                    React.createElement(Box, { sx: { mb: 3 } },
+                        React.createElement(Typography, { variant: "h6", gutterBottom: true }, "Vorerkrankungen"),
+                        React.createElement(Autocomplete, {
+                            multiple: true,
+                            freeSolo: true,
+                            options: ['Diabetes', 'Bluthochdruck', 'Asthma'],
+                            value: formData.preExistingConditions || [],
+                            onChange: (_, newValue) => {
+                                console.log('Pre-existing conditions changed:', newValue);
+                                console.log('Type of newValue:', typeof newValue);
+                                console.log('Is array:', Array.isArray(newValue));
+                                handleArrayChange('preExistingConditions', newValue || []);
+                            },
+                            renderTags: (value, getTagProps) =>
+                                value.map((option, index) =>
+                                    React.createElement(Chip, {
+                                        variant: "outlined",
+                                        label: option,
+                                        ...getTagProps({ index }),
+                                        key: index
+                                    })
+                                ),
+                            renderInput: (params) =>
+                                React.createElement(TextField, {
+                                    ...params,
+                                    label: "Vorerkrankungen",
+                                    placeholder: "Auswählen oder eingeben..."
+                                })
+                        })
+                    ),
+                    
+                    React.createElement(Box, { className: "debug" },
+                        React.createElement(Typography, { variant: "h6", gutterBottom: true }, "Debug Information"),
+                        React.createElement("pre", null, JSON.stringify(formData, null, 2))
+                    )
+                )
+            );
+        }
+
+        ReactDOM.render(React.createElement(TestAutocomplete), document.getElementById('root'));
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tablet Debug - Netzwerk Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: #f9f9f9;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            width: 100%;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        .url-display {
+            margin: 10px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #ccc;
+        }
+        .qr-container {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: #f9f9f9;
+        }
+        .qr-code {
+            max-width: 200px;
+            height: auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Tablet Debug - Netzwerk Test</h1>
+        
+        <div class="info status">
+            <strong>ℹ️ Geräte-Informationen:</strong><br>
+            Hostname: <span id="hostname"></span><br>
+            Port: <span id="port"></span><br>
+            User Agent: <span id="userAgent"></span><br>
+            URL: <span id="currentUrl"></span>
+        </div>
+
+        <div class="test-section">
+            <h3>🌐 Netzwerk-Test</h3>
+            <p>Teste verschiedene IP-Adressen und Ports:</p>
+            
+            <button class="test-button" onclick="testConnection('localhost', '3000')">
+                Test localhost:3000
+            </button>
+            
+            <button class="test-button" onclick="testConnection('127.0.0.1', '3000')">
+                Test 127.0.0.1:3000
+            </button>
+            
+            <button class="test-button" onclick="testConnection('192.168.178.163', '3000')">
+                Test 192.168.178.163:3000
+            </button>
+            
+            <button class="test-button" onclick="testAllConnections()">
+                Teste alle Verbindungen
+            </button>
+            
+            <div id="connectionResults"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📱 QR-Code Test</h3>
+            <p>Generiere QR-Code mit der besten funktionierenden URL:</p>
+            
+            <div class="url-display" id="qrUrlDisplay">Wähle zuerst eine funktionierende Verbindung</div>
+            
+            <button class="test-button" onclick="generateQR()" id="generateQRBtn" disabled>
+                QR-Code generieren
+            </button>
+            
+            <div id="qrCodeContainer" class="qr-container" style="display: none;">
+                <h4>QR-Code:</h4>
+                <div id="qrCode"></div>
+                <p><em>Scannen Sie diesen QR-Code mit einer QR-Scanner-App</em></p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3>🔍 Direkter Test</h3>
+            <p>Teste die Validierungsseite direkt:</p>
+            
+            <button class="test-button" onclick="testValidationPage()">
+                Validierungsseite testen
+            </button>
+            
+            <div id="validationResults"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 Anweisungen</h3>
+            <div class="info status">
+                <strong>Schritte für Tablet-Test:</strong><br>
+                1. Klicken Sie auf "Teste alle Verbindungen"<br>
+                2. Warten Sie auf die Ergebnisse<br>
+                3. Wenn eine Verbindung funktioniert, generieren Sie einen QR-Code<br>
+                4. Scannen Sie den QR-Code mit einer QR-Scanner-App<br>
+                5. Die Validierungsseite sollte sich öffnen
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Geräte-Informationen anzeigen
+        const currentHost = window.location.hostname;
+        const currentPort = window.location.port || '3000';
+        const currentUrl = window.location.href;
+        
+        document.getElementById('hostname').textContent = currentHost;
+        document.getElementById('port').textContent = currentPort;
+        document.getElementById('userAgent').textContent = navigator.userAgent.substring(0, 50) + '...';
+        document.getElementById('currentUrl').textContent = currentUrl;
+        
+        let bestWorkingUrl = null;
+        
+        // Test-Daten für Validierung
+        const testData = {
+            patientId: "tablet-debug-123",
+            firstName: "Tablet",
+            lastName: "Debug",
+            dateOfBirth: "1990-01-01",
+            gender: "m",
+            email: "tablet@debug.com",
+            phone: "123456789",
+            address: {
+                street: "Debugstraße 1",
+                city: "Wien",
+                zipCode: "1010"
+            },
+            insuranceProvider: "ÖGK",
+            socialSecurityNumber: "1234567890",
+            bloodType: "A+",
+            height: 180,
+            weight: 75,
+            bmi: 23.1,
+            allergies: ["Pollen"],
+            currentMedications: ["Aspirin"],
+            medicalHistory: ["Bluthochdruck"],
+            vaccinations: ["Tetanus"],
+            medicalNotes: "Tablet Debug Test",
+            isPregnant: false,
+            pregnancyWeek: null
+        };
+        
+        // Verbindung testen
+        async function testConnection(host, port) {
+            const url = `http://${host}:${port}/validate.html`;
+            const resultDiv = document.getElementById('connectionResults');
+            
+            try {
+                const response = await fetch(url, { 
+                    method: 'HEAD',
+                    mode: 'no-cors' // Für Cross-Origin-Probleme
+                });
+                
+                resultDiv.innerHTML += `<div class="success status">✅ ${host}:${port} - Erreichbar!</div>`;
+                
+                if (!bestWorkingUrl) {
+                    bestWorkingUrl = url;
+                    document.getElementById('qrUrlDisplay').textContent = url;
+                    document.getElementById('generateQRBtn').disabled = false;
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML += `<div class="error status">❌ ${host}:${port} - Fehler: ${error.message}</div>`;
+            }
+        }
+        
+        // Alle Verbindungen testen
+        async function testAllConnections() {
+            const resultDiv = document.getElementById('connectionResults');
+            resultDiv.innerHTML = '<div class="info status">🔄 Teste alle Verbindungen...</div>';
+            
+            const connections = [
+                ['localhost', '3000'],
+                ['127.0.0.1', '3000'],
+                ['192.168.178.163', '3000']
+            ];
+            
+            for (const [host, port] of connections) {
+                await testConnection(host, port);
+                await new Promise(resolve => setTimeout(resolve, 1000)); // 1 Sekunde Pause
+            }
+            
+            if (bestWorkingUrl) {
+                resultDiv.innerHTML += `<div class="success status">🎉 Beste Verbindung gefunden: ${bestWorkingUrl}</div>`;
+            } else {
+                resultDiv.innerHTML += `<div class="error status">❌ Keine funktionierende Verbindung gefunden!</div>`;
+            }
+        }
+        
+        // QR-Code generieren
+        function generateQR() {
+            if (!bestWorkingUrl) {
+                alert('Keine funktionierende Verbindung gefunden!');
+                return;
+            }
+            
+            // Vereinfachte Test-URL ohne komplexe Daten
+            const simpleTestData = {
+                patientId: "test123",
+                firstName: "Test",
+                lastName: "Patient"
+            };
+            
+            const validationUrl = `${bestWorkingUrl}?data=${encodeURIComponent(JSON.stringify(simpleTestData))}`;
+            document.getElementById('qrUrlDisplay').textContent = validationUrl;
+            
+            // QR-Code mit höherer Auflösung und besserer Lesbarkeit generieren
+            const qrCodeImg = document.createElement('img');
+            qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(validationUrl)}&ecc=M&margin=10&format=png`;
+            qrCodeImg.alt = "QR-Code für Validierung";
+            qrCodeImg.className = 'qr-code';
+            qrCodeImg.style.maxWidth = '300px';
+            qrCodeImg.style.height = 'auto';
+            
+            // Alten QR-Code entfernen
+            const qrContainer = document.getElementById('qrCode');
+            qrContainer.innerHTML = '';
+            qrContainer.appendChild(qrCodeImg);
+            
+            // QR-Code Container anzeigen
+            document.getElementById('qrCodeContainer').style.display = 'block';
+            
+            // QR-Code klickbar machen
+            qrCodeImg.onclick = function() {
+                window.open(validationUrl, '_blank');
+            };
+            
+            console.log('QR-Code URL:', validationUrl);
+            console.log('QR-Code Image URL:', qrCodeImg.src);
+        }
+        
+        // Validierungsseite testen
+        async function testValidationPage() {
+            const resultDiv = document.getElementById('validationResults');
+            resultDiv.innerHTML = '<div class="info status">🔄 Teste Validierungsseite...</div>';
+            
+            if (!bestWorkingUrl) {
+                resultDiv.innerHTML = '<div class="error status">❌ Keine funktionierende Verbindung gefunden!</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(bestWorkingUrl);
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<div class="success status">✅ Validierungsseite funktioniert! Öffne Seite...</div>';
+                    setTimeout(() => {
+                        window.open(bestWorkingUrl, '_blank');
+                    }, 1000);
+                } else {
+                    resultDiv.innerHTML = `<div class="error status">❌ Fehler: ${response.status} ${response.statusText}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error status">❌ Netzwerkfehler: ${error.message}</div>`;
+            }
+        }
+        
+        // Automatisch alle Verbindungen testen beim Laden
+        window.onload = function() {
+            setTimeout(testAllConnections, 1000);
+        };
+    </script>
+</body>
+</html>

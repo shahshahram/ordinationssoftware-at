@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ELGA CDA XML - Vollständige Ansicht</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            overflow-x: auto;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background-color: #252526;
+            border-radius: 4px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            color: #4ec9b0;
+            margin-bottom: 20px;
+            font-size: 24px;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+        }
+
+        .toolbar {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background-color: #0e639c;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #1177bb;
+        }
+
+        button:active {
+            background-color: #0a4f75;
+        }
+
+        .info {
+            background-color: #264f78;
+            border-left: 4px solid #007acc;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #858585;
+        }
+
+        .error {
+            background-color: #5a1d1d;
+            border-left: 4px solid #f48771;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+            color: #f48771;
+        }
+
+        #xml-container {
+            background-color: #1e1e1e;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            padding: 20px;
+            overflow: auto;
+            max-height: calc(100vh - 250px);
+            position: relative;
+        }
+
+        pre {
+            margin: 0;
+            white-space: pre;
+            word-wrap: normal;
+            overflow-x: auto;
+        }
+
+        code {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        /* XML Syntax Highlighting */
+        .xml-tag {
+            color: #569cd6;
+        }
+
+        .xml-attribute-name {
+            color: #92c5f7;
+        }
+
+        .xml-attribute-value {
+            color: #ce9178;
+        }
+
+        .xml-comment {
+            color: #6a9955;
+            font-style: italic;
+        }
+
+        .xml-text {
+            color: #d4d4d4;
+        }
+
+        .xml-cdata {
+            color: #dcdcaa;
+        }
+
+        .xml-declaration {
+            color: #569cd6;
+        }
+
+        .line-numbers {
+            display: inline-block;
+            color: #858585;
+            margin-right: 20px;
+            user-select: none;
+            text-align: right;
+            min-width: 60px;
+        }
+
+        .line {
+            display: flex;
+        }
+
+        .line-content {
+            flex: 1;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ELGA CDA XML - Vollständige Ansicht</h1>
+        
+        <div class="toolbar">
+            <button onclick="copyToClipboard()">In Zwischenablage kopieren</button>
+            <button onclick="downloadXML()">Als Datei herunterladen</button>
+            <button onclick="formatXML()">Neu formatieren</button>
+        </div>
+
+        <div class="info">
+            <strong>Info:</strong> Dies ist die vollständige XML-Quelldatei des ELGA Entlassungsbriefs. 
+            Verwenden Sie die Scrollbars, um durch das Dokument zu navigieren.
+        </div>
+
+        <div id="status" class="loading">
+            Lade XML-Dokument...
+        </div>
+
+        <div id="xml-container" style="display: none;">
+            <pre><code id="xml-content"></code></pre>
+        </div>
+    </div>
+
+    <script>
+        let xmlContent = '';
+        let formatted = false;
+
+        const highlightXML = (xml) => {
+            // Zeile für Zeile verarbeiten für besseres Highlighting
+            const lines = xml.split('\n');
+            
+            return lines.map((line, index) => {
+                let highlightedLine = line;
+                
+                // Schritt 1: XML-Deklarationen und Processing Instructions
+                highlightedLine = highlightedLine.replace(
+                    /(&lt;\?[^?]*\?&gt;)/g,
+                    '<span class="xml-declaration">$1</span>'
+                );
+                
+                // Schritt 2: Kommentare (muss vor anderen Tags kommen)
+                highlightedLine = highlightedLine.replace(
+                    /(&lt;!--[\s\S]*?--&gt;)/g,
+                    '<span class="xml-comment">$1</span>'
+                );
+                
+                // Schritt 3: CDATA Sections
+                highlightedLine = highlightedLine.replace(
+                    /(&lt;!\[CDATA\[[\s\S]*?\]\]&gt;)/g,
+                    '<span class="xml-cdata">$1</span>'
+                );
+                
+                // Schritt 4: Schließende Tags
+                highlightedLine = highlightedLine.replace(
+                    /(&lt;\/[\w:]+&gt;)/g,
+                    '<span class="xml-tag">$1</span>'
+                );
+                
+                // Schritt 5: Öffnende Tags mit Attributen (komplexe Regex)
+                highlightedLine = highlightedLine.replace(
+                    /(&lt;)([\w:]+)((?:\s+[\w:]+="[^"]*")*)(\s*\/?)(&gt;)/g,
+                    (match, lt, tagName, attrs, selfClose, gt) => {
+                        let result = '<span class="xml-tag">' + lt + tagName + '</span>';
+                        
+                        if (attrs) {
+                            // Attribute einzeln formatieren
+                            attrs.replace(/(\s+)([\w:]+)="([^"]*)"/g, (attrMatch, space, attrName, attrValue) => {
+                                result += space + '<span class="xml-attribute-name">' + attrName + '</span>=';
+                                result += '"<span class="xml-attribute-value">' + attrValue + '</span>"';
+                            });
+                        }
+                        
+                        if (selfClose.trim() === '/') {
+                            result += ' <span class="xml-tag">/</span>';
+                        }
+                        
+                        result += '<span class="xml-tag">' + gt + '</span>';
+                        return result;
+                    }
+                );
+                
+                // Schritt 6: Einfache öffnende Tags ohne Attribute (nur wenn noch nicht verarbeitet)
+                highlightedLine = highlightedLine.replace(
+                    /(&lt;[\w:]+&gt;)/g,
+                    (match) => {
+                        // Nur ersetzen wenn noch kein Span vorhanden
+                        if (!match.includes('<span')) {
+                            return '<span class="xml-tag">' + match + '</span>';
+                        }
+                        return match;
+                    }
+                );
+                
+                const lineNumber = index + 1;
+                return `<div class="line">
+                    <span class="line-numbers">${lineNumber}</span>
+                    <span class="line-content">${highlightedLine || ' '}</span>
+                </div>`;
+            }).join('\n');
+        };
+
+        const formatXMLRaw = (xml) => {
+            // Einfache XML-Formatierung mit Einrückung
+            let formatted = '';
+            let indent = 0;
+            const tab = '  ';
+            let i = 0;
+            let inTag = false;
+            let tagBuffer = '';
+            
+            while (i < xml.length) {
+                const char = xml[i];
+                
+                if (char === '<') {
+                    // Tag beginnt
+                    if (tagBuffer.trim() && !inTag) {
+                        // Text-Inhalt vor dem Tag
+                        const text = tagBuffer.trim();
+                        if (text) {
+                            formatted += tab.repeat(indent) + text + '\n';
+                        }
+                        tagBuffer = '';
+                    }
+                    tagBuffer += char;
+                    inTag = true;
+                } else if (char === '>') {
+                    tagBuffer += char;
+                    inTag = false;
+                    
+                    // Tag verarbeiten
+                    const tag = tagBuffer;
+                    tagBuffer = '';
+                    
+                    // Schließende Tags
+                    if (tag.startsWith('</')) {
+                        indent = Math.max(0, indent - 1);
+                        formatted += tab.repeat(indent) + tag + '\n';
+                    }
+                    // Self-closing Tags
+                    else if (tag.endsWith('/>') || tag.startsWith('<?') || tag.startsWith('<!--') || tag.startsWith('<![CDATA[')) {
+                        formatted += tab.repeat(indent) + tag + '\n';
+                        // Kommentare und CDATA nicht weiter einrücken
+                        if (tag.startsWith('<!--')) {
+                            // Kommentar kann mehrere Zeilen umfassen
+                            let commentEnd = tag.indexOf('-->');
+                            if (commentEnd === -1) {
+                                // Mehrzeiliger Kommentar - weiter sammeln
+                                while (i < xml.length && !xml.substring(i + 1).startsWith('-->')) {
+                                    i++;
+                                    tagBuffer += xml[i];
+                                }
+                                continue;
+                            }
+                        }
+                    }
+                    // Öffnende Tags
+                    else {
+                        formatted += tab.repeat(indent) + tag + '\n';
+                        // Nur einrücken wenn nicht self-closing
+                        if (!tag.endsWith('/>')) {
+                            indent++;
+                        }
+                    }
+                } else if (inTag) {
+                    tagBuffer += char;
+                } else {
+                    tagBuffer += char;
+                }
+                
+                i++;
+            }
+            
+            // Restlicher Text
+            if (tagBuffer.trim()) {
+                formatted += tab.repeat(indent) + tagBuffer.trim();
+            }
+            
+            return formatted || xml;
+        };
+
+        const formatXML = (xml) => {
+            // Für bereits formatiertes XML einfach zurückgeben
+            return xml;
+        };
+
+        const loadXML = async () => {
+            try {
+                const response = await fetch('./ELGA-023-Entlassungsbrief_aerztlich_EIS-FullSupport.xml');
+                
+                if (!response.ok) {
+                    throw new Error(`Fehler beim Laden: ${response.statusText}`);
+                }
+
+                xmlContent = await response.text();
+                
+                // HTML-Entities escapen für Anzeige (Original-Format beibehalten)
+                const escapedXML = xmlContent
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#39;');
+                
+                // Highlighting anwenden
+                const highlighted = highlightXML(escapedXML);
+                
+                document.getElementById('xml-content').innerHTML = highlighted;
+                document.getElementById('status').style.display = 'none';
+                document.getElementById('xml-container').style.display = 'block';
+                
+            } catch (error) {
+                document.getElementById('status').innerHTML = `<div class="error">
+                    <strong>Fehler:</strong><br>
+                    ${error.message}<br><br>
+                    <strong>Hinweise:</strong><br>
+                    - Stellen Sie sicher, dass die XML-Datei im public-Verzeichnis liegt<br>
+                    - Öffnen Sie diese Seite über einen HTTP-Server (http://localhost:3000)
+                </div>`;
+                console.error('Fehler beim Laden des XML:', error);
+            }
+        };
+
+        const copyToClipboard = async () => {
+            try {
+                await navigator.clipboard.writeText(xmlContent);
+                alert('XML in Zwischenablage kopiert!');
+            } catch (error) {
+                console.error('Fehler beim Kopieren:', error);
+                alert('Fehler beim Kopieren. Bitte manuell auswählen und kopieren.');
+            }
+        };
+
+        const downloadXML = () => {
+            const blob = new Blob([xmlContent], { type: 'application/xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'ELGA-023-Entlassungsbrief_aerztlich_EIS-FullSupport.xml';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
+        const formatXMLButton = () => {
+            const formattedRawXML = formatXMLRaw(xmlContent);
+            const escapedXML = formattedRawXML
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+
+            const highlighted = highlightXML(escapedXML);
+            document.getElementById('xml-content').innerHTML = highlighted;
+        };
+
+        // Beim Laden der Seite XML laden
+        window.addEventListener('DOMContentLoaded', loadXML);
+    </script>
+</body>
+</html>
+

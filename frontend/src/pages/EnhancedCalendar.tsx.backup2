@@ -1,0 +1,1337 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Box,
+  Typography,
+  Button,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  CircularProgress,
+  Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  Chip,
+  ToggleButton,
+  ToggleButtonGroup,
+  Card,
+  CardContent,
+  Switch,
+  FormControlLabel,
+  Tooltip,
+} from '@mui/material';
+import {
+  ArrowBackIos as ArrowBackIosIcon,
+  ArrowForwardIos as ArrowForwardIosIcon,
+  Today as TodayIcon,
+  ViewWeek as ViewWeekIcon,
+  ViewDay as ViewDayIcon,
+  CalendarViewMonth as ViewMonthIcon,
+  ViewAgenda as ViewAgendaIcon,
+  Cached as RefreshIcon,
+} from '@mui/icons-material';
+import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { de } from 'date-fns/locale';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment } from '../store/slices/appointmentSlice';
+import { fetchStaffProfiles } from '../store/slices/staffSlice';
+import { fetchRooms } from '../store/slices/roomSlice';
+import { fetchLocations } from '../store/slices/locationSlice';
+import { fetchLocationWeeklySchedules } from '../store/slices/locationWeeklyScheduleSlice';
+import { fetchWeeklySchedules } from '../store/slices/weeklyScheduleSlice';
+
+interface CalendarEvent {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  staffId: string;
+  staffName: string;
+  staffColor: string;
+  roomId?: string;
+  roomName?: string;
+  type: string;
+  status: string;
+  bookingType: 'online' | 'internal';
+  locationId?: string;
+  locationName?: string;
+  locationColor?: string;
+}
+
+interface BackgroundEvent {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  type: 'location_hours' | 'staff_hours';
+  color: string;
+  opacity: number;
+  locationId?: string;
+  locationName?: string;
+  staffId?: string;
+  staffName?: string;
+}
+
+interface NewEventState {
+  title: string;
+  start: string;
+  end: string;
+  staffId: string;
+  roomId: string;
+  type: string;
+  status: string;
+  patientId: string;
+  locationId: string;
+  bookingType: 'online' | 'internal';
+}
+
+const EnhancedCalendar: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const { appointments, loading: appointmentsLoading, error: appointmentsError } = useAppSelector((state) => state.appointments);
+  const { staffProfiles, loading: staffLoading } = useAppSelector((state) => state.staff);
+  const { rooms, loading: roomsLoading } = useAppSelector((state) => state.rooms);
+  const { locations, loading: locationsLoading } = useAppSelector((state) => state.locations);
+  const { schedules: locationSchedules, loading: locationSchedulesLoading } = useAppSelector((state) => state.locationWeeklySchedules);
+  const { schedules: weeklySchedules, loading: weeklySchedulesLoading } = useAppSelector((state) => state.weeklySchedules);
+
+  // State
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [viewMode, setViewMode] = useState<'day' | '3day' | 'week' | 'month'>('week');
+  const [selectedLocation, setSelectedLocation] = useState<string>('all');
+  const [medicalFilter, setMedicalFilter] = useState<'all' | 'medical' | 'non-medical'>('all');
+  const [showLocationHours, setShowLocationHours] = useState(true);
+  const [showStaffHours, setShowStaffHours] = useState(true);
+  const [showBreaks, setShowBreaks] = useState(true);
+  const [openEventDialog, setOpenEventDialog] = useState(false);
+  const [newEvent, setNewEvent] = useState<NewEventState>({
+    title: '',
+    start: '',
+    end: '',
+    staffId: '',
+    roomId: '',
+    type: 'konsultation',
+    status: 'confirmed',
+    patientId: '',
+    locationId: '',
+    bookingType: 'internal',
+  });
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+
+  useEffect(() => {
+    console.log('Dispatching data fetch actions...');
+    dispatch(fetchAppointments());
+    dispatch(fetchStaffProfiles());
+    dispatch(fetchRooms());
+    dispatch(fetchLocations());
+    dispatch(fetchLocationWeeklySchedules());
+    dispatch(fetchWeeklySchedules());
+  }, [dispatch]);
+
+  // Force refresh data when component becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('Page became visible, refreshing data...');
+        dispatch(fetchStaffProfiles());
+        dispatch(fetchWeeklySchedules());
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [dispatch]);
+
+  // Helper function for time parsing
+  const parseTime = (timeString: string) => {
+    const [hours, minutes] = timeString.split(':').map(Number);
+    return { hours, minutes };
+  };
+
+  // Filter staff by medical/non-medical
+  const filteredStaff = useMemo(() => {
+    if (medicalFilter === 'all') return staffProfiles;
+    return staffProfiles.filter(staff => {
+      // Debug log for Hanna Sheu
+      if (staff.first_name?.includes('Hanna') || staff.last_name?.includes('Sheu')) {
+        console.log('Hanna Sheu filteredStaff debug:' {
+          staffName: `${staff.first_name} ${staff.last_name}`,
+          role: staff.role,
+          isMedical: staff.role === 'doctor' || staff.role === 'arzt' || staff.role === 'mediziner' || staff.role === 'Arzt' || staff.role === 'Mediziner',
+          medicalFilter,
+          willShow: medicalFilter === 'medical' ? (staff.role === 'doctor' || staff.role === 'arzt' || staff.role === 'mediziner' || staff.role === 'Arzt' || staff.role === 'Mediziner') : !(staff.role === 'doctor' || staff.role === 'arzt' || staff.role === 'mediziner' || staff.role === 'Arzt' || staff.role === 'Mediziner')
+        });
+      }
+      const isMedical = staff.role === 'doctor' || staff.role === 'arzt' || staff.role === 'mediziner' || staff.role === 'Arzt' || staff.role === 'Mediziner';
+      // Debug log for Hanna Sheu
+      if (staff.first_name?.includes('Hanna') || staff.last_name?.includes('Sheu')) {
+        console.log('Hanna Sheu filteredStaff debug:' {
+          staffName: `${staff.first_name} ${staff.last_name}`,
+          role: staff.role,
+          isMedical,
+          medicalFilter,
+          willShow: medicalFilter === 'medical' ? isMedical : !isMedical
+        });
+      }
+      // Debug log for Hanna Sheu
+      if (staff.first_name?.includes('Hanna') || staff.last_name?.includes('Sheu')) {
+        console.log('Hanna Sheu filteredStaff debug:' {
+          staffName: `${staff.first_name} ${staff.last_name}`,
+          role: staff.role,
+          isMedical,
+          medicalFilter,
+          willShow: medicalFilter === 'medical' ? isMedical : !isMedical
+        });
+      }
+      return medicalFilter === 'medical' ? isMedical : !isMedical;
+    });
+  }, [staffProfiles, medicalFilter]);
+
+  // Generate background events (location hours and staff hours)
+  const backgroundEvents = useMemo(() => {
+    const events: BackgroundEvent[] = [];
+    
+    // Debug: Log data
+    console.log('EnhancedCalendar Debug:', {
+      locationSchedules: locationSchedules?.length || 0,
+      weeklySchedules: weeklySchedules?.length || 0,
+      staffProfiles: staffProfiles?.length || 0,
+      showLocationHours,
+      showStaffHours,
+      selectedLocation,
+      medicalFilter,
+      locationSchedulesData: locationSchedules,
+      weeklySchedulesData: weeklySchedules,
+      locationSchedulesLoading,
+      weeklySchedulesLoading
+    });
+    
+    // Calculate start and end dates based on view mode
+    let startDate: Date;
+    let endDate: Date;
+    
+    switch (viewMode) {
+      case 'day':
+        startDate = startOfDay(currentDate);
+        endDate = endOfDay(currentDate);
+        break;
+      case '3day':
+        startDate = startOfDay(addDays(currentDate, -1));
+        endDate = endOfDay(addDays(currentDate, 1));
+        break;
+      case 'week':
+        startDate = startOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+        endDate = endOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+        break;
+      case 'month':
+        startDate = startOfWeek(startOfMonth(currentDate), { locale: de, weekStartsOn: 1 });
+        endDate = endOfWeek(endOfMonth(currentDate), { locale: de, weekStartsOn: 1 });
+        break;
+      default:
+        startDate = startOfDay(currentDate);
+        endDate = endOfDay(currentDate);
+    }
+
+    // Location opening hours
+    if (showLocationHours && locationSchedules) {
+      locationSchedules.forEach(schedule => {
+        if (selectedLocation !== 'all' && schedule.location_id._id !== selectedLocation) return;
+        
+        schedule.schedules.forEach(daySchedule => {
+          if (!daySchedule.isOpen) return;
+          
+          // Generate events for each day in the view
+          let currentDate = startDate;
+          while (currentDate <= endDate) {
+            const dayOfWeek = currentDate.getDay();
+            const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek];
+            
+            if (daySchedule.day === dayKey) {
+              const startTime = parseTime(daySchedule.startTime);
+              const endTime = parseTime(daySchedule.endTime);
+              
+              const eventStart = new Date(currentDate);
+              eventStart.setHours(startTime.hours, startTime.minutes, 0, 0);
+              
+              const eventEnd = new Date(currentDate);
+              eventEnd.setHours(endTime.hours, endTime.minutes, 0, 0);
+              
+              events.push({
+                id: `location-${schedule._id}-${daySchedule.day}-${currentDate.getTime()}`,
+                title: `${schedule.location_id.name} - Öffnungszeiten`,
+                start: eventStart,
+                end: eventEnd,
+                type: 'location_hours',
+                color: schedule.location_id.color_hex || '#2563EB',
+                opacity: 0.1,
+                locationId: schedule.location_id._id,
+                locationName: schedule.location_id.name,
+              });
+            }
+            
+            currentDate = addDays(currentDate, 1);
+          }
+        });
+      });
+    }
+
+    // Staff working hours
+    if (showStaffHours && weeklySchedules) {
+      weeklySchedules.forEach(schedule => {
+        // Filter by medical/non-medical if needed
+        const staff = filteredStaff.find(s => s._id === schedule.staffId._id);
+        if (staff) {
+          
+          // Debug log for Hanna Sheu
+          if (staff.first_name?.includes('Hanna') || staff.last_name?.includes('Sheu')) {
+            console.log('Hanna Sheu backgroundEvents debug:', {
+              staffName: `${staff.first_name} ${staff.last_name}`,
+              role: staff.role,
+              isMedical: true,
+              medicalFilter,
+              willShow: true
+            });
+          }
+          
+        }
+        
+        schedule.schedules.forEach(daySchedule => {
+          if (!daySchedule.isWorking) return;
+          
+          // Generate events for each day in the view
+          let currentDate = startDate;
+          while (currentDate <= endDate) {
+            const dayOfWeek = currentDate.getDay();
+            const dayKey = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][dayOfWeek];
+            
+            if (daySchedule.day === dayKey) {
+              const startTime = parseTime(daySchedule.startTime);
+              const endTime = parseTime(daySchedule.endTime);
+              
+              const eventStart = new Date(currentDate);
+              eventStart.setHours(startTime.hours, startTime.minutes, 0, 0);
+              
+              const eventEnd = new Date(currentDate);
+              eventEnd.setHours(endTime.hours, endTime.minutes, 0, 0);
+              
+              // Arbeitszeit-Event
+              const staffName = staff ? `${staff.first_name} ${staff.last_name}` : 'Unbekannt';
+              const staffColor = staff?.color_hex || '#4CAF50';
+              
+                          // Debug log for Dr. Thomas Schmidt
+              if (staffName.includes('Thomas Schmidt')) {
+                console.log('Dr. Thomas Schmidt color debug:', {
+                  staffName,
+                  staff: staff,
+                  color_hex: staff?.color_hex,
+                  finalColor: staffColor,
+                  scheduleStaffId: schedule.staffId._id,
+                  allStaffProfiles: staffProfiles.map(s => ({ 
+                    id: s._id, 
+                    first_name: s.first_name, 
+                    last_name: s.last_name, 
+                    display_name: s.display_name,
+                    color_hex: s.color_hex 
+                  })),
+                  staffProfilesLength: staffProfiles.length,
+                  currentDate: currentDate.toISOString()
+                });
+              }
+              
+              events.push({
+                id: `staff-${schedule._id}-${daySchedule.day}-${currentDate.getTime()}`,
+                title: `${staffName} - Arbeitszeit`,
+                start: eventStart,
+                end: eventEnd,
+                type: 'staff_hours',
+                color: staffColor,
+                opacity: 0.2,
+                staffId: schedule.staffId._id,
+                staffName: staffName,
+              });
+
+              // Pausenzeiten-Event (falls definiert und showBreaks aktiviert)
+              if (showBreaks && daySchedule.breakStart && daySchedule.breakEnd) {
+                const breakStartTime = parseTime(daySchedule.breakStart);
+                const breakEndTime = parseTime(daySchedule.breakEnd);
+                
+                const breakStart = new Date(currentDate);
+                breakStart.setHours(breakStartTime.hours, breakStartTime.minutes, 0, 0);
+                
+                const breakEnd = new Date(currentDate);
+                breakEnd.setHours(breakEndTime.hours, breakEndTime.minutes, 0, 0);
+                
+                events.push({
+                  id: `staff-break-${schedule._id}-${daySchedule.day}-${currentDate.getTime()}`,
+                  title: `${staffName} - Pause`,
+                  start: breakStart,
+                  end: breakEnd,
+                  type: 'staff_hours',
+                  color: '#FF9800', // Orange für Pausen
+                  opacity: 0.3,
+                  staffId: schedule.staffId._id,
+                  staffName: staffName,
+                });
+              }
+            }
+            
+            currentDate = addDays(currentDate, 1);
+          }
+        });
+      });
+    }
+
+    console.log('Generated background events:', events);
+    return events;
+  }, [locationSchedules, weeklySchedules, selectedLocation, showLocationHours, showStaffHours, showBreaks, filteredStaff, currentDate, viewMode]);
+
+  // Generate calendar events from appointments
+  const calendarEvents = useMemo(() => {
+    return appointments
+      .filter(appointment => {
+        // Filter by location if selected
+        if (selectedLocation !== 'all' && appointment.locationId !== selectedLocation) return false;
+        
+        // Filter by medical/non-medical staff
+        const staff = filteredStaff.find(s => s.user_id === appointment.doctor);
+        if (staff) {
+        }
+        
+        return true;
+      })
+      .map(appointment => {
+        const staff = filteredStaff.find(s => s.user_id === appointment.doctor);
+        const room = rooms.find(r => r._id === appointment.room);
+        const location = locations.find(l => l._id === appointment.locationId);
+        
+        return {
+          id: appointment._id,
+          title: appointment.title || 'Termin',
+          start: new Date(appointment.startTime),
+          end: new Date(appointment.endTime),
+          staffId: appointment.doctor,
+          staffName: staff?.display_name || 'Unbekannt',
+          staffColor: staff?.color_hex || '#9CA3AF',
+          roomId: appointment.room,
+          roomName: room?.name,
+          type: appointment.type,
+          status: appointment.status,
+          bookingType: appointment.bookingType as 'online' | 'internal',
+          locationId: appointment.locationId,
+          locationName: location?.name,
+          locationColor: location?.color_hex,
+        };
+      });
+  }, [appointments, staffProfiles, rooms, locations, selectedLocation, currentDate, viewMode]);
+
+  const handleDateChange = (direction: 'prev' | 'next' | 'today') => {
+    if (direction === 'prev') {
+      if (viewMode === 'month') setCurrentDate(subMonths(currentDate, 1));
+      else if (viewMode === 'week' || viewMode === '3day') setCurrentDate(subWeeks(currentDate, 1));
+      else setCurrentDate(addDays(currentDate, -1));
+    } else if (direction === 'next') {
+      if (viewMode === 'month') setCurrentDate(addMonths(currentDate, 1));
+      else if (viewMode === 'week' || viewMode === '3day') setCurrentDate(addWeeks(currentDate, 1));
+      else setCurrentDate(addDays(currentDate, 1));
+    } else {
+      setCurrentDate(new Date());
+    }
+  };
+
+  const handleViewModeChange = (mode: 'day' | '3day' | 'week' | 'month') => {
+    setViewMode(mode);
+  };
+
+  const handleOpenNewEventDialog = (date?: Date, hour?: number) => {
+    const start = date ? new Date(date.setHours(hour || 8, 0, 0, 0)) : new Date();
+    const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour default
+    
+    // Check if any staff is on break during this time slot
+    const slotStart = start;
+    const slotEnd = end;
+    const staffOnBreak = backgroundEvents.some(event => 
+      event.type === 'staff_hours' && 
+      event.title.includes('Pause') &&
+      (isWithinInterval(slotStart, { start: event.start, end: event.end }) ||
+       isWithinInterval(slotEnd, { start: event.start, end: event.end }) ||
+       (event.start <= slotStart && event.end >= slotEnd))
+    );
+    
+    if (staffOnBreak) {
+      alert('Während der Pausenzeiten können keine Termine gebucht werden.');
+      return;
+    }
+    
+    setNewEvent({
+      title: '',
+      start: start.toISOString().substring(0, 16),
+      end: end.toISOString().substring(0, 16),
+      staffId: '',
+      roomId: '',
+      type: 'konsultation',
+      status: 'confirmed',
+      patientId: '',
+      locationId: selectedLocation !== 'all' ? selectedLocation : '',
+      bookingType: 'internal',
+    });
+    setSelectedEvent(null);
+    setOpenEventDialog(true);
+  };
+
+  const handleOpenEditEventDialog = (event: CalendarEvent) => {
+    setSelectedEvent(event);
+    setNewEvent({
+      title: event.title,
+      start: event.start.toISOString().substring(0, 16),
+      end: event.end.toISOString().substring(0, 16),
+      staffId: event.staffId,
+      roomId: event.roomId || '',
+      type: event.type,
+      status: event.status,
+      patientId: '', // TODO: Fetch patient ID for existing event
+      locationId: event.locationId || '',
+      bookingType: event.bookingType,
+    });
+    setOpenEventDialog(true);
+  };
+
+  const handleCloseEventDialog = () => {
+    setOpenEventDialog(false);
+    setSelectedEvent(null);
+  };
+
+  const handleSaveEvent = () => {
+    if (!newEvent.title || !newEvent.start || !newEvent.end || !newEvent.staffId) {
+      alert('Bitte füllen Sie alle erforderlichen Felder aus.');
+      return;
+    }
+
+    const startTime = new Date(newEvent.start);
+    const endTime = new Date(newEvent.end);
+    
+    // Check if the selected staff is on break during this time
+    const staffOnBreak = backgroundEvents.some(event => 
+      event.type === 'staff_hours' && 
+      event.title.includes('Pause') &&
+      event.staffId === newEvent.staffId &&
+      (isWithinInterval(startTime, { start: event.start, end: event.end }) ||
+       isWithinInterval(endTime, { start: event.start, end: event.end }) ||
+       (event.start <= startTime && event.end >= endTime))
+    );
+    
+    if (staffOnBreak) {
+      alert('Der ausgewählte Mitarbeiter ist während dieser Zeit in der Pause und nicht verfügbar.');
+      return;
+    }
+
+    const eventData = {
+      title: newEvent.title,
+      startTime: startTime.toISOString(),
+      endTime: endTime.toISOString(),
+      doctor: newEvent.staffId,
+      room: newEvent.roomId || undefined,
+      patient: newEvent.patientId || undefined,
+      type: newEvent.type,
+      status: newEvent.status,
+      locationId: newEvent.locationId || undefined,
+      bookingType: newEvent.bookingType,
+    };
+
+    if (selectedEvent) {
+      dispatch(updateAppointment({ id: selectedEvent.id, ...eventData }));
+    } else {
+      dispatch(createAppointment(eventData));
+    }
+    handleCloseEventDialog();
+  };
+
+  const handleDeleteEvent = () => {
+    if (selectedEvent) {
+      dispatch(deleteAppointment(selectedEvent.id));
+      handleCloseEventDialog();
+    }
+  };
+
+  const handleRefreshData = () => {
+    console.log('Manually refreshing data...');
+    
+    // Debug token
+    const token = localStorage.getItem('token');
+    console.log('Token from localStorage:', token ? 'Present' : 'Missing');
+    if (token) {
+      console.log('Token length:', token.length);
+      console.log('Token starts with:', token.substring(0, 20) + '...');
+    }
+    
+    dispatch(fetchStaffProfiles()).then((result) => {
+      console.log('Staff profiles refresh result:', result);
+      console.log('Staff profiles after refresh:', staffProfiles);
+      
+      // Debug Dr. Thomas Schmidt specifically
+      const thomasSchmidt = staffProfiles.find(s => 
+        s.first_name?.includes('Thomas') && s.last_name?.includes('Schmidt')
+      );
+      if (thomasSchmidt) {
+        console.log('Dr. Thomas Schmidt after refresh:', {
+          first_name: thomasSchmidt.first_name,
+          last_name: thomasSchmidt.last_name,
+          color_hex: thomasSchmidt.color_hex,
+          display_name: thomasSchmidt.display_name
+        });
+      } else {
+        console.log('Dr. Thomas Schmidt not found in staffProfiles');
+        console.log('Available staff:', staffProfiles.map(s => ({
+          first_name: s.first_name,
+          last_name: s.last_name,
+          display_name: s.display_name
+        })));
+      }
+    });
+    dispatch(fetchWeeklySchedules());
+    dispatch(fetchLocationWeeklySchedules());
+    alert('Daten werden aktualisiert...');
+  };
+
+  // Function to render continuous staff bars as overlay
+  const renderContinuousStaffOverlay = (day: Date) => {
+    const dayStart = startOfDay(day);
+    const dayEnd = endOfDay(day);
+    
+    console.log('renderContinuousStaffOverlay called for day:', day);
+    console.log('dayStart:', dayStart, 'dayEnd:', dayEnd);
+    console.log('backgroundEvents:', backgroundEvents);
+    
+    // Debug: Check what types of events we have
+    const eventTypes = backgroundEvents.map(event => event.type);
+    console.log('Event types in backgroundEvents:', Array.from(new Set(eventTypes)));
+    
+    // Debug: Check staff_hours events specifically
+    const staffHoursEvents = backgroundEvents.filter(event => event.type === 'staff_hours');
+    console.log('staff_hours events:', staffHoursEvents);
+    
+    // Debug: Check first few staff events' dates
+    if (staffHoursEvents.length > 0) {
+      console.log('First staff event dates:', {
+        start: staffHoursEvents[0].start,
+        end: staffHoursEvents[0].end,
+        dayStart,
+        dayEnd
+      });
+    }
+    
+    const staffEventsForDay = backgroundEvents.filter(event => {
+      if (event.type !== 'staff_hours') return false;
+      
+      // Filter out breaks if showBreaks is false
+      if (!showBreaks && event.title.includes('Pause')) return false;
+      
+      // Check if the event overlaps with the day
+      const eventStart = event.start;
+      const eventEnd = event.end;
+      
+      // Event overlaps if:
+      // 1. Event starts before day ends AND event ends after day starts
+      const overlaps = eventStart < dayEnd && eventEnd > dayStart;
+      
+      console.log(`Event ${event.id}: ${eventStart.toISOString()} - ${eventEnd.toISOString()}, overlaps: ${overlaps}`);
+      
+      return overlaps;
+    });
+
+    console.log('staffEventsForDay:', staffEventsForDay);
+
+    return staffEventsForDay.map((event, index) => {
+      const isBreak = event.title.includes('Pause');
+      const barColor = isBreak ? '#FF9800' : event.color;
+      const barOpacity = isBreak ? 0.8 : 0.9;
+      
+      // Calculate position in pixels (60px per hour)
+      const startTime = event.start.getHours() * 60 + event.start.getMinutes();
+      const endTime = event.end.getHours() * 60 + event.end.getMinutes();
+      
+      const topPosition = startTime; // in pixels
+      const height = endTime - startTime; // in pixels
+      
+      console.log(`Rendering staff bar: ${event.staffName}, start: ${startTime}px, height: ${height}px`);
+      
+      return (
+        <Tooltip
+          key={`continuous-staff-${event.id}-${index}`}
+          title={`${event.title} - ${event.staffName || 'Unbekannt'} (${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')})`}
+          arrow
+        >
+          <Box
+            sx={{
+              position: 'absolute',
+              top: `${topPosition}px`,
+              left: 0,
+              right: 0,
+              height: `${height}px`,
+              backgroundColor: barColor,
+              opacity: barOpacity,
+              zIndex: 2,
+              borderRadius: '8px',
+              border: '1px solid rgba(255,255,255,0.3)',
+              '&:hover': {
+                opacity: 1,
+                transform: 'scale(1.02)',
+                boxShadow: `0 4px 12px ${barColor}40`,
+              },
+              transition: 'all 0.2s ease',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'flex-start',
+              padding: '4px 8px',
+              overflow: 'hidden',
+            }}
+          >
+            {/* Staff name and time info */}
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'white',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                width: '100%',
+                lineHeight: 1.2,
+              }}
+            >
+              {isBreak ? 'PAUSE' : (event.staffName || 'Unbekannt')}
+            </Typography>
+            <Typography
+              variant="caption"
+              sx={{
+                color: 'white',
+                fontSize: '9px',
+                textShadow: '1px 1px 2px rgba(0,0,0,0.8)',
+                opacity: 0.9,
+                lineHeight: 1.1,
+              }}
+            >
+              {format(event.start, 'HH:mm')} - {format(event.end, 'HH:mm')}
+            </Typography>
+          </Box>
+        </Tooltip>
+      );
+    });
+  };
+
+  const renderTimeSlot = (hour: number, day?: Date) => {
+    const slotDate = day || currentDate;
+    const slotStart = new Date(slotDate);
+    slotStart.setHours(hour, 0, 0, 0);
+    const slotEnd = new Date(slotDate);
+    slotEnd.setHours(hour + 1, 0, 0, 0);
+
+    // Find background events for this time slot
+    const backgroundEventsForSlot = backgroundEvents.filter(event => 
+      isWithinInterval(slotStart, { start: event.start, end: event.end }) ||
+      isWithinInterval(slotEnd, { start: event.start, end: event.end }) ||
+      (event.start <= slotStart && event.end >= slotEnd)
+    );
+
+    // Find calendar events for this time slot
+    const eventsForSlot = calendarEvents.filter(event => 
+      isWithinInterval(slotStart, { start: event.start, end: event.end }) ||
+      isWithinInterval(slotEnd, { start: event.start, end: event.end }) ||
+      (event.start <= slotStart && event.end >= slotEnd)
+    );
+
+    // Check if any staff is on break during this time slot
+    const staffOnBreak = backgroundEventsForSlot.some(event => 
+      event.type === 'staff_hours' && event.title.includes('Pause')
+    );
+
+    return (
+      <Box
+        key={hour}
+        sx={{
+          height: '60px',
+          borderBottom: '1px dashed #e0e0e0',
+          position: 'relative',
+          cursor: 'pointer',
+          '&:hover': {
+            backgroundColor: 'rgba(0, 0, 0, 0.04)',
+          },
+        }}
+        onClick={() => !staffOnBreak && handleOpenNewEventDialog(slotDate, hour)}
+      >
+        {/* Background for location hours */}
+        {backgroundEventsForSlot
+          .filter(event => event.type === 'location_hours')
+          .map((event, index) => (
+            <Box
+              key={`bg-${event.id}-${index}`}
+              sx={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: event.color,
+                opacity: 0.1,
+                zIndex: 1,
+              }}
+              title={`${event.title} (${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')})`}
+            />
+          ))}
+
+
+        {/* Calendar events */}
+        {eventsForSlot.map((event, index) => (
+          <Box
+            key={`event-${event.id}-${index}`}
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: event.staffColor,
+              color: 'white',
+              borderRadius: '4px',
+              p: 0.5,
+              overflow: 'hidden',
+              cursor: 'pointer',
+              border: '1px solid rgba(0,0,0,0.2)',
+              zIndex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleOpenEditEventDialog(event);
+            }}
+          >
+            <Typography variant="caption" sx={{ fontWeight: 'bold', fontSize: '0.7rem' }}>
+              {event.title}
+            </Typography>
+            <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>
+              {format(event.start, 'HH:mm')} - {format(event.end, 'HH:mm')}
+            </Typography>
+            <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>
+              {event.staffName}
+            </Typography>
+            {event.roomName && (
+              <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>
+                {event.roomName}
+              </Typography>
+            )}
+            <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
+              <Chip
+                label={event.bookingType === 'online' ? 'Online' : 'Intern'}
+                size="small"
+                sx={{ height: 16, fontSize: '0.6rem' }}
+                color={event.bookingType === 'online' ? 'primary' : 'secondary'}
+              />
+              {event.locationName && (
+                <Chip
+                  label={event.locationName}
+                  size="small"
+                  sx={{ height: 16, fontSize: '0.6rem', backgroundColor: event.locationColor }}
+                />
+              )}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    );
+  };
+
+  const renderDayView = () => {
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+        <Box sx={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }} />
+          <Box sx={{ flexGrow: 1, textAlign: 'center', py: 1, fontWeight: 'bold' }}>
+            {format(currentDate, 'EEEE, dd. MMMM yyyy', { locale: de })}
+          </Box>
+        </Box>
+        <Box sx={{ display: 'flex', flexGrow: 1 }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }}>
+            {hours.map(hour => (
+              <Box key={hour} sx={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', pr: 1, pt: 0.5, borderBottom: '1px dashed #e0e0e0' }}>
+                <Typography variant="caption">{`${hour}:00`}</Typography>
+              </Box>
+            ))}
+          </Box>
+          <Box sx={{ flexGrow: 1, position: 'relative' }}>
+            {/* Continuous staff overlay */}
+            {renderContinuousStaffOverlay(currentDate)}
+            {/* Time slots */}
+            {hours.map(hour => renderTimeSlot(hour))}
+          </Box>
+        </Box>
+      </Box>
+    );
+  };
+
+  const render3DayView = () => {
+    const startDate = addDays(currentDate, -1);
+    const days = Array.from({ length: 3 }, (_, i) => addDays(startDate, i));
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+        <Box sx={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }} />
+          {days.map(day => (
+            <Box key={day.toISOString()} sx={{ flexGrow: 1, textAlign: 'center', py: 1, fontWeight: 'bold', borderRight: '1px solid #e0e0e0' }}>
+              <Typography variant="caption" display="block">{format(day, 'EEE', { locale: de })}</Typography>
+              <Typography variant="body2">{format(day, 'dd.MM.', { locale: de })}</Typography>
+            </Box>
+          ))}
+        </Box>
+        <Box sx={{ display: 'flex', flexGrow: 1 }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }}>
+            {hours.map(hour => (
+              <Box key={hour} sx={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', pr: 1, pt: 0.5, borderBottom: '1px dashed #e0e0e0' }}>
+                <Typography variant="caption">{`${hour}:00`}</Typography>
+              </Box>
+            ))}
+          </Box>
+          {days.map(day => (
+            <Box key={day.toISOString()} sx={{ flexGrow: 1, position: 'relative', borderRight: '1px solid #e0e0e0' }}>
+              {/* Continuous staff overlay */}
+              {renderContinuousStaffOverlay(day)}
+              {/* Time slots */}
+              {hours.map(hour => renderTimeSlot(hour, day))}
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    );
+  };
+
+  const renderWeekView = () => {
+    const startWeek = startOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+    const days = Array.from({ length: 7 }, (_, i) => addDays(startWeek, i));
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
+        <Box sx={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }} />
+          {days.map(day => (
+            <Box key={day.toISOString()} sx={{ flexGrow: 1, textAlign: 'center', py: 1, fontWeight: 'bold', borderRight: '1px solid #e0e0e0' }}>
+              <Typography variant="caption" display="block">{format(day, 'EEE', { locale: de })}</Typography>
+              <Typography variant="body2">{format(day, 'dd.MM.', { locale: de })}</Typography>
+            </Box>
+          ))}
+        </Box>
+        <Box sx={{ display: 'flex', flexGrow: 1 }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }}>
+            {hours.map(hour => (
+              <Box key={hour} sx={{ height: '60px', display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', pr: 1, pt: 0.5, borderBottom: '1px dashed #e0e0e0' }}>
+                <Typography variant="caption">{`${hour}:00`}</Typography>
+              </Box>
+            ))}
+          </Box>
+          {days.map(day => (
+            <Box key={day.toISOString()} sx={{ flexGrow: 1, position: 'relative', borderRight: '1px solid #e0e0e0' }}>
+              {/* Continuous staff overlay */}
+              {renderContinuousStaffOverlay(day)}
+              {/* Time slots */}
+              {hours.map(hour => renderTimeSlot(hour, day))}
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    );
+  };
+
+  const renderMonthView = () => {
+    const startMonth = startOfMonth(currentDate);
+    const endMonth = endOfMonth(currentDate);
+    const startDate = startOfWeek(startMonth, { locale: de, weekStartsOn: 1 });
+    const endDate = endOfWeek(endMonth, { locale: de, weekStartsOn: 1 });
+
+    const days = [];
+    let day = startDate;
+
+    while (day <= endDate) {
+      days.push(day);
+      day = addDays(day, 1);
+    }
+
+    return (
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', border: '1px solid #e0e0e0', height: '100%', overflowY: 'auto' }}>
+        {Array.from({ length: 7 }, (_, i) => (
+          <Box key={i} sx={{ textAlign: 'center', p: 1, fontWeight: 'bold', borderBottom: '1px solid #e0e0e0', borderRight: '1px solid #e0e0e0', '&:last-child': { borderRight: 'none' } }}>
+            {format(addDays(startOfWeek(new Date(), { locale: de, weekStartsOn: 1 }), i), 'EEE', { locale: de })}
+          </Box>
+        ))}
+        {days.map((dayItem, index) => {
+          const dayEvents = calendarEvents.filter(event => isSameDay(event.start, dayItem));
+          return (
+            <Box
+              key={index}
+              sx={{
+                borderRight: '1px solid #e0e0e0',
+                borderBottom: '1px solid #e0e0e0',
+                minHeight: '100px',
+                p: 0.5,
+                backgroundColor: isSameMonth(dayItem, currentDate) ? 'white' : '#f5f5f5',
+                opacity: isSameMonth(dayItem, currentDate) ? 1 : 0.7,
+                cursor: 'pointer',
+                '&:nth-of-type(7n)': { borderRight: 'none' },
+              }}
+              onClick={() => handleOpenNewEventDialog(dayItem)}
+            >
+              <Typography variant="caption" sx={{ fontWeight: 'bold', color: isSameDay(dayItem, new Date()) ? 'primary.main' : 'text.primary' }}>
+                {format(dayItem, 'd', { locale: de })}
+              </Typography>
+              {dayEvents.map(event => (
+                <Box
+                  key={event.id}
+                  sx={{
+                    backgroundColor: event.staffColor,
+                    color: 'white',
+                    borderRadius: '2px',
+                    fontSize: '0.7rem',
+                    p: '2px 4px',
+                    mb: '2px',
+                    overflow: 'hidden',
+                    whiteSpace: 'nowrap',
+                    textOverflow: 'ellipsis',
+                    cursor: 'pointer',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenEditEventDialog(event);
+                  }}
+                >
+                  {`${format(event.start, 'HH:mm')} ${event.title}`}
+                </Box>
+              ))}
+            </Box>
+          );
+        })}
+      </Box>
+    );
+  };
+
+  if (appointmentsLoading || staffLoading || roomsLoading || locationsLoading || locationSchedulesLoading || weeklySchedulesLoading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (appointmentsError) {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">Fehler beim Laden der Termine: {appointmentsError}</Alert>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ p: 3, height: 'calc(100vh - 64px - 48px)', display: 'flex', flexDirection: 'column' }}>
+      <Typography variant="h4" gutterBottom>Erweiterter Terminkalender</Typography>
+
+      {/* Controls */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <IconButton onClick={() => handleDateChange('prev')}>
+                <ArrowBackIosIcon />
+              </IconButton>
+              <IconButton onClick={() => handleDateChange('next')}>
+                <ArrowForwardIosIcon />
+              </IconButton>
+              <Button onClick={() => handleDateChange('today')} variant="outlined" sx={{ ml: 1 }}>
+                <TodayIcon sx={{ mr: 1 }} /> Heute
+              </Button>
+            </Box>
+            <Typography variant="h5" sx={{ mx: 2 }}>
+              {viewMode === 'month' && format(currentDate, 'MMMM yyyy', { locale: de })}
+              {viewMode === 'week' && `KW ${format(currentDate, 'w', { locale: de })} ${format(currentDate, 'yyyy', { locale: de })}`}
+              {viewMode === '3day' && `3-Tage-Ansicht ${format(addDays(currentDate, -1), 'dd.MM.')} - ${format(addDays(currentDate, 1), 'dd.MM.yyyy')}`}
+              {viewMode === 'day' && format(currentDate, 'dd. MMMM yyyy', { locale: de })}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <Button
+                onClick={handleRefreshData}
+                variant="outlined"
+                size="small"
+                startIcon={<RefreshIcon />}
+              >
+                Aktualisieren
+              </Button>
+              <ToggleButtonGroup
+                value={viewMode}
+                exclusive
+                onChange={(_, newMode) => newMode && handleViewModeChange(newMode)}
+                size="small"
+              >
+                <ToggleButton value="day">
+                  <ViewDayIcon sx={{ mr: 1 }} /> Tag
+                </ToggleButton>
+                <ToggleButton value="3day">
+                  <ViewAgendaIcon sx={{ mr: 1 }} /> 3 Tage
+                </ToggleButton>
+                <ToggleButton value="week">
+                  <ViewWeekIcon sx={{ mr: 1 }} /> Woche
+                </ToggleButton>
+                <ToggleButton value="month">
+                  <ViewMonthIcon sx={{ mr: 1 }} /> Monat
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Box>
+          </Box>
+
+          {/* Filters */}
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <FormControl sx={{ minWidth: 200 }}>
+              <InputLabel>Standort</InputLabel>
+              <Select
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
+                label="Standort"
+              >
+                <MenuItem value="all">Alle Standorte</MenuItem>
+                {locations.map((location) => (
+                  <MenuItem key={location._id} value={location._id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box
+                        sx={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          backgroundColor: location.color_hex || '#2563EB',
+                          mr: 1
+                        }}
+                      />
+                      {location.name}{location.code ? ` (${location.code})` : ''}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl sx={{ minWidth: 150 }}>
+              <InputLabel>Personal</InputLabel>
+              <Select
+                value={medicalFilter}
+                onChange={(e) => setMedicalFilter(e.target.value as 'all' | 'medical' | 'non-medical')}
+                label="Personal"
+              >
+                <MenuItem value="all">Alle</MenuItem>
+                <MenuItem value="medical">Mediziner</MenuItem>
+                <MenuItem value="non-medical">Nicht-Mediziner</MenuItem>
+              </Select>
+            </FormControl>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showLocationHours}
+                  onChange={(e) => setShowLocationHours(e.target.checked)}
+                />
+              }
+              label="Standort-Öffnungszeiten"
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showStaffHours}
+                  onChange={(e) => setShowStaffHours(e.target.checked)}
+                />
+              }
+              label="Personal-Arbeitszeiten"
+            />
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={showBreaks}
+                  onChange={(e) => setShowBreaks(e.target.checked)}
+                />
+              }
+              label="Pausenzeiten"
+            />
+          </Box>
+        </CardContent>
+      </Card>
+
+      {/* Calendar */}
+      <Box sx={{ flexGrow: 1, border: '1px solid #e0e0e0', borderRadius: '8px', overflow: 'hidden' }}>
+        {viewMode === 'day' && renderDayView()}
+        {viewMode === '3day' && render3DayView()}
+        {viewMode === 'week' && renderWeekView()}
+        {viewMode === 'month' && renderMonthView()}
+      </Box>
+
+      {/* Event Dialog */}
+      <Dialog open={openEventDialog} onClose={handleCloseEventDialog} maxWidth="md" fullWidth>
+        <DialogTitle>{selectedEvent ? 'Termin bearbeiten' : 'Neuen Termin erstellen'}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 400 }}>
+            <TextField
+              label="Titel"
+              fullWidth
+              value={newEvent.title}
+              onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+            />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Startzeit"
+                type="datetime-local"
+                fullWidth
+                value={newEvent.start}
+                onChange={(e) => setNewEvent({ ...newEvent, start: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+              />
+              <TextField
+                label="Endzeit"
+                type="datetime-local"
+                fullWidth
+                value={newEvent.end}
+                onChange={(e) => setNewEvent({ ...newEvent, end: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+              />
+            </Box>
+            <TextField
+              label="Mitarbeiter"
+              select
+              fullWidth
+              value={newEvent.staffId}
+              onChange={(e) => setNewEvent({ ...newEvent, staffId: e.target.value })}
+            >
+              {filteredStaff.map((staff) => (
+                <MenuItem key={staff._id} value={staff.user_id}>
+                  <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                    <Box
+                      sx={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: '50%',
+                        backgroundColor: staff.color_hex || '#9CA3AF',
+                        mr: 1
+                      }}
+                    />
+                    {staff.display_name}
+                  </Box>
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Raum"
+              select
+              fullWidth
+              value={newEvent.roomId}
+              onChange={(e) => setNewEvent({ ...newEvent, roomId: e.target.value })}
+            >
+              <MenuItem value="">Kein Raum</MenuItem>
+              {rooms.map((room) => (
+                <MenuItem key={room._id} value={room._id}>
+                  {room.name}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Termin-Typ"
+                select
+                fullWidth
+                value={newEvent.type}
+                onChange={(e) => setNewEvent({ ...newEvent, type: e.target.value })}
+              >
+                {['konsultation', 'untersuchung', 'operation', 'nachsorge', 'beratung', 'gruppentermin', 'impfung', 'vorsorge', 'labor', 'sonstiges'].map((type) => (
+                  <MenuItem key={type} value={type}>
+                    {type.charAt(0).toUpperCase() + type.slice(1)}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                label="Status"
+                select
+                fullWidth
+                value={newEvent.status}
+                onChange={(e) => setNewEvent({ ...newEvent, status: e.target.value })}
+              >
+                {['confirmed', 'pending', 'cancelled', 'completed', 'no-show'].map((status) => (
+                  <MenuItem key={status} value={status}>
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Buchungstyp"
+                select
+                fullWidth
+                value={newEvent.bookingType}
+                onChange={(e) => setNewEvent({ ...newEvent, bookingType: e.target.value as 'online' | 'internal' })}
+              >
+                <MenuItem value="internal">Intern</MenuItem>
+                <MenuItem value="online">Online</MenuItem>
+              </TextField>
+              <TextField
+                label="Standort"
+                select
+                fullWidth
+                value={newEvent.locationId}
+                onChange={(e) => setNewEvent({ ...newEvent, locationId: e.target.value })}
+              >
+                <MenuItem value="">Kein Standort</MenuItem>
+                {locations.map((location) => (
+                  <MenuItem key={location._id} value={location._id}>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box
+                        sx={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          backgroundColor: location.color_hex || '#2563EB',
+                          mr: 1
+                        }}
+                      />
+                      {location.name}{location.code ? ` (${location.code})` : ''}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+            <TextField
+              label="Patienten-ID (optional)"
+              fullWidth
+              value={newEvent.patientId}
+              onChange={(e) => setNewEvent({ ...newEvent, patientId: e.target.value })}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          {selectedEvent && (
+            <Button onClick={handleDeleteEvent} color="error">
+              Löschen
+            </Button>
+          )}
+          <Button onClick={handleCloseEventDialog}>Abbrechen</Button>
+          <Button onClick={handleSaveEvent} variant="contained" color="primary">
+            {selectedEvent ? 'Speichern' : 'Erstellen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+    </Box>
+  );
+};
+
+export default EnhancedCalendar;

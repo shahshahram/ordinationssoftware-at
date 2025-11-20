@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR-Code Demo - Self-Check-in</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1, h2 { color: #0056b3; }
+        .section { 
+            margin-bottom: 30px; 
+            padding: 15px; 
+            border: 1px solid #ddd; 
+            border-radius: 5px; 
+            background-color: #f9f9f9; 
+        }
+        .button { 
+            background-color: #007bff; 
+            color: white; 
+            padding: 10px 15px; 
+            border: none; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            font-size: 16px; 
+            margin-right: 10px; 
+        }
+        .button:hover { background-color: #0056b3; }
+        .qr-code-display { text-align: center; margin-top: 20px; }
+        #qrCodeCanvas { border: 1px solid #ccc; }
+        .message { 
+            padding: 10px; 
+            margin-top: 10px; 
+            border-radius: 5px; 
+        }
+        .success { 
+            background-color: #d4edda; 
+            color: #155724; 
+            border-color: #c3e6cb; 
+        }
+        .error { 
+            background-color: #f8d7da; 
+            color: #721c24; 
+            border-color: #f5c6cb; 
+        }
+        .warning { 
+            background-color: #fff3cd; 
+            color: #856404; 
+            border-color: #ffeeba; 
+        }
+        .url-display {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            font-family: monospace;
+            word-break: break-all;
+        }
+        .test-link {
+            display: inline-block;
+            background-color: #28a745;
+            color: white;
+            padding: 10px 20px;
+            text-decoration: none;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-size: 18px;
+        }
+        .test-link:hover {
+            background-color: #218838;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.4.4/build/qrcode.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 QR-Code Self-Check-in Demo</h1>
+        <p>Diese Demo zeigt, wie der QR-Code jetzt eine vollständige URL generiert, die automatisch die Check-in-Seite öffnet.</p>
+
+        <div class="section">
+            <h2>1. QR-Code mit URL generieren</h2>
+            <button class="button" id="generateQrCode">🔄 QR-Code generieren</button>
+            <div class="qr-code-display">
+                <canvas id="qrCodeCanvas"></canvas>
+                <div id="qrCodeText"></div>
+                <div id="qrCodeUrl" class="url-display" style="display: none;"></div>
+            </div>
+            <div id="qrStatus" class="message warning" style="display: none;"></div>
+        </div>
+
+        <div class="section">
+            <h2>2. Check-in-Seite testen</h2>
+            <p>Klicken Sie auf den Link, um die Check-in-Seite zu öffnen:</p>
+            <div id="testLink" style="display: none;">
+                <a id="checkinLink" href="#" target="_blank" class="test-link">
+                    🚀 Check-in-Seite öffnen
+                </a>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>3. 📱 Tablet-Test Anweisungen</h2>
+            <ol>
+                <li><strong>WLAN-Verbindung:</strong> Stellen Sie sicher, dass das Tablet im gleichen WLAN ist (192.168.178.163)</li>
+                <li><strong>QR-Code generieren:</strong> Klicken Sie auf "QR-Code generieren" oben</li>
+                <li><strong>QR-Code scannen:</strong> Verwenden Sie eine QR-Code-Scanner-App auf dem Tablet</li>
+                <li><strong>Automatisches Öffnen:</strong> Der Browser sollte automatisch die Check-in-Seite öffnen</li>
+                <li><strong>Formular ausfüllen:</strong> Füllen Sie das Patientendaten-Formular aus</li>
+                <li><strong>Abschließen:</strong> Klicken Sie auf "Check-in abschließen"</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h2>4. 🔧 Technische Details</h2>
+            <ul>
+                <li><strong>Backend:</strong> http://192.168.178.163:5001</li>
+                <li><strong>Frontend:</strong> http://192.168.178.163:3000</li>
+                <li><strong>Check-in Route:</strong> /checkin?token=...</li>
+                <li><strong>QR-Code Format:</strong> Vollständige URL statt nur Text</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>5. ✅ Erwartetes Verhalten</h2>
+            <p>Nach dem Scannen des QR-Codes sollte:</p>
+            <ul>
+                <li>Der Browser automatisch öffnen</li>
+                <li>Die URL <code>http://192.168.178.163:3000/checkin?token=...</code> laden</li>
+                <li>Das Check-in-Formular angezeigt werden</li>
+                <li>Das Token automatisch validiert werden</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE_URL = 'http://192.168.178.163:5001/api/checkin';
+        let currentQRCode = null;
+
+        function showStatus(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.textContent = message;
+            element.className = `message ${type}`;
+            element.style.display = 'block';
+        }
+
+        async function generateQrCode() {
+            try {
+                showStatus('qrStatus', 'Generiere QR-Code...', 'warning');
+                const response = await fetch(`${API_BASE_URL}/generate`, { method: 'POST' });
+                const data = await response.json();
+
+                if (data.success) {
+                    currentQRCode = data.data.qrCode;
+                    QRCode.toCanvas(document.getElementById('qrCodeCanvas'), currentQRCode, { width: 200 }, function (error) {
+                        if (error) console.error(error);
+                        showStatus('qrStatus', `✅ QR-Code erfolgreich generiert!`, 'success');
+                        document.getElementById('qrCodeText').textContent = `Token: ${data.data.checkInId}`;
+                        document.getElementById('qrCodeUrl').textContent = `URL: ${currentQRCode}`;
+                        document.getElementById('qrCodeUrl').style.display = 'block';
+                        
+                        // Show test link
+                        const linkElement = document.getElementById('checkinLink');
+                        linkElement.href = currentQRCode;
+                        document.getElementById('testLink').style.display = 'block';
+                    });
+                } else {
+                    showStatus('qrStatus', `❌ Fehler beim Generieren: ${data.message || 'Unbekannter Fehler'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error generating QR code:', error);
+                showStatus('qrStatus', `❌ Netzwerkfehler: ${error.message}`, 'error');
+            }
+        }
+
+        document.getElementById('generateQrCode').addEventListener('click', generateQrCode);
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

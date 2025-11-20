@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patientendaten Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .json-display {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            max-height: 400px;
+            overflow-y: auto;
+            margin: 10px 0;
+        }
+        .field-test {
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Patientendaten Test</h1>
+        
+        <div class="field-test">
+            <h3>Test-Patient laden</h3>
+            <input type="text" id="patientIdInput" placeholder="Patienten-ID eingeben" style="width: 300px; padding: 8px; margin: 5px;">
+            <button class="button" onclick="loadPatient()">Patient laden</button>
+        </div>
+
+        <div class="field-test">
+            <h3>API-Antwort</h3>
+            <div id="apiResponse" class="json-display">
+                Klicken Sie auf "Patient laden" um die API-Antwort zu sehen.
+            </div>
+        </div>
+
+        <div class="field-test">
+            <h3>Feld-Tests</h3>
+            <div id="fieldTests">
+                <p>Keine Daten geladen</p>
+            </div>
+        </div>
+
+        <div class="field-test">
+            <h3>QR-Code Test</h3>
+            <button class="button" onclick="generateQR()" id="generateQRBtn" disabled>
+                QR-Code generieren
+            </button>
+            <div id="qrCodeContainer" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentPatient = null;
+
+        async function loadPatient() {
+            const patientId = document.getElementById('patientIdInput').value.trim();
+            if (!patientId) {
+                alert('Bitte geben Sie eine Patienten-ID ein');
+                return;
+            }
+
+            try {
+                console.log('Lade Patient mit ID:', patientId);
+                
+                const response = await fetch(`http://192.168.178.163:5001/api/patients-extended/validate/${patientId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                console.log('API-Antwort:', result);
+                
+                document.getElementById('apiResponse').textContent = JSON.stringify(result, null, 2);
+                
+                if (result.success && result.data) {
+                    currentPatient = result.data;
+                    document.getElementById('generateQRBtn').disabled = false;
+                    document.getElementById('generateQRBtn').textContent = `QR-Code für ${currentPatient.firstName} ${currentPatient.lastName} generieren`;
+                    
+                    // Feld-Tests
+                    testFields();
+                } else {
+                    document.getElementById('apiResponse').textContent = 'Fehler: ' + (result.message || 'Unbekannter Fehler');
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden des Patienten:', error);
+                document.getElementById('apiResponse').textContent = 'Fehler: ' + error.message;
+            }
+        }
+
+        function testFields() {
+            if (!currentPatient) return;
+
+            const fieldTests = document.getElementById('fieldTests');
+            fieldTests.innerHTML = `
+                <h4>Feld-Überprüfung:</h4>
+                <p><strong>Geschlecht:</strong> ${currentPatient.gender || 'NICHT GEFUNDEN'} (${currentPatient.gender === 'm' ? 'Männlich' : currentPatient.gender === 'f' ? 'Weiblich' : 'Unbekannt'})</p>
+                <p><strong>Allergien:</strong> ${Array.isArray(currentPatient.allergies) ? currentPatient.allergies.length : 'NICHT GEFUNDEN'} Einträge</p>
+                <p><strong>Medikamente:</strong> ${Array.isArray(currentPatient.currentMedications) ? currentPatient.currentMedications.length : 'NICHT GEFUNDEN'} Einträge</p>
+                <p><strong>Medizinische Vorgeschichte:</strong> ${Array.isArray(currentPatient.medicalHistory) ? currentPatient.medicalHistory.length : 'NICHT GEFUNDEN'} Einträge</p>
+                <p><strong>Impfungen:</strong> ${Array.isArray(currentPatient.vaccinations) ? currentPatient.vaccinations.length : 'NICHT GEFUNDEN'} Einträge</p>
+                <p><strong>Blutgruppe:</strong> ${currentPatient.bloodType || 'NICHT GEFUNDEN'}</p>
+                <p><strong>Größe:</strong> ${currentPatient.height || 'NICHT GEFUNDEN'}</p>
+                <p><strong>Gewicht:</strong> ${currentPatient.weight || 'NICHT GEFUNDEN'}</p>
+                <p><strong>BMI:</strong> ${currentPatient.bmi || 'NICHT GEFUNDEN'}</p>
+                <p><strong>Schwanger:</strong> ${currentPatient.isPregnant !== undefined ? currentPatient.isPregnant : 'NICHT GEFUNDEN'}</p>
+                <p><strong>Schwangerschaftswoche:</strong> ${currentPatient.pregnancyWeek || 'NICHT GEFUNDEN'}</p>
+                
+                <h4>Allergien Details:</h4>
+                <div style="background: #f0f0f0; padding: 10px; border-radius: 4px;">
+                    ${Array.isArray(currentPatient.allergies) && currentPatient.allergies.length > 0 
+                        ? currentPatient.allergies.map(allergy => `<div>• ${typeof allergy === 'string' ? allergy : allergy.name || JSON.stringify(allergy)}</div>`).join('')
+                        : '<div>Keine Allergien gefunden</div>'
+                    }
+                </div>
+                
+                <h4>Medikamente Details:</h4>
+                <div style="background: #f0f0f0; padding: 10px; border-radius: 4px;">
+                    ${Array.isArray(currentPatient.currentMedications) && currentPatient.currentMedications.length > 0 
+                        ? currentPatient.currentMedications.map(med => `<div>• ${typeof med === 'string' ? med : med.name || JSON.stringify(med)}</div>`).join('')
+                        : '<div>Keine Medikamente gefunden</div>'
+                    }
+                </div>
+            `;
+        }
+
+        function generateQR() {
+            if (!currentPatient) {
+                alert('Kein Patient geladen');
+                return;
+            }
+
+            const simplifiedData = {
+                patientId: currentPatient._id,
+                firstName: currentPatient.firstName,
+                lastName: currentPatient.lastName,
+                dateOfBirth: currentPatient.dateOfBirth,
+                gender: currentPatient.gender
+            };
+
+            const validationUrl = `http://192.168.178.163:3000/validate.html?data=${encodeURIComponent(JSON.stringify(simplifiedData))}`;
+            
+            const qrCodeImg = document.createElement('img');
+            qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(validationUrl)}&ecc=M&margin=10&format=png`;
+            qrCodeImg.alt = "QR-Code für Patient-Validierung";
+            qrCodeImg.style.maxWidth = '300px';
+            qrCodeImg.style.height = 'auto';
+            qrCodeImg.style.border = '2px solid #333';
+            qrCodeImg.style.borderRadius = '8px';
+            
+            const container = document.getElementById('qrCodeContainer');
+            container.innerHTML = '';
+            container.appendChild(qrCodeImg);
+            
+            // QR-Code klickbar machen
+            qrCodeImg.onclick = function() {
+                window.open(validationUrl, '_blank');
+            };
+            
+            console.log('QR-Code URL:', validationUrl);
+            console.log('Vereinfachte Daten:', simplifiedData);
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
