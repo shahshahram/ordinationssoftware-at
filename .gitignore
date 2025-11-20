@@ -23,4 +23,8 @@ frontend/dev.log
 # Chat Logs are tracked
 !docs/chat-logs/
 
+# Large files
+*.zip
+ordinationssoftware-at.zip
+
 
