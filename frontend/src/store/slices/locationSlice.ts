@@ -56,6 +56,7 @@ export interface Location {
   color_hex: string;
   is_active: boolean;
   practiceType?: 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt';
+  specialties?: string[]; // Medizinische Fachrichtungen
   billing?: LocationBillingConfig;
   xdsRegistry?: XdsRegistryConfig;
   createdAt: string;

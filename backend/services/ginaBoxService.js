@@ -32,7 +32,6 @@ class GINABoxService extends EventEmitter {
     // Event-Handler
     this.onCardInsert = this.onCardInsert.bind(this);
     this.onCardRemove = this.onCardRemove.bind(this);
-    this.onCardValidated = this.onCardValidated.bind(this);
   }
   
   /**
@@ -172,7 +171,10 @@ class GINABoxService extends EventEmitter {
         this.onCardRemove();
         break;
       case 'card_validated':
-        this.onCardValidated(message.data);
+        // Event wird bereits durch validateCurrentCard() emittiert
+        if (message.data) {
+          this.emit('card_validated', message.data);
+        }
         break;
       case 'status':
         this.connected = message.data.connected === true;

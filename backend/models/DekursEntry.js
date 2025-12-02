@@ -88,6 +88,40 @@ const DekursEntrySchema = new mongoose.Schema({
       enum: ['left', 'right', 'bilateral', ''],
       default: ''
     },
+    isPrimary: {
+      type: Boolean,
+      default: false
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [1000, 'Diagnose-Notizen dürfen maximal 1000 Zeichen haben']
+    },
+    status: {
+      type: String,
+      enum: ['active', 'resolved', 'provisional', 'ruled-out'],
+      default: 'active'
+    },
+    severity: {
+      type: String,
+      enum: ['mild', 'moderate', 'severe', 'critical'],
+      default: undefined
+    },
+    onsetDate: {
+      type: Date
+    },
+    resolvedDate: {
+      type: Date
+    },
+    catalogYear: {
+      type: Number,
+      default: new Date().getFullYear()
+    },
+    source: {
+      type: String,
+      enum: ['clinical', 'billing', 'reporting'],
+      default: 'clinical'
+    },
     _id: false
   }],
   
@@ -187,7 +221,33 @@ const DekursEntrySchema = new mongoose.Schema({
     index: true
   },
   
-  // Verwendete Vorlage (optional)
+  // Neue Felder für bildgebende Verfahren und Labor
+  imagingFindings: {
+    type: String,
+    trim: true,
+    maxlength: [5000, 'Bildgebende Befunde dürfen maximal 5000 Zeichen haben']
+  },
+  laboratoryFindings: {
+    type: String,
+    trim: true,
+    maxlength: [5000, 'Laborbefunde dürfen maximal 5000 Zeichen haben']
+  },
+  
+  // Verknüpfungen zu DICOM/Radiologie/Labor (optional)
+  linkedDicomStudies: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DicomStudy'
+  }],
+  linkedRadiologyReports: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Document'
+  }],
+  linkedLaborResults: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'LaborResult'
+  }],
+  
+  // Verwendete Vorlage (erweitert)
   templateId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'DekursVorlage'
@@ -195,6 +255,35 @@ const DekursEntrySchema = new mongoose.Schema({
   templateName: {
     type: String,
     trim: true
+  },
+  templateUsed: {
+    templateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DekursVorlage'
+    },
+    templateName: {
+      type: String,
+      trim: true
+    },
+    templateVersion: {
+      type: Number
+    },
+    insertedAt: {
+      type: Date
+    },
+    modified: {
+      type: Boolean,
+      default: false
+    },
+    originalFields: {
+      visitReason: String,
+      clinicalObservations: String,
+      findings: String,
+      progressChecks: String,
+      treatmentDetails: String,
+      notes: String,
+      psychosocialFactors: String
+    }
   },
   
   // Metadaten

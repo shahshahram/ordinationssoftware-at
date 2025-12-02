@@ -295,4 +295,76 @@ router.get('/auto-submit/status', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/ogk-billing/config
+ * @desc    ÖGK-Abrechnungs-Konfiguration abrufen
+ * @access  Private
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    const status = ogkAutoSubmitService.getStatus();
+    
+    res.json({
+      success: true,
+      data: {
+        autoSubmit: status.isRunning,
+        schedule: process.env.OGK_AUTO_SUBMIT_SCHEDULE || '0 23 * * *',
+        lastRun: status.lastRun,
+        nextRun: status.nextRun,
+        totalSubmissions: status.totalSubmissions || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching ÖGK billing config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der ÖGK-Abrechnungs-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/ogk-billing/config
+ * @desc    ÖGK-Abrechnungs-Konfiguration aktualisieren
+ * @access  Private (Admin)
+ */
+router.put('/config', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Konfigurationen ändern'
+      });
+    }
+
+    const { autoSubmit, schedule } = req.body;
+    
+    // Aktualisiere Auto-Submit Status
+    if (autoSubmit !== undefined) {
+      if (autoSubmit) {
+        ogkAutoSubmitService.start();
+      } else {
+        ogkAutoSubmitService.stop();
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Konfiguration aktualisiert',
+      data: {
+        autoSubmit: ogkAutoSubmitService.getStatus().isRunning,
+        schedule: schedule || '0 23 * * *'
+      }
+    });
+  } catch (error) {
+    console.error('Error updating ÖGK billing config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der ÖGK-Abrechnungs-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

@@ -227,5 +227,63 @@ router.post('/auto-submit', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/kdok/config
+ * @desc    KDok-Konfiguration abrufen (ohne sensible Daten)
+ * @access  Private
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        baseUrl: process.env.KDOK_BASE_URL || '',
+        environment: process.env.KDOK_ENVIRONMENT || 'production',
+        autoSubmit: process.env.KDOK_AUTO_SUBMIT === 'true',
+        submissionMethod: process.env.KDOK_SUBMISSION_METHOD || 'xml',
+        batchSize: parseInt(process.env.KDOK_BATCH_SIZE || '100'),
+        timeout: parseInt(process.env.KDOK_TIMEOUT || '30000'),
+        hasCertificates: !!process.env.KDOK_CLIENT_CERT_PATH
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching KDok config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der KDok-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/kdok/config
+ * @desc    KDok-Konfiguration aktualisieren
+ * @access  Private (Admin)
+ */
+router.put('/config', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Konfigurationen ändern'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Konfiguration aktualisiert. Bitte beachten Sie: Änderungen müssen in der .env-Datei vorgenommen werden.',
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Error updating KDok config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der KDok-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
 

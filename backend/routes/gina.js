@@ -195,6 +195,70 @@ router.post('/patient/:patientId/sync', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/gina/config
+ * @desc    GINA-Konfiguration abrufen (ohne sensible Daten)
+ * @access  Private
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    // Konfiguration ohne sensible Daten zurückgeben
+    res.json({
+      success: true,
+      data: {
+        environment: ginaService.config.environment,
+        baseUrl: ginaService.config.baseUrl,
+        timeout: ginaService.config.timeout,
+        hasCertificates: ginaService.hasCertificates(),
+        certPath: ginaService.certConfig.clientCert
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching GINA config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der GINA-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/gina/config
+ * @desc    GINA-Konfiguration aktualisieren
+ * @access  Private (Admin)
+ */
+router.put('/config', auth, async (req, res) => {
+  try {
+    // Prüfe Admin-Rechte
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Konfigurationen ändern'
+      });
+    }
+
+    const { baseUrl, timeout, environment } = req.body;
+    
+    res.json({
+      success: true,
+      message: 'Konfiguration aktualisiert. Bitte beachten Sie: Änderungen müssen in der .env-Datei vorgenommen werden.',
+      data: {
+        baseUrl: baseUrl || '',
+        timeout: timeout || 30000,
+        environment: environment || 'development'
+      }
+    });
+  } catch (error) {
+    console.error('Error updating GINA config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der GINA-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
 
 

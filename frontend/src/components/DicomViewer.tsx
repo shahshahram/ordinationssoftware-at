@@ -12,7 +12,7 @@ import {
   Alert
 } from '@mui/material';
 import { Close, ZoomIn, ZoomOut, RotateLeft, RotateRight, Refresh, NavigateBefore, NavigateNext } from '@mui/icons-material';
-import dicomParser from 'dicom-parser';
+import * as dicomParser from 'dicom-parser';
 
 const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5001/api').replace(/\/api$/, '') || 'http://localhost:5001';
 

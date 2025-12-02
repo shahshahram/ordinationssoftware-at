@@ -142,6 +142,7 @@ const menuItems = [
           { text: 'Standortverwaltung', icon: <LocationOn />, path: '/locations' },
           { text: 'Standort-Dashboard', icon: <DashboardIcon />, path: '/location-dashboard' },
           { text: 'Standort-Kalender', icon: <CalendarMonth />, path: '/location-calendar' },
+          { text: 'Medizinische Fachrichtungen', icon: <MedicalServices />, path: '/medical-specialties' },
         ]
       },
       { 
@@ -168,6 +169,7 @@ const menuItems = [
       { text: 'RBAC Discovery', icon: <Extension />, path: '/rbac-discovery' },
       { text: 'Berichte', icon: <Assessment />, path: '/reports' },
       { text: 'Sicherheit', icon: <Security />, path: '/security' },
+      { text: 'Integrations-Status', icon: <Settings />, path: '/integration-status' },
     ]
   },
 ];

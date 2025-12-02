@@ -79,6 +79,8 @@ const kdokRoutes = require('./routes/kdok');
 const directBillingRoutes = require('./routes/direct-billing');
 const ginaRoutes = require('./routes/gina');
 const ginaBoxRoutes = require('./routes/gina-box');
+const medicalSpecialtiesRoutes = require('./routes/medicalSpecialties');
+const dekursVorlagenRoutes = require('./routes/dekursVorlagen');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -299,6 +301,7 @@ function registerStaticRoutes(app) {
   app.use('/api/ambulanzbefunde', ambulanzbefundeRoutes);
   app.use('/api/dashboard-widgets', dashboardWidgetsRoutes);
   app.use('/api/dekurs', dekursRoutes);
+  app.use('/api/dekurs-vorlagen', dekursVorlagenRoutes);
   app.use('/api/internal-messages', internalMessagesRoutes);
   app.use('/api/vital-signs', vitalSignsRoutes);
 app.use('/api/medical-data-history', medicalDataHistoryRoutes);
@@ -314,7 +317,8 @@ app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/kdok', kdokRoutes);
   app.use('/api/direct-billing', directBillingRoutes);
   app.use('/api/gina', ginaRoutes);
-app.use('/api/gina-box', ginaBoxRoutes);
+  app.use('/api/gina-box', ginaBoxRoutes);
+  app.use('/api/medical-specialties', medicalSpecialtiesRoutes);
   
   // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)
   if (USE_MODULE_MANAGER) {

@@ -41,6 +41,10 @@ interface Performance {
   totalPrice: number;
   tariffType: 'kassa' | 'wahl' | 'privat';
   status: 'recorded' | 'billed' | 'sent' | 'accepted' | 'rejected' | 'refunded' | 'failed';
+  appointmentId?: {
+    _id: string;
+    locationId?: string;
+  };
   patientId: {
     _id: string;
     firstName: string;
@@ -92,7 +96,37 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
   });
 
   // Berechnung der Route und Anzeige
+  // Berücksichtigt Mischformen: tariffType > contractType > patient insurance
   const getBillingRoute = () => {
+    // 1. PRIORITÄT: Performance.tariffType (explizite Angabe in der Leistung)
+    // Dies hat höchste Priorität, da es die explizite Entscheidung des Arztes ist
+    if (performance.tariffType) {
+      switch (performance.tariffType) {
+        case 'kassa':
+          // Kassenleistung - prüfe ob Arzt Kassenarzt ist
+          if (performance.doctorId.contractType === 'kassenarzt') {
+            return 'KASSE';
+          }
+          // Wenn Arzt kein Kassenarzt, aber Leistung als Kasse markiert,
+          // könnte es eine Fehlkonfiguration sein, aber wir zeigen es trotzdem
+          // Das Backend wird die Validierung durchführen
+          return 'KASSE';
+          
+        case 'wahl':
+          // Wahlarzt-Leistung - immer erlaubt
+          return 'PATIENT+KASSE_REFUND';
+          
+        case 'privat':
+          // Privatleistung - prüfe ob Patient Versicherung hat
+          return performance.patientId.insuranceProvider && 
+                 performance.patientId.insuranceProvider !== 'Privatversicherung' && 
+                 performance.patientId.insuranceProvider !== 'Selbstzahler'
+            ? 'PATIENT+INSURANCE' 
+            : 'PATIENT';
+      }
+    }
+    
+    // 2. FALLBACK: Doctor contractType
     const contractType = performance.doctorId.contractType || 'privat';
     
     switch (contractType) {
@@ -101,9 +135,17 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
       case 'wahlarzt':
         return 'PATIENT+KASSE_REFUND';
       case 'privat':
-        return performance.patientId.insuranceProvider ? 'PATIENT+INSURANCE' : 'PATIENT';
+        return performance.patientId.insuranceProvider && 
+               performance.patientId.insuranceProvider !== 'Privatversicherung' && 
+               performance.patientId.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
       default:
-        return 'PATIENT';
+        return performance.patientId.insuranceProvider && 
+               performance.patientId.insuranceProvider !== 'Privatversicherung' && 
+               performance.patientId.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
     }
   };
 
@@ -176,7 +218,8 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
           },
           body: JSON.stringify({
             options: {
-              insuranceClaim: !!performance.patientId.insuranceProvider
+              insuranceClaim: !!performance.patientId.insuranceProvider,
+              locationId: performance.appointmentId?.locationId || null
             }
           })
         }

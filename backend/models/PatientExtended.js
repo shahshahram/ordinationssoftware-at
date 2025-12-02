@@ -536,7 +536,21 @@ const PatientExtendedSchema = new mongoose.Schema({
     type: String,
     trim: true,
     maxlength: [1000, 'Besondere Anweisungen dürfen maximal 1000 Zeichen haben']
-  }
+  },
+
+  // Standort-Zuordnung (optional - Patienten können zu mehreren Standorten gehören)
+  // Primärer Standort (für Patienten, die hauptsächlich an einem Standort behandelt werden)
+  primaryLocationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Location',
+    index: true
+  },
+  // Alle Standorte, an denen der Patient behandelt wird (optional)
+  locationIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Location',
+    index: true
+  }]
 }, {
   timestamps: true,
   toJSON: { virtuals: true },

@@ -138,6 +138,16 @@ const locationSchema = new mongoose.Schema({
     }
   },
   
+  // Medizinische Fachrichtungen/Spezialisierungen
+  // Referenziert die MedicalSpecialty-Collection (code-Feld)
+  specialties: [{
+    type: String,
+    trim: true,
+    lowercase: true,
+    index: true
+    // Kein enum mehr - Fachrichtungen werden dynamisch aus MedicalSpecialty-Collection geladen
+  }],
+  
   // XDS Registry Konfiguration
   xdsRegistry: {
     enabled: {

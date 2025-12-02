@@ -27,6 +27,7 @@ import {
   CircularProgress,
   Tabs,
   Tab,
+  Autocomplete,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -75,7 +76,9 @@ import {
   LocationWeeklySchedule,
   LocationWeeklyScheduleData,
 } from '../store/slices/locationWeeklyScheduleSlice';
+import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import LocationWeeklyScheduleComponent from '../components/LocationWeeklySchedule';
+import api from '../utils/api';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -133,6 +136,7 @@ const LocationManagement: React.FC = () => {
     color_hex: '#2563EB',
     is_active: true,
     practiceType: 'gemischt' as 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt',
+    specialties: [] as string[], // Medizinische Fachrichtungen
     billing: {
       defaultBillingType: null as 'kassenarzt' | 'wahlarzt' | 'privat' | 'sonderklasse' | null,
       kassenarzt: {
@@ -180,10 +184,14 @@ const LocationManagement: React.FC = () => {
 
   const [assignmentForm, setAssignmentForm] = useState({
     staff_id: '',
-    location_id: '',
+    location_ids: [] as string[], // Mehrfachauswahl für Standorte
     is_primary: false,
     allowed_services: [] as string[],
   });
+  const [allUsers, setAllUsers] = useState<Array<{ _id: string; firstName: string; lastName: string; email: string; role: string }>>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [medicalSpecialties, setMedicalSpecialties] = useState<Array<{ _id: string; code: string; name: string; isActive: boolean; sortOrder: number }>>([]);
+  const [specialtiesLoading, setSpecialtiesLoading] = useState(false);
 
   useEffect(() => {
     dispatch(fetchLocations());
@@ -191,7 +199,53 @@ const LocationManagement: React.FC = () => {
     dispatch(fetchLocationClosures());
     dispatch(fetchStaffLocationAssignments());
     dispatch(fetchLocationWeeklySchedules());
+    dispatch(fetchStaffProfiles());
+    
+    // Lade alle Benutzer für Autocomplete
+    const loadAllUsers = async () => {
+      setUsersLoading(true);
+      try {
+        const response: any = await api.get('/users?limit=1000');
+        if (response.data?.success) {
+          setAllUsers(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Benutzer:', error);
+      } finally {
+        setUsersLoading(false);
+      }
+    };
+    loadAllUsers();
+    
+    // Lade medizinische Fachrichtungen
+    const loadMedicalSpecialties = async () => {
+      setSpecialtiesLoading(true);
+      try {
+        const response: any = await api.get('/medical-specialties?activeOnly=true');
+        if (response.data?.success) {
+          setMedicalSpecialties(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Fachrichtungen:', error);
+      } finally {
+        setSpecialtiesLoading(false);
+      }
+    };
+    loadMedicalSpecialties();
   }, [dispatch]);
+  
+  // Aktualisiere die Benutzer-Zuordnung, wenn staffProfiles oder allUsers geladen werden
+  useEffect(() => {
+    if (editingAssignment && assignmentForm.staff_id && staffProfiles.length > 0 && allUsers.length > 0) {
+      console.log('[useEffect] Updating user mapping for assignment:', {
+        editingAssignment: editingAssignment._id,
+        staff_id: assignmentForm.staff_id,
+        staffProfiles_count: staffProfiles.length,
+        allUsers_count: allUsers.length
+      });
+      // Die Zuordnung wird automatisch durch den value-Getter im Autocomplete aktualisiert
+    }
+  }, [editingAssignment, assignmentForm.staff_id, staffProfiles, allUsers]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -243,6 +297,7 @@ const LocationManagement: React.FC = () => {
         color_hex: location.color_hex,
         is_active: location.is_active,
         practiceType: location.practiceType || 'gemischt',
+        specialties: Array.isArray(location.specialties) ? location.specialties : [],
         billing: {
           defaultBillingType: billing.defaultBillingType || null,
           kassenarzt: {
@@ -289,6 +344,7 @@ const LocationManagement: React.FC = () => {
         color_hex: '#2563EB',
         is_active: true,
         practiceType: 'gemischt',
+        specialties: [],
         billing: {
           defaultBillingType: null,
           kassenarzt: {
@@ -470,19 +526,63 @@ const LocationManagement: React.FC = () => {
   const handleAssignmentDialogOpen = (assignment?: StaffLocationAssignment) => {
     if (assignment) {
       setEditingAssignment(assignment);
-      setAssignmentForm({
-        staff_id: typeof assignment.staff_id === 'string' ? assignment.staff_id : assignment.staff_id._id,
-        location_id: typeof assignment.location_id === 'string' ? assignment.location_id : (assignment.location_id as any)._id,
-        is_primary: assignment.is_primary,
-        allowed_services: (Array.isArray(assignment.allowed_services) ? assignment.allowed_services : []).map(service => 
-          typeof service === 'string' ? service : (service as any)._id
-        ),
+      
+      // Extrahiere staff_id sicher (kann string oder populated object sein)
+      let staffId = '';
+      if (assignment.staff_id) {
+        if (typeof assignment.staff_id === 'string') {
+          staffId = assignment.staff_id;
+        } else {
+          // Populated object - extrahiere _id
+          staffId = (assignment.staff_id as any)?._id || '';
+        }
+      }
+      
+      console.log('[Assignment Dialog] Opening with assignment:', {
+        assignment,
+        staffId,
+        staff_id_type: typeof assignment.staff_id,
+        staff_id_value: assignment.staff_id,
+        staff_id_populated: assignment.staff_id && typeof assignment.staff_id === 'object' ? {
+          _id: (assignment.staff_id as any)?._id,
+          userId: (assignment.staff_id as any)?.userId,
+          user_id: (assignment.staff_id as any)?.user_id
+        } : null
       });
+      
+      // Extrahiere location_id sicher (kann null sein)
+      let locationId = '';
+      if (assignment.location_id) {
+        locationId = typeof assignment.location_id === 'string' 
+          ? assignment.location_id 
+          : (assignment.location_id as any)?._id || '';
+      }
+      
+      setAssignmentForm({
+        staff_id: staffId,
+        location_ids: locationId ? [locationId] : [], // Für Bearbeitung: einzelner Standort als Array
+        is_primary: assignment.is_primary || false,
+        allowed_services: (Array.isArray(assignment.allowed_services) ? assignment.allowed_services : []).map(service => 
+          typeof service === 'string' ? service : (service as any)?._id || ''
+        ).filter(id => id), // Filtere leere IDs
+      });
+      
+      console.log('[Assignment Dialog] Form initialized:', {
+        staff_id: staffId,
+        location_ids: locationId ? [locationId] : [],
+        is_primary: assignment.is_primary || false
+      });
+      
+      // Warte kurz, damit staffProfiles geladen werden können
+      setTimeout(() => {
+        console.log('[Assignment Dialog] After timeout - staffProfiles:', staffProfiles);
+        console.log('[Assignment Dialog] After timeout - allUsers:', allUsers);
+      }, 100);
     } else {
       setEditingAssignment(null);
       setAssignmentForm({
         staff_id: '',
-        location_id: '',
+        location_ids: [], // Mehrfachauswahl für neue Zuweisungen
         is_primary: false,
         allowed_services: [],
       });
@@ -497,14 +597,177 @@ const LocationManagement: React.FC = () => {
 
   const handleAssignmentSubmit = async () => {
     try {
+      if (assignmentForm.location_ids.length === 0) {
+        alert('Bitte wählen Sie mindestens einen Standort aus.');
+        return;
+      }
+      
+      if (!assignmentForm.staff_id) {
+        alert('Bitte wählen Sie einen Benutzer aus.');
+        return;
+      }
+      
+      // Prüfe, ob assignmentForm.staff_id eine user_id ist (kein StaffProfile gefunden)
+      // Wenn ja, erstelle ein StaffProfile oder finde das bestehende
+      let actualStaffId = assignmentForm.staff_id;
+      const staffProfile = (Array.isArray(staffProfiles) ? staffProfiles : []).find(s => s._id === assignmentForm.staff_id);
+      
+      if (!staffProfile) {
+        // Prüfe, ob assignmentForm.staff_id eine user_id ist
+        const user = allUsers.find(u => u._id === assignmentForm.staff_id);
+        if (user) {
+          console.log('[Assignment Submit] staff_id is a user_id, creating/finding StaffProfile for user:', user);
+          
+          // Versuche, ein StaffProfile für diesen User zu finden oder zu erstellen
+          try {
+            // Versuche zuerst, ein bestehendes StaffProfile zu finden
+            const existingStaffProfile = (Array.isArray(staffProfiles) ? staffProfiles : []).find(s => {
+              const userId = (s as any).user_id || (s as any).userId;
+              return userId === user._id;
+            });
+            
+            if (existingStaffProfile) {
+              actualStaffId = existingStaffProfile._id;
+              console.log('[Assignment Submit] Found existing StaffProfile:', actualStaffId);
+            } else {
+              // Erstelle ein neues StaffProfile
+              // Mappe User-Rolle auf gültige roleHint-Werte (Backend akzeptiert: 'arzt', 'assistenz', 'therapeut', 'admin', 'staff', 'nurse', 'receptionist', 'assistant', 'doctor')
+              // Alle User-Rollen können Standorten zugeordnet werden
+              const roleMapping: { [key: string]: string } = {
+                // User-Rollen aus dem System
+                'super_admin': 'admin',
+                'admin': 'admin',
+                'arzt': 'arzt',
+                'assistent': 'assistenz', // Deutsche Variante
+                'rezeption': 'receptionist',
+                'billing': 'staff',
+                'patient': 'staff',
+                // StaffProfile roleHint-Werte (direkt übernehmen)
+                'assistenz': 'assistenz',
+                'assistant': 'assistant', // Englische Variante
+                'doctor': 'doctor',
+                'therapeut': 'therapeut',
+                'staff': 'staff',
+                'nurse': 'nurse',
+                'receptionist': 'receptionist'
+              };
+              
+              const userRole = user.role?.toLowerCase() || '';
+              const roleHint = roleMapping[userRole] || 'staff';
+              
+              console.log('[Assignment Submit] Mapping user role:', { userRole, roleHint });
+              
+              const response: any = await api.post('/staff-profiles', {
+                userId: user._id,
+                displayName: `${user.firstName} ${user.lastName}`,
+                roleHint: roleHint,
+                isActive: true
+              });
+              
+              if (response.data?.success && response.data.data) {
+                actualStaffId = response.data.data._id;
+                console.log('[Assignment Submit] Created new StaffProfile:', actualStaffId);
+                // Lade StaffProfiles neu, um das neue Profil zu erhalten
+                dispatch(fetchStaffProfiles());
+              } else {
+                throw new Error('Fehler beim Erstellen des Personalprofils');
+              }
+            }
+          } catch (createError: any) {
+            console.error('[Assignment Submit] Error creating StaffProfile:', createError);
+            alert(`Fehler beim Erstellen des Personalprofils: ${createError?.message || 'Unbekannter Fehler'}`);
+            return;
+          }
+        }
+      }
+      
+      // Validierung: Nur ein primärer Standort pro Benutzer
+      if (assignmentForm.is_primary) {
+        // Prüfe, ob bereits ein primärer Standort für diesen Benutzer existiert
+        const existingPrimaryAssignments = (Array.isArray(staffAssignments) ? staffAssignments : []).filter(
+          (a: any) => {
+            const aStaffId = typeof a.staff_id === 'string' ? a.staff_id : (a.staff_id as any)?._id;
+            return aStaffId === actualStaffId && a.is_primary && a._id !== editingAssignment?._id;
+          }
+        );
+        
+        if (existingPrimaryAssignments.length > 0) {
+          const confirmMessage = `Es existiert bereits ein primärer Standort für diesen Benutzer. Möchten Sie den bestehenden primären Standort entfernen und diesen als primär setzen?`;
+          if (!window.confirm(confirmMessage)) {
+            return;
+          }
+          
+          // Entferne is_primary von allen anderen Zuweisungen dieses Benutzers
+          const updatePromises = existingPrimaryAssignments.map((a: any) => 
+            dispatch(updateStaffLocationAssignment({ 
+              id: a._id, 
+              assignmentData: { ...a, is_primary: false } 
+            })).unwrap()
+          );
+          await Promise.all(updatePromises);
+        }
+      }
+      
+      console.log('[Assignment Submit] Submitting:', {
+        editingAssignment: editingAssignment?._id,
+        staff_id: actualStaffId,
+        original_staff_id: assignmentForm.staff_id,
+        location_ids: assignmentForm.location_ids,
+        is_primary: assignmentForm.is_primary
+      });
+      
       if (editingAssignment) {
-        await dispatch(updateStaffLocationAssignment({ id: editingAssignment._id, assignmentData: assignmentForm })).unwrap();
+        // Bei Bearbeitung: Aktualisiere bestehende Zuweisung mit dem ersten Standort
+        const existingLocationId = assignmentForm.location_ids[0];
+        
+        const assignmentData = {
+          staff_id: actualStaffId,
+          location_id: existingLocationId,
+          is_primary: assignmentForm.is_primary,
+          allowed_services: assignmentForm.allowed_services,
+        };
+        
+        console.log('[Assignment Submit] Updating assignment:', assignmentData);
+        await dispatch(updateStaffLocationAssignment({ id: editingAssignment._id, assignmentData })).unwrap();
+        
+        // Erstelle neue Zuweisungen für zusätzliche Standorte (wenn mehr als einer ausgewählt)
+        if (assignmentForm.location_ids.length > 1) {
+          const additionalLocationIds = assignmentForm.location_ids.slice(1);
+          const promises = additionalLocationIds.map((locationId) => {
+            const newAssignmentData = {
+              staff_id: actualStaffId,
+              location_id: locationId,
+              is_primary: false, // Nur der erste ist Primary
+              allowed_services: assignmentForm.allowed_services,
+            };
+            return dispatch(createStaffLocationAssignment(newAssignmentData)).unwrap();
+          });
+          await Promise.all(promises);
+        }
       } else {
-        await dispatch(createStaffLocationAssignment(assignmentForm)).unwrap();
+        // Bei neuer Zuweisung: mehrere Standorte möglich
+        // Erstelle für jeden ausgewählten Standort eine separate Zuweisung
+        const promises = assignmentForm.location_ids.map((locationId, index) => {
+          const assignmentData = {
+            staff_id: actualStaffId,
+            location_id: locationId,
+            is_primary: assignmentForm.is_primary && index === 0, // Nur der erste als Primary, wenn aktiviert
+            allowed_services: assignmentForm.allowed_services,
+          };
+          console.log('[Assignment Submit] Creating assignment:', assignmentData);
+          return dispatch(createStaffLocationAssignment(assignmentData)).unwrap();
+        });
+        
+        await Promise.all(promises);
       }
       handleAssignmentDialogClose();
-    } catch (error) {
+      // Lade Zuweisungen neu
+      dispatch(fetchStaffLocationAssignments());
+      dispatch(fetchStaffProfiles()); // Lade auch StaffProfiles neu
+    } catch (error: any) {
       console.error('Error saving assignment:', error);
+      const errorMessage = error?.message || 'Fehler beim Speichern der Zuweisung(en). Bitte versuchen Sie es erneut.';
+      alert(errorMessage);
     }
   };
 
@@ -644,6 +907,29 @@ const LocationManagement: React.FC = () => {
                     <TableCell>{location.code || '-'}</TableCell>
                     <TableCell>
                       {location.address_line1}, {location.postal_code} {location.city}
+                    </TableCell>
+                    <TableCell>
+                      {Array.isArray(location.specialties) && location.specialties.length > 0 ? (
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {location.specialties.map((spec: string) => {
+                            const specialty = medicalSpecialties.find(s => s.code === spec);
+                            const label = specialty ? specialty.name : spec;
+                            return (
+                              <Chip
+                                key={spec}
+                                label={label}
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                              />
+                            );
+                          })}
+                        </Box>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          Keine
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell>
                       {location.practiceType && (
@@ -1204,6 +1490,60 @@ const LocationManagement: React.FC = () => {
               </Typography>
             </Box>
             
+            {/* Medizinische Fachrichtungen */}
+            <Autocomplete
+              multiple
+              loading={specialtiesLoading}
+              options={medicalSpecialties
+                .filter(s => s.isActive)
+                .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0) || a.name.localeCompare(b.name))
+                .map(s => ({ value: s.code, label: s.name }))}
+              getOptionLabel={(option) => typeof option === 'string' 
+                ? (medicalSpecialties.find(s => s.code === option)?.name || option)
+                : option.label || option.value || ''
+              }
+              value={locationForm.specialties.map(spec => {
+                const specialty = medicalSpecialties.find(s => s.code === spec);
+                if (specialty) {
+                  return { value: specialty.code, label: specialty.name };
+                }
+                // Fallback für alte Codes, die noch nicht in der DB sind
+                return { value: spec, label: spec };
+              })}
+              onChange={(_, newValue) => {
+                const selectedValues = Array.isArray(newValue) 
+                  ? newValue.map(v => typeof v === 'string' ? v : (v as any).value || v)
+                  : [];
+                setLocationForm({ ...locationForm, specialties: selectedValues });
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Medizinische Fachrichtungen"
+                  placeholder="Fachrichtungen auswählen..."
+                  helperText="Wählen Sie eine oder mehrere medizinische Fachrichtungen für diesen Standort. Diese können Sie unter 'Medizinische Fachrichtungen' verwalten."
+                />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  const label = typeof option === 'string' 
+                    ? (medicalSpecialties.find(s => s.code === option)?.name || option)
+                    : (option as any).label || (option as any).value || '';
+                  return (
+                    <Chip
+                      {...tagProps}
+                      key={key || index}
+                      label={label}
+                      color="primary"
+                      variant="outlined"
+                      size="small"
+                    />
+                  );
+                })
+              }
+            />
+            
             {/* Praxistyp & Abrechnung */}
             <Accordion sx={{ mt: 2 }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -1755,34 +2095,130 @@ const LocationManagement: React.FC = () => {
         />
         <DialogContent sx={{ pt: 5, px: 3, overflow: 'visible' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <FormControl fullWidth>
-              <InputLabel>Personal</InputLabel>
-              <Select
-                value={assignmentForm.staff_id || ''}
-                onChange={(e) => setAssignmentForm({ ...assignmentForm, staff_id: e.target.value })}
-                required
-              >
-                {(Array.isArray(staffProfiles) ? staffProfiles : []).map((staff) => (
-                  <MenuItem key={staff._id} value={staff._id}>
-                    {staff.first_name} {staff.last_name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>Standort</InputLabel>
-              <Select
-                value={assignmentForm.location_id || ''}
-                onChange={(e) => setAssignmentForm({ ...assignmentForm, location_id: e.target.value })}
-                required
-              >
-                {(Array.isArray(locations) ? locations : []).map((location) => (
-                  <MenuItem key={location._id} value={location._id}>
-                    {location.name} ({location.code})
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+            <Autocomplete
+              options={allUsers}
+              getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.email})`}
+              loading={usersLoading}
+              value={(() => {
+                // Finde User über StaffProfile
+                if (assignmentForm.staff_id && allUsers.length > 0 && staffProfiles.length > 0) {
+                  console.log('[Autocomplete] Looking for user with staff_id:', assignmentForm.staff_id);
+                  console.log('[Autocomplete] Available staffProfiles:', staffProfiles);
+                  console.log('[Autocomplete] Available allUsers:', allUsers);
+                  
+                  const staffProfile = (Array.isArray(staffProfiles) ? staffProfiles : []).find(s => s._id === assignmentForm.staff_id);
+                  console.log('[Autocomplete] Found staffProfile:', staffProfile);
+                  
+                  if (staffProfile) {
+                    // StaffProfile hat user_id (aus API) oder userId (aus Model)
+                    const userId = (staffProfile as any).user_id || (staffProfile as any).userId;
+                    console.log('[Autocomplete] Extracted userId:', userId);
+                    
+                    if (userId) {
+                      // userId kann ein String oder ein Object sein (wenn populated)
+                      const userIdString = typeof userId === 'string' ? userId : (userId as any)?._id || userId;
+                      const foundUser = allUsers.find(u => u._id === userIdString);
+                      console.log('[Autocomplete] Found user:', foundUser);
+                      if (foundUser) {
+                        return foundUser;
+                      }
+                    }
+                  }
+                  
+                  // Fallback: wenn staff_id direkt eine user_id ist
+                  const foundUser = allUsers.find(u => u._id === assignmentForm.staff_id);
+                  if (foundUser) {
+                    console.log('[Autocomplete] Found user via fallback:', foundUser);
+                    return foundUser;
+                  }
+                  
+                  console.log('[Autocomplete] No user found');
+                }
+                return null;
+              })()}
+              onChange={(_, newValue) => {
+                if (newValue) {
+                  // Finde StaffProfile für diesen User
+                  const staffProfile = (Array.isArray(staffProfiles) ? staffProfiles : []).find(s => {
+                    const userId = (s as any).user_id || (s as any).userId;
+                    return userId === newValue._id;
+                  });
+                  if (staffProfile) {
+                    setAssignmentForm({ ...assignmentForm, staff_id: staffProfile._id });
+                  } else {
+                    // Wenn kein StaffProfile existiert, verwende user_id direkt
+                    // (Backend muss dann StaffProfile erstellen oder user_id akzeptieren)
+                    setAssignmentForm({ ...assignmentForm, staff_id: newValue._id });
+                  }
+                } else {
+                  setAssignmentForm({ ...assignmentForm, staff_id: '' });
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Benutzer"
+                  placeholder="Benutzer suchen..."
+                  required
+                  helperText="Geben Sie den Namen oder die E-Mail-Adresse ein"
+                />
+              )}
+              renderOption={(props, option) => {
+                const { key, ...otherProps } = props;
+                return (
+                  <Box component="li" key={key} {...otherProps}>
+                    <Box>
+                      <Typography variant="body1">
+                        {option.firstName} {option.lastName}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.email} • {option.role}
+                      </Typography>
+                    </Box>
+                  </Box>
+                );
+              }}
+            />
+            <Autocomplete
+              multiple // Immer Mehrfachauswahl möglich
+              options={Array.isArray(locations) ? locations : []}
+              getOptionLabel={(option) => `${option.name}${option.code ? ` (${option.code})` : ''}`}
+              value={(Array.isArray(locations) ? locations : []).filter(loc => 
+                assignmentForm.location_ids.includes(loc._id)
+              )}
+              onChange={(_, newValue) => {
+                const selectedLocations = Array.isArray(newValue) ? newValue : [];
+                setAssignmentForm({ 
+                  ...assignmentForm, 
+                  location_ids: selectedLocations.map((loc: any) => loc._id)
+                });
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Standort(e)"
+                  placeholder="Standort(e) auswählen..."
+                  required
+                  helperText={editingAssignment 
+                    ? "Wählen Sie einen oder mehrere Standorte aus (alle Standorte verfügbar)" 
+                    : "Wählen Sie einen oder mehrere Standorte aus"}
+                />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => {
+                  const { key, ...tagProps } = getTagProps({ index });
+                  return (
+                    <Chip
+                      {...tagProps}
+                      key={option._id}
+                      label={`${option.name}${option.code ? ` (${option.code})` : ''}`}
+                      color="primary"
+                      variant="outlined"
+                    />
+                  );
+                })
+              }
+            />
             <Box display="flex" alignItems="center">
               <Switch
                 checked={assignmentForm.is_primary}
@@ -1810,7 +2246,7 @@ const LocationManagement: React.FC = () => {
           <Button 
             onClick={handleAssignmentSubmit} 
             variant="contained"
-            disabled={!assignmentForm.staff_id || !assignmentForm.location_id}
+            disabled={!assignmentForm.staff_id || assignmentForm.location_ids.length === 0}
           >
             {editingAssignment ? 'Aktualisieren' : 'Erstellen'}
           </Button>

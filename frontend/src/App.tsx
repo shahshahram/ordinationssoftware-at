@@ -10,6 +10,7 @@ import Layout from './components/Layout/Layout';
 import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
 import ProtectedRoute from './components/ProtectedRoute';
+import LocationProvider from './components/Location/LocationProvider';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -32,6 +33,8 @@ import EnhancedCalendar from './pages/EnhancedCalendar';
 import LocationManagement from './pages/LocationManagement';
 import LocationDashboard from './components/LocationDashboard';
 import LocationCalendar from './components/LocationCalendar';
+import MedicalSpecialties from './pages/MedicalSpecialties';
+import DekursVorlagenAdmin from './pages/DekursVorlagenAdmin';
 import ServiceCatalog from './pages/ServiceCatalog';
 import ServiceBookings from './pages/ServiceBookings';
 import Settings from './pages/Settings';
@@ -70,6 +73,7 @@ import ClinicHours from './pages/ClinicHours';
 import Availability from './pages/Availability';
 import ServiceCategories from './pages/ServiceCategories';
 import ECardValidation from './pages/ECardValidation';
+import IntegrationStatus from './pages/IntegrationStatus';
 
 // Theme
 const theme = createTheme({
@@ -189,22 +193,23 @@ const AppContent: React.FC = () => {
           path="/*"
           element={
             <ProtectedRoute>
-              <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-                <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-                <Box
-                  component="main"
-                  sx={{
-                    flexGrow: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    ml: { sm: sidebarOpen ? '240px' : '0px' },
-                    transition: 'margin 0.3s ease',
-                    overflow: 'hidden',
-                    height: '100vh',
-                  }}
-                >
-                  <Header onMenuClick={handleSidebarToggle} />
-                  <Layout>
+              <LocationProvider>
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                  <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+                  <Box
+                    component="main"
+                    sx={{
+                      flexGrow: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      ml: { sm: sidebarOpen ? '240px' : '0px' },
+                      transition: 'margin 0.3s ease',
+                      overflow: 'hidden',
+                      height: '100vh',
+                    }}
+                  >
+                    <Header onMenuClick={handleSidebarToggle} />
+                    <Layout>
                     <Routes>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<Dashboard />} />
@@ -291,6 +296,14 @@ const AppContent: React.FC = () => {
                 </ProtectedRoute>
               }
             />
+            <Route
+              path="/medical-specialties"
+              element={
+                <ProtectedRoute requiredRole={['admin', 'super_admin']}>
+                  <MedicalSpecialties />
+                </ProtectedRoute>
+              }
+            />
                       <Route 
                         path="/service-catalog" 
                         element={
@@ -358,8 +371,8 @@ const AppContent: React.FC = () => {
                       <Route 
                         path="/dekurs-vorlagen" 
                         element={
-                          <ProtectedRoute requiredRole={['admin', 'super_admin']}>
-                            <DekursVorlageAdmin />
+                          <ProtectedRoute requiredRole={['admin', 'super_admin', 'arzt', 'doctor']}>
+                            <DekursVorlagenAdmin />
                           </ProtectedRoute>
                         } 
                       />
@@ -553,6 +566,14 @@ const AppContent: React.FC = () => {
                         } 
                       />
                       <Route 
+                        path="/integration-status" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <IntegrationStatus />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
                         path="/medication-import" 
                         element={
                           <ProtectedRoute requiredRole={['admin', 'super_admin']}>
@@ -580,6 +601,7 @@ const AppContent: React.FC = () => {
                   </Layout>
                 </Box>
               </Box>
+              </LocationProvider>
             </ProtectedRoute>
           }
         />

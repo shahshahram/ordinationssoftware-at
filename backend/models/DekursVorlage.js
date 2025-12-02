@@ -1,13 +1,51 @@
 const mongoose = require('mongoose');
 
 const DekursVorlageSchema = new mongoose.Schema({
-  // Grunddaten
+  // Identifikation
+  code: {
+    type: String,
+    required: [true, 'Code ist erforderlich'],
+    unique: true,
+    trim: true,
+    index: true
+  },
+  title: {
+    type: String,
+    required: [true, 'Titel ist erforderlich'],
+    trim: true,
+    maxlength: [200, 'Titel darf maximal 200 Zeichen haben'],
+    index: true
+  },
+  icd10: {
+    type: String,
+    trim: true,
+    index: true
+  },
+  icd10Title: {
+    type: String,
+    trim: true
+  },
+  
+  // Zuordnung
+  specialty: {
+    type: String,
+    trim: true,
+    index: true
+  },
+  specialties: [{
+    type: String,
+    trim: true
+  }],
+  locationIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Location'
+  }],
+  
+  // Alte Felder (für Kompatibilität)
   name: {
     type: String,
-    required: [true, 'Vorlagenname ist erforderlich'],
     trim: true,
-    maxlength: [200, 'Vorlagenname darf maximal 200 Zeichen haben'],
-    index: true
+    maxlength: [200, 'Vorlagenname darf maximal 200 Zeichen haben']
   },
   description: {
     type: String,
@@ -15,7 +53,7 @@ const DekursVorlageSchema = new mongoose.Schema({
     maxlength: [1000, 'Beschreibung darf maximal 1000 Zeichen haben']
   },
   
-  // Kategorie für Gruppierung
+  // Kategorie für Gruppierung (Legacy)
   category: {
     type: String,
     trim: true,
@@ -70,6 +108,16 @@ const DekursVorlageSchema = new mongoose.Schema({
       type: String,
       enum: ['appointment', 'phone', 'emergency', 'follow-up', 'other'],
       default: 'appointment'
+    },
+    imagingFindings: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    laboratoryFindings: {
+      type: String,
+      trim: true,
+      default: ''
     }
   },
   
@@ -117,15 +165,91 @@ const DekursVorlageSchema = new mongoose.Schema({
     _id: false
   }],
   
+  // ELGA-konforme Struktur (für Export)
+  elga_structured: {
+    chief_complaint: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    history_of_present_illness: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    relevant_history: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    medications: [{
+      type: String,
+      trim: true
+    }],
+    allergies: [{
+      type: String,
+      trim: true
+    }],
+    physical_exam: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    diagnosis: [{
+      type: String,
+      trim: true
+    }],
+    treatment: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    followup: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    imaging: {
+      type: String,
+      trim: true,
+      default: ''
+    },
+    laboratory: {
+      type: String,
+      trim: true,
+      default: ''
+    }
+  },
+  
   // Verfügbarkeit
   isActive: {
     type: Boolean,
     default: true,
     index: true
   },
+  isDefault: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   isPublic: {
     type: Boolean,
     default: true // Öffentlich für alle Benutzer
+  },
+  sortOrder: {
+    type: Number,
+    default: 0,
+    index: true
+  },
+  tags: [{
+    type: String,
+    trim: true
+  }],
+  
+  // Versionierung
+  version: {
+    type: Number,
+    default: 1
   },
   
   // Erstellt von
@@ -133,6 +257,10 @@ const DekursVorlageSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  lastModifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
   
   // Metadaten
@@ -155,10 +283,15 @@ const DekursVorlageSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index
+// Indizes
+DekursVorlageSchema.index({ code: 1 }, { unique: true });
+DekursVorlageSchema.index({ icd10: 1, specialty: 1 });
+DekursVorlageSchema.index({ specialty: 1, isActive: 1 });
+DekursVorlageSchema.index({ locationIds: 1 });
 DekursVorlageSchema.index({ category: 1, isActive: 1 });
 DekursVorlageSchema.index({ createdBy: 1, isActive: 1 });
 DekursVorlageSchema.index({ isPublic: 1, isActive: 1 });
+DekursVorlageSchema.index({ isDefault: 1, icd10: 1 });
 
 // Pre-save Hook
 DekursVorlageSchema.pre('save', function(next) {

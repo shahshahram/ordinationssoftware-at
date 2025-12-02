@@ -668,9 +668,10 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
         onSave={(entry) => {
           // Aktualisiere selectedEntry damit Fotos hinzugefügt werden können
           setSelectedEntry(entry);
-          if (onEntrySelect) {
-            onEntrySelect(entry);
-          }
+          // onEntrySelect NICHT aufrufen beim Speichern, nur beim expliziten Auswählen aus der Liste
+          // if (onEntrySelect) {
+          //   onEntrySelect(entry);
+          // }
           loadEntries();
         }}
       />

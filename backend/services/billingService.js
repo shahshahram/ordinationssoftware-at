@@ -30,8 +30,8 @@ class BillingService {
       const doctor = await this.loadDoctorData(performance.doctorId);
       const patient = await this.loadPatientData(performance.patientId);
       
-      // 2. Route bestimmen
-      const route = this.determineRoute(doctor, performance, options);
+      // 2. Route bestimmen (mit Mischformen-Unterstützung)
+      const route = await this.determineRoute(doctor, performance, patient, options);
       
       // 3. Idempotency-Key generieren
       const idempotencyKey = this.generateIdempotencyKey(performance, route);
@@ -80,7 +80,7 @@ class BillingService {
     const performance = await Performance.findById(performanceId)
       .populate('patientId', 'firstName lastName email socialSecurityNumber insuranceProvider')
       .populate('doctorId', 'firstName lastName contractType specialization')
-      .populate('appointmentId', 'startTime endTime type');
+      .populate('appointmentId', 'startTime endTime type locationId');
     
     if (!performance) {
       throw new Error('Leistung nicht gefunden');
@@ -117,62 +117,155 @@ class BillingService {
 
   /**
    * Abrechnungsroute bestimmen
-   * Berücksichtigt: Location practiceType > Doctor contractType > Options
+   * Berücksichtigt Mischformen:
+   * 1. Performance.tariffType (höchste Priorität - explizite Angabe)
+   * 2. Location.practiceType (Standort-Konfiguration)
+   * 3. Doctor.contractType (Arzt-Vertragstyp)
+   * 4. Patient.insuranceProvider (für Privatversicherung)
+   * 
+   * Mischformen erlaubt:
+   * - Kassenarzt in Kassenpraxis kann Privatleistungen erbringen (tariffType: 'privat')
+   * - Kassenarzt in Kassenpraxis kann Wahlarzt-Leistungen erbringen (tariffType: 'wahl')
+   * - Wahlarzt kann auch Kassenleistungen erbringen (wenn Arzt auch Kassenarzt ist)
    */
-  async determineRoute(doctor, performance, options = {}) {
+  async determineRoute(doctor, performance, patient, options = {}) {
     const Location = require('../models/Location');
+    const Appointment = require('../models/Appointment');
     
-    // Location-Praxistyp hat Priorität
-    let practiceType = null;
-    if (options.locationId) {
-      const location = await Location.findById(options.locationId);
-      if (location && location.practiceType) {
-        practiceType = location.practiceType;
+    // 1. PRIORITÄT: Performance.tariffType (explizite Angabe in der Leistung)
+    // Dies hat höchste Priorität, da es die explizite Entscheidung des Arztes ist
+    if (performance.tariffType) {
+      switch (performance.tariffType) {
+        case 'kassa':
+          // Kassenleistung - prüfe ob Arzt Kassenarzt ist oder Location Kassenpraxis
+          if (doctor.contractType === 'kassenarzt') {
+            return 'KASSE';
+          }
+          // Wenn Location Kassenpraxis ist, auch erlauben
+          if (options.locationId) {
+            const location = await Location.findById(options.locationId);
+            if (location && location.practiceType === 'kassenpraxis') {
+              return 'KASSE';
+            }
+          }
+          // Fallback: Kann nicht als Kasse abgerechnet werden
+          throw new Error('Kassenleistung kann nur von Kassenarzt oder in Kassenpraxis abgerechnet werden');
+          
+        case 'wahl':
+          // Wahlarzt-Leistung - immer erlaubt
+          return 'PATIENT+KASSE_REFUND';
+          
+        case 'privat':
+          // Privatleistung - immer erlaubt
+          return patient.insuranceProvider && 
+                 patient.insuranceProvider !== 'Privatversicherung' && 
+                 patient.insuranceProvider !== 'Selbstzahler'
+            ? 'PATIENT+INSURANCE' 
+            : 'PATIENT';
       }
     }
     
-    // Fallback: Doctor contractType
-    const contractType = practiceType || doctor.contractType || 'privat';
+    // 2. PRIORITÄT: Location.practiceType (Standort-Konfiguration)
+    let location = null;
+    let practiceType = null;
     
-    // Wenn Location "gemischt" ist, kann Doctor contractType verwendet werden
-    if (practiceType === 'gemischt') {
-      const doctorContractType = doctor.contractType || 'privat';
-      return this._mapContractTypeToRoute(doctorContractType, options);
+    // Location aus Appointment laden, falls vorhanden
+    // performance.appointmentId kann ein ObjectId oder bereits populated sein
+    if (performance.appointmentId) {
+      let appointment = null;
+      if (performance.appointmentId.locationId) {
+        // Bereits populated
+        appointment = performance.appointmentId;
+      } else if (typeof performance.appointmentId === 'object' && performance.appointmentId._id) {
+        // ObjectId als Objekt
+        appointment = await Appointment.findById(performance.appointmentId._id || performance.appointmentId).select('locationId');
+      } else {
+        // String/ObjectId
+        appointment = await Appointment.findById(performance.appointmentId).select('locationId');
+      }
+      
+      if (appointment && appointment.locationId) {
+        location = await Location.findById(appointment.locationId);
+      }
     }
     
-    // Location-spezifische Route bestimmen
-    return this._mapPracticeTypeToRoute(practiceType || contractType, options);
+    // Location aus options laden (falls direkt übergeben)
+    if (!location && options.locationId) {
+      location = await Location.findById(options.locationId);
+    }
+    
+    if (location && location.practiceType) {
+      practiceType = location.practiceType;
+    }
+    
+    // Wenn Location "gemischt" ist, weiter zu Arzt-Vertragstyp
+    if (practiceType === 'gemischt') {
+      practiceType = null; // Weiter zu nächster Priorität
+    }
+    
+    // Wenn Location explizit gesetzt ist, verwenden
+    if (practiceType) {
+      return this._mapPracticeTypeToRoute(practiceType, patient, options);
+    }
+    
+    // 3. PRIORITÄT: Doctor.contractType (Arzt-Vertragstyp)
+    if (doctor.contractType) {
+      return this._mapContractTypeToRoute(doctor.contractType, patient, options);
+    }
+    
+    // 4. FALLBACK: Privatabrechnung
+    return patient.insuranceProvider && 
+           patient.insuranceProvider !== 'Privatversicherung' && 
+           patient.insuranceProvider !== 'Selbstzahler'
+      ? 'PATIENT+INSURANCE' 
+      : 'PATIENT';
   }
   
   /**
    * Mappt Praxistyp zu Abrechnungsroute
    */
-  _mapPracticeTypeToRoute(practiceType, options) {
+  _mapPracticeTypeToRoute(practiceType, patient, options = {}) {
     switch (practiceType) {
       case 'kassenpraxis':
         return 'KASSE';
       case 'wahlarzt':
         return 'PATIENT+KASSE_REFUND';
       case 'privat':
-        return options.insuranceClaim ? 'PATIENT+INSURANCE' : 'PATIENT';
+        return patient && patient.insuranceProvider && 
+               patient.insuranceProvider !== 'Privatversicherung' && 
+               patient.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
       default:
-        return 'PATIENT';
+        return patient && patient.insuranceProvider && 
+               patient.insuranceProvider !== 'Privatversicherung' && 
+               patient.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
     }
   }
   
   /**
    * Mappt Contract Type zu Abrechnungsroute (Fallback)
    */
-  _mapContractTypeToRoute(contractType, options) {
+  _mapContractTypeToRoute(contractType, patient, options = {}) {
     switch (contractType) {
       case 'kassenarzt':
         return 'KASSE';
       case 'wahlarzt':
         return 'PATIENT+KASSE_REFUND';
       case 'privat':
-        return options.insuranceClaim ? 'PATIENT+INSURANCE' : 'PATIENT';
+        return patient && patient.insuranceProvider && 
+               patient.insuranceProvider !== 'Privatversicherung' && 
+               patient.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
       default:
-        return 'PATIENT';
+        return patient && patient.insuranceProvider && 
+               patient.insuranceProvider !== 'Privatversicherung' && 
+               patient.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
     }
   }
 

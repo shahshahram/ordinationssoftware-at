@@ -1,11 +1,12 @@
 import React from 'react';
-import { DialogTitle, Box, Typography } from '@mui/material';
-import { Add as AddIcon, Edit as EditIcon } from '@mui/icons-material';
+import { DialogTitle, Box, Typography, IconButton } from '@mui/material';
+import { Add as AddIcon, Edit as EditIcon, Close } from '@mui/icons-material';
 
 interface GradientDialogTitleProps {
   isEdit?: boolean;
   title: string;
   icon?: React.ReactNode;
+  onClose?: () => void;
   gradientColors?: {
     from: string;
     to: string;
@@ -16,6 +17,7 @@ const GradientDialogTitle: React.FC<GradientDialogTitleProps> = ({
   isEdit = false, 
   title, 
   icon,
+  onClose,
   gradientColors = { from: '#667eea', to: '#764ba2' }
 }) => {
   return (
@@ -35,35 +37,50 @@ const GradientDialogTitle: React.FC<GradientDialogTitleProps> = ({
         },
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <Box
-          sx={{
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            bgcolor: 'rgba(255,255,255,0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          {icon ? (
-            <Box sx={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {icon}
-            </Box>
-          ) : (
-            isEdit ? (
-              <EditIcon sx={{ fontSize: 28 }} />
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: '50%',
+              bgcolor: 'rgba(255,255,255,0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {icon ? (
+              <Box sx={{ fontSize: 28, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                {icon}
+              </Box>
             ) : (
-              <AddIcon sx={{ fontSize: 28 }} />
-            )
-          )}
+              isEdit ? (
+                <EditIcon sx={{ fontSize: 28 }} />
+              ) : (
+                <AddIcon sx={{ fontSize: 28 }} />
+              )
+            )}
+          </Box>
+          <Box>
+            <Typography variant="h5" fontWeight="bold">
+              {title}
+            </Typography>
+          </Box>
         </Box>
-        <Box>
-          <Typography variant="h5" fontWeight="bold">
-            {title}
-          </Typography>
-        </Box>
+        {onClose && (
+          <IconButton
+            onClick={onClose}
+            sx={{
+              color: 'white',
+              '&:hover': {
+                bgcolor: 'rgba(255,255,255,0.2)',
+              },
+            }}
+          >
+            <Close />
+          </IconButton>
+        )}
       </Box>
     </DialogTitle>
   );

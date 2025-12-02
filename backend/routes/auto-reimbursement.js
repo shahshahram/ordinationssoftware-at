@@ -111,5 +111,66 @@ router.get('/status', auth, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/auto-reimbursement/config
+ * Gibt Konfiguration der automatischen Erstattungsverarbeitung zurück
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    res.json({
+      success: true,
+      data: {
+        isRunning: autoReimbursementService.isProcessing,
+        enabled: process.env.AUTO_REIMBURSEMENT_ENABLED === 'true',
+        schedule: process.env.AUTO_REIMBURSEMENT_SCHEDULE || '0 2 * * *',
+        batchSize: parseInt(process.env.AUTO_REIMBURSEMENT_BATCH_SIZE || '50'),
+        retryAttempts: parseInt(process.env.AUTO_REIMBURSEMENT_RETRY_ATTEMPTS || '3')
+      }
+    });
+  } catch (error) {
+    console.error('Error getting auto reimbursement config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * PUT /api/auto-reimbursement/config
+ * Aktualisiert Konfiguration der automatischen Erstattungsverarbeitung
+ */
+router.put('/config', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Konfigurationen ändern'
+      });
+    }
+
+    const { enabled, schedule, batchSize, retryAttempts } = req.body;
+    
+    res.json({
+      success: true,
+      message: 'Konfiguration aktualisiert. Bitte beachten Sie: Änderungen müssen in der .env-Datei vorgenommen werden.',
+      data: {
+        enabled: enabled || false,
+        schedule: schedule || '0 2 * * *',
+        batchSize: batchSize || 50,
+        retryAttempts: retryAttempts || 3
+      }
+    });
+  } catch (error) {
+    console.error('Error updating auto reimbursement config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
 

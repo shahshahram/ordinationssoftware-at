@@ -184,12 +184,21 @@ PatientDiagnosisSchema.pre('validate', async function(next) {
         isActive: true
       }).lean();
       if (!entry) {
-        return next(new Error('ICD-10 Code wurde im aktiven Katalogjahr nicht gefunden'));
+        // Warnung statt Fehler - erlaube Diagnose auch wenn Code nicht im aktiven Katalog ist
+        console.warn(`⚠️ PatientDiagnosis: ICD-10 Code ${this.code} wurde im aktiven Katalogjahr ${this.catalogYear} nicht gefunden, aber Diagnose wird trotzdem gespeichert`);
+        // Stelle sicher, dass display gesetzt ist
+        if (!this.display || this.display.trim() === '') {
+          this.display = this.code || 'Unbekannte Diagnose';
+        }
+      } else {
+        // Optional: display abgleichen/überschreiben, falls leer
+        if (!this.display || this.display.trim() === '') {
+          this.display = entry.title || this.code;
+        }
       }
-      // Optional: display abgleichen/überschreiben, falls leer
-      if (!this.display) {
-        this.display = entry.title || this.code;
-      }
+    } else if (!this.display || this.display.trim() === '') {
+      // Falls kein Code oder Jahr, aber display leer, setze Fallback
+      this.display = this.code || 'Unbekannte Diagnose';
     }
 
     next();

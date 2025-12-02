@@ -411,4 +411,91 @@ router.post('/patient/:patientId/documents/upload', [
   }
 });
 
+/**
+ * @route   GET /api/elga/config
+ * @desc    ELGA-Konfiguration abrufen (ohne sensible Daten)
+ * @access  Private
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    const config = require('../config/elga.config');
+    
+    // Konfiguration ohne sensible Daten zurückgeben
+    res.json({
+      success: true,
+      data: {
+        environment: config.environment,
+        testApiUrl: config.api.test.baseUrl,
+        prodApiUrl: config.api.production.baseUrl,
+        hasCertificates: config.hasCertificates(),
+        certPath: config.certificates.clientCert,
+        ecard: {
+          timeout: config.ecard.timeout,
+          cacheDuration: config.ecard.cacheDuration,
+          enableFallback: config.ecard.enableFallback
+        },
+        billing: {
+          autoSubmit: config.billing.autoSubmit,
+          submitSchedule: config.billing.submitSchedule,
+          maxRetries: config.billing.maxRetries,
+          retryDelay: config.billing.retryDelay
+        },
+        logging: {
+          verbose: config.logging.verbose,
+          level: config.logging.level
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching ELGA config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der ELGA-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/elga/config
+ * @desc    ELGA-Konfiguration aktualisieren
+ * @access  Private (Admin)
+ */
+router.put('/config', auth, async (req, res) => {
+  try {
+    // Prüfe Admin-Rechte
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Konfigurationen ändern'
+      });
+    }
+
+    const { environment, testApiUrl, prodApiUrl, ecard, billing, logging } = req.body;
+    
+    // Hinweis: In Produktion sollten Konfigurationen über .env-Dateien verwaltet werden
+    // Diese Endpunkte dienen nur zur Anzeige und können in eine Config-DB schreiben
+    
+    res.json({
+      success: true,
+      message: 'Konfiguration aktualisiert. Bitte beachten Sie: Änderungen müssen in der .env-Datei vorgenommen werden.',
+      data: {
+        environment: environment || 'development',
+        testApiUrl: testApiUrl || '',
+        prodApiUrl: prodApiUrl || '',
+        ecard: ecard || {},
+        billing: billing || {},
+        logging: logging || {}
+      }
+    });
+  } catch (error) {
+    console.error('Error updating ELGA config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der ELGA-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

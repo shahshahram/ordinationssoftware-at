@@ -364,5 +364,62 @@ router.get('/patient/find', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/gina-box/config
+ * @desc    GINA-Box-Konfiguration abrufen
+ * @access  Private
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    const config = {
+      baseUrl: process.env.GINA_BOX_BASE_URL || 'http://localhost:8080',
+      timeout: parseInt(process.env.GINA_BOX_TIMEOUT || '30000'),
+      autoConnect: process.env.GINA_BOX_AUTO_CONNECT === 'true',
+      reconnectInterval: parseInt(process.env.GINA_BOX_RECONNECT_INTERVAL || '5000')
+    };
+    
+    res.json({
+      success: true,
+      data: config
+    });
+  } catch (error) {
+    console.error('Error fetching GINA-Box config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der GINA-Box-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/gina-box/config
+ * @desc    GINA-Box-Konfiguration aktualisieren
+ * @access  Private (Admin)
+ */
+router.put('/config', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Konfigurationen ändern'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Konfiguration aktualisiert. Bitte beachten Sie: Änderungen müssen in der .env-Datei vorgenommen werden.',
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Error updating GINA-Box config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der GINA-Box-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
 

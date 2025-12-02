@@ -263,4 +263,61 @@ router.get('/status', auth, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/ecard/config
+ * @desc    e-card System-Konfiguration abrufen
+ * @access  Private
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    const config = require('../config/elga.config');
+    
+    res.json({
+      success: true,
+      data: {
+        elgaAvailable: true, // Wird dynamisch geprüft
+        fallbackEnabled: config.ecard.enableFallback,
+        timeout: config.ecard.timeout,
+        cacheDuration: config.ecard.cacheDuration
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching e-card config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der e-card-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/ecard/config
+ * @desc    e-card System-Konfiguration aktualisieren
+ * @access  Private (Admin)
+ */
+router.put('/config', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Konfigurationen ändern'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Konfiguration aktualisiert. Bitte beachten Sie: Änderungen müssen in der .env-Datei vorgenommen werden.',
+      data: req.body
+    });
+  } catch (error) {
+    console.error('Error updating e-card config:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der e-card-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

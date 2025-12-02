@@ -15,6 +15,14 @@ export interface LinkedDiagnosis {
   icd10Code?: string;
   display?: string;
   side?: 'left' | 'right' | 'bilateral' | '';
+  isPrimary?: boolean;
+  notes?: string;
+  status?: 'active' | 'resolved' | 'provisional' | 'ruled-out';
+  severity?: 'mild' | 'moderate' | 'severe' | 'critical';
+  onsetDate?: string;
+  resolvedDate?: string;
+  catalogYear?: number;
+  source?: string;
 }
 
 export interface LinkedMedication {
@@ -52,13 +60,34 @@ export interface DekursEntry {
   notes?: string;
   visitReason?: string;
   visitType?: 'appointment' | 'phone' | 'emergency' | 'follow-up' | 'other';
+  imagingFindings?: string;
+  laboratoryFindings?: string;
   linkedDiagnoses?: LinkedDiagnosis[];
   linkedMedications?: LinkedMedication[];
   linkedDocuments?: LinkedDocument[];
+  linkedDicomStudies?: string[];
+  linkedRadiologyReports?: string[];
+  linkedLaborResults?: string[];
   attachments?: DekursAttachment[];
   status?: 'draft' | 'finalized';
   templateId?: string;
   templateName?: string;
+  templateUsed?: {
+    templateId?: string;
+    templateName?: string;
+    templateVersion?: number;
+    insertedAt?: string;
+    modified?: boolean;
+    originalFields?: {
+      visitReason?: string;
+      clinicalObservations?: string;
+      findings?: string;
+      progressChecks?: string;
+      treatmentDetails?: string;
+      notes?: string;
+      psychosocialFactors?: string;
+    };
+  };
   createdAt?: string;
   updatedAt?: string;
   finalizedAt?: string;

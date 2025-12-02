@@ -23,7 +23,9 @@ import {
   CircularProgress,
   Grid,
   Paper,
-  Tooltip
+  Tooltip,
+  FormControlLabel,
+  Switch
 } from '@mui/material';
 import {
   Close,
@@ -39,7 +41,10 @@ import {
   CheckCircle,
   Cancel,
   ZoomIn,
-  Print
+  Print,
+  Edit,
+  Star,
+  StarBorder
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -56,6 +61,10 @@ import {
 import { fetchPatientDiagnoses } from '../store/slices/diagnosisSlice';
 import ICD10Autocomplete from './ICD10Autocomplete';
 import MedicationAutocomplete from './MedicationAutocomplete';
+import DekursVorlagenAutocomplete from './DekursVorlagenAutocomplete';
+import DicomRadiologieSelector from './DicomRadiologieSelector';
+import LaborWerteSelector from './LaborWerteSelector';
+import { useDekursVorlagen } from '../hooks/useDekursVorlagen';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -114,9 +123,14 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     treatmentDetails: '',
     psychosocialFactors: '',
     notes: '',
+    imagingFindings: '',
+    laboratoryFindings: '',
     linkedDiagnoses: [],
     linkedMedications: [],
-    linkedDocuments: []
+    linkedDocuments: [],
+    linkedDicomStudies: [],
+    linkedRadiologyReports: [],
+    linkedLaborResults: []
   });
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoInputRef, setPhotoInputRef] = useState<HTMLInputElement | null>(null);
@@ -131,6 +145,31 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageName, setSelectedImageName] = useState<string>('');
+  const [vorlagenDialogOpen, setVorlagenDialogOpen] = useState(false);
+  const [dicomSelectorOpen, setDicomSelectorOpen] = useState(false);
+  const [laborSelectorOpen, setLaborSelectorOpen] = useState(false);
+  const [diagnosisEditDialogOpen, setDiagnosisEditDialogOpen] = useState(false);
+  const [editingDiagnosisIndex, setEditingDiagnosisIndex] = useState<number | null>(null);
+  const [diagnosisFormData, setDiagnosisFormData] = useState<{
+    side: 'left' | 'right' | 'bilateral' | '';
+    isPrimary: boolean;
+    notes: string;
+    status: 'active' | 'resolved' | 'provisional' | 'ruled-out';
+    severity: 'mild' | 'moderate' | 'severe' | 'critical' | '';
+    onsetDate: string;
+    resolvedDate: string;
+  }>({
+    side: '',
+    isPrimary: false,
+    notes: '',
+    status: 'active',
+    severity: '',
+    onsetDate: '',
+    resolvedDate: ''
+  });
+  const { insertTemplate, getTemplate } = useDekursVorlagen();
+  const { locations } = useAppSelector((state) => state.locations);
+  const currentLocation = locations.find((loc: any) => loc.isActive);
 
   // Lade Vorlagen beim Öffnen
   useEffect(() => {
@@ -164,9 +203,14 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
           treatmentDetails: '',
           psychosocialFactors: '',
           notes: '',
+          imagingFindings: '',
+          laboratoryFindings: '',
           linkedDiagnoses: [],
           linkedMedications: [],
-          linkedDocuments: []
+          linkedDocuments: [],
+          linkedDicomStudies: [],
+          linkedRadiologyReports: [],
+          linkedLaborResults: []
         });
         setSelectedVorlage(null);
         // Lösche temporäre Fotos beim Öffnen eines neuen Dialogs
@@ -174,10 +218,32 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
         setPendingPhotoPreviews([]);
       } else {
         // Wenn currentEntry vorhanden ist, lade die Daten
+        // Bereinige linkedMedications: Stelle sicher, dass medicationId eine String-ID ist
+        const cleanedLinkedMedications = (currentEntry.linkedMedications || []).map((med: any) => {
+          let medicationId: string | undefined = undefined;
+          if (med.medicationId) {
+            // Wenn medicationId ein Objekt ist, extrahiere die _id
+            if (typeof med.medicationId === 'object' && med.medicationId._id) {
+              medicationId = typeof med.medicationId._id === 'string' 
+                ? med.medicationId._id 
+                : med.medicationId._id.toString();
+            } else if (typeof med.medicationId === 'string') {
+              medicationId = med.medicationId;
+            } else {
+              medicationId = med.medicationId.toString();
+            }
+          }
+          return {
+            ...med,
+            medicationId: medicationId
+          };
+        });
+        
         setFormData({
           ...currentEntry,
           patientId,
-          encounterId: currentEntry.encounterId || encounterId
+          encounterId: currentEntry.encounterId || encounterId,
+          linkedMedications: cleanedLinkedMedications
         });
       }
     }
@@ -187,111 +253,105 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleVorlageSelect = (vorlage: DekursVorlage | null) => {
-    setSelectedVorlage(vorlage);
-    if (vorlage) {
-      console.log('DekursDialog: Vorlage ausgewählt', vorlage);
-      console.log('DekursDialog: Template-Daten', vorlage.template);
-      console.log('DekursDialog: Textbausteine', vorlage.textBlocks);
-      
-      setFormData((prev) => {
-        // Initialisiere alle Felder direkt aus der Vorlage (auch wenn leer)
-        const newData: Partial<DekursEntry> = {
-          ...prev,
-          // Setze alle Template-Felder explizit (auch wenn leer/undefined)
-          clinicalObservations: vorlage.template?.clinicalObservations || '',
-          progressChecks: vorlage.template?.progressChecks || '',
-          findings: vorlage.template?.findings || '',
-          medicationChanges: vorlage.template?.medicationChanges || '',
-          treatmentDetails: vorlage.template?.treatmentDetails || '',
-          psychosocialFactors: vorlage.template?.psychosocialFactors || '',
-          notes: vorlage.template?.notes || '',
-          visitReason: vorlage.template?.visitReason || prev.visitReason || '',
-          visitType: vorlage.template?.visitType || prev.visitType || 'appointment',
-          templateId: vorlage._id,
-          templateName: vorlage.name
-        };
-
-        // Füge Textbausteine hinzu, basierend auf ihrer Kategorie
-        if (vorlage.textBlocks && vorlage.textBlocks.length > 0) {
-          console.log('DekursDialog: Verarbeite Textbausteine', vorlage.textBlocks);
-          
-          vorlage.textBlocks.forEach((block) => {
-            const category = block.category || 'notes';
-            const blockText = block.text || '';
-            
-            console.log('DekursDialog: Textbaustein', { category, blockText, label: block.label });
-            
-            if (blockText) {
-              // Bestimme das Ziel-Feld basierend auf der Kategorie
-              let targetField: keyof DekursEntry;
-              switch (category) {
-                case 'clinicalObservations':
-                  targetField = 'clinicalObservations';
-                  break;
-                case 'progressChecks':
-                  targetField = 'progressChecks';
-                  break;
-                case 'findings':
-                  targetField = 'findings';
-                  break;
-                case 'medicationChanges':
-                  targetField = 'medicationChanges';
-                  break;
-                case 'treatmentDetails':
-                  targetField = 'treatmentDetails';
-                  break;
-                case 'psychosocialFactors':
-                  targetField = 'psychosocialFactors';
-                  break;
-                case 'notes':
-                default:
-                  targetField = 'notes';
-                  break;
-              }
-
-              // Füge Textbaustein hinzu (anhängen, wenn bereits Text vorhanden)
-              const existingText = (newData[targetField] as string) || '';
-              console.log('DekursDialog: Ziel-Feld', targetField, 'Vorhandener Text:', existingText);
-              
-              if (existingText) {
-                newData[targetField] = `${existingText}\n\n${blockText}`;
-              } else {
-                newData[targetField] = blockText;
-              }
-              
-              console.log('DekursDialog: Neuer Text für', targetField, ':', newData[targetField]);
-            }
-          });
-        }
-
-        // Füge vorgeschlagene Diagnosen hinzu
-        if (vorlage.suggestedDiagnoses && vorlage.suggestedDiagnoses.length > 0) {
-          const newDiagnoses = vorlage.suggestedDiagnoses.map((diag: any) => ({
-            diagnosisId: diag.diagnosisId || diag._id || '',
-            icd10Code: diag.icd10Code || '',
-            display: diag.display || '',
-            side: '' as 'left' | 'right' | 'bilateral' | ''
-          }));
-          newData.linkedDiagnoses = [...(prev.linkedDiagnoses || []), ...newDiagnoses];
-        }
-
-        // Füge vorgeschlagene Medikamente hinzu
-        if (vorlage.suggestedMedications && vorlage.suggestedMedications.length > 0) {
-          const newMedications = vorlage.suggestedMedications.map((med: any) => ({
-            medicationId: med.medicationId || med._id || '',
-            name: med.name || '',
-            dosage: '',
-            frequency: '',
-            changeType: 'added' as const
-          }));
-          newData.linkedMedications = [...(prev.linkedMedications || []), ...newMedications];
-        }
-
-        console.log('DekursDialog: Finale FormData', newData);
-        return newData;
-      });
+  const handleVorlageSelect = async (vorlage: any) => {
+    console.log('🔍 DekursDialog: Vorlage ausgewählt:', vorlage);
+    
+    // Lade vollständige Vorlage per ID, da die Search-Route nur minimale Daten zurückgibt
+    let fullVorlage = vorlage;
+    
+    // Wenn template fehlt, lade vollständige Vorlage
+    if (!vorlage.template) {
+      console.log('🔍 DekursDialog: Template fehlt, lade vollständige Vorlage...');
+      const loadedVorlage = await getTemplate(vorlage._id);
+      if (loadedVorlage) {
+        fullVorlage = loadedVorlage;
+        console.log('🔍 DekursDialog: Vollständige Vorlage geladen:', fullVorlage);
+      } else {
+        console.error('🔍 DekursDialog: Fehler beim Laden der vollständigen Vorlage');
+        setError('Fehler beim Laden der Vorlage');
+        return;
+      }
     }
+    
+    const patient = patients.find(p => p._id === patientId);
+    const patientName = patient ? `${patient.firstName} ${patient.lastName}` : '';
+    const patientAge = patient?.dateOfBirth ? 
+      Math.floor((new Date().getTime() - new Date(patient.dateOfBirth).getTime()) / (365.25 * 24 * 60 * 60 * 1000)) : undefined;
+    
+    console.log('🔍 DekursDialog: Patient-Info:', { patientName, patientAge });
+    console.log('🔍 DekursDialog: Vorlage template:', fullVorlage.template);
+    
+    const templateData = insertTemplate(fullVorlage, patientName, patientAge);
+    
+    console.log('🔍 DekursDialog: Template-Daten nach insertTemplate:', templateData);
+    
+    setFormData((prev) => {
+      // Prüfe, ob bereits eine Diagnose mit diesem ICD-10 Code existiert
+      const existingDiagnosisCodes = new Set((prev.linkedDiagnoses || []).map((d: any) => d.icd10Code));
+      
+      // Füge ICD-10 Diagnose automatisch hinzu, wenn vorhanden und noch nicht in der Liste
+      let newLinkedDiagnoses = [...(prev.linkedDiagnoses || [])];
+      if (fullVorlage.icd10 && !existingDiagnosisCodes.has(fullVorlage.icd10)) {
+        const newDiagnosis = {
+          diagnosisId: fullVorlage.icd10, // Verwende ICD-10 Code als ID
+          icd10Code: fullVorlage.icd10,
+          display: fullVorlage.icd10Title || fullVorlage.title || fullVorlage.icd10,
+          side: '' as 'left' | 'right' | 'bilateral' | '',
+          isPrimary: false,
+          notes: '',
+          status: 'active' as const,
+          severity: undefined,
+          onsetDate: undefined,
+          resolvedDate: undefined,
+          catalogYear: new Date().getFullYear(),
+          source: 'clinical' as const
+        };
+        newLinkedDiagnoses.push(newDiagnosis);
+        console.log('🔍 DekursDialog: ICD-10 Diagnose automatisch hinzugefügt:', newDiagnosis);
+      }
+      
+      const newFormData = {
+        ...prev,
+        ...templateData,
+        templateId: fullVorlage._id,
+        templateName: fullVorlage.title,
+        linkedDiagnoses: newLinkedDiagnoses
+      };
+      console.log('🔍 DekursDialog: Neues FormData:', newFormData);
+      return newFormData;
+    });
+    setSelectedVorlage(fullVorlage);
+  };
+
+  const handleDicomSelect = (selectedStudies: any[]) => {
+    const formattedText = selectedStudies.map(study => {
+      const date = study.studyDate || study.uploadedAt;
+      const dateStr = date ? new Date(date).toLocaleDateString('de-DE') : '';
+      return `[${dateStr}] ${study.modality || study.studyDescription || 'DICOM-Studie'}: ${study.findings || ''}`;
+    }).join('\n\n');
+    
+    setFormData((prev) => ({
+      ...prev,
+      imagingFindings: prev.imagingFindings ? `${prev.imagingFindings}\n\n${formattedText}` : formattedText,
+      linkedDicomStudies: [...(prev.linkedDicomStudies || []), ...selectedStudies.map(s => s._id)]
+    }));
+  };
+
+  const handleLaborSelect = (selectedResults: any[]) => {
+    const formattedText = selectedResults.map(result => {
+      const date = result.resultDate;
+      const dateStr = date ? new Date(date).toLocaleDateString('de-DE') : '';
+      const resultsText = result.results?.map((res: any) => 
+        `- ${res.parameter}: ${res.value} ${res.unit || ''} (${res.reference || ''}) ${res.isCritical ? '[Auffällig]' : '[Normal]'}`
+      ).join('\n') || '';
+      return `[${dateStr}] - Laborwerte:\n${resultsText}`;
+    }).join('\n\n');
+    
+    setFormData((prev) => ({
+      ...prev,
+      laboratoryFindings: prev.laboratoryFindings ? `${prev.laboratoryFindings}\n\n${formattedText}` : formattedText,
+      linkedLaborResults: [...(prev.linkedLaborResults || []), ...selectedResults.map(r => r._id)]
+    }));
   };
 
   const handleAddDiagnosis = (diagnosis: any) => {
@@ -323,6 +383,68 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     });
   };
 
+  const handleEditDiagnosis = (index: number) => {
+    const diagnosis = formData.linkedDiagnoses?.[index];
+    if (diagnosis) {
+      setEditingDiagnosisIndex(index);
+      setDiagnosisFormData({
+        side: diagnosis.side || '',
+        isPrimary: diagnosis.isPrimary || false,
+        notes: diagnosis.notes || '',
+        status: diagnosis.status || 'active',
+        severity: diagnosis.severity || '',
+        onsetDate: diagnosis.onsetDate ? new Date(diagnosis.onsetDate).toISOString().split('T')[0] : '',
+        resolvedDate: diagnosis.resolvedDate ? new Date(diagnosis.resolvedDate).toISOString().split('T')[0] : ''
+      });
+      setDiagnosisEditDialogOpen(true);
+    }
+  };
+
+  const handleSaveDiagnosisEdit = () => {
+    if (editingDiagnosisIndex === null) return;
+
+    setFormData((prev) => {
+      const updatedDiagnoses = [...(prev.linkedDiagnoses || [])];
+      if (updatedDiagnoses[editingDiagnosisIndex]) {
+        // Wenn eine Diagnose als Hauptdiagnose gesetzt wird, entferne die Hauptdiagnose von allen anderen
+        if (diagnosisFormData.isPrimary) {
+          updatedDiagnoses.forEach((diag, idx) => {
+            if (idx !== editingDiagnosisIndex) {
+              diag.isPrimary = false;
+            }
+          });
+        }
+        
+        updatedDiagnoses[editingDiagnosisIndex] = {
+          ...updatedDiagnoses[editingDiagnosisIndex],
+          side: diagnosisFormData.side,
+          isPrimary: diagnosisFormData.isPrimary,
+          notes: diagnosisFormData.notes,
+          status: diagnosisFormData.status,
+          severity: diagnosisFormData.severity || undefined,
+          onsetDate: diagnosisFormData.onsetDate || undefined,
+          resolvedDate: diagnosisFormData.resolvedDate || undefined
+        };
+      }
+      return {
+        ...prev,
+        linkedDiagnoses: updatedDiagnoses
+      };
+    });
+
+    setDiagnosisEditDialogOpen(false);
+    setEditingDiagnosisIndex(null);
+    setDiagnosisFormData({
+      side: '',
+      isPrimary: false,
+      notes: '',
+      status: 'active',
+      severity: '',
+      onsetDate: '',
+      resolvedDate: ''
+    });
+  };
+
   const handleRemoveDiagnosis = (index: number) => {
     setFormData((prev) => ({
       ...prev,
@@ -332,8 +454,28 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
 
   const handleAddMedication = (medication: any) => {
     if (!medication) return;
+    
+    // Stelle sicher, dass medicationId eine String-ID ist, nicht ein Objekt
+    let medicationId: string | undefined = undefined;
+    if (medication._id) {
+      medicationId = typeof medication._id === 'string' ? medication._id : medication._id.toString();
+    } else if (medication.id) {
+      medicationId = typeof medication.id === 'string' ? medication.id : medication.id.toString();
+    } else if (medication.medicationId) {
+      // Wenn medicationId ein Objekt ist, extrahiere die _id
+      if (typeof medication.medicationId === 'object' && medication.medicationId._id) {
+        medicationId = typeof medication.medicationId._id === 'string' 
+          ? medication.medicationId._id 
+          : medication.medicationId._id.toString();
+      } else if (typeof medication.medicationId === 'string') {
+        medicationId = medication.medicationId;
+      } else {
+        medicationId = medication.medicationId.toString();
+      }
+    }
+    
     const newMedication = {
-      medicationId: medication._id || medication.id || medication.medicationId,
+      medicationId: medicationId,
       name: medication.name || medication.Name || medication.medicationName || '',
       dosage: medication.dosage || '',
       frequency: medication.frequency || '',
@@ -431,16 +573,40 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     setError(null);
 
     try {
+      // Bereinige linkedMedications vor dem Speichern: Stelle sicher, dass medicationId eine String-ID ist
+      const cleanedFormData = {
+        ...formData,
+        linkedMedications: (formData.linkedMedications || []).map((med: any) => {
+          let medicationId: string | undefined = undefined;
+          if (med.medicationId) {
+            // Wenn medicationId ein Objekt ist, extrahiere die _id
+            if (typeof med.medicationId === 'object' && med.medicationId._id) {
+              medicationId = typeof med.medicationId._id === 'string' 
+                ? med.medicationId._id 
+                : med.medicationId._id.toString();
+            } else if (typeof med.medicationId === 'string') {
+              medicationId = med.medicationId;
+            } else {
+              medicationId = med.medicationId.toString();
+            }
+          }
+          return {
+            ...med,
+            medicationId: medicationId
+          };
+        })
+      };
+      
       let savedEntry: DekursEntry;
 
       if (currentEntry?._id) {
         // Update
         savedEntry = await dispatch(
-          updateDekursEntry({ entryId: currentEntry._id, entryData: formData })
+          updateDekursEntry({ entryId: currentEntry._id, entryData: cleanedFormData })
         ).unwrap();
       } else {
         // Create
-        savedEntry = await dispatch(createDekursEntry(formData)).unwrap();
+        savedEntry = await dispatch(createDekursEntry(cleanedFormData)).unwrap();
       }
 
       if (finalize && savedEntry._id) {
@@ -478,10 +644,8 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
         onSave(savedEntry);
       }
 
-      // Schließe Dialog nur wenn finalisiert, sonst bleibt er offen für weitere Bearbeitung
-      if (finalize) {
-        onClose();
-      }
+      // Schließe Dialog nach erfolgreichem Speichern (sowohl Entwurf als auch finalisiert)
+      onClose();
     } catch (err: any) {
       setError(err.message || 'Fehler beim Speichern');
     } finally {
@@ -788,33 +952,26 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
         )}
 
         {/* Vorlagen-Auswahl */}
-        <Box sx={{ mb: 3 }}>
-          <FormControl fullWidth>
-            <InputLabel>Vorlage auswählen (optional)</InputLabel>
-            <Select
-              value={selectedVorlage?._id || ''}
-              onChange={(e) => {
-                const vorlage = vorlagen.find((v) => v._id === e.target.value);
-                handleVorlageSelect(vorlage || null);
-              }}
-              disabled={!!initialEntry || loading}
+        {!initialEntry && (
+          <Box sx={{ mb: 3 }}>
+            <Button
+              variant="outlined"
+              onClick={() => setVorlagenDialogOpen(true)}
+              disabled={loading}
+              fullWidth
+              sx={{ mb: 1 }}
             >
-              <MenuItem value="">Keine Vorlage</MenuItem>
-              {vorlagen.map((vorlage) => (
-                <MenuItem key={vorlage._id} value={vorlage._id}>
-                  {vorlage.name} {vorlage.category && `(${vorlage.category})`}
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        </Box>
+              Vorlage einfügen
+            </Button>
+          </Box>
+        )}
 
         {/* Basis-Informationen */}
         <Grid container spacing={2} sx={{ mb: 3 }}>
           <Grid size={{ xs: 12, md: 6 }}>
             <TextField
               fullWidth
-              label="Besuchsgrund"
+              label="Diagnose"
               value={formData.visitReason || ''}
               onChange={(e) => handleFieldChange('visitReason', e.target.value)}
               multiline
@@ -846,107 +1003,126 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
           onChange={(e, newValue) => setActiveTab(newValue)}
           sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
         >
-          <Tab label="Klinische Beobachtungen" icon={<LocalHospital />} iconPosition="start" />
-          <Tab label="Verlaufskontrollen" icon={<Description />} iconPosition="start" />
-          <Tab label="Befunde" icon={<CheckCircle />} iconPosition="start" />
+          <Tab label="Allgemein" icon={<LocalHospital />} iconPosition="start" />
           <Tab label="Medikamente" icon={<Medication />} iconPosition="start" />
-          <Tab label="Behandlung" icon={<Psychology />} iconPosition="start" />
-          <Tab label="Notizen" icon={<Assignment />} iconPosition="start" />
+          <Tab label="Diagnosen" icon={<CheckCircle />} iconPosition="start" />
           <Tab label="Fotos" icon={<PhotoCamera />} iconPosition="start" />
         </Tabs>
 
         <TabPanel value={activeTab} index={0}>
-          <TextField
-            fullWidth
-            label="Klinische Beobachtungen"
-            value={formData.clinicalObservations || ''}
-            onChange={(e) => handleFieldChange('clinicalObservations', e.target.value)}
-            multiline
-            rows={6}
-            disabled={isFinalized}
-            placeholder="Beschreiben Sie die klinischen Beobachtungen..."
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={1}>
-          <TextField
-            fullWidth
-            label="Verlaufskontrollen"
-            value={formData.progressChecks || ''}
-            onChange={(e) => handleFieldChange('progressChecks', e.target.value)}
-            multiline
-            rows={6}
-            disabled={isFinalized}
-            placeholder="Beschreiben Sie die Verlaufskontrollen..."
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={2}>
           <Stack spacing={2}>
             <TextField
               fullWidth
-              label="Befunde"
+              label="Anamnese"
+              value={formData.clinicalObservations || ''}
+              onChange={(e) => handleFieldChange('clinicalObservations', e.target.value)}
+              multiline
+              rows={4}
+              disabled={isFinalized}
+              placeholder="Beschreiben Sie die Anamnese..."
+            />
+            <TextField
+              fullWidth
+              label="Status/Befund"
               value={formData.findings || ''}
               onChange={(e) => handleFieldChange('findings', e.target.value)}
               multiline
               rows={4}
               disabled={isFinalized}
-              placeholder="Beschreiben Sie die Befunde..."
+              placeholder="Beschreiben Sie den Status/Befund..."
+            />
+            <TextField
+              fullWidth
+              label="Beurteilung"
+              value={formData.progressChecks || ''}
+              onChange={(e) => handleFieldChange('progressChecks', e.target.value)}
+              multiline
+              rows={4}
+              disabled={isFinalized}
+              placeholder="Beschreiben Sie die Beurteilung..."
+            />
+            <TextField
+              fullWidth
+              label="Therapie"
+              value={formData.treatmentDetails || ''}
+              onChange={(e) => handleFieldChange('treatmentDetails', e.target.value)}
+              multiline
+              rows={4}
+              disabled={isFinalized}
+              placeholder="Beschreiben Sie die Therapie..."
+            />
+            <TextField
+              fullWidth
+              label="Empfehlung"
+              value={formData.notes || ''}
+              onChange={(e) => handleFieldChange('notes', e.target.value)}
+              multiline
+              rows={3}
+              disabled={isFinalized}
+              placeholder="Empfehlungen..."
+            />
+            <TextField
+              fullWidth
+              label="Psychosoziale Faktoren"
+              value={formData.psychosocialFactors || ''}
+              onChange={(e) => handleFieldChange('psychosocialFactors', e.target.value)}
+              multiline
+              rows={2}
+              disabled={isFinalized}
+              placeholder="Psychosoziale Faktoren..."
             />
             <Divider />
-            <Typography variant="subtitle2">Verknüpfte Diagnosen</Typography>
-            <ICD10Autocomplete
-              onSelect={(code: string, display: string, fullCode: any) => handleAddDiagnosis(fullCode)}
-            />
-            {formData.linkedDiagnoses && formData.linkedDiagnoses.length > 0 && (
-              <Stack spacing={1}>
-                {formData.linkedDiagnoses.map((diag, index) => (
-                  <Paper key={index} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="body2" fontWeight="bold">
-                        {diag.icd10Code} - {diag.display}
-                      </Typography>
-                      {!isFinalized && (
-                        <FormControl size="small" sx={{ mt: 1, minWidth: 120 }}>
-                          <InputLabel>Seite</InputLabel>
-                          <Select
-                            value={diag.side || ''}
-                            onChange={(e) => handleUpdateDiagnosisSide(index, e.target.value as 'left' | 'right' | 'bilateral' | '')}
-                            label="Seite"
-                          >
-                            <MenuItem value="">Keine Angabe</MenuItem>
-                            <MenuItem value="left">Links</MenuItem>
-                            <MenuItem value="right">Rechts</MenuItem>
-                            <MenuItem value="bilateral">Beidseitig</MenuItem>
-                          </Select>
-                        </FormControl>
-                      )}
-                      {isFinalized && diag.side && (
-                        <Chip
-                          label={diag.side === 'left' ? 'Links' : diag.side === 'right' ? 'Rechts' : 'Beidseitig'}
-                          size="small"
-                          sx={{ mt: 0.5 }}
-                          color="secondary"
-                        />
-                      )}
-                    </Box>
-                    {!isFinalized && (
-                      <IconButton
-                        size="small"
-                        onClick={() => handleRemoveDiagnosis(index)}
-                        color="error"
-                      >
-                        <Delete />
-                      </IconButton>
-                    )}
-                  </Paper>
-                ))}
-              </Stack>
-            )}
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>Bildgebende Befunde (DICOM/Radiologie)</Typography>
+              <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setDicomSelectorOpen(true)}
+                  disabled={isFinalized}
+                >
+                  DICOM-Studien übernehmen
+                </Button>
+              </Box>
+              <TextField
+                fullWidth
+                label="Bildgebende Befunde"
+                value={formData.imagingFindings || ''}
+                onChange={(e) => handleFieldChange('imagingFindings', e.target.value)}
+                multiline
+                rows={4}
+                disabled={isFinalized}
+                placeholder="Bildgebende Befunde (wird automatisch befüllt wenn DICOM-Studien ausgewählt werden)..."
+              />
+            </Box>
+            <Divider />
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>Laborbefunde</Typography>
+              <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setLaborSelectorOpen(true)}
+                  disabled={isFinalized}
+                >
+                  Aktuelle Laborwerte übernehmen
+                </Button>
+              </Box>
+              <TextField
+                fullWidth
+                label="Laborbefunde"
+                value={formData.laboratoryFindings || ''}
+                onChange={(e) => handleFieldChange('laboratoryFindings', e.target.value)}
+                multiline
+                rows={4}
+                disabled={isFinalized}
+                placeholder="Laborbefunde (wird automatisch befüllt wenn Laborwerte ausgewählt werden)..."
+              />
+            </Box>
           </Stack>
         </TabPanel>
 
-        <TabPanel value={activeTab} index={3}>
+        <TabPanel value={activeTab} index={1}>
           <Stack spacing={2}>
             <TextField
               fullWidth
@@ -996,45 +1172,137 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
           </Stack>
         </TabPanel>
 
-        <TabPanel value={activeTab} index={4}>
+        <TabPanel value={activeTab} index={2}>
           <Stack spacing={2}>
-            <TextField
-              fullWidth
-              label="Behandlungsdetails"
-              value={formData.treatmentDetails || ''}
-              onChange={(e) => handleFieldChange('treatmentDetails', e.target.value)}
-              multiline
-              rows={4}
-              disabled={isFinalized}
-              placeholder="Beschreiben Sie die Behandlungsdetails..."
+            <Typography variant="subtitle2">Verknüpfte Diagnosen</Typography>
+            <ICD10Autocomplete
+              onSelect={(code: string, display: string, fullCode: any) => handleAddDiagnosis(fullCode)}
             />
-            <TextField
-              fullWidth
-              label="Psychosoziale Faktoren"
-              value={formData.psychosocialFactors || ''}
-              onChange={(e) => handleFieldChange('psychosocialFactors', e.target.value)}
-              multiline
-              rows={4}
-              disabled={isFinalized}
-              placeholder="Beschreiben Sie psychosoziale Faktoren..."
-            />
+            {formData.linkedDiagnoses && formData.linkedDiagnoses.length > 0 && (
+              <Stack spacing={1}>
+                {formData.linkedDiagnoses.map((diag, index) => {
+                  const getStatusColor = (status?: string) => {
+                    switch (status) {
+                      case 'active': return 'success';
+                      case 'resolved': return 'default';
+                      case 'provisional': return 'warning';
+                      case 'ruled-out': return 'error';
+                      default: return 'default';
+                    }
+                  };
+                  const getStatusLabel = (status?: string) => {
+                    switch (status) {
+                      case 'active': return 'Aktiv';
+                      case 'resolved': return 'Behoben';
+                      case 'provisional': return 'Verdachtsdiagnose';
+                      case 'ruled-out': return 'Ausgeschlossen';
+                      default: return 'Aktiv';
+                    }
+                  };
+                  const getSeverityColor = (severity?: string) => {
+                    switch (severity) {
+                      case 'mild': return 'success';
+                      case 'moderate': return 'warning';
+                      case 'severe': return 'error';
+                      case 'critical': return 'error';
+                      default: return 'default';
+                    }
+                  };
+                  const getSeverityLabel = (severity?: string) => {
+                    switch (severity) {
+                      case 'mild': return 'Leicht';
+                      case 'moderate': return 'Mäßig';
+                      case 'severe': return 'Schwer';
+                      case 'critical': return 'Kritisch';
+                      default: return '';
+                    }
+                  };
+                  
+                  return (
+                    <Paper key={index} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                      <Box sx={{ flex: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                          <Typography variant="body2" fontWeight="bold">
+                            {diag.icd10Code} - {diag.display}
+                          </Typography>
+                          {diag.isPrimary && (
+                            <Chip
+                              label="Hauptdiagnose"
+                              size="small"
+                              color="primary"
+                              icon={<CheckCircle />}
+                            />
+                          )}
+                          {diag.status && (
+                            <Chip
+                              label={getStatusLabel(diag.status)}
+                              size="small"
+                              color={getStatusColor(diag.status) as any}
+                              variant="outlined"
+                            />
+                          )}
+                          {diag.severity && (
+                            <Chip
+                              label={getSeverityLabel(diag.severity)}
+                              size="small"
+                              color={getSeverityColor(diag.severity) as any}
+                              variant="outlined"
+                            />
+                          )}
+                          {diag.side && (
+                            <Chip
+                              label={diag.side === 'left' ? 'Links' : diag.side === 'right' ? 'Rechts' : 'Beidseitig'}
+                              size="small"
+                              color="secondary"
+                              variant="outlined"
+                            />
+                          )}
+                        </Box>
+                        <Stack direction="row" spacing={1} sx={{ mb: 1, flexWrap: 'wrap' }}>
+                          {diag.onsetDate && (
+                            <Typography variant="caption" color="text.secondary">
+                              Beginn: {new Date(diag.onsetDate).toLocaleDateString('de-DE')}
+                            </Typography>
+                          )}
+                          {diag.resolvedDate && (
+                            <Typography variant="caption" color="text.secondary">
+                              Ende: {new Date(diag.resolvedDate).toLocaleDateString('de-DE')}
+                            </Typography>
+                          )}
+                        </Stack>
+                        {diag.notes && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            {diag.notes}
+                          </Typography>
+                        )}
+                      </Box>
+                      {!isFinalized && (
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleEditDiagnosis(index)}
+                            color="primary"
+                          >
+                            <Edit />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            onClick={() => handleRemoveDiagnosis(index)}
+                            color="error"
+                          >
+                            <Delete />
+                          </IconButton>
+                        </Box>
+                      )}
+                    </Paper>
+                  );
+                })}
+              </Stack>
+            )}
           </Stack>
         </TabPanel>
 
-        <TabPanel value={activeTab} index={5}>
-          <TextField
-            fullWidth
-            label="Notizen"
-            value={formData.notes || ''}
-            onChange={(e) => handleFieldChange('notes', e.target.value)}
-            multiline
-            rows={8}
-            disabled={isFinalized}
-            placeholder="Zusätzliche Notizen..."
-          />
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={6}>
+        <TabPanel value={activeTab} index={3}>
           <Stack spacing={2}>
             {!isFinalized && (
               <Box>
@@ -1256,6 +1524,188 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
             />
           )}
         </DialogContent>
+      </Dialog>
+
+      {/* Vorlagen-Auswahl Dialog */}
+      <DekursVorlagenAutocomplete
+        open={vorlagenDialogOpen}
+        onClose={() => setVorlagenDialogOpen(false)}
+        onSelect={handleVorlageSelect}
+        locationId={currentLocation?._id}
+      />
+
+      {/* DICOM/Radiologie Selector */}
+      <DicomRadiologieSelector
+        open={dicomSelectorOpen}
+        onClose={() => setDicomSelectorOpen(false)}
+        onSelect={handleDicomSelect}
+        patientId={patientId}
+      />
+
+      {/* Laborwerte Selector */}
+      <LaborWerteSelector
+        open={laborSelectorOpen}
+        onClose={() => setLaborSelectorOpen(false)}
+        onSelect={handleLaborSelect}
+        patientId={patientId}
+      />
+
+      {/* Diagnose-Edit Dialog */}
+      <Dialog
+        open={diagnosisEditDialogOpen}
+        onClose={() => {
+          setDiagnosisEditDialogOpen(false);
+          setEditingDiagnosisIndex(null);
+          setDiagnosisFormData({
+            side: '',
+            isPrimary: false,
+            notes: '',
+            status: 'active',
+            severity: '',
+            onsetDate: '',
+            resolvedDate: ''
+          });
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Diagnose bearbeiten
+          {editingDiagnosisIndex !== null && formData.linkedDiagnoses?.[editingDiagnosisIndex] && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {formData.linkedDiagnoses[editingDiagnosisIndex].icd10Code} - {formData.linkedDiagnoses[editingDiagnosisIndex].display}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            {/* Status and Severity */}
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Status</InputLabel>
+                  <Select
+                    value={diagnosisFormData.status}
+                    onChange={(e) => setDiagnosisFormData(prev => ({ ...prev, status: e.target.value as 'active' | 'resolved' | 'provisional' | 'ruled-out' }))}
+                    label="Status"
+                  >
+                    <MenuItem value="active">Aktiv</MenuItem>
+                    <MenuItem value="resolved">Behoben</MenuItem>
+                    <MenuItem value="provisional">Verdachtsdiagnose</MenuItem>
+                    <MenuItem value="ruled-out">Ausgeschlossen</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+
+              <Box sx={{ flex: 1 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Schweregrad</InputLabel>
+                  <Select
+                    value={diagnosisFormData.severity}
+                    onChange={(e) => setDiagnosisFormData(prev => ({ ...prev, severity: e.target.value as 'mild' | 'moderate' | 'severe' | 'critical' | '' }))}
+                    label="Schweregrad"
+                  >
+                    <MenuItem value="">Nicht angegeben</MenuItem>
+                    <MenuItem value="mild">Leicht</MenuItem>
+                    <MenuItem value="moderate">Mäßig</MenuItem>
+                    <MenuItem value="severe">Schwer</MenuItem>
+                    <MenuItem value="critical">Kritisch</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            </Box>
+
+            <FormControl fullWidth>
+              <InputLabel>Seite</InputLabel>
+              <Select
+                value={diagnosisFormData.side}
+                onChange={(e) => setDiagnosisFormData(prev => ({ ...prev, side: e.target.value as 'left' | 'right' | 'bilateral' | '' }))}
+                label="Seite"
+              >
+                <MenuItem value="">Keine Angabe</MenuItem>
+                <MenuItem value="left">Links</MenuItem>
+                <MenuItem value="right">Rechts</MenuItem>
+                <MenuItem value="bilateral">Beidseitig</MenuItem>
+              </Select>
+            </FormControl>
+
+            {/* Onset and Resolved Date */}
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <TextField
+                  fullWidth
+                  label="Beginn"
+                  type="date"
+                  value={diagnosisFormData.onsetDate}
+                  onChange={(e) => setDiagnosisFormData(prev => ({ ...prev, onsetDate: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
+
+              <Box sx={{ flex: 1 }}>
+                <TextField
+                  fullWidth
+                  label="Ende"
+                  type="date"
+                  value={diagnosisFormData.resolvedDate}
+                  onChange={(e) => setDiagnosisFormData(prev => ({ ...prev, resolvedDate: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Box>
+            </Box>
+
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={diagnosisFormData.isPrimary}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDiagnosisFormData(prev => ({ ...prev, isPrimary: e.target.checked }))}
+                  color="primary"
+                />
+              }
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {diagnosisFormData.isPrimary ? <Star color="primary" /> : <StarBorder />}
+                  <Typography>Hauptdiagnose</Typography>
+                </Box>
+              }
+            />
+
+            <TextField
+              fullWidth
+              label="Notizen"
+              multiline
+              rows={4}
+              value={diagnosisFormData.notes}
+              onChange={(e) => setDiagnosisFormData(prev => ({ ...prev, notes: e.target.value }))}
+              placeholder="Zusätzliche Informationen zur Diagnose..."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setDiagnosisEditDialogOpen(false);
+              setEditingDiagnosisIndex(null);
+              setDiagnosisFormData({
+                side: '',
+                isPrimary: false,
+                notes: '',
+                status: 'active',
+                severity: '',
+                onsetDate: '',
+                resolvedDate: ''
+              });
+            }}
+          >
+            Abbrechen
+          </Button>
+          <Button
+            onClick={handleSaveDiagnosisEdit}
+            variant="contained"
+          >
+            Speichern
+          </Button>
+        </DialogActions>
       </Dialog>
     </Dialog>
   );

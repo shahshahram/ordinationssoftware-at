@@ -5,6 +5,8 @@ const DekursEntry = require('../models/DekursEntry');
 const DekursVorlage = require('../models/DekursVorlage');
 const PatientExtended = require('../models/PatientExtended');
 const Appointment = require('../models/Appointment');
+const PatientDiagnosis = require('../models/PatientDiagnosis');
+const Icd10Catalog = require('../models/Icd10Catalog');
 const auth = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
@@ -42,6 +44,362 @@ const photoUpload = multer({
   }
 });
 
+/**
+ * Normalisiert encounterId zu einem String (falls es ein Objekt ist)
+ */
+const normalizeEncounterId = (encounterId) => {
+  if (!encounterId) return undefined;
+  if (typeof encounterId === 'string') return encounterId;
+  if (typeof encounterId === 'object' && encounterId._id) return encounterId._id.toString();
+  return encounterId.toString();
+};
+
+/**
+ * Synchronisiert linkedDiagnoses aus Dekurs-Eintrag mit PatientDiagnosis
+ * Erstellt oder aktualisiert Diagnosen in den medizinischen Daten
+ */
+const syncDiagnosesToPatientDiagnosis = async (linkedDiagnoses, patientId, encounterId, userId) => {
+  if (!linkedDiagnoses || linkedDiagnoses.length === 0) {
+    return [];
+  }
+
+  // Normalisiere encounterId zu einem String
+  const normalizedEncounterId = normalizeEncounterId(encounterId);
+
+  const syncedDiagnoses = [];
+
+  for (const diag of linkedDiagnoses) {
+    if (!diag.icd10Code) {
+      // Überspringe Diagnosen ohne ICD-10 Code
+      syncedDiagnoses.push(diag);
+      continue;
+    }
+
+    try {
+      // Bestimme catalogYear (Standard: aktuelles Jahr)
+      const catalogYear = diag.catalogYear || new Date().getFullYear();
+
+      // Prüfe ob ICD-10 Code im Katalog existiert
+      let icdCode = null;
+      try {
+        icdCode = await Icd10Catalog.findOne({
+          code: diag.icd10Code,
+          releaseYear: catalogYear
+        });
+      } catch (icdLookupError) {
+        console.warn(`Fehler beim Nachschlagen des ICD-10 Codes ${diag.icd10Code}:`, icdLookupError);
+      }
+
+      // Wenn diagnosisId vorhanden, versuche zuerst die bestehende Diagnose zu laden
+      let patientDiagnosis = null;
+      if (diag.diagnosisId && mongoose.Types.ObjectId.isValid(diag.diagnosisId)) {
+        try {
+          patientDiagnosis = await PatientDiagnosis.findById(diag.diagnosisId);
+          
+          if (patientDiagnosis && patientDiagnosis.patientId.toString() === patientId) {
+            // Diagnose gefunden und gehört zum Patienten
+          } else {
+            // Diagnose existiert nicht oder gehört nicht zu diesem Patienten
+            patientDiagnosis = null;
+          }
+        } catch (loadError) {
+          console.warn(`Fehler beim Laden der bestehenden Diagnose ${diag.diagnosisId}:`, loadError);
+          patientDiagnosis = null;
+        }
+      }
+
+      // Bestimme display: Verwende diag.display, oder hole aus bestehender Diagnose, oder aus ICD-Katalog
+      let displayText = '';
+      if (diag.display && diag.display.trim() !== '') {
+        displayText = diag.display.trim();
+      } else if (patientDiagnosis && patientDiagnosis.display && patientDiagnosis.display.trim() !== '') {
+        displayText = patientDiagnosis.display.trim();
+      } else if (icdCode && icdCode.title && icdCode.title.trim() !== '') {
+        displayText = icdCode.title.trim();
+      } else {
+        displayText = diag.icd10Code || 'Unbekannte Diagnose';
+      }
+      
+      // Stelle sicher, dass displayText nicht leer ist
+      if (!displayText || displayText.trim() === '') {
+        displayText = diag.icd10Code || 'Unbekannte Diagnose';
+      }
+      
+      console.log(`🔍 syncDiagnosesToPatientDiagnosis - displayText für ${diag.icd10Code}:`, displayText);
+
+      // Wenn kein ICD-Code gefunden wurde, aber eine diagnosisId vorhanden ist, verwende die bestehende Diagnose
+      if (!icdCode && patientDiagnosis) {
+        // Aktualisiere nur die Felder, die nicht vom ICD-Katalog abhängen
+        try {
+          patientDiagnosis.status = diag.status || patientDiagnosis.status || 'active';
+          patientDiagnosis.severity = diag.severity || patientDiagnosis.severity || undefined;
+          patientDiagnosis.isPrimary = diag.isPrimary !== undefined ? diag.isPrimary : patientDiagnosis.isPrimary;
+          patientDiagnosis.onsetDate = diag.onsetDate ? new Date(diag.onsetDate) : patientDiagnosis.onsetDate;
+          patientDiagnosis.resolvedDate = diag.resolvedDate ? new Date(diag.resolvedDate) : patientDiagnosis.resolvedDate;
+          patientDiagnosis.notes = diag.notes !== undefined ? diag.notes : patientDiagnosis.notes;
+          patientDiagnosis.lastModifiedBy = userId;
+          patientDiagnosis.encounterId = normalizedEncounterId || patientDiagnosis.encounterId;
+
+          // Wenn Hauptdiagnose, setze andere auf false
+          if (diag.isPrimary && normalizedEncounterId) {
+            await PatientDiagnosis.updateMany(
+              { 
+                encounterId: normalizedEncounterId, 
+                isPrimary: true,
+                _id: { $ne: patientDiagnosis._id }
+              },
+              { isPrimary: false }
+            );
+          }
+
+          await patientDiagnosis.save();
+          
+          // Füge diagnosisId zur linkedDiagnosis hinzu
+          syncedDiagnoses.push({
+            ...diag,
+            diagnosisId: patientDiagnosis._id.toString(),
+            display: displayText
+          });
+          continue;
+        } catch (updateError) {
+          console.error(`Fehler beim Aktualisieren der bestehenden Diagnose ohne ICD-Code:`, updateError);
+          // Bei Fehler füge Diagnose ohne diagnosisId hinzu
+          syncedDiagnoses.push({
+            ...diag,
+            display: displayText
+          });
+          continue;
+        }
+      }
+
+      // Wenn kein ICD-Code gefunden wurde und keine bestehende Diagnose, füge Diagnose ohne Synchronisation hinzu
+      if (!icdCode) {
+        console.warn(`ICD-10 Code ${diag.icd10Code} für Jahr ${catalogYear} nicht gefunden, Diagnose wird nicht synchronisiert, bleibt aber im Dekurs-Eintrag`);
+        syncedDiagnoses.push({
+          ...diag,
+          display: displayText
+        });
+        continue;
+      }
+      
+      // Ab hier ist icdCode vorhanden, normale Synchronisation
+      // Wenn diagnosisId vorhanden, aber noch nicht geladen, lade sie jetzt
+      if (diag.diagnosisId && mongoose.Types.ObjectId.isValid(diag.diagnosisId) && !patientDiagnosis) {
+        try {
+          patientDiagnosis = await PatientDiagnosis.findById(diag.diagnosisId);
+          
+          if (patientDiagnosis && patientDiagnosis.patientId.toString() === patientId) {
+            // Wenn display leer ist, verwende den bestehenden display
+            if (!displayText || displayText.trim() === '' || displayText === diag.icd10Code) {
+              displayText = patientDiagnosis.display || displayText || diag.icd10Code;
+            }
+            
+            // Stelle sicher, dass displayText nicht leer ist
+            if (!displayText || displayText.trim() === '') {
+              displayText = icdCode?.title || diag.icd10Code || 'Unbekannte Diagnose';
+            }
+            
+            console.log(`🔍 syncDiagnosesToPatientDiagnosis - Aktualisiere bestehende Diagnose ${diag.diagnosisId} mit display:`, displayText);
+            
+            // Aktualisiere bestehende Diagnose
+            patientDiagnosis.code = diag.icd10Code;
+            patientDiagnosis.display = displayText.trim();
+            patientDiagnosis.catalogYear = catalogYear;
+            patientDiagnosis.status = diag.status || 'active';
+            patientDiagnosis.severity = diag.severity || undefined;
+            patientDiagnosis.isPrimary = diag.isPrimary || false;
+            patientDiagnosis.onsetDate = diag.onsetDate ? new Date(diag.onsetDate) : undefined;
+            patientDiagnosis.resolvedDate = diag.resolvedDate ? new Date(diag.resolvedDate) : undefined;
+            patientDiagnosis.notes = diag.notes || undefined;
+            // Konvertiere 'template' zu 'clinical', da 'template' nicht im enum ist
+            const source = diag.source === 'template' ? 'clinical' : (diag.source || 'clinical');
+            patientDiagnosis.source = source;
+            patientDiagnosis.lastModifiedBy = userId;
+            patientDiagnosis.encounterId = normalizedEncounterId || undefined;
+
+            // Wenn Hauptdiagnose, setze andere auf false
+            if (diag.isPrimary && normalizedEncounterId) {
+              await PatientDiagnosis.updateMany(
+                { 
+                  encounterId: normalizedEncounterId, 
+                  isPrimary: true,
+                  _id: { $ne: patientDiagnosis._id }
+                },
+                { isPrimary: false }
+              );
+            }
+
+            try {
+              await patientDiagnosis.save();
+              console.log(`✅ syncDiagnosesToPatientDiagnosis - PatientDiagnosis erfolgreich aktualisiert:`, patientDiagnosis._id);
+            } catch (saveError) {
+              console.error(`❌ syncDiagnosesToPatientDiagnosis - Fehler beim Speichern der aktualisierten PatientDiagnosis:`, saveError);
+              console.error(`❌ saveError-Stack:`, saveError.stack);
+              console.error(`❌ saveError-Details:`, {
+                name: saveError.name,
+                message: saveError.message,
+                errors: saveError.errors
+              });
+              throw saveError; // Re-throw, damit der äußere catch-Block es abfängt
+            }
+          } else {
+            // Diagnose existiert nicht oder gehört nicht zu diesem Patienten, erstelle neue
+            console.warn(`⚠️ syncDiagnosesToPatientDiagnosis - Diagnose ${diag.diagnosisId} existiert nicht oder gehört nicht zu Patient ${patientId}`);
+            patientDiagnosis = null;
+          }
+        } catch (updateError) {
+          console.error(`❌ syncDiagnosesToPatientDiagnosis - Fehler beim Aktualisieren der bestehenden Diagnose ${diag.diagnosisId}:`, updateError);
+          console.error('❌ Update-Error-Stack:', updateError.stack);
+          console.error('❌ Update-Error-Details:', {
+            name: updateError.name,
+            message: updateError.message,
+            errors: updateError.errors
+          });
+          // Bei Fehler beim Aktualisieren, versuche neue Diagnose zu erstellen
+          patientDiagnosis = null;
+        }
+      }
+
+      // Wenn keine diagnosisId oder Diagnose nicht gefunden, erstelle neue
+      if (!patientDiagnosis) {
+        // Prüfe ob bereits eine Diagnose mit diesem Code für diesen Patienten existiert
+        const existingDiagnosis = await PatientDiagnosis.findOne({
+          patientId,
+          code: diag.icd10Code,
+          catalogYear
+        });
+
+        if (existingDiagnosis) {
+          // Wenn display leer ist, verwende den bestehenden display
+          if (!diag.display || diag.display.trim() === '') {
+            displayText = existingDiagnosis.display;
+          }
+          
+          // Aktualisiere bestehende Diagnose
+          existingDiagnosis.display = displayText;
+          existingDiagnosis.status = diag.status || 'active';
+          existingDiagnosis.severity = diag.severity || undefined;
+          existingDiagnosis.isPrimary = diag.isPrimary || false;
+          existingDiagnosis.onsetDate = diag.onsetDate ? new Date(diag.onsetDate) : undefined;
+          existingDiagnosis.resolvedDate = diag.resolvedDate ? new Date(diag.resolvedDate) : undefined;
+          existingDiagnosis.notes = diag.notes || undefined;
+          // Konvertiere 'template' zu 'clinical', da 'template' nicht im enum ist
+          const source = diag.source === 'template' ? 'clinical' : (diag.source || 'clinical');
+          existingDiagnosis.source = source;
+          existingDiagnosis.lastModifiedBy = userId;
+          existingDiagnosis.encounterId = normalizedEncounterId || existingDiagnosis.encounterId;
+
+          // Wenn Hauptdiagnose, setze andere auf false
+          if (diag.isPrimary && normalizedEncounterId) {
+            await PatientDiagnosis.updateMany(
+              { 
+                encounterId: normalizedEncounterId, 
+                isPrimary: true,
+                _id: { $ne: existingDiagnosis._id }
+              },
+              { isPrimary: false }
+            );
+          }
+
+          await existingDiagnosis.save();
+          patientDiagnosis = existingDiagnosis;
+        } else {
+          // Erstelle neue Diagnose
+          // Wenn Hauptdiagnose, setze andere auf false
+          if (diag.isPrimary && normalizedEncounterId) {
+            await PatientDiagnosis.updateMany(
+              { encounterId: normalizedEncounterId, isPrimary: true },
+              { isPrimary: false }
+            );
+          }
+
+          // Stelle sicher, dass displayText nicht leer ist, bevor wir PatientDiagnosis erstellen
+          if (!displayText || displayText.trim() === '') {
+            console.warn(`⚠️ displayText ist leer für ${diag.icd10Code}, verwende Fallback`);
+            displayText = diag.icd10Code || 'Unbekannte Diagnose';
+          }
+          
+          console.log(`🔍 syncDiagnosesToPatientDiagnosis - Erstelle neue PatientDiagnosis für ${diag.icd10Code} mit display:`, displayText);
+          
+          patientDiagnosis = new PatientDiagnosis({
+            patientId,
+            encounterId: normalizedEncounterId || undefined,
+            code: diag.icd10Code,
+            catalogYear,
+            display: displayText.trim(),
+            status: diag.status || 'active',
+            severity: diag.severity || undefined,
+            isPrimary: diag.isPrimary || false,
+            onsetDate: diag.onsetDate ? new Date(diag.onsetDate) : undefined,
+            resolvedDate: diag.resolvedDate ? new Date(diag.resolvedDate) : undefined,
+            notes: diag.notes || undefined,
+            source: diag.source === 'template' ? 'clinical' : (diag.source || 'clinical'),
+            createdBy: userId,
+            lastModifiedBy: userId
+          });
+
+          try {
+            await patientDiagnosis.save();
+            console.log(`✅ syncDiagnosesToPatientDiagnosis - PatientDiagnosis erfolgreich erstellt:`, patientDiagnosis._id);
+          } catch (saveError) {
+            console.error(`❌ syncDiagnosesToPatientDiagnosis - Fehler beim Speichern der neuen PatientDiagnosis:`, saveError);
+            console.error(`❌ saveError-Stack:`, saveError.stack);
+            console.error(`❌ saveError-Details:`, {
+              name: saveError.name,
+              message: saveError.message,
+              errors: saveError.errors
+            });
+            throw saveError; // Re-throw, damit der äußere catch-Block es abfängt
+          }
+        }
+      }
+
+      // Füge diagnosisId zur linkedDiagnosis hinzu
+      if (patientDiagnosis && patientDiagnosis._id) {
+        syncedDiagnoses.push({
+          ...diag,
+          diagnosisId: patientDiagnosis._id.toString(),
+          display: displayText // Stelle sicher, dass display gesetzt ist
+        });
+      } else {
+        // Fallback: Wenn patientDiagnosis nicht gesetzt wurde, füge Diagnose ohne diagnosisId hinzu
+        console.warn(`PatientDiagnosis konnte nicht erstellt/aktualisiert werden für ${diag.icd10Code}`);
+        syncedDiagnoses.push({
+          ...diag,
+          display: displayText
+        });
+      }
+    } catch (error) {
+      console.error(`Fehler beim Synchronisieren der Diagnose ${diag.icd10Code}:`, error);
+      console.error('Fehler-Stack:', error.stack);
+      console.error('Diagnose-Daten:', JSON.stringify(diag, null, 2));
+      
+      // Versuche display aus ICD-Katalog zu holen
+      let fallbackDisplay = diag.icd10Code || 'Unbekannte Diagnose';
+      try {
+        const catalogYear = diag.catalogYear || new Date().getFullYear();
+        const icdCode = await Icd10Catalog.findOne({
+          code: diag.icd10Code,
+          releaseYear: catalogYear
+        });
+        if (icdCode && icdCode.title) {
+          fallbackDisplay = icdCode.title;
+        }
+      } catch (lookupError) {
+        console.error('Fehler beim Nachschlagen des ICD-Codes:', lookupError);
+      }
+      
+      // Bei Fehler füge Diagnose ohne diagnosisId hinzu, aber mit display
+      syncedDiagnoses.push({
+        ...diag,
+        display: diag.display && diag.display.trim() !== '' ? diag.display : fallbackDisplay
+      });
+    }
+  }
+
+  return syncedDiagnoses;
+};
+
 // @route   POST /api/dekurs
 // @desc    Neuen Dekurs-Eintrag erstellen
 // @access  Private
@@ -72,7 +430,13 @@ router.post('/', auth, [
       linkedDiagnoses,
       linkedMedications,
       linkedDocuments,
-      templateId
+      templateId,
+      imagingFindings,
+      laboratoryFindings,
+      linkedDicomStudies,
+      linkedRadiologyReports,
+      linkedLaborResults,
+      templateUsed
     } = req.body;
 
     // Prüfe ob Patient existiert
@@ -134,15 +498,31 @@ router.post('/', auth, [
       }
     }
 
-    // Bereinige linkedDiagnoses: Entferne leere diagnosisId-Werte
-    const cleanedLinkedDiagnoses = (linkedDiagnoses || []).map(diag => {
+    // Synchronisiere linkedDiagnoses mit PatientDiagnosis
+    const syncedLinkedDiagnoses = await syncDiagnosesToPatientDiagnosis(
+      linkedDiagnoses || [],
+      patientId,
+      finalEncounterId,
+      req.user.id
+    );
+
+    // Bereinige linkedDiagnoses: Behalte alle Felder aus der Synchronisation
+    const cleanedLinkedDiagnoses = syncedLinkedDiagnoses.map(diag => {
       const cleaned = {
         icd10Code: diag.icd10Code || '',
         display: diag.display || '',
-        side: diag.side && ['left', 'right', 'bilateral'].includes(diag.side) ? diag.side : ''
+        side: diag.side && ['left', 'right', 'bilateral'].includes(diag.side) ? diag.side : '',
+        isPrimary: diag.isPrimary || false,
+        status: diag.status || 'active',
+        severity: diag.severity || undefined,
+        onsetDate: diag.onsetDate || undefined,
+        resolvedDate: diag.resolvedDate || undefined,
+        catalogYear: diag.catalogYear || new Date().getFullYear(),
+        source: diag.source || 'clinical',
+        notes: diag.notes || undefined
       };
-      // Nur diagnosisId hinzufügen, wenn es nicht leer ist und eine gültige ObjectId ist
-      if (diag.diagnosisId && diag.diagnosisId.trim() !== '' && mongoose.Types.ObjectId.isValid(diag.diagnosisId)) {
+      // Füge diagnosisId hinzu, wenn vorhanden
+      if (diag.diagnosisId && mongoose.Types.ObjectId.isValid(diag.diagnosisId)) {
         cleaned.diagnosisId = diag.diagnosisId;
       }
       return cleaned;
@@ -166,7 +546,7 @@ router.post('/', auth, [
       });
 
     // Erstelle Dekurs-Eintrag
-    const dekursEntry = new DekursEntry({
+    const dekursEntryData = {
       patientId,
       encounterId: finalEncounterId || undefined,
       entryDate: entryDate ? new Date(entryDate) : new Date(),
@@ -184,9 +564,40 @@ router.post('/', auth, [
       linkedMedications: cleanedLinkedMedications,
       linkedDocuments: linkedDocuments || [],
       templateId: template ? template._id : undefined,
-      templateName: template ? template.name : undefined,
+      templateName: template ? (template.title || template.name) : undefined,
       status: 'draft'
-    });
+    };
+
+    // Neue Felder hinzufügen
+    if (imagingFindings !== undefined) dekursEntryData.imagingFindings = imagingFindings;
+    if (laboratoryFindings !== undefined) dekursEntryData.laboratoryFindings = laboratoryFindings;
+    if (linkedDicomStudies !== undefined) dekursEntryData.linkedDicomStudies = linkedDicomStudies;
+    if (linkedRadiologyReports !== undefined) dekursEntryData.linkedRadiologyReports = linkedRadiologyReports;
+    if (linkedLaborResults !== undefined) dekursEntryData.linkedLaborResults = linkedLaborResults;
+    
+    // TemplateUsed hinzufügen wenn Vorlage verwendet wurde
+    if (template && templateUsed) {
+      dekursEntryData.templateUsed = {
+        templateId: template._id,
+        templateName: template.title || template.name,
+        templateVersion: template.version || 1,
+        insertedAt: new Date(),
+        modified: false,
+        originalFields: {
+          visitReason: template.template?.visitReason || '',
+          clinicalObservations: template.template?.clinicalObservations || '',
+          findings: template.template?.findings || '',
+          progressChecks: template.template?.progressChecks || '',
+          treatmentDetails: template.template?.treatmentDetails || '',
+          notes: template.template?.notes || '',
+          psychosocialFactors: template.template?.psychosocialFactors || ''
+        }
+      };
+    } else if (templateUsed) {
+      dekursEntryData.templateUsed = templateUsed;
+    }
+
+    const dekursEntry = new DekursEntry(dekursEntryData);
 
     await dekursEntry.save();
 
@@ -673,7 +1084,13 @@ router.put('/:id', auth, [
       'notes',
       'visitReason',
       'visitType',
-      'linkedDocuments'
+      'linkedDocuments',
+      'imagingFindings',
+      'laboratoryFindings',
+      'linkedDicomStudies',
+      'linkedRadiologyReports',
+      'linkedLaborResults',
+      'templateUsed'
     ];
 
     updatableFields.forEach(field => {
@@ -682,21 +1099,65 @@ router.put('/:id', auth, [
       }
     });
 
-    // Bereinige und aktualisiere linkedDiagnoses
+    // Synchronisiere und aktualisiere linkedDiagnoses
     if (req.body.linkedDiagnoses !== undefined) {
-      const cleanedLinkedDiagnoses = (req.body.linkedDiagnoses || []).map(diag => {
+      // Bestimme encounterId: Verwende das aus dem Request-Body oder aus dem bestehenden Eintrag
+      let finalEncounterId = undefined;
+      if (req.body.encounterId) {
+        // Wenn encounterId im Request-Body ist, extrahiere die ID (kann Objekt oder String sein)
+        if (typeof req.body.encounterId === 'object' && req.body.encounterId._id) {
+          finalEncounterId = req.body.encounterId._id.toString();
+        } else if (typeof req.body.encounterId === 'string') {
+          finalEncounterId = req.body.encounterId;
+        } else {
+          finalEncounterId = req.body.encounterId.toString();
+        }
+      } else if (dekursEntry.encounterId) {
+        // Wenn encounterId aus der Datenbank kommt, konvertiere es zu String
+        finalEncounterId = dekursEntry.encounterId.toString();
+      }
+      
+      console.log('🔍 PUT /api/dekurs/:id - finalEncounterId:', finalEncounterId);
+      console.log('🔍 PUT /api/dekurs/:id - linkedDiagnoses:', JSON.stringify(req.body.linkedDiagnoses, null, 2));
+      
+      try {
+        // Synchronisiere linkedDiagnoses mit PatientDiagnosis
+        const syncedLinkedDiagnoses = await syncDiagnosesToPatientDiagnosis(
+          req.body.linkedDiagnoses || [],
+          dekursEntry.patientId.toString(),
+          finalEncounterId,
+          req.user.id
+        );
+        
+        console.log('🔍 PUT /api/dekurs/:id - syncedLinkedDiagnoses:', JSON.stringify(syncedLinkedDiagnoses, null, 2));
+
+      // Bereinige linkedDiagnoses: Behalte alle Felder aus der Synchronisation
+      const cleanedLinkedDiagnoses = syncedLinkedDiagnoses.map(diag => {
         const cleaned = {
           icd10Code: diag.icd10Code || '',
           display: diag.display || '',
-          side: diag.side && ['left', 'right', 'bilateral'].includes(diag.side) ? diag.side : ''
+          side: diag.side && ['left', 'right', 'bilateral'].includes(diag.side) ? diag.side : '',
+          isPrimary: diag.isPrimary || false,
+          status: diag.status || 'active',
+          severity: diag.severity || undefined,
+          onsetDate: diag.onsetDate || undefined,
+          resolvedDate: diag.resolvedDate || undefined,
+          catalogYear: diag.catalogYear || new Date().getFullYear(),
+          source: diag.source || 'clinical',
+          notes: diag.notes || undefined
         };
-        // Nur diagnosisId hinzufügen, wenn es nicht leer ist und eine gültige ObjectId ist
-        if (diag.diagnosisId && diag.diagnosisId.trim() !== '' && mongoose.Types.ObjectId.isValid(diag.diagnosisId)) {
+        // Füge diagnosisId hinzu, wenn vorhanden
+        if (diag.diagnosisId && mongoose.Types.ObjectId.isValid(diag.diagnosisId)) {
           cleaned.diagnosisId = diag.diagnosisId;
         }
         return cleaned;
       });
       dekursEntry.linkedDiagnoses = cleanedLinkedDiagnoses;
+      } catch (syncError) {
+        console.error('🔍 PUT /api/dekurs/:id - Fehler bei syncDiagnosesToPatientDiagnosis:', syncError);
+        console.error('🔍 PUT /api/dekurs/:id - Sync-Error-Stack:', syncError.stack);
+        throw syncError; // Re-throw, damit der Haupt-Fehlerhandler es abfängt
+      }
     }
 
     // Bereinige und aktualisiere linkedMedications
@@ -719,7 +1180,22 @@ router.put('/:id', auth, [
       dekursEntry.linkedMedications = cleanedLinkedMedications;
     }
 
-    await dekursEntry.save();
+    try {
+      await dekursEntry.save();
+      console.log('✅ PUT /api/dekurs/:id - Dekurs-Eintrag erfolgreich gespeichert');
+    } catch (saveError) {
+      console.error('❌ PUT /api/dekurs/:id - Fehler beim Speichern des Dekurs-Eintrags:', saveError);
+      console.error('❌ Save-Error-Stack:', saveError.stack);
+      console.error('❌ Save-Error-Details:', {
+        name: saveError.name,
+        message: saveError.message,
+        errors: saveError.errors,
+        code: saveError.code,
+        keyPattern: saveError.keyPattern,
+        keyValue: saveError.keyValue
+      });
+      throw saveError; // Re-throw, damit der Haupt-Fehlerhandler es abfängt
+    }
 
     await dekursEntry.populate([
       { path: 'createdBy', select: 'firstName lastName title' },
@@ -733,8 +1209,53 @@ router.put('/:id', auth, [
       data: dekursEntry
     });
   } catch (error) {
-    console.error('Fehler beim Aktualisieren des Dekurs-Eintrags:', error);
-    res.status(500).json({ success: false, message: 'Server-Fehler', error: error.message });
+    console.error('❌ Fehler beim Aktualisieren des Dekurs-Eintrags:', error);
+    console.error('❌ Fehler-Stack:', error.stack);
+    console.error('❌ Fehler-Details:', {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      keyPattern: error.keyPattern,
+      keyValue: error.keyValue,
+      errors: error.errors // Mongoose validation errors
+    });
+    console.error('❌ Request-Body:', JSON.stringify(req.body, null, 2));
+    console.error('❌ Dekurs-Eintrag-ID:', req.params.id);
+    
+    // Wenn es ein Mongoose-Validierungsfehler ist, gib mehr Details zurück
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.keys(error.errors || {}).map(key => ({
+        field: key,
+        message: error.errors[key].message
+      }));
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: validationErrors,
+        error: error.message,
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    }
+    
+    // Wenn es ein Duplicate Key Error ist
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: 'Eindeutigkeitsfehler',
+        error: error.message,
+        duplicateField: error.keyPattern ? Object.keys(error.keyPattern)[0] : undefined,
+        duplicateValue: error.keyValue
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      message: 'Server-Fehler', 
+      error: error.message,
+      errorName: error.name,
+      errorCode: error.code,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
