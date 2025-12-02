@@ -186,7 +186,7 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
       setFormData(prev => ({
         ...prev,
         appointmentId: appointmentId,
-        patientId: appointment.patient._id,
+        patientId: appointment.patient?._id || appointment.patientId || '',
         serviceDatetime: new Date(appointment.startTime).toISOString().slice(0, 16)
       }));
     }
@@ -275,7 +275,7 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
                   {appointments.map((appointment: any) => (
                     <MenuItem key={appointment._id} value={appointment._id}>
                       {new Date(appointment.startTime).toLocaleDateString('de-DE')} - 
-                      {appointment.patient.firstName} {appointment.patient.lastName}
+                      {appointment.patient ? `${appointment.patient.firstName || ''} ${appointment.patient.lastName || ''}`.trim() || 'Unbekannter Patient' : 'Unbekannter Patient'}
                     </MenuItem>
                   ))}
                 </Select>

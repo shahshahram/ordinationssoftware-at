@@ -54,6 +54,14 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         if (widget.widgetId === 'tasks' || widget.widgetId === 'todos') {
           return <TasksWidget widget={widget} data={data} />;
         }
+        if (widget.widgetId === 'reimbursements') {
+          const ReimbursementsWidget = require('./ReimbursementsWidget').default;
+          return <ReimbursementsWidget widget={widget} data={data} />;
+        }
+        if (widget.widgetId === 'ogk-status') {
+          const OGKStatusWidget = require('./OGKStatusWidget').default;
+          return <OGKStatusWidget widget={widget} data={data} />;
+        }
         return (
           <Box sx={{ p: 2 }}>
             <Typography variant="body2" color="text.secondary">

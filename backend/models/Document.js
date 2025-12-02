@@ -185,11 +185,29 @@ const DocumentSchema = new mongoose.Schema({
     reason: { type: String }
   }],
   
+  // Standort
+  locationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Location',
+    required: false
+  },
+  
   // Metadaten
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   dueDate: { type: Date },
-  completedDate: { type: Date }
+  completedDate: { type: Date },
+  
+  // Optimistic Locking: Version für gleichzeitige Bearbeitungen
+  optimisticLockVersion: {
+    type: Number,
+    default: 0,
+    index: true
+  },
+  lastModifiedAt: {
+    type: Date,
+    default: Date.now
+  }
 }, {
   timestamps: true,
   toJSON: { virtuals: true },
@@ -203,6 +221,12 @@ DocumentSchema.pre('save', async function(next) {
     const year = new Date().getFullYear();
     const typePrefix = this.type.toUpperCase().substring(0, 3);
     this.documentNumber = `${typePrefix}-${year}-${String(count + 1).padStart(6, '0')}`;
+  }
+  
+  // Optimistic Locking: Version bei jeder Änderung erhöhen
+  if (this.isModified() && !this.isNew) {
+    this.optimisticLockVersion = (this.optimisticLockVersion || 0) + 1;
+    this.lastModifiedAt = new Date();
   }
   
   // Automatische Klassifizierung beim ersten Speichern (NEU)
@@ -281,6 +305,23 @@ DocumentSchema.methods.canBeEdited = function() {
  */
 DocumentSchema.methods.requiresNewVersion = function() {
   return this.isReleased && this.status === 'released';
+};
+
+/**
+ * Prüft ob die Optimistic Lock Version übereinstimmt (NEU)
+ * @param {Number} expectedVersion - Die erwartete Version
+ * @returns {Boolean} - true wenn Version übereinstimmt
+ */
+DocumentSchema.methods.isVersionValid = function(expectedVersion) {
+  return this.optimisticLockVersion === expectedVersion;
+};
+
+/**
+ * Gibt die aktuelle Optimistic Lock Version zurück (NEU)
+ * @returns {Number} - Aktuelle Version
+ */
+DocumentSchema.methods.getLockVersion = function() {
+  return this.optimisticLockVersion || 0;
 };
 
 module.exports = mongoose.model('Document', DocumentSchema);

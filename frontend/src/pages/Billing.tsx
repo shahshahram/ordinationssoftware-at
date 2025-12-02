@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import api from '../utils/api';
 import { 
   fetchInvoices, 
   fetchServices, 
@@ -73,6 +75,7 @@ import {
 } from '@mui/icons-material';
 
 const Billing: React.FC = () => {
+  const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { invoices, services, loading, error, statistics } = useAppSelector((state) => state.billing);
   const { patients } = useAppSelector((state) => state.patients);
@@ -121,6 +124,11 @@ const Billing: React.FC = () => {
   const [loadingRKSVO, setLoadingRKSVO] = useState(false);
   const [loadingOGK, setLoadingOGK] = useState(false);
   const [quickServices, setQuickServices] = useState<Service[]>([]);
+  const [turnusDialogOpen, setTurnusDialogOpen] = useState(false);
+  const [turnusData, setTurnusData] = useState<any>(null);
+  const [loadingTurnus, setLoadingTurnus] = useState(false);
+  const [calculationResult, setCalculationResult] = useState<any>(null);
+  const [showCalculation, setShowCalculation] = useState(false);
 
   // Load data
   useEffect(() => {
@@ -190,11 +198,37 @@ const Billing: React.FC = () => {
     setOpenDialog(true);
   };
 
-  const handleView = (invoice: Invoice) => {
-    setFormData(invoice);
-    setDialogMode('view');
-    setActiveTab(0);
-    setOpenDialog(true);
+  const handleView = async (invoice: Invoice) => {
+    try {
+      // Lade vollständige Rechnungsdetails von der API
+      const token = localStorage.getItem('token');
+      const response = await api.get<any>(`/billing/invoices/${invoice._id || invoice.id}`);
+      
+      if (response.success && response.data) {
+        setFormData(response.data);
+        setDialogMode('view');
+        setActiveTab(0);
+        setOpenDialog(true);
+      } else {
+        // Fallback auf vorhandene Daten
+        setFormData(invoice);
+        setDialogMode('view');
+        setActiveTab(0);
+        setOpenDialog(true);
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Laden der Rechnungsdetails:', error);
+      // Fallback auf vorhandene Daten
+      setFormData(invoice);
+      setDialogMode('view');
+      setActiveTab(0);
+      setOpenDialog(true);
+      setSnackbar({
+        open: true,
+        message: 'Rechnungsdetails konnten nicht vollständig geladen werden',
+        severity: 'warning'
+      });
+    }
   };
 
   const handlePrintInvoice = async (invoice: Invoice) => {
@@ -403,21 +437,94 @@ const Billing: React.FC = () => {
     }));
   };
 
-  const handleServiceAdd = (service: Service) => {
-    const newService = {
-      date: new Date(),
-      serviceCode: service.code,
-      description: service.name,
-      quantity: 1,
-      unitPrice: service.prices.privat,
-      totalPrice: service.prices.privat,
-      category: service.category
-    };
-    
-    setFormData(prev => ({
-      ...prev,
-      services: [...(prev.services || []), newService]
-    }));
+  const handleServiceAdd = async (service: Service) => {
+    // Wenn Patient und Abrechnungstyp vorhanden, automatische Berechnung durchführen
+    if (formData.patient?.id && formData.billingType) {
+      try {
+        const calculation = await handleCalculateBilling(
+          formData.patient.id,
+          service.code,
+          formData.billingType
+        );
+        
+        if (calculation) {
+          const newService = {
+            date: new Date(),
+            serviceCode: service.code,
+            description: service.name,
+            quantity: 1,
+            unitPrice: calculation.grossAmount || service.prices?.privat || 0,
+            totalPrice: calculation.grossAmount || service.prices?.privat || 0,
+            category: service.category,
+            calculation: calculation // Speichere Berechnungsergebnis
+          };
+          
+          setFormData(prev => ({
+            ...prev,
+            services: [...(prev.services || []), newService],
+            subtotal: (prev.subtotal || 0) + newService.totalPrice,
+            totalAmount: (prev.totalAmount || 0) + newService.totalPrice
+          }));
+          
+          // Zeige Warnungen falls vorhanden
+          if (calculation.warnings && calculation.warnings.length > 0) {
+            setSnackbar({
+              open: true,
+              message: calculation.warnings.join(', '),
+              severity: 'warning'
+            });
+          }
+        } else {
+          // Fallback auf Standard-Preis
+          const newService = {
+            date: new Date(),
+            serviceCode: service.code,
+            description: service.name,
+            quantity: 1,
+            unitPrice: service.prices?.privat || 0,
+            totalPrice: service.prices?.privat || 0,
+            category: service.category
+          };
+          
+          setFormData(prev => ({
+            ...prev,
+            services: [...(prev.services || []), newService]
+          }));
+        }
+      } catch (error) {
+        // Fallback auf Standard-Preis bei Fehler
+        const newService = {
+          date: new Date(),
+          serviceCode: service.code,
+          description: service.name,
+          quantity: 1,
+          unitPrice: service.prices?.privat || 0,
+          totalPrice: service.prices?.privat || 0,
+          category: service.category
+        };
+        
+        setFormData(prev => ({
+          ...prev,
+          services: [...(prev.services || []), newService]
+        }));
+      }
+    } else {
+      // Keine automatische Berechnung möglich, Standard-Preis verwenden
+      const newService = {
+        date: new Date(),
+        serviceCode: service.code,
+        description: service.name,
+        quantity: 1,
+        unitPrice: service.prices?.privat || 0,
+        totalPrice: service.prices?.privat || 0,
+        category: service.category
+      };
+      
+      setFormData(prev => ({
+        ...prev,
+        services: [...(prev.services || []), newService]
+      }));
+    }
   };
 
   const handleQuickBill = (service: Service) => {
@@ -529,6 +636,101 @@ const Billing: React.FC = () => {
     }
   };
 
+  const handleExportInsurance = async (invoice: Invoice, insuranceProvider: string) => {
+    try {
+      setLoadingOGK(true);
+      const response = await api.get(`/insurance-billing/export/${invoice._id || invoice.id}`, {
+        responseType: 'blob'
+      } as any);
+      
+      if (response.success) {
+        const blob = response.data instanceof Blob ? response.data : new Blob([response.data as BlobPart]);
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${insuranceProvider.toLowerCase()}-invoice-${invoice?.invoiceNumber || 'unbekannt'}.xml`;
+        a.click();
+        setSnackbar({ open: true, message: `${insuranceProvider}-XML erfolgreich exportiert!`, severity: 'success' });
+      }
+    } catch (error: any) {
+      setSnackbar({ open: true, message: `Fehler beim Export des ${insuranceProvider}-XML`, severity: 'error' });
+    } finally {
+      setLoadingOGK(false);
+    }
+  };
+
+  // Berechnungsfunktion für automatische Preisberechnung
+  const handleCalculateBilling = async (patientId: string, serviceCode: string, billingType: string) => {
+    try {
+      const response = await api.post<any>('/billing/calculate', {
+        patientId,
+        serviceCode,
+        billingType
+      });
+
+      if (response.success && response.data) {
+        setCalculationResult(response.data);
+        setShowCalculation(true);
+        return response.data;
+      }
+    } catch (error: any) {
+      console.error('Berechnungsfehler:', error);
+      setSnackbar({
+        open: true,
+        message: error?.message || 'Fehler bei der Berechnung',
+        severity: 'error'
+      });
+    }
+    return null;
+  };
+
+  // Turnusabrechnung laden
+  const handleLoadTurnusabrechnung = async (startDate: string, endDate: string) => {
+    try {
+      setLoadingTurnus(true);
+      const response = await api.get<any>('/billing/turnusabrechnung', {
+        startDate,
+        endDate
+      });
+
+      if (response.success && response.data) {
+        setTurnusData(response.data);
+        setTurnusDialogOpen(true);
+      }
+    } catch (error: any) {
+      console.error('Turnusabrechnung-Fehler:', error);
+      setSnackbar({
+        open: true,
+        message: error?.message || 'Fehler beim Laden der Turnusabrechnung',
+        severity: 'error'
+      });
+    } finally {
+      setLoadingTurnus(false);
+    }
+  };
+
+  // Test-E-Mail senden
+  const handleTestEmail = async (email: string) => {
+    try {
+      const response = await api.post<any>('/billing/test-email', { email });
+
+      if (response.success) {
+        setSnackbar({
+          open: true,
+          message: 'Test-E-Mail erfolgreich versendet',
+          severity: 'success'
+        });
+      }
+    } catch (error: any) {
+      console.error('Test-E-Mail-Fehler:', error);
+      setSnackbar({
+        open: true,
+        message: error?.message || 'Fehler beim Versenden der Test-E-Mail',
+        severity: 'error'
+      });
+    }
+  };
+
   const filteredInvoices = safeInvoices.filter(invoice => {
     // Sicherheitsprüfung für invoice Objekt
     if (!invoice) return false;
@@ -580,14 +782,28 @@ const Billing: React.FC = () => {
         <Typography variant="h4" component="h1">
           Abrechnung
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={handleAddNew}
-          sx={{ borderRadius: 2 }}
-        >
-          Neue Rechnung
-        </Button>
+        <Box display="flex" gap={2}>
+          <Button
+            variant="outlined"
+            startIcon={<Receipt />}
+            onClick={() => {
+              const startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+              const endDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
+              handleLoadTurnusabrechnung(startDate, endDate);
+            }}
+            sx={{ borderRadius: 2 }}
+          >
+            Turnusabrechnung
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={handleAddNew}
+            sx={{ borderRadius: 2 }}
+          >
+            Neue Rechnung
+          </Button>
+        </Box>
       </Box>
 
       {/* Statistics Cards */}
@@ -852,6 +1068,44 @@ const Billing: React.FC = () => {
           <Article sx={{ mr: 1 }} />
           ÖGK-XML exportieren
         </MenuItem>
+        {selectedInvoice?.patient?.insuranceProvider && (
+          <>
+            {selectedInvoice.patient.insuranceProvider.includes('SVS') && (
+              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'SVS'); setAnchorEl(null); }}>
+                <Article sx={{ mr: 1 }} />
+                SVS-XML exportieren
+              </MenuItem>
+            )}
+            {selectedInvoice.patient.insuranceProvider.includes('BVAEB') && (
+              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'BVAEB'); setAnchorEl(null); }}>
+                <Article sx={{ mr: 1 }} />
+                BVAEB-XML exportieren
+              </MenuItem>
+            )}
+            {selectedInvoice.patient.insuranceProvider.includes('KFA') && (
+              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'KFA'); setAnchorEl(null); }}>
+                <Article sx={{ mr: 1 }} />
+                KFA-XML exportieren
+              </MenuItem>
+            )}
+            {selectedInvoice.patient.insuranceProvider.includes('PVA') && (
+              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'PVA'); setAnchorEl(null); }}>
+                <Article sx={{ mr: 1 }} />
+                PVA-XML exportieren
+              </MenuItem>
+            )}
+          </>
+        )}
+        <Divider />
+        <MenuItem onClick={() => {
+          const startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+          const endDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
+          handleLoadTurnusabrechnung(startDate, endDate);
+          setAnchorEl(null);
+        }}>
+          <Receipt sx={{ mr: 1 }} />
+          Turnusabrechnung
+        </MenuItem>
       </Menu>
 
       <Dialog
@@ -895,6 +1149,7 @@ const Billing: React.FC = () => {
               <Tab label="Grunddaten" />
               <Tab label="Leistungen" />
               <Tab label="Zahlung" />
+              <Tab label="ÖGK & Erstattung" />
             </Tabs>
 
           <Box sx={{ mt: 2 }}>
@@ -1145,6 +1400,171 @@ const Billing: React.FC = () => {
                 </Box>
               </Box>
             )}
+
+            {activeTab === 3 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {/* ÖGK-Informationen */}
+                <Card sx={{ p: 2 }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6">ÖGK-Abrechnung</Typography>
+                    {formData.billingType === 'kassenarzt' && (
+                      <Chip label="Kassenarzt" color="primary" size="small" />
+                    )}
+                  </Box>
+                  {formData.billingType === 'kassenarzt' ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                        <Box sx={{ flex: '1 1 200px' }}>
+                          <Typography variant="body2" color="text.secondary">EBM-Code</Typography>
+                          <Typography variant="body1">
+                            {formData.services?.[0]?.serviceCode || 'Nicht angegeben'}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ flex: '1 1 200px' }}>
+                          <Typography variant="body2" color="text.secondary">Status</Typography>
+                          <Chip
+                            label={formData.insuranceBilling?.status || 'pending'}
+                            color={
+                              formData.insuranceBilling?.status === 'approved' ? 'success' :
+                              formData.insuranceBilling?.status === 'rejected' ? 'error' :
+                              formData.insuranceBilling?.status === 'submitted' ? 'info' : 'default'
+                            }
+                            size="small"
+                          />
+                        </Box>
+                      </Box>
+                      {formData.insuranceBilling?.referenceNumber && (
+                        <Box>
+                          <Typography variant="body2" color="text.secondary">Referenznummer</Typography>
+                          <Typography variant="body1">{formData.insuranceBilling.referenceNumber}</Typography>
+                        </Box>
+                      )}
+                      <Box sx={{ display: 'flex', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+                        {formData.patient?.insuranceProvider?.includes('ÖGK') && (
+                          <Button
+                            variant="outlined"
+                            startIcon={<Article />}
+                            onClick={() => formData._id && handleExportOGK(formData as Invoice)}
+                            disabled={!formData._id || loadingOGK}
+                          >
+                            {loadingOGK ? <CircularProgress size={20} /> : 'ÖGK-XML exportieren'}
+                          </Button>
+                        )}
+                        {formData.patient?.insuranceProvider?.includes('SVS') && (
+                          <Button
+                            variant="outlined"
+                            startIcon={<Download />}
+                            onClick={() => formData._id && handleExportInsurance(formData as Invoice, 'SVS')}
+                            disabled={!formData._id || loadingOGK}
+                          >
+                            {loadingOGK ? <CircularProgress size={20} /> : 'SVS-XML exportieren'}
+                          </Button>
+                        )}
+                        {formData.patient?.insuranceProvider?.includes('BVAEB') && (
+                          <Button
+                            variant="outlined"
+                            startIcon={<Download />}
+                            onClick={() => formData._id && handleExportInsurance(formData as Invoice, 'BVAEB')}
+                            disabled={!formData._id || loadingOGK}
+                          >
+                            {loadingOGK ? <CircularProgress size={20} /> : 'BVAEB-XML exportieren'}
+                          </Button>
+                        )}
+                        {formData.patient?.insuranceProvider?.includes('KFA') && (
+                          <Button
+                            variant="outlined"
+                            startIcon={<Download />}
+                            onClick={() => formData._id && handleExportInsurance(formData as Invoice, 'KFA')}
+                            disabled={!formData._id || loadingOGK}
+                          >
+                            {loadingOGK ? <CircularProgress size={20} /> : 'KFA-XML exportieren'}
+                          </Button>
+                        )}
+                        {formData.patient?.insuranceProvider?.includes('PVA') && (
+                          <Button
+                            variant="outlined"
+                            startIcon={<Download />}
+                            onClick={() => formData._id && handleExportInsurance(formData as Invoice, 'PVA')}
+                            disabled={!formData._id || loadingOGK}
+                          >
+                            {loadingOGK ? <CircularProgress size={20} /> : 'PVA-XML exportieren'}
+                          </Button>
+                        )}
+                      </Box>
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Diese Rechnung ist nicht als Kassenarzt-Abrechnung konfiguriert.
+                    </Typography>
+                  )}
+                </Card>
+
+                {/* Erstattungsinformationen */}
+                <Card sx={{ p: 2 }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="h6">Erstattungsverwaltung</Typography>
+                    {formData.billingType === 'wahlarzt' && (
+                      <Chip label="Wahlarzt" color="secondary" size="small" />
+                    )}
+                  </Box>
+                  {formData.billingType === 'wahlarzt' || formData.billingType === 'privat' ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {formData.privateBilling && (
+                        <>
+                          <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                            <Box sx={{ flex: '1 1 200px' }}>
+                              <Typography variant="body2" color="text.secondary">Erstattungsbetrag</Typography>
+                              <Typography variant="h6" color="success.main">
+                                €{(formData.privateBilling.reimbursementAmount || 0).toFixed(2)}
+                              </Typography>
+                            </Box>
+                            <Box sx={{ flex: '1 1 200px' }}>
+                              <Typography variant="body2" color="text.secondary">Patientenbetrag</Typography>
+                              <Typography variant="h6" color="primary.main">
+                                €{(formData.privateBilling.patientAmount || 0).toFixed(2)}
+                              </Typography>
+                            </Box>
+                          </Box>
+                          {formData.privateBilling.wahlarztCode && (
+                            <Box>
+                              <Typography variant="body2" color="text.secondary">Wahlarzt-Code</Typography>
+                              <Typography variant="body1">{formData.privateBilling.wahlarztCode}</Typography>
+                            </Box>
+                          )}
+                        </>
+                      )}
+                      <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+                        <Button
+                          variant="outlined"
+                          startIcon={<Add />}
+                          onClick={() => {
+                            // Navigiere zur Erstattungsverwaltung mit dieser Rechnung
+                            navigate(`/reimbursements?invoiceId=${formData._id || formData.id}`);
+                          }}
+                          disabled={!formData._id && !formData.id}
+                        >
+                          Erstattung erstellen
+                        </Button>
+                        <Button
+                          variant="outlined"
+                          startIcon={<Visibility />}
+                          onClick={() => {
+                            navigate(`/reimbursements?invoiceId=${formData._id || formData.id}`);
+                          }}
+                          disabled={!formData._id && !formData.id}
+                        >
+                          Erstattungen anzeigen
+                        </Button>
+                      </Box>
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="text.secondary">
+                      Erstattungen sind nur für Wahlarzt- und Privatabrechnungen verfügbar.
+                    </Typography>
+                  )}
+                </Card>
+              </Box>
+            )}
           </Box>
           </Box>
         </DialogContent>
@@ -1193,6 +1613,178 @@ const Billing: React.FC = () => {
         <DialogActions>
           <Button onClick={() => setQrCodeDialog(false)}>Schließen</Button>
           <Button variant="contained" startIcon={<Print />}>Drucken</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Turnusabrechnung Dialog */}
+      <Dialog
+        open={turnusDialogOpen}
+        onClose={() => setTurnusDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <GradientDialogTitle
+          isEdit={false}
+          title="Turnusabrechnung"
+          icon={<Receipt />}
+          gradientColors={{ from: '#3b82f6', to: '#2563eb' }}
+        />
+        <DialogContent sx={{ pt: 3 }}>
+          {loadingTurnus ? (
+            <Box display="flex" justifyContent="center" p={4}>
+              <CircularProgress />
+            </Box>
+          ) : turnusData ? (
+            <Box>
+              <Typography variant="h6" gutterBottom>
+                Zusammenfassung
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+                <Card sx={{ p: 2, flex: '1 1 200px' }}>
+                  <Typography variant="body2" color="text.secondary">Anzahl Rechnungen</Typography>
+                  <Typography variant="h5">{turnusData.count || 0}</Typography>
+                </Card>
+                <Card sx={{ p: 2, flex: '1 1 200px' }}>
+                  <Typography variant="body2" color="text.secondary">Gesamtbetrag</Typography>
+                  <Typography variant="h5">€{(turnusData.totals?.totalAmount || 0).toFixed(2)}</Typography>
+                </Card>
+                <Card sx={{ p: 2, flex: '1 1 200px' }}>
+                  <Typography variant="body2" color="text.secondary">Selbstbehalt</Typography>
+                  <Typography variant="h5">€{(turnusData.totals?.copay || 0).toFixed(2)}</Typography>
+                </Card>
+              </Box>
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Rechnungsnummer</TableCell>
+                      <TableCell>Patient</TableCell>
+                      <TableCell>Betrag</TableCell>
+                      <TableCell>Selbstbehalt</TableCell>
+                      <TableCell>Datum</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {turnusData.invoices?.map((invoice: any) => (
+                      <TableRow key={invoice._id}>
+                        <TableCell>{invoice.invoiceNumber}</TableCell>
+                        <TableCell>
+                          {invoice.patient?.id?.firstName} {invoice.patient?.id?.lastName}
+                        </TableCell>
+                        <TableCell>€{(invoice.totalAmount || 0).toFixed(2)}</TableCell>
+                        <TableCell>€{(invoice.copay || 0).toFixed(2)}</TableCell>
+                        <TableCell>
+                          {new Date(invoice.invoiceDate).toLocaleDateString('de-DE')}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+          ) : (
+            <Typography>Keine Daten verfügbar</Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setTurnusDialogOpen(false)}>Schließen</Button>
+          {turnusData && (
+            <Button
+              variant="contained"
+              startIcon={<Download />}
+              onClick={async () => {
+                try {
+                  const invoiceIds = turnusData.invoices?.map((inv: any) => inv._id) || [];
+                  const response = await api.post('/billing/export-ogk-xml', {
+                    invoiceIds,
+                    doctorInfo: {
+                      name: 'Dr. Maria Brandt',
+                      address: {}
+                    }
+                  }, { responseType: 'blob' });
+
+                  if (response.data instanceof Blob) {
+                    const url = window.URL.createObjectURL(response.data);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `turnusabrechnung-${new Date().toISOString().split('T')[0]}.xml`;
+                    a.click();
+                    setSnackbar({
+                      open: true,
+                      message: 'Turnusabrechnung erfolgreich exportiert',
+                      severity: 'success'
+                    });
+                  }
+                } catch (error: any) {
+                  setSnackbar({
+                    open: true,
+                    message: 'Fehler beim Export der Turnusabrechnung',
+                    severity: 'error'
+                  });
+                }
+              }}
+            >
+              ÖGK-XML exportieren
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Berechnungs-Dialog */}
+      <Dialog
+        open={showCalculation}
+        onClose={() => setShowCalculation(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <GradientDialogTitle
+          isEdit={false}
+          title="Berechnungsergebnis"
+          icon={<AttachMoney />}
+          gradientColors={{ from: '#10b981', to: '#059669' }}
+        />
+        <DialogContent sx={{ pt: 3 }}>
+          {calculationResult && (
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Abrechnungstyp
+              </Typography>
+              <Typography variant="h6" gutterBottom>
+                {calculationResult.billingType}
+              </Typography>
+              <Divider sx={{ my: 2 }} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography>Bruttobetrag:</Typography>
+                  <Typography fontWeight="bold">€{(calculationResult.grossAmount || 0).toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography>Selbstbehalt:</Typography>
+                  <Typography fontWeight="bold">€{(calculationResult.copay || 0).toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography>Versicherungsbetrag:</Typography>
+                  <Typography fontWeight="bold">€{(calculationResult.insuranceAmount || 0).toFixed(2)}</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography>Patientenbetrag:</Typography>
+                  <Typography fontWeight="bold">€{(calculationResult.patientAmount || 0).toFixed(2)}</Typography>
+                </Box>
+                {calculationResult.warnings && calculationResult.warnings.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Alert severity="warning">
+                      {calculationResult.warnings.map((warning: string, index: number) => (
+                        <Typography key={index} variant="body2">{warning}</Typography>
+                      ))}
+                    </Alert>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowCalculation(false)}>Schließen</Button>
         </DialogActions>
       </Dialog>
 

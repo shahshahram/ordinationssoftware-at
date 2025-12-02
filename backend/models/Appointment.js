@@ -33,6 +33,12 @@ const AppointmentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Room' 
   },
+  // Standort - wird automatisch aus room.location_id gesetzt, kann aber auch direkt gesetzt werden
+  locationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Location',
+    index: true
+  },
   devices: [{ 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Device' 
@@ -308,7 +314,7 @@ AppointmentSchema.virtual('statusGerman').get(function() {
 // Indexes are defined in the schema above with index: true
 
 // Pre-save middleware für Validierung
-AppointmentSchema.pre('save', function(next) {
+AppointmentSchema.pre('save', async function(next) {
   // Endzeit muss nach Startzeit liegen
   if (this.endTime <= this.startTime) {
     return next(new Error('Endzeit muss nach Startzeit liegen'));
@@ -316,6 +322,26 @@ AppointmentSchema.pre('save', function(next) {
   
   // Dauer berechnen
   this.duration = Math.round((this.endTime - this.startTime) / (1000 * 60));
+  
+  // locationId automatisch aus room.location_id setzen, falls nicht bereits gesetzt
+  if (!this.locationId && this.room) {
+    try {
+      // Wenn room bereits ein Object ist (populated), location_id direkt verwenden
+      if (this.room.location_id) {
+        this.locationId = this.room.location_id;
+      } else {
+        // Sonst Room aus DB laden
+        const Room = mongoose.model('Room');
+        const roomDoc = await Room.findById(this.room).select('location_id');
+        if (roomDoc && roomDoc.location_id) {
+          this.locationId = roomDoc.location_id;
+        }
+      }
+    } catch (error) {
+      // Fehler ignorieren, locationId bleibt undefined
+      console.warn('Could not set locationId from room:', error.message);
+    }
+  }
   
   next();
 });

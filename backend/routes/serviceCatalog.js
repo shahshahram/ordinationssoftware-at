@@ -114,6 +114,19 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       limit = 50
     } = req.query;
 
+    // Parse limit and page properly
+    const parsedLimit = limit ? parseInt(limit.toString(), 10) : 50;
+    const parsedPage = page ? parseInt(page.toString(), 10) : 1;
+    
+    console.log('🔍 Service Catalog Request:', {
+      limit: limit,
+      parsedLimit,
+      page: page,
+      parsedPage,
+      is_active,
+      search
+    });
+
     // Filter aufbauen
     const filter = {};
     
@@ -132,14 +145,16 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       ];
     }
 
+    console.log('🔍 Filter:', JSON.stringify(filter, null, 2));
+
     // Pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (parsedPage - 1) * parsedLimit;
     
     // First, get the raw services to save assigned_rooms and assigned_devices IDs before populate
     const rawServices = await ServiceCatalog.find(filter)
       .sort({ name: 1 })
       .skip(skip)
-      .limit(parseInt(limit))
+      .limit(parsedLimit)
       .lean(); // Use lean() to get plain objects
     
     // Store the IDs before populate removes them
@@ -173,7 +188,7 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       })
       .sort({ name: 1 })
       .skip(skip)
-      .limit(parseInt(limit));
+      .limit(parsedLimit);
 
     const total = await ServiceCatalog.countDocuments(filter);
 
@@ -286,14 +301,36 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       return serviceObj;
     }));
 
+    console.log('🔍 Service Catalog Results:', {
+      total,
+      returned: transformedServices.length,
+      limit: parsedLimit,
+      page: parsedPage,
+      skip
+    });
+
+    // Debug: Check for K001 in results
+    const k001Service = transformedServices.find(s => s.code === 'K001' || s.code === 'KONS006');
+    if (k001Service) {
+      console.log('✅ K001/Tribella gefunden in Ergebnissen:', {
+        name: k001Service.name,
+        code: k001Service.code,
+        is_active: k001Service.is_active,
+        quick_select: k001Service.quick_select
+      });
+    } else {
+      console.log('❌ K001/Tribella NICHT in Ergebnissen gefunden');
+      console.log('🔍 Erste 5 Codes:', transformedServices.slice(0, 5).map(s => s.code));
+    }
+
     res.json({
       success: true,
       data: transformedServices,
       pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
+        page: parsedPage,
+        limit: parsedLimit,
         total,
-        pages: Math.ceil(total / parseInt(limit))
+        pages: Math.ceil(total / parsedLimit)
       }
     });
   } catch (error) {
@@ -1060,6 +1097,126 @@ router.get('/:id/available-rooms', auth, checkPermission('services.read'), async
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der verfügbaren Räume',
+      error: error.message
+    });
+  }
+});
+
+// Update-Status Endpunkte (aus serviceCatalogUpdate.js integriert)
+// GET /api/service-catalog/update-status
+router.get('/update-status', auth, checkPermission('services.read'), async (req, res) => {
+  try {
+    const AuditLog = require('../models/AuditLog');
+    const lastUpdate = await AuditLog.findOne({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE'
+    }).sort({ timestamp: -1 });
+
+    const currentYear = new Date().getFullYear();
+    const nextUpdate = new Date(currentYear + 1, 0, 1);
+
+    const totalServices = await ServiceCatalog.countDocuments();
+    const activeServices = await ServiceCatalog.countDocuments({ is_active: true });
+    
+    const currentYearStart = new Date(currentYear, 0, 1);
+    const currentYearUpdates = await AuditLog.find({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE',
+      timestamp: { $gte: currentYearStart }
+    }).sort({ timestamp: -1 });
+
+    let newServicesThisYear = 0;
+    let deprecatedServicesThisYear = 0;
+    let priceAdjustmentsThisYear = 0;
+
+    currentYearUpdates.forEach(update => {
+      if (update.changes && update.changes.details) {
+        newServicesThisYear += update.changes.details.newServices || 0;
+        deprecatedServicesThisYear += update.changes.details.deprecatedServices || 0;
+        priceAdjustmentsThisYear += update.changes.details.updatedPrices || 0;
+      }
+    });
+
+    const recentUpdates = await AuditLog.find({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE'
+    })
+    .sort({ timestamp: -1 })
+    .limit(10)
+    .select('timestamp changes.metadata');
+
+    let status = 'never';
+    if (lastUpdate) {
+      const lastUpdateYear = lastUpdate.timestamp.getFullYear();
+      if (lastUpdateYear === currentYear) {
+        status = 'success';
+      } else if (lastUpdateYear < currentYear) {
+        status = 'pending';
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        lastUpdate: lastUpdate ? lastUpdate.timestamp.toISOString() : null,
+        nextUpdate: nextUpdate.toISOString(),
+        status,
+        statistics: {
+          totalServices,
+          activeServices,
+          newServicesThisYear,
+          deprecatedServicesThisYear,
+          priceAdjustmentsThisYear
+        },
+        recentUpdates: recentUpdates.map(update => ({
+          date: update.timestamp,
+          type: 'price',
+          description: `Update ${update.timestamp.getFullYear()}`,
+          count: update.changes?.details?.newServices || 0
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Fehler beim Laden der Update-Status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Update-Status',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/service-catalog/trigger-update
+router.post('/trigger-update', auth, checkPermission('services.write'), async (req, res) => {
+  try {
+    const AuditLog = require('../models/AuditLog');
+    const runningUpdate = await AuditLog.findOne({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE',
+      timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    if (runningUpdate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ein Update wurde bereits in den letzten 24 Stunden durchgeführt'
+      });
+    }
+
+    const serviceCatalogUpdateService = require('../services/serviceCatalogUpdateService');
+    serviceCatalogUpdateService.updateAll()
+      .then(() => {
+        console.log('Manuelles Service-Katalog Update erfolgreich abgeschlossen');
+      })
+      .catch((error) => {
+        console.error('Manuelles Service-Katalog Update fehlgeschlagen:', error);
+      });
+
+    res.json({
+      success: true,
+      message: 'Service-Katalog Update wurde gestartet'
+    });
+  } catch (error) {
+    console.error('Fehler beim Starten des Updates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Starten des Updates',
       error: error.message
     });
   }

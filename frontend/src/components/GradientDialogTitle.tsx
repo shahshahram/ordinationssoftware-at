@@ -25,6 +25,14 @@ const GradientDialogTitle: React.FC<GradientDialogTitleProps> = ({
         color: 'white',
         pb: 2,
         pt: 3,
+        px: 3,
+        m: 0,
+        position: 'relative',
+        zIndex: 1,
+        '&.MuiDialogTitle-root': {
+          padding: '24px 24px 16px 24px',
+          margin: 0,
+        },
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

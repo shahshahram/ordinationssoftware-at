@@ -6,17 +6,59 @@ const { ACTIONS, RESOURCES } = require('../utils/rbac');
 const router = express.Router();
 
 // @route   GET /api/patients
-// @desc    Get all patients
+// @desc    Get all patients with pagination
 // @access  Private
 router.get('/', auth, rbacMiddleware.canViewPatients, async (req, res) => {
   try {
-    const patients = await Patient.find().populate('createdBy', 'firstName lastName');
+    const {
+      page = 1,
+      limit = 100,
+      search = '',
+      sortBy = 'lastName',
+      sortOrder = 'asc'
+    } = req.query;
+
+    // Build query
+    const query = {};
+    
+    if (search) {
+      query.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { insuranceNumber: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Build sort
+    const sort = {};
+    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
+
+    // Execute query with pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const patients = await Patient.find(query)
+      .populate('createdBy', 'firstName lastName')
+      .sort(sort)
+      .limit(parseInt(limit))
+      .skip(skip)
+      .lean();
+
+    const total = await Patient.countDocuments(query);
+
     res.json({
       success: true,
-      count: patients.length,
-      data: patients
+      data: patients,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / parseInt(limit)),
+        total,
+        hasMore: (parseInt(page) * parseInt(limit)) < total,
+        limit: parseInt(limit),
+        nextPage: (parseInt(page) * parseInt(limit)) < total ? parseInt(page) + 1 : null
+      }
     });
   } catch (error) {
+    console.error('Error fetching patients:', error);
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Patienten'

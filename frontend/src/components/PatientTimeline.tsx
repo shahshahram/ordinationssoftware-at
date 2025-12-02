@@ -37,7 +37,9 @@ import {
   Edit,
   Visibility,
   ExpandMore,
-  ExpandLess
+  ExpandLess,
+  Biotech,
+  Collections
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { Patient } from '../store/slices/patientSlice';
@@ -45,6 +47,7 @@ import { fetchAppointments } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses } from '../store/slices/diagnosisSlice';
 import { fetchDocuments } from '../store/slices/documentSlice';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
+import api from '../utils/api';
 
 interface PatientTimelineProps {
   patient: Patient;
@@ -54,7 +57,7 @@ interface PatientTimelineProps {
 
 interface TimelineEvent {
   id: string;
-  type: 'appointment' | 'diagnosis' | 'document' | 'medication' | 'billing' | 'dekurs';
+  type: 'appointment' | 'diagnosis' | 'document' | 'medication' | 'billing' | 'dekurs' | 'labor' | 'dicom';
   title: string;
   description?: string;
   date: Date;
@@ -78,6 +81,8 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
+  const [laborResults, setLaborResults] = useState<any[]>([]);
+  const [dicomStudies, setDicomStudies] = useState<any[]>([]);
 
   // Lade Patientendaten
   useEffect(() => {
@@ -88,7 +93,41 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({
         dispatch(fetchAppointments()),
         dispatch(fetchPatientDiagnoses({ patientId })),
         dispatch(fetchDocuments({ patientId })),
-        dispatch(fetchDekursEntries({ patientId, limit: 50 }))
+        dispatch(fetchDekursEntries({ patientId, limit: 50 })),
+        // Lade Laborwerte
+        api.get<any>(`/labor/patient/${patientId}`).then((response: any) => {
+          console.log('PatientTimeline: Labor results API response:', response);
+          if (response.success) {
+            const data = response.data;
+            // Die API kann { success: true, data: [...], count: ... } oder direkt ein Array zurückgeben
+            const laborData = Array.isArray(data) ? data : ((data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) ? data.data : []);
+            console.log('PatientTimeline: Setting labor results:', laborData);
+            setLaborResults(laborData);
+          } else {
+            console.warn('PatientTimeline: Labor results response not successful:', response);
+            setLaborResults([]);
+          }
+        }).catch(err => {
+          console.error('Error loading labor results for timeline:', err);
+          setLaborResults([]);
+        }),
+        // Lade DICOM-Studien
+        api.get<any>(`/dicom/patient/${patientId}`).then((response: any) => {
+          console.log('PatientTimeline: DICOM studies API response:', response);
+          if (response.success) {
+            const data = response.data;
+            // Die API kann { success: true, data: [...], count: ... } oder direkt ein Array zurückgeben
+            const dicomData = Array.isArray(data) ? data : ((data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) ? data.data : []);
+            console.log('PatientTimeline: Setting DICOM studies:', dicomData);
+            setDicomStudies(dicomData);
+          } else {
+            console.warn('PatientTimeline: DICOM studies response not successful:', response);
+            setDicomStudies([]);
+          }
+        }).catch(err => {
+          console.error('Error loading DICOM studies for timeline:', err);
+          setDicomStudies([]);
+        })
       ]).finally(() => setLoading(false));
     }
   }, [patient, dispatch]);
@@ -182,10 +221,92 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({
       });
     }
 
+    // Laborwerte hinzufügen
+    // Die API /labor/patient/:patientId gibt bereits patient-spezifische Ergebnisse zurück
+    console.log('PatientTimeline: Processing labor results:', laborResults);
+    if (Array.isArray(laborResults) && laborResults.length > 0) {
+      console.log('PatientTimeline: Found', laborResults.length, 'labor results');
+      laborResults.forEach(labor => {
+        const sourceFormat = labor.metadata?.sourceFormat;
+        const isScanned = labor.metadata?.isScanned;
+        let sourceLabel = 'Importiert';
+        if (sourceFormat === 'scan' || isScanned === true) {
+          sourceLabel = 'Per Scan';
+        } else if (sourceFormat === 'manual') {
+          sourceLabel = 'Manuell';
+        }
+
+        const providerName = labor.providerId?.name || 'Unbekanntes Labor';
+        const resultCount = labor.results?.length || 0;
+        const criticalCount = labor.results?.filter((r: any) => r.isCritical === true).length || 0;
+        
+        const laborTitle = `Laborwerte: ${providerName}${criticalCount > 0 ? ' (Kritisch)' : ''}`;
+        const laborDescription = `${resultCount} Werte erfasst${labor.interpretation ? ` - ${labor.interpretation}` : ''}${sourceLabel ? ` - ${sourceLabel}` : ''}`;
+        
+        console.log('PatientTimeline: Adding labor result to timeline:', laborTitle, 'Date:', labor.resultDate || labor.receivedAt);
+        events.push({
+          id: (labor._id || labor.id) as string,
+          type: 'labor',
+          title: laborTitle,
+          description: laborDescription,
+          date: new Date(labor.resultDate || labor.receivedAt || labor.createdAt || new Date()),
+          status: labor.hasCriticalValues ? 'Kritisch' : labor.status || 'Final',
+          icon: <Biotech />,
+          color: labor.hasCriticalValues ? 'error' : 'info',
+          metadata: labor
+        });
+      });
+    } else {
+      console.log('PatientTimeline: No labor results found or not an array. laborResults:', laborResults);
+    }
+
+    // DICOM-Studien hinzufügen
+    console.log('PatientTimeline: Processing DICOM studies:', dicomStudies);
+    if (Array.isArray(dicomStudies) && dicomStudies.length > 0) {
+      console.log('PatientTimeline: Found', dicomStudies.length, 'DICOM studies');
+      
+      // Gruppiere Studien nach studyInstanceUID
+      const studyMap = new Map<string, any[]>();
+      dicomStudies.forEach(study => {
+        const studyUID = study.studyInstanceUID || study._id;
+        if (!studyMap.has(studyUID)) {
+          studyMap.set(studyUID, []);
+        }
+        studyMap.get(studyUID)!.push(study);
+      });
+
+      // Erstelle Events für jede Studie
+      studyMap.forEach((instances, studyUID) => {
+        const firstInstance = instances[0];
+        const studyDate = firstInstance.studyDate || firstInstance.uploadedAt || firstInstance.createdAt;
+        const modality = firstInstance.modality || 'DICOM';
+        const studyDescription = firstInstance.studyDescription || firstInstance.seriesDescription || 'DICOM-Studie';
+        const instanceCount = instances.length;
+        
+        const dicomTitle = `${modality}: ${studyDescription}`;
+        const dicomDescription = `${instanceCount} ${instanceCount === 1 ? 'Bild' : 'Bilder'}${firstInstance.seriesDescription ? ` - ${firstInstance.seriesDescription}` : ''}`;
+        
+        console.log('PatientTimeline: Adding DICOM study to timeline:', dicomTitle, 'Date:', studyDate);
+        events.push({
+          id: studyUID,
+          type: 'dicom',
+          title: dicomTitle,
+          description: dicomDescription,
+          date: new Date(studyDate || new Date()),
+          status: modality,
+          icon: <Collections />,
+          color: 'info',
+          metadata: { study: firstInstance, instances }
+        });
+      });
+    } else {
+      console.log('PatientTimeline: No DICOM studies found or not an array. dicomStudies:', dicomStudies);
+    }
+
     // Nach Datum sortieren (neueste zuerst)
     events.sort((a, b) => b.date.getTime() - a.date.getTime());
     setTimelineEvents(events.slice(0, maxItems));
-  }, [patient, appointments, patientDiagnoses, documents, dekursEntries, maxItems]);
+  }, [patient, appointments, patientDiagnoses, documents, dekursEntries, laborResults, dicomStudies, maxItems]);
 
   const getDocumentIcon = (type: string) => {
     switch (type) {
@@ -253,6 +374,14 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({
       case 'dekurs':
         // Navigiere zum PatientOrganizer mit Dekurs-Tab
         onNavigate(`/patient-organizer/${patientId}?tab=dekurs`);
+        break;
+      case 'labor':
+        // Navigiere zum PatientOrganizer mit Laborwerte-Tab
+        onNavigate(`/patient-organizer/${patientId}?tab=laborwerte`);
+        break;
+      case 'dicom':
+        // Navigiere zum PatientOrganizer mit DICOM-Tab
+        onNavigate(`/patient-organizer/${patientId}?tab=dicom`);
         break;
     }
   };

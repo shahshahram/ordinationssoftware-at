@@ -67,7 +67,8 @@ import {
   Cancel,
   CameraAlt,
   Delete as DeleteIcon,
-  Close
+  Close,
+  CreditCard
 } from '@mui/icons-material';
 import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -89,8 +90,14 @@ import DekursHistory from '../components/DekursHistory';
 import DekursDialog from '../components/DekursDialog';
 import DekursQuickEntry from '../components/DekursQuickEntry';
 import PatientPhotoGallery from '../components/PatientPhotoGallery';
+import LaborResults from '../components/LaborResults';
+import DicomViewer from '../components/DicomViewer';
+import DicomUpload from '../components/DicomUpload';
+import DicomStudiesList from '../components/DicomStudiesList';
+import ECardValidation from '../components/ECardValidation';
+import GinaBoxStatus from '../components/GinaBoxStatus';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
-import { Article, Storage, Assignment } from '@mui/icons-material';
+import { Article, Storage, Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera } from '@mui/icons-material';
 import { Specialization } from '../types/ambulanzbefund';
 
 // Spezialisierungs-Labels
@@ -183,12 +190,47 @@ const PatientOrganizer: React.FC = () => {
   const [ambulanzbefunde, setAmbulanzbefunde] = useState<any[]>([]);
   const [loadingAmbulanzbefunde, setLoadingAmbulanzbefunde] = useState(false);
 
+  // State für Tabs
+  const [activeTab, setActiveTab] = useState(0);
+  
+  // State für Dekurs
+  const [dekursDialogOpen, setDekursDialogOpen] = useState(false);
+  const [selectedDekursEntry, setSelectedDekursEntry] = useState<any>(null);
+  
+  // State für DICOM
+  const [dicomUploadOpen, setDicomUploadOpen] = useState(false);
+
   // Get patientId from URL params or query params
   const patientId = React.useMemo(() => {
     if (id) return id;
     const searchParams = new URLSearchParams(location.search);
     return searchParams.get('patientId');
   }, [id, location.search]);
+
+  // Tab aus URL-Parameter lesen
+  React.useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const tabParam = searchParams.get('tab');
+    if (tabParam === 'dekurs') {
+      setActiveTab(1);
+    } else if (tabParam === 'laborwerte') {
+      setActiveTab(2);
+    } else if (tabParam === 'dicom') {
+      setActiveTab(3);
+    } else if (tabParam === 'stammdaten') {
+      setActiveTab(4);
+    } else if (tabParam === 'medizinisch') {
+      setActiveTab(5);
+    } else if (tabParam === 'termine') {
+      setActiveTab(6);
+    } else if (tabParam === 'dokumente') {
+      setActiveTab(7);
+    } else if (tabParam === 'fotos') {
+      setActiveTab(8);
+    } else {
+      setActiveTab(0);
+    }
+  }, [location.search]);
 
   // State für Template-Dialog
   const [templateMenuAnchor, setTemplateMenuAnchor] = useState<null | HTMLElement>(null);
@@ -205,10 +247,6 @@ const PatientOrganizer: React.FC = () => {
   
   // State für Stammdaten-Bearbeitung
   const [editDialogOpen, setEditDialogOpen] = useState(false);
-
-  // State für Dekurs-Dialog
-  const [dekursDialogOpen, setDekursDialogOpen] = useState(false);
-  const [selectedDekursEntry, setSelectedDekursEntry] = useState<any>(null);
   const [editData, setEditData] = useState<Partial<Patient>>({});
   
   // State für Stammdaten-Validierung
@@ -219,21 +257,17 @@ const PatientOrganizer: React.FC = () => {
   const [medicalDialogOpen, setMedicalDialogOpen] = useState(false);
   const [medicalData, setMedicalData] = useState<Partial<Patient>>({});
   
-  // State für Tab-Navigation
-  const [activeTab, setActiveTab] = useState(0);
-
-  // Tab aus URL-Parameter lesen
-  React.useEffect(() => {
-    const searchParams = new URLSearchParams(location.search);
-    const tabParam = searchParams.get('tab');
-    if (tabParam === 'dekurs') {
-      setActiveTab(2); // Dekurs-Tab ist Index 2 (nach Übersicht und Stammdaten)
-    }
-  }, [location.search]);
-  
   // State für Foto-Upload
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoInputRef, setPhotoInputRef] = useState<HTMLInputElement | null>(null);
+  
+  // State für e-card-Validierung
+  const [ecardValidationOpen, setEcardValidationOpen] = useState(false);
+  const [autoValidatedEcard, setAutoValidatedEcard] = useState(false);
+  
+  // State für GINA-Box
+  const [ginaBoxPatientFound, setGinaBoxPatientFound] = useState<any>(null);
+  const [ginaBoxDialogOpen, setGinaBoxDialogOpen] = useState(false);
   
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -502,7 +536,7 @@ const PatientOrganizer: React.FC = () => {
     setEditData({});
   };
 
-  // Handler für Stammdaten-Validierung
+  // Handler für Stammdaten-Validierung (QR-Code)
   const handleValidateStammdaten = async () => {
     if (!patient) return;
     
@@ -557,6 +591,33 @@ const PatientOrganizer: React.FC = () => {
       });
     }
   };
+
+  // Handler für e-card-Validierung
+  const handleECardValidation = () => {
+    setEcardValidationOpen(true);
+  };
+
+  // Automatische e-card-Abfrage beim Öffnen der Stammdaten
+  React.useEffect(() => {
+    if (activeTab === 4 && patient && patientId) {
+      // Prüfe ob e-card validiert werden sollte
+      const shouldValidate = 
+        patient.insuranceProvider && 
+        patient.insuranceProvider !== 'Privatversicherung' && 
+        patient.insuranceProvider !== 'Selbstzahler' &&
+        patient.socialSecurityNumber &&
+        (!patient.ecard?.cardNumber || 
+         !patient.ecard?.validationStatus || 
+         patient.ecard.validationStatus !== 'valid' ||
+         (patient.ecard.validUntil && new Date(patient.ecard.validUntil) < new Date()));
+
+      if (shouldValidate && !autoValidatedEcard) {
+        // Zeige Hinweis, dass automatische Validierung durchgeführt wurde
+        // (Die Validierung wird bereits im Backend beim Speichern durchgeführt)
+        setAutoValidatedEcard(true);
+      }
+    }
+  }, [activeTab, patient, patientId, autoValidatedEcard]);
 
   const handleCloseValidation = () => {
     setValidationDialogOpen(false);
@@ -1659,12 +1720,14 @@ const PatientOrganizer: React.FC = () => {
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
             <Tab label="Übersicht" icon={<Info />} iconPosition="start" />
-            <Tab label="Stammdaten" icon={<Person />} iconPosition="start" />
             <Tab label="Dekurs" icon={<Assignment />} iconPosition="start" />
-            <Tab label="Medizinisch" icon={<LocalHospital />} iconPosition="start" />
-            <Tab label="Termine & Besuche" icon={<Schedule />} iconPosition="start" />
+            <Tab label="Laborwerte" icon={<Science />} iconPosition="start" />
+            <Tab label="DICOM" icon={<Image />} iconPosition="start" />
+            <Tab label="Stammdaten" icon={<AccountCircle />} iconPosition="start" />
+            <Tab label="Medizinisch" icon={<MedicalServices />} iconPosition="start" />
+            <Tab label="Termine & Besuche" icon={<CalendarToday />} iconPosition="start" />
             <Tab label="Dokumente" icon={<Description />} iconPosition="start" />
-            <Tab label="Fotos" icon={<CameraAlt />} iconPosition="start" />
+            <Tab label="Fotos" icon={<PhotoCamera />} iconPosition="start" />
           </Tabs>
         </Paper>
 
@@ -1731,142 +1794,6 @@ const PatientOrganizer: React.FC = () => {
         </TabPanel>
 
         <TabPanel value={activeTab} index={1}>
-          {/* Stammdaten Tab */}
-          <Paper sx={{ p: 2 }}>
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-              <Typography variant="h6">Stammdaten</Typography>
-          <Box display="flex" gap={1}>
-            <Button
-              variant={patient?.hasHint ? "contained" : "outlined"}
-              startIcon={<Warning />}
-              onClick={handleToggleHint}
-              size="small"
-              disabled={!patient}
-              color={patient?.hasHint ? "warning" : "primary"}
-            >
-              {patient?.hasHint ? "Hinweis aktiv" : "Hinweis"}
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<QrCode />}
-              onClick={handleValidateStammdaten}
-              size="small"
-              disabled={!patient}
-              color="secondary"
-            >
-              Validieren
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<Edit />}
-              onClick={handleEditStammdaten}
-              size="small"
-              disabled={!patient}
-            >
-              Bearbeiten
-            </Button>
-          </Box>
-        </Box>
-        <Divider sx={{ my: 1 }} />
-        {!patient && isLoading ? (
-          <>
-            <Skeleton variant="text" width="60%" />
-            <Skeleton variant="text" width="40%" />
-            <Skeleton variant="text" width="50%" />
-          </>
-        ) : !patient ? (
-          <Typography variant="body2" color="text.secondary">Patient nicht gefunden.</Typography>
-        ) : (
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}>
-            <Typography variant="body2">Name: {patient.firstName} {patient.lastName}</Typography>
-            <Typography variant="body2">Geburtsdatum: {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('de-DE') : '—'}</Typography>
-            <Typography variant="body2">SVNR: {patient.socialSecurityNumber || '—'}</Typography>
-            <Typography variant="body2">Geschlecht: {patient.gender || '—'}</Typography>
-            <Typography variant="body2">Adresse: {patient.address ? `${patient.address.street}, ${patient.address.zipCode} ${patient.address.city}` : '—'}</Typography>
-            <Typography variant="body2">Kontakt: {patient.phone || '—'}{patient.email ? ` / ${patient.email}` : ''}</Typography>
-            <Typography variant="body2">Status: {patient.status || '—'}</Typography>
-            <Typography variant="body2">Versicherung: {patient.insuranceProvider || '—'}</Typography>
-            
-            {/* Notfallkontakt */}
-            <Box sx={{ gridColumn: '1 / -1', mt: 2 }}>
-              <Typography variant="subtitle2" color="primary" gutterBottom>Notfallkontakt</Typography>
-              <Typography variant="body2">Name: {patient.emergencyContact?.name || '—'}</Typography>
-              <Typography variant="body2">Telefon: {patient.emergencyContact?.phone || '—'}</Typography>
-              <Typography variant="body2">Verwandtschaft: {patient.emergencyContact?.relationship || '—'}</Typography>
-            </Box>
-            
-            {/* Hausarzt */}
-            <Box sx={{ gridColumn: '1 / -1', mt: 2 }}>
-              <Typography variant="subtitle2" color="primary" gutterBottom>Hausarzt</Typography>
-              <Typography variant="body2">Name: {patient.primaryCarePhysician?.name || '—'}</Typography>
-              <Typography variant="body2">Ort: {patient.primaryCarePhysician?.location || '—'}</Typography>
-              <Typography variant="body2">Telefon: {patient.primaryCarePhysician?.phone || '—'}</Typography>
-            </Box>
-            
-            {/* Administrative Daten */}
-            <Box sx={{ gridColumn: '1 / -1', mt: 2 }}>
-              <Typography variant="subtitle2" color="primary" gutterBottom>Administrative Daten</Typography>
-              <Typography variant="body2">Zuweisung durch: {
-                patient.referralSource === 'self' ? 'Selbstzuweiser' :
-                patient.referralSource === 'physician' ? 'Hausarzt' :
-                patient.referralSource === 'hospital' ? 'Krankenhaus' :
-                patient.referralSource === 'specialist' ? 'Facharzt' :
-                patient.referralSource === 'other' ? 'Andere' : '—'
-              }</Typography>
-              <Typography variant="body2">Zuweisender Arzt: {patient.referralDoctor || '—'}</Typography>
-              <Typography variant="body2">Besuchsgrund: {patient.visitReason || '—'}</Typography>
-              <Typography variant="body2">Erstellt am: {patient.createdAt ? new Date(patient.createdAt).toLocaleDateString('de-DE') : '—'}</Typography>
-              <Typography variant="body2">Letzte Änderung: {patient.updatedAt ? new Date(patient.updatedAt).toLocaleDateString('de-DE') : '—'}</Typography>
-            </Box>
-
-            {/* Hinweis */}
-            {patient.hasHint && (
-              <Box 
-                sx={{ 
-                  gridColumn: '1 / -1', 
-                  mt: 2, 
-                  p: 2, 
-                  bgcolor: 'warning.light', 
-                  borderRadius: 1, 
-                  border: '2px solid', 
-                  borderColor: 'warning.main',
-                  cursor: 'pointer',
-                  '&:hover': {
-                    bgcolor: 'warning.main',
-                    '& .MuiTypography-root': {
-                      color: 'warning.contrastText'
-                    },
-                    '& .MuiSvgIcon-root': {
-                      color: 'warning.contrastText'
-                    }
-                  },
-                  transition: 'all 0.2s ease-in-out'
-                }}
-                onClick={() => setHintDetailsDialogOpen(true)}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <Warning color="warning" />
-                  <Typography variant="subtitle2" fontWeight="bold" color="warning.dark">
-                    ⚠️ HINWEIS
-                  </Typography>
-                </Box>
-                <Typography variant="body2" color="warning.dark">
-                  {patient.hintText || 'Dieser Patient hat einen Hinweis erhalten.'}
-                </Typography>
-              </Box>
-            )}
-            
-            <Stack direction="row" spacing={1} sx={{ mt: 2, gridColumn: '1 / -1' }}>
-              <Button variant="outlined" onClick={() => navigate('/appointments')}>Termine</Button>
-              <Button variant="outlined" onClick={() => navigate('/documents')}>Dokumente</Button>
-              <Button variant="outlined" onClick={() => navigate('/icd10-catalog-management')}>Diagnosen</Button>
-            </Stack>
-          </Box>
-        )}
-      </Paper>
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={2}>
           {/* Dekurs Tab */}
           {patientsLoading ? (
             <Box display="flex" justifyContent="center" p={4}>
@@ -1907,820 +1834,363 @@ const PatientOrganizer: React.FC = () => {
           )}
         </TabPanel>
 
-        <TabPanel value={activeTab} index={3}>
-          {/* Medizinisch Tab */}
-          <Stack spacing={2}>
-            {/* Medizinische Daten */}
-      <Paper sx={{ p: 2 }}>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Medizinische Daten</Typography>
-          <Button
-            variant="outlined"
-            startIcon={<Edit />}
-            size="small"
-            disabled={!patient}
-            onClick={handleEditMedicalData}
-          >
-            Bearbeiten
-          </Button>
-        </Box>
-        <Divider sx={{ my: 1 }} />
-        {!patient && isLoading ? (
-          <>
-            <Skeleton variant="text" width="60%" />
-            <Skeleton variant="text" width="40%" />
-            <Skeleton variant="text" width="50%" />
-          </>
-        ) : !patient ? (
-          <Typography variant="body2" color="text.secondary">Patient nicht gefunden.</Typography>
-        ) : (
-          <Box>
-            {/* Grundlegende medizinische Daten */}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Bloodtype color="action" />
-                <Typography variant="body2">
-                  <strong>Blutgruppe:</strong> {patient.bloodType || 'Nicht erfasst'}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Height color="action" />
-                <Typography variant="body2">
-                  <strong>Größe:</strong> {patient.height ? `${patient.height} cm` : 'Nicht erfasst'}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <MonitorWeight color="action" />
-                <Typography variant="body2">
-                  <strong>Gewicht:</strong> {patient.weight ? `${patient.weight} kg` : 'Nicht erfasst'}
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Favorite color="action" />
-                <Typography variant="body2">
-                  <strong>BMI:</strong> {patient.bmi ? patient.bmi.toFixed(1) : 'Nicht berechnet'}
-                </Typography>
-              </Box>
-            </Box>
-
-            {/* Allergien */}
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Allergy color="warning" />
-                <Typography variant="subtitle2" fontWeight="bold">Allergien</Typography>
-              </Box>
-              {patient.allergies && patient.allergies.length > 0 ? (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {patient.allergies.map((allergy, index) => (
-                    <Chip
-                      key={index}
-                      label={typeof allergy === 'string' ? allergy : allergy.description}
-                      color="warning"
-                      size="small"
-                      icon={<Allergy />}
-                    />
-                  ))}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Keine Allergien erfasst
-                </Typography>
-              )}
-            </Box>
-
-            {/* Medikamente */}
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <LocalPharmacy color="primary" />
-                <Typography variant="subtitle2" fontWeight="bold">Aktuelle Medikamente</Typography>
-              </Box>
-              {patient.currentMedications && patient.currentMedications.length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {patient.currentMedications.map((medication, index) => (
-                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                      <LocalPharmacy color="primary" />
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body2" fontWeight="bold">
-                          {typeof medication === 'string' ? medication : medication.name}
-                        </Typography>
-                        {typeof medication === 'object' && (
-                          <Typography variant="caption" color="text.secondary">
-                            {medication.dosage && medication.dosage !== 'Nicht angegeben' && `Dosierung: ${medication.dosage}`}
-                            {medication.dosage && medication.dosage !== 'Nicht angegeben' && medication.frequency && medication.frequency !== 'Nicht angegeben' && ' • '}
-                            {medication.frequency && medication.frequency !== 'Nicht angegeben' && `Häufigkeit: ${medication.frequency}`}
-                          </Typography>
-                        )}
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Keine Medikamente erfasst
-                </Typography>
-              )}
-            </Box>
-
-            {/* Vorerkrankungen */}
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <MedicalServices color="error" />
-                <Typography variant="subtitle2" fontWeight="bold">Vorerkrankungen</Typography>
-              </Box>
-              {patient.preExistingConditions && patient.preExistingConditions.length > 0 ? (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {patient.preExistingConditions.map((condition, index) => (
-                    <Chip
-                      key={index}
-                      label={condition}
-                      color="error"
-                      size="small"
-                      icon={<MedicalServices />}
-                    />
-                  ))}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Keine Vorerkrankungen erfasst
-                </Typography>
-              )}
-            </Box>
-
-            {/* Medizinische Vorgeschichte */}
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Psychology color="info" />
-                <Typography variant="subtitle2" fontWeight="bold">Medizinische Vorgeschichte</Typography>
-              </Box>
-              {patient.medicalHistory && patient.medicalHistory.length > 0 ? (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {patient.medicalHistory.map((history, index) => (
-                    <Chip
-                      key={index}
-                      label={history}
-                      color="info"
-                      size="small"
-                      icon={<Psychology />}
-                    />
-                  ))}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Keine medizinische Vorgeschichte erfasst
-                </Typography>
-              )}
-            </Box>
-
-            {/* Impfungen */}
-            <Box sx={{ mb: 2 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Vaccines color="success" />
-                <Typography variant="subtitle2" fontWeight="bold">Impfungen</Typography>
-              </Box>
-              {patient.vaccinations && patient.vaccinations.length > 0 ? (
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                  {patient.vaccinations.map((vaccination, index) => (
-                    <Chip
-                      key={index}
-                      label={typeof vaccination === 'string' ? vaccination : `${vaccination.name} (${vaccination.date ? new Date(vaccination.date).toLocaleDateString('de-DE') : 'Datum unbekannt'})`}
-                      color="success"
-                      size="small"
-                      icon={<Vaccines />}
-                    />
-                  ))}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Keine Impfungen erfasst
-                </Typography>
-              )}
-            </Box>
-
-            {/* Schwangerschaft und Stillen (nur bei Frauen) */}
-            {patient.gender === 'f' || patient.gender === 'w' ? (
-              <Box sx={{ mb: 3 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  <PregnantWoman color="secondary" />
-                  <Typography variant="subtitle2" fontWeight="bold">Schwangerschaft & Stillen</Typography>
-                </Box>
-                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="body2">
-                      <strong>Schwanger:</strong> {patient.isPregnant ? 'Ja' : 'Nein'}
-                    </Typography>
-                  </Box>
-                  {patient.isPregnant && (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2">
-                        <strong>Schwangerschaftswoche:</strong> {patient.pregnancyWeek || 'Nicht angegeben'}
-                      </Typography>
-                    </Box>
-                  )}
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="body2">
-                      <strong>Stillen:</strong> {patient.isBreastfeeding ? 'Ja' : 'Nein'}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Box>
-            ) : null}
-
-            {/* Medizinische Implantate und Geräte */}
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <MedicalServices color="primary" />
-                <Typography variant="subtitle2" fontWeight="bold">Implantate & Geräte</Typography>
-              </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mb: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2">
-                    <strong>Schrittmacher:</strong> {patient.hasPacemaker ? 'Ja' : 'Nein'}
-                  </Typography>
-                </Box>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2">
-                    <strong>Defibrillator:</strong> {patient.hasDefibrillator ? 'Ja' : 'Nein'}
-                  </Typography>
-                </Box>
-              </Box>
-              {patient.implants && patient.implants.length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {patient.implants.map((implant, index) => (
-                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                      <MedicalServices color="primary" />
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="body2" fontWeight="bold">
-                          {implant.type}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {implant.location && `Ort: ${implant.location}`}
-                          {implant.date && ` • Datum: ${new Date(implant.date).toLocaleDateString('de-DE')}`}
-                          {implant.notes && ` • ${implant.notes}`}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Keine Implantate erfasst
-                </Typography>
-              )}
-            </Box>
-
-            {/* Raucherstatus */}
-            <Box sx={{ mb: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Allergy color="warning" />
-                <Typography variant="subtitle2" fontWeight="bold">Raucherstatus</Typography>
-              </Box>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2">
-                    <strong>Status:</strong> {
-                      patient.smokingStatus === 'non-smoker' ? 'Nichtraucher' :
-                      patient.smokingStatus === 'former-smoker' ? 'Ehemaliger Raucher' :
-                      patient.smokingStatus === 'current-smoker' ? 'Raucher' : 'Nicht erfasst'
-                    }
-                  </Typography>
-                </Box>
-                {patient.smokingStatus === 'current-smoker' && patient.cigarettesPerDay && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="body2">
-                      <strong>Zigaretten/Tag:</strong> {patient.cigarettesPerDay}
-                    </Typography>
-                  </Box>
-                )}
-                {patient.smokingStatus !== 'non-smoker' && patient.yearsOfSmoking && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="body2">
-                      <strong>Rauchejahre:</strong> {patient.yearsOfSmoking}
-                    </Typography>
-                  </Box>
-                )}
-                {patient.smokingStatus === 'former-smoker' && patient.quitSmokingDate && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <Typography variant="body2">
-                      <strong>Aufgehört:</strong> {new Date(patient.quitSmokingDate).toLocaleDateString('de-DE')}
-                    </Typography>
-                  </Box>
-                )}
-              </Box>
-            </Box>
-
-            {/* Notizen */}
-            {patient.notes && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                <Typography variant="subtitle2" fontWeight="bold" sx={{ mb: 1 }}>
-                  Medizinische Notizen
-                </Typography>
-                <Typography variant="body2">
-                  {patient.notes}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        )}
-      </Paper>
-
-            {/* Diagnosen-Verwaltung mit Autocomplete */}
+        <TabPanel value={activeTab} index={2}>
+          {/* Laborwerte Tab */}
+          {patientId ? (
             <Paper sx={{ p: 2 }}>
-              {patientId && (
-                <DiagnosisManager
-                  patientId={patientId}
-                  allowEdit={true}
-                  showPrimaryToggle={true}
-                  context="medical"
-                  onDiagnosisChange={(diagnoses) => {
-                    console.log('Diagnosen aktualisiert:', diagnoses.length);
-                  }}
-                />
-              )}
+              <LaborResults patientId={patientId} />
             </Paper>
-          </Stack>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={3}>
+          {/* DICOM Tab */}
+          {patientId ? (
+            <Paper sx={{ p: 2 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">DICOM-Studien</Typography>
+                <Button
+                  variant="contained"
+                  startIcon={<Add />}
+                  onClick={() => setDicomUploadOpen(true)}
+                >
+                  DICOM hochladen
+                </Button>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              <DicomStudiesList patientId={patientId} />
+            </Paper>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
         </TabPanel>
 
         <TabPanel value={activeTab} index={4}>
-          {/* Termine & Besuche Tab */}
-          <Stack spacing={2}>
-            {/* Besuchshistorie */}
-            {patientId && (
-              <Box>
-                <Paper sx={{ p: 2, mb: 2 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">Besuchshistorie</Typography>
-                  </Box>
-                </Paper>
-                <PatientVisitHistory patientId={patientId} limit={10} />
-              </Box>
-            )}
-
-            {/* Termine */}
+          {/* Stammdaten Tab */}
+          {patient ? (
             <Paper sx={{ p: 2 }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="h6">Termine</Typography>
-                <Button size="small" onClick={() => navigate(`/appointments?patient=${patientId}`)}>Alle</Button>
-              </Stack>
-              <Divider sx={{ my: 1 }} />
-              {isLoading ? (
-                <>
-                  {[...Array(4)].map((_,i)=>(<Skeleton key={i} variant="rectangular" width="100%" height={80} sx={{ my: 1 }} />))}
-                </>
-              ) : patientAppointments.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">Keine Termine</Typography>
-              ) : (
-                <>
-                  {/* Anstehende Termine */}
-                  {patientAppointments.filter((apt) => {
-                    try {
-                      const aptDate = new Date(apt.startTime);
-                      return aptDate > new Date();
-                    } catch {
-                      return false;
-                    }
-                  }).length > 0 && (
-                    <>
-                      <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1, mt: 2 }}>Anstehende Termine</Typography>
-                      <Stack spacing={1}>
-                        {patientAppointments.filter((apt) => {
-                          try {
-                            const aptDate = new Date(apt.startTime);
-                            return aptDate > new Date();
-                          } catch {
-                            return false;
-                          }
-                        }).map((appointment) => (
-                  <Paper
-                    key={appointment._id}
-                    sx={{
-                      p: 2,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      borderLeft: 4,
-                      borderLeftColor: `${getStatusColor(appointment.status)}.main`,
-                      '&:hover': {
-                        boxShadow: 2
-                      },
-                      cursor: 'pointer'
-                    }}
-                    onClick={() => navigate(`/appointments`)}
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">Stammdaten</Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<Edit />}
+                    onClick={handleEditStammdaten}
                   >
-                    <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
-                      <Avatar sx={{ mr: 2, bgcolor: `${getStatusColor(appointment.status)}.main` }}>
-                        {getStatusIcon(appointment.status)}
-                      </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-                          <Typography variant="subtitle1" fontWeight="bold">
-                            {(() => {
-                              try {
-                                const date = new Date(appointment.startTime);
-                                if (isNaN(date.getTime())) {
-                                  return 'Zeit unbekannt';
-                                }
-                                return date.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
-                              } catch (error) {
-                                return 'Zeit unbekannt';
-                              }
-                            })()}
-                          </Typography>
-                          <Chip
-                            label={(appointment as any).service?.name || appointment.type}
-                            size="small"
-                            variant="outlined"
-                            sx={{
-                              backgroundColor: (appointment as any).service?.color_hex || 'default',
-                              color: (appointment as any).service?.color_hex ? 'white' : 'default'
-                            }}
-                          />
-                        </Box>
-                        <Typography variant="body2" color="text.secondary" mb={0.5}>
-                          {appointment.startTime && <span>{new Date(appointment.startTime).toLocaleDateString('de-DE')} • </span>}
-                          {(appointment as any).room ? (appointment as any).room.name : 'Raum nicht zugewiesen'} • 
-                          {appointment.duration ? `${appointment.duration} Min • ` : ''}
-                          {(appointment as any).doctor ? `${(appointment as any).doctor.title} ${(appointment as any).doctor.lastName}` : (appointment as any).doctorName}
-                          {(appointment as any).service?.price_cents && (
-                            <span> • €{((appointment as any).service.price_cents / 100).toFixed(2)}</span>
-                          )}
-                        </Typography>
-                        {/* Zugewiesene Ressourcen anzeigen */}
-                        {(((appointment as any).assigned_rooms && (appointment as any).assigned_rooms.length > 0) || 
-                           ((appointment as any).assigned_devices && (appointment as any).assigned_devices.length > 0) || 
-                           ((appointment as any).assigned_users && (appointment as any).assigned_users.length > 0)) && (
-                          <Box display="flex" gap={1} mt={1} flexWrap="wrap">
-                            {(appointment as any).assigned_rooms?.map((room: any, index: number) => (
-                              <Chip
-                                key={room._id || `room-${index}`}
-                                label={`Raum: ${room.name}`}
-                                size="small"
-                                variant="outlined"
-                                color="primary"
-                              />
-                            ))}
-                            {(appointment as any).assigned_devices?.map((device: any, index: number) => (
-                              <Chip
-                                key={device._id || `device-${index}`}
-                                label={`Gerät: ${device.name}`}
-                                size="small"
-                                variant="outlined"
-                                color="secondary"
-                              />
-                            ))}
-                            {(appointment as any).assigned_users?.map((user: any, index: number) => (
-                              <Chip
-                                key={user._id || `user-${index}`}
-                                label={`Personal: ${user.display_name || user.firstName || user.first_name} ${user.lastName || user.last_name}`}
-                                size="small"
-                                variant="outlined"
-                                color="success"
-                              />
-                            ))}
-                          </Box>
-                        )}
-                      </Box>
-                    </Box>
-                  </Paper>
-                ))}
-                      </Stack>
-                    </>
-                  )}
-                  
-                  {/* Abgelaufene Termine */}
-                  {patientAppointments.filter((apt) => {
-                    try {
-                      const aptDate = new Date(apt.startTime);
-                      return aptDate <= new Date();
-                    } catch {
-                      return false;
+                    Bearbeiten
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<QrCode />}
+                    onClick={handleValidateStammdaten}
+                  >
+                    QR-Validierung
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<CreditCard />}
+                    onClick={handleECardValidation}
+                  >
+                    e-card validieren
+                  </Button>
+                </Stack>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              
+              {/* GINA-Box Status */}
+              <Box sx={{ mb: 2 }}>
+                <GinaBoxStatus
+                  onPatientFound={(patient) => {
+                    setGinaBoxPatientFound(patient);
+                    setGinaBoxDialogOpen(true);
+                    // Navigiere zum Patienten, wenn gefunden
+                    if (patient._id) {
+                      navigate(`/patients/${patient._id}?tab=stammdaten`);
                     }
-                  }).length > 0 && (
-                    <>
-                      <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 1, mt: 2 }}>Abgelaufene Termine</Typography>
-                      <Stack spacing={1}>
-                        {patientAppointments.filter((apt) => {
-                          try {
-                            const aptDate = new Date(apt.startTime);
-                            return aptDate <= new Date();
-                          } catch {
-                            return false;
-                          }
-                        }).map((appointment) => (
-                          <Paper
-                            key={appointment._id}
-                            sx={{
-                              p: 2,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              borderLeft: 4,
-                              borderLeftColor: `${getStatusColor(appointment.status)}.main`,
-                              '&:hover': {
-                                boxShadow: 2
-                              },
-                              cursor: 'pointer',
-                              opacity: 0.7
-                            }}
-                            onClick={() => navigate(`/appointments`)}
-                          >
-                            <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
-                              <Avatar sx={{ mr: 2, bgcolor: `${getStatusColor(appointment.status)}.main` }}>
-                                {getStatusIcon(appointment.status)}
-                              </Avatar>
-                              <Box sx={{ flexGrow: 1 }}>
-                                <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-                                  <Typography variant="subtitle1" fontWeight="bold">
-                                    {(() => {
-                                      try {
-                                        const date = new Date(appointment.startTime);
-                                        if (isNaN(date.getTime())) {
-                                          return 'Zeit unbekannt';
-                                        }
-                                        return date.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
-                                      } catch (error) {
-                                        return 'Zeit unbekannt';
-                                      }
-                                    })()}
-                                  </Typography>
-                                  <Chip
-                                    label={(appointment as any).service?.name || appointment.type}
-                                    size="small"
-                                    variant="outlined"
-                                    sx={{
-                                      backgroundColor: (appointment as any).service?.color_hex || 'default',
-                                      color: (appointment as any).service?.color_hex ? 'white' : 'default'
-                                    }}
-                                  />
-                                </Box>
-                                <Typography variant="body2" color="text.secondary" mb={0.5}>
-                                  {appointment.startTime && <span>{new Date(appointment.startTime).toLocaleDateString('de-DE')} • </span>}
-                                  {(appointment as any).room ? (appointment as any).room.name : 'Raum nicht zugewiesen'} • 
-                                  {appointment.duration ? `${appointment.duration} Min • ` : ''}
-                                  {(appointment as any).doctor ? `${(appointment as any).doctor.title} ${(appointment as any).doctor.lastName}` : (appointment as any).doctorName}
-                                  {(appointment as any).service?.price_cents && (
-                                    <span> • €{((appointment as any).service.price_cents / 100).toFixed(2)}</span>
-                                  )}
-                                </Typography>
-                                {/* Zugewiesene Ressourcen anzeigen */}
-                                {(((appointment as any).assigned_rooms && (appointment as any).assigned_rooms.length > 0) || 
-                                   ((appointment as any).assigned_devices && (appointment as any).assigned_devices.length > 0) || 
-                                   ((appointment as any).assigned_users && (appointment as any).assigned_users.length > 0)) && (
-                                  <Box display="flex" gap={1} mt={1} flexWrap="wrap">
-                                    {(appointment as any).assigned_rooms?.map((room: any, index: number) => (
-                                      <Chip
-                                        key={room._id || `room-${index}`}
-                                        label={`Raum: ${room.name}`}
-                                        size="small"
-                                        variant="outlined"
-                                        color="primary"
-                                      />
-                                    ))}
-                                    {(appointment as any).assigned_devices?.map((device: any, index: number) => (
-                                      <Chip
-                                        key={device._id || `device-${index}`}
-                                        label={`Gerät: ${device.name}`}
-                                        size="small"
-                                        variant="outlined"
-                                        color="secondary"
-                                      />
-                                    ))}
-                                    {(appointment as any).assigned_users?.map((user: any, index: number) => (
-                                      <Chip
-                                        key={user._id || `user-${index}`}
-                                        label={`Personal: ${user.display_name || user.firstName || user.first_name} ${user.lastName || user.last_name}`}
-                                        size="small"
-                                        variant="outlined"
-                                        color="success"
-                                      />
-                                    ))}
-                                  </Box>
-                                )}
-                              </Box>
-                            </Box>
-                          </Paper>
-                        ))}
-                      </Stack>
-                    </>
+                  }}
+                  onPatientNotFound={() => {
+                    setSnackbar({
+                      open: true,
+                      message: 'Kein Patient mit dieser e-card gefunden. Möchten Sie einen neuen Patienten anlegen?',
+                      severity: 'info'
+                    });
+                  }}
+                />
+              </Box>
+              
+              {/* Hinweis für automatische e-card-Validierung */}
+              {autoValidatedEcard && patient?.ecard?.validationStatus === 'valid' && (
+                <Alert severity="success" sx={{ mb: 2 }} onClose={() => setAutoValidatedEcard(false)}>
+                  e-card wurde automatisch validiert beim {patient.ecard.lastValidated ? new Date(patient.ecard.lastValidated).toLocaleDateString('de-DE') : 'Speichern'}
+                  {patient.ecard.validUntil && (
+                    <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                      Gültig bis: {new Date(patient.ecard.validUntil).toLocaleDateString('de-DE')}
+                    </Typography>
                   )}
-                </>
+                </Alert>
               )}
+
+              {/* e-card Status anzeigen */}
+              {patient.ecard && (
+                <Box sx={{ mb: 2 }}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Stack direction="row" spacing={2} alignItems="center">
+                        <CreditCard />
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="subtitle2" fontWeight="bold">
+                            e-card Status
+                          </Typography>
+                          <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
+                            <Chip
+                              label={patient.ecard.validationStatus === 'valid' ? 'Gültig' : 
+                                     patient.ecard.validationStatus === 'invalid' ? 'Ungültig' :
+                                     patient.ecard.validationStatus === 'expired' ? 'Abgelaufen' : 'Nicht geprüft'}
+                              color={patient.ecard.validationStatus === 'valid' ? 'success' : 
+                                     patient.ecard.validationStatus === 'invalid' ? 'error' :
+                                     patient.ecard.validationStatus === 'expired' ? 'warning' : 'default'}
+                              size="small"
+                            />
+                            {patient.ecard.cardNumber && (
+                              <Typography variant="caption" color="text.secondary">
+                                {patient.ecard.cardNumber.slice(0, 4)}...{patient.ecard.cardNumber.slice(-4)}
+                              </Typography>
+                            )}
+                          </Stack>
+                          {patient.ecard.lastValidated && (
+                            <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                              Letzte Validierung: {new Date(patient.ecard.lastValidated).toLocaleDateString('de-DE')}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                </Box>
+              )}
+
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Persönliche Daten</Typography>
+                  <Typography variant="body2"><strong>Name:</strong> {patient.firstName} {patient.lastName}</Typography>
+                  <Typography variant="body2"><strong>Geburtsdatum:</strong> {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('de-DE') : '—'}</Typography>
+                  <Typography variant="body2"><strong>Geschlecht:</strong> {patient.gender === 'm' ? 'Männlich' : patient.gender === 'f' || patient.gender === 'w' ? 'Weiblich' : '—'}</Typography>
+                  <Typography variant="body2"><strong>SVNR:</strong> {patient.socialSecurityNumber || '—'}</Typography>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Kontaktdaten</Typography>
+                  <Typography variant="body2"><strong>Telefon:</strong> {patient.phone || '—'}</Typography>
+                  <Typography variant="body2"><strong>E-Mail:</strong> {patient.email || '—'}</Typography>
+                  <Typography variant="body2"><strong>Adresse:</strong> {patient.address ? `${patient.address.street || ''}, ${patient.address.zipCode || ''} ${patient.address.city || ''}`.trim() : '—'}</Typography>
+                </Grid>
+                {patient.emergencyContact && (
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Notfallkontakt</Typography>
+                    <Typography variant="body2"><strong>Name:</strong> {patient.emergencyContact.name || '—'}</Typography>
+                    <Typography variant="body2"><strong>Telefon:</strong> {patient.emergencyContact.phone || '—'}</Typography>
+                  </Grid>
+                )}
+                {patient.primaryCarePhysician && (
+                  <Grid size={{ xs: 12, md: 6 }}>
+                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Hausarzt</Typography>
+                    <Typography variant="body2"><strong>Name:</strong> {patient.primaryCarePhysician.name || '—'}</Typography>
+                    <Typography variant="body2"><strong>Telefon:</strong> {patient.primaryCarePhysician.phone || '—'}</Typography>
+                  </Grid>
+                )}
+              </Grid>
             </Paper>
-          </Stack>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
         </TabPanel>
 
         <TabPanel value={activeTab} index={5}>
-          {/* Dokumente Tab */}
-          <Stack spacing={2}>
-
-            {/* In Arbeit Container - Ambulanzbefunde im Entwurf */}
-            {(inArbeitAmbulanzbefunde.length > 0 || loadingAmbulanzbefunde) && (
-              <Paper sx={{ p: 2, mb: 2 }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="center">
-                  <Typography variant="h6">In Arbeit</Typography>
-                  <Button 
-                    size="small" 
-                    startIcon={<Article />}
-                    onClick={() => navigate(`/ambulanzbefund/new/${patientId}`)}
-                    variant="contained"
-                    color="primary"
-                  >
-                    Ambulanzbefund
-                  </Button>
-                </Stack>
-                <Divider sx={{ my: 1 }} />
-                {loadingAmbulanzbefunde ? (
-                  <>
-                    {[...Array(2)].map((_, i) => (
-                      <Skeleton key={i} variant="text" width="80%" height={40} sx={{ my: 0.5 }} />
-                    ))}
-                  </>
-                ) : inArbeitAmbulanzbefunde.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">Keine Entwürfe</Typography>
-                ) : (
-                  <List dense>
-                    {inArbeitAmbulanzbefunde.map((amb: any) => {
-                      const statusText = amb.status === 'draft' ? 'Entwurf' : 'Zur Freigabe';
-                      const statusColor = amb.status === 'draft' ? 'warning' : 'info';
-                      const dateStr = amb.updatedAt || amb.createdAt 
-                        ? new Date(amb.updatedAt || amb.createdAt).toLocaleString('de-DE') 
-                        : '';
-                      
-                      return (
-                        <ListItemButton
-                          key={amb._id}
-                          onClick={() => navigate(`/ambulanzbefund/${amb._id}`)}
-                          sx={{
-                            backgroundColor: amb.status === 'draft' ? 'rgba(255, 193, 7, 0.1)' : 'rgba(33, 150, 243, 0.1)',
-                            mb: 0.5,
-                            borderRadius: 1,
-                            '&:hover': {
-                              backgroundColor: amb.status === 'draft' ? 'rgba(255, 193, 7, 0.2)' : 'rgba(33, 150, 243, 0.2)'
-                            }
-                          }}
-                        >
-                          <ListItemText
-                            primary={
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                <Article fontSize="small" color="primary" />
-                                <span>Ambulanzbefund - {amb.documentNumber}</span>
-                                <Chip 
-                                  label={statusText} 
-                                  size="small" 
-                                  color={statusColor as any}
-                                  sx={{ ml: 'auto' }}
-                                />
-                              </Box>
-                            }
-                            secondary={
-                              <Box>
-                                <Typography variant="caption" color="text.secondary">
-                                  {SPECIALIZATION_LABELS[amb.specialization as Specialization] || amb.specialization}
-                                  {dateStr ? ` • ${dateStr}` : ''}
-                                </Typography>
-                              </Box>
-                            }
-                            secondaryTypographyProps={{ component: 'div' }}
-                          />
-                        </ListItemButton>
-                      );
-                    })}
-                  </List>
-                )}
-              </Paper>
-            )}
-
-            {/* Dokumente */}
+          {/* Medizinisch Tab */}
+          {patient ? (
             <Paper sx={{ p: 2 }}>
-              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                <Typography variant="h6">Dokumente</Typography>
-                <Stack direction="row" spacing={1}>
-                  <Button 
-                    size="small" 
-                    startIcon={<Article />}
-                    onClick={() => navigate(`/ambulanzbefund/new/${patientId}`)}
-                    variant="contained"
-                    color="primary"
-                  >
-                    Ambulanzbefund
-                  </Button>
-                  <Button 
-                    size="small" 
-                    startIcon={<Add />}
-                    onClick={handleTemplateMenuOpen}
-                    disabled={isCreatingDocument}
-                  >
-                    Aus Vorlage
-                  </Button>
-                  <Button size="small" onClick={() => navigate('/documents')}>Neu</Button>
-                </Stack>
-              </Stack>
-              <Divider sx={{ my: 1 }} />
-              {(isLoading || loadingXdsDocuments || loadingAmbulanzbefunde) ? (
-                <>
-                  {[...Array(4)].map((_,i)=>(<Skeleton key={i} variant="text" width="80%" height={22} sx={{ my: 0.5 }} />))}
-                </>
-              ) : patientDocuments.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">Keine Dokumente</Typography>
-              ) : (
-                <List dense>
-                  {patientDocuments.map((doc: any) => {
-                    const isXds = doc.isXdsDocument;
-                    const isAmb = doc.isAmbulanzbefund;
-                    const docDate = doc.creationTime || doc.createdAt || doc.updatedAt;
-                    const dateStr = docDate ? new Date(docDate).toLocaleString('de-DE') : '';
-                    const secondaryText = isXds 
-                      ? `${doc.formatCode?.displayName || doc.mimeType || 'XDS'} • ${doc.locationName || ''} • ${dateStr}`.trim()
-                      : isAmb
-                      ? `${SPECIALIZATION_LABELS[doc.specialization as Specialization] || doc.specialization || 'Ambulanzbefund'} • ${dateStr}`.trim()
-                      : `${doc.type || ''}${doc.status ? ' • ' + doc.status : ''} • ${dateStr}`.trim();
-                    
-                    const isCDA = isXds && (
-                      doc.mimeType?.toLowerCase().includes('xml') ||
-                      doc.mimeType?.toLowerCase().includes('cda') ||
-                      doc.formatCode?.code?.includes('1.2.40.0.34.11') ||
-                      doc.title?.toLowerCase().includes('entlassungsbrief')
-                    );
-
-                    const bgColor = (isAmb || (isXds && isOwnOrganizationDocument(doc, locations || []))) 
-                      ? 'rgba(33, 150, 243, 0.08)'
-                      : undefined;
-
-                    return (
-                      <ListItemButton
-                        key={doc._id || doc.id || doc.entryUUID}
-                        onClick={() => {
-                          if (isAmb) {
-                            navigate(`/ambulanzbefund/${doc._id}`);
-                          } else if (isXds && isCDA) {
-                            setViewingXdsDocument(doc);
-                            setCdaViewerOpen(true);
-                          } else if (isXds) {
-                            navigate(`/xds-documents?locationId=${doc.locationId}&documentId=${doc._id}`);
-                          } else {
-                            navigate(`/documents/${doc._id || doc.id}`);
-                          }
-                        }}
-                        sx={{
-                          backgroundColor: bgColor,
-                          mb: 0.5,
-                          borderRadius: 1,
-                          '&:hover': {
-                            backgroundColor: bgColor 
-                              ? 'rgba(33, 150, 243, 0.15)' 
-                              : 'action.hover'
-                          }
-                        }}
-                      >
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                              {isAmb && <Article fontSize="small" color="primary" />}
-                              {isXds && !isAmb && <Storage fontSize="small" color="primary" />}
-                              {isCDA && <Article fontSize="small" color="primary" />}
-                              <span>{doc.title}</span>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">Medizinische Daten</Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  startIcon={<Edit />}
+                  onClick={handleEditMedicalData}
+                >
+                  Bearbeiten
+                </Button>
+              </Box>
+              <Divider sx={{ mb: 2 }} />
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Grunddaten</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Bloodtype color="action" />
+                    <Typography variant="body2"><strong>Blutgruppe:</strong> {patient.bloodType || 'Nicht erfasst'}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Height color="action" />
+                    <Typography variant="body2"><strong>Größe:</strong> {patient.height ? `${patient.height} cm` : 'Nicht erfasst'}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <MonitorWeight color="action" />
+                    <Typography variant="body2"><strong>Gewicht:</strong> {patient.weight ? `${patient.weight} kg` : 'Nicht erfasst'}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Favorite color="action" />
+                    <Typography variant="body2"><strong>BMI:</strong> {patient.bmi ? patient.bmi.toFixed(1) : 'Nicht berechnet'}</Typography>
+                  </Box>
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  {patient.allergies && patient.allergies.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Allergien</Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {patient.allergies.map((allergy, index) => (
+                          <Chip
+                            key={index}
+                            label={typeof allergy === 'string' ? allergy : allergy.description}
+                            color="warning"
+                            size="small"
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                  {patient.currentMedications && patient.currentMedications.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Aktuelle Medikamente</Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {patient.currentMedications.map((medication, index) => (
+                          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                            <LocalPharmacy color="primary" />
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2">
+                                {typeof medication === 'string' ? medication : medication.name}
+                              </Typography>
                             </Box>
-                          }
-                          secondary={secondaryText}
-                          secondaryTypographyProps={{ color: 'text.secondary', component: 'div' }}
-                        />
-                        {isAmb && doc.status === 'finalized' && !doc.cdaExport?.exported && (
-                          <Tooltip title="Ins XDS Repository exportieren">
-                            <IconButton
-                              size="small"
-                              onClick={(e) => handleExportAmbulanzbefund(doc._id, e)}
-                              disabled={loadingAmbulanzbefunde}
-                              sx={{ ml: 1 }}
-                            >
-                              <CloudUpload fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                      </ListItemButton>
-                    );
-                  })}
-                </List>
-              )}
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                </Grid>
+                {patientId && (
+                  <Grid size={{ xs: 12 }}>
+                    <DiagnosisManager
+                      patientId={patientId}
+                      allowEdit={true}
+                      showPrimaryToggle={true}
+                      context="medical"
+                    />
+                  </Grid>
+                )}
+              </Grid>
             </Paper>
-
-            {/* Patienten-Timeline */}
-            {patient && (
-              <PatientTimeline
-                patient={patient}
-                onNavigate={(path) => navigate(path)}
-                maxItems={15}
-              />
-            )}
-          </Stack>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
         </TabPanel>
 
         <TabPanel value={activeTab} index={6}>
+          {/* Termine & Besuche Tab */}
+          {patientId ? (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>Termine & Besuche</Typography>
+              <Divider sx={{ mb: 2 }} />
+              <PatientVisitHistory patientId={patientId} limit={20} />
+            </Paper>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={7}>
+          {/* Dokumente Tab */}
+          {patientId ? (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>Dokumente</Typography>
+              <Divider sx={{ mb: 2 }} />
+              {patientDocuments && patientDocuments.length > 0 ? (
+                <List>
+                  {patientDocuments.slice(0, 20).map((doc, index) => (
+                    <ListItemButton
+                      key={doc._id || index}
+                      onClick={() => {
+                        if (doc.type === 'cda' || doc.content?.format === 'cda') {
+                          setViewingXdsDocument(doc);
+                          setCdaViewerOpen(true);
+                        } else {
+                          navigate(`/documents/${doc._id || doc.id}`);
+                        }
+                      }}
+                    >
+                      <ListItemText
+                        primary={doc.title || doc.name || 'Unbenanntes Dokument'}
+                        secondary={
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('de-DE') : '—'}
+                            </Typography>
+                            {doc.type && (
+                              <Chip label={doc.type} size="small" sx={{ ml: 1 }} />
+                            )}
+                          </Box>
+                        }
+                        secondaryTypographyProps={{ component: 'div' }}
+                      />
+                    </ListItemButton>
+                  ))}
+                </List>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Keine Dokumente gefunden
+                </Typography>
+              )}
+            </Paper>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={8}>
           {/* Fotos Tab */}
           {patientId ? (
             <PatientPhotoGallery patientId={patientId} />
           ) : (
-            <Alert severity="warning">
-              Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
-            </Alert>
+            <Paper sx={{ p: 2 }}>
+              <Alert severity="warning">
+                Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
+              </Alert>
+            </Paper>
           )}
         </TabPanel>
 
@@ -3649,6 +3119,23 @@ const PatientOrganizer: React.FC = () => {
         />
       )}
 
+      {/* DICOM Upload Dialog */}
+      {patientId && (
+        <DicomUpload
+          open={dicomUploadOpen}
+          onClose={() => setDicomUploadOpen(false)}
+          patientId={patientId}
+          onUploadSuccess={() => {
+            setDicomUploadOpen(false);
+            setSnackbar({
+              open: true,
+              message: 'DICOM-Dateien erfolgreich hochgeladen',
+              severity: 'success'
+            });
+          }}
+        />
+      )}
+
       {/* Snackbar für Benachrichtigungen */}
       <Snackbar
         open={snackbar.open}
@@ -3676,6 +3163,105 @@ const PatientOrganizer: React.FC = () => {
           documentTitle={viewingXdsDocument.title || 'CDA Dokument'}
         />
       )}
+
+      {/* e-card Validierungs-Dialog */}
+      {patientId && (
+        <Dialog
+          open={ecardValidationOpen}
+          onClose={() => setEcardValidationOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle>
+            <Box display="flex" alignItems="center" gap={1}>
+              <CreditCard />
+              <Typography variant="h6">e-card Validierung</Typography>
+            </Box>
+          </DialogTitle>
+          <DialogContent>
+            <Box sx={{ mt: 2 }}>
+              <ECardValidation
+                patientId={patientId}
+                ecardNumber={patient?.ecard?.cardNumber}
+                onValidationComplete={(result) => {
+                  if (result?.success) {
+                    setSnackbar({
+                      open: true,
+                      message: 'e-card erfolgreich validiert',
+                      severity: 'success'
+                    });
+                    // Lade Patientendaten neu
+                    dispatch(fetchPatients(1));
+                    setEcardValidationOpen(false);
+                  }
+                }}
+              />
+            </Box>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setEcardValidationOpen(false)}>
+              Schließen
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* GINA-Box Patient gefunden Dialog */}
+      <Dialog
+        open={ginaBoxDialogOpen}
+        onClose={() => {
+          setGinaBoxDialogOpen(false);
+          setGinaBoxPatientFound(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box display="flex" alignItems="center" gap={1}>
+            <CreditCard color="success" />
+            <Typography variant="h6">Patient gefunden</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {ginaBoxPatientFound && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body1" gutterBottom>
+                <strong>Name:</strong> {ginaBoxPatientFound.firstName} {ginaBoxPatientFound.lastName}
+              </Typography>
+              {ginaBoxPatientFound.dateOfBirth && (
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  <strong>Geburtsdatum:</strong> {new Date(ginaBoxPatientFound.dateOfBirth).toLocaleDateString('de-DE')}
+                </Typography>
+              )}
+              {ginaBoxPatientFound.socialSecurityNumber && (
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  <strong>SVNR:</strong> {ginaBoxPatientFound.socialSecurityNumber}
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setGinaBoxDialogOpen(false);
+            setGinaBoxPatientFound(null);
+          }}>
+            Schließen
+          </Button>
+          {ginaBoxPatientFound?._id && (
+            <Button
+              variant="contained"
+              onClick={() => {
+                navigate(`/patients/${ginaBoxPatientFound._id}?tab=stammdaten`);
+                setGinaBoxDialogOpen(false);
+                setGinaBoxPatientFound(null);
+              }}
+            >
+              Zum Patienten
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
 
       {/* Hinweis-Details Dialog */}
       <Dialog

@@ -33,75 +33,61 @@ router.get('/', auth, async (req, res) => {
     const parsedPage = Math.max(parseInt(page) || 1, 1);
     const parsedLimit = Math.min(Math.max(parseInt(limit) || 20, 1), 200);
 
-    const rawItems = await Appointment.find(filter)
+    // Optimierte Abfrage: Alle Populates in einer einzigen Abfrage
+    // Verhindert N+1-Problem durch separate Abfragen für jeden Termin
+    const items = await Appointment.find(filter)
       .sort({ startTime: -1 })
       .limit(parsedLimit)
       .skip((parsedPage - 1) * parsedLimit)
-      .lean();
-    
-    console.log('Raw appointment before populate - first item:', rawItems[0]);
-
-    const Patient = require('../models/PatientExtended');
-    
-    const items = await Promise.all(rawItems.map(async (item) => {
-      try {
-      const appointment = await Appointment.findById(item._id)
         .populate('patient', 'firstName lastName email phone dateOfBirth gender allergies preExistingConditions medicalHistory isPregnant pregnancyWeek isBreastfeeding hasPacemaker hasDefibrillator currentMedications')
         .populate('doctor', 'firstName lastName email')
         .populate('service', 'name code color_hex category description base_duration_min price_cents isMedical')
-        .populate('assigned_users', 'firstName lastName email role display_name first_name last_name');
-      
-      // Manually populate location_id if it exists
-      if (item.location_id) {
+      .populate('assigned_users', 'firstName lastName email role display_name first_name last_name')
+      .populate('assigned_devices', 'name type status location')
+      .populate('assigned_rooms', 'name number location')
+      .populate('room', 'name number location')
+      .populate('devices', 'name type status location')
+      .lean();
+
+    // Location-Informationen nachträglich hinzufügen, falls locationId vorhanden
+    // Da locationId möglicherweise kein Referenz-Feld ist, müssen wir es manuell behandeln
         const Location = require('../models/Location');
-        const location = await Location.findById(item.location_id);
-        appointment.location_id = location;
-      }
-      
-      // Manually populate assigned_devices and assigned_rooms if they are IDs
-      const Device = require('../models/Device');
-      const Room = require('../models/Room');
       const Resource = require('../models/Resource');
       
-      if (item.assigned_devices && item.assigned_devices.length > 0) {
-        appointment.assigned_devices = await Promise.all(item.assigned_devices.map(async (deviceId) => {
-          let device = await Device.findById(deviceId);
-          if (!device) {
-            device = await Resource.findOne({ _id: deviceId, type: 'equipment' });
-          }
-          return device;
-        }));
+    // Sammle alle eindeutigen locationIds
+    const locationIds = new Set();
+    items.forEach(item => {
+      if (item.locationId) locationIds.add(item.locationId);
+      if (item.location_id) locationIds.add(item.location_id);
+    });
+    
+    // Lade alle Locations in einer Abfrage
+    const locationsMap = new Map();
+    if (locationIds.size > 0) {
+      const locations = await Location.find({ _id: { $in: Array.from(locationIds) } }).lean();
+      locations.forEach(loc => locationsMap.set(loc._id.toString(), loc));
+    }
+    
+    // Füge Location-Informationen zu jedem Termin hinzu
+    const validItems = items.map(item => {
+      const locationId = item.locationId || item.location_id;
+      if (locationId && locationsMap.has(locationId.toString())) {
+        item.location = locationsMap.get(locationId.toString());
+        item.location_id = item.location;
       }
+      
+      // Fallback für Geräte/Räume, die nicht über Populate geladen wurden
+      // (falls sie als Resource gespeichert sind)
+      if (item.assigned_devices && item.assigned_devices.length > 0) {
+        item.assigned_devices = item.assigned_devices.filter(device => device !== null);
+    }
       
       if (item.assigned_rooms && item.assigned_rooms.length > 0) {
-        appointment.assigned_rooms = await Promise.all(item.assigned_rooms.map(async (roomId) => {
-          let room = await Room.findById(roomId);
-          if (!room) {
-            room = await Resource.findOne({ _id: roomId, type: 'room' });
-          }
-          return room;
-        }));
+        item.assigned_rooms = item.assigned_rooms.filter(room => room !== null);
       }
       
-      console.log('Appointment after populate - patient:', appointment.patient, 'patient type:', typeof appointment.patient);
-      
-      // Wenn populate null zurückgibt, manuell Patient laden
-      if (!appointment.patient && item.patient) {
-        console.log('Patient not populated, trying to load manually with ID:', item.patient);
-        const patient = await Patient.findById(item.patient);
-        console.log('Manual patient load result:', patient);
-        appointment.patient = patient;
-      }
-      
-      return appointment.toObject();
-    } catch (error) {
-      console.error('Error processing appointment:', item._id, error);
-      return null;
-    }
-  }));
-
-  // Filter out null values
-  const validItems = items.filter(item => item !== null);
+      return item;
+    });
 
     const total = await Appointment.countDocuments(filter);
 

@@ -21,6 +21,26 @@ export interface XdsRegistryConfig {
   patientUploadAllowedTypes?: string[];
 }
 
+export interface LocationBillingConfig {
+  defaultBillingType?: 'kassenarzt' | 'wahlarzt' | 'privat' | 'sonderklasse' | null;
+  kassenarzt?: {
+    enabled: boolean;
+    ogkContractNumber?: string;
+    autoSubmitOGK?: boolean;
+    elgaEnabled?: boolean;
+    kimEnabled?: boolean;
+  };
+  wahlarzt?: {
+    enabled: boolean;
+    defaultReimbursementRate?: number;
+    autoCalculateReimbursement?: boolean;
+  };
+  privat?: {
+    enabled: boolean;
+    defaultTariff?: 'GOÄ' | 'custom';
+  };
+}
+
 export interface Location {
   _id: string;
   name: string;
@@ -35,6 +55,8 @@ export interface Location {
   email?: string;
   color_hex: string;
   is_active: boolean;
+  practiceType?: 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt';
+  billing?: LocationBillingConfig;
   xdsRegistry?: XdsRegistryConfig;
   createdAt: string;
   updatedAt: string;
@@ -96,6 +118,9 @@ interface LocationState {
   locationHours: LocationHours[];
   locationClosures: LocationClosure[];
   staffAssignments: StaffLocationAssignment[];
+  currentLocation: Location | null;
+  availableLocations: Location[];
+  hasNoAssignment: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -105,6 +130,9 @@ const initialState: LocationState = {
   locationHours: [],
   locationClosures: [],
   staffAssignments: [],
+  currentLocation: null,
+  availableLocations: [],
+  hasNoAssignment: false,
   loading: false,
   error: null,
 };
@@ -302,6 +330,32 @@ export const deleteStaffLocationAssignment = createAsyncThunk<string, string>(
   }
 );
 
+// User-Standorte abrufen (für aktuell eingeloggten User)
+export interface UserLocationsResponse {
+  locations: Array<{
+    _id: string;
+    name: string;
+    code?: string;
+    city?: string;
+    is_primary: boolean;
+    allowed_services?: any[];
+  }>;
+  hasNoAssignment: boolean;
+  primaryLocation: string | null;
+}
+
+export const fetchUserLocations = createAsyncThunk<UserLocationsResponse, void>(
+  'locations/fetchUserLocations',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiRequest.get<{ success: boolean; data: UserLocationsResponse }>('/staff-location-assignments/user/me');
+      return response.data.data;
+    } catch (error: any) {
+      return rejectWithValue(error.message || 'Fehler beim Laden der Benutzer-Standorte');
+    }
+  }
+);
+
 // Slice
 const locationSlice = createSlice({
   name: 'locations',
@@ -312,6 +366,21 @@ const locationSlice = createSlice({
     },
     setLoading: (state, action: PayloadAction<boolean>) => {
       state.loading = action.payload;
+    },
+    setCurrentLocation: (state, action: PayloadAction<Location | null>) => {
+      state.currentLocation = action.payload;
+      // Speichere in LocalStorage
+      if (action.payload) {
+        localStorage.setItem('currentLocationId', action.payload._id);
+      } else {
+        localStorage.removeItem('currentLocationId');
+      }
+    },
+    setAvailableLocations: (state, action: PayloadAction<Location[]>) => {
+      state.availableLocations = action.payload;
+    },
+    setHasNoAssignment: (state, action: PayloadAction<boolean>) => {
+      state.hasNoAssignment = action.payload;
     },
   },
   extraReducers: (builder) => {
@@ -427,9 +496,53 @@ const locationSlice = createSlice({
       // Delete Staff Location Assignment
       .addCase(deleteStaffLocationAssignment.fulfilled, (state, action: PayloadAction<string>) => {
         state.staffAssignments = state.staffAssignments.filter(assignment => assignment._id !== action.payload);
+      })
+      // Fetch User Locations
+      .addCase(fetchUserLocations.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchUserLocations.fulfilled, (state, action: PayloadAction<UserLocationsResponse>) => {
+        state.loading = false;
+        state.hasNoAssignment = action.payload.hasNoAssignment;
+        
+        // Konvertiere die Standorte zu Location-Objekten
+        const locationIds = action.payload.locations.map(loc => loc._id);
+        const availableLocs = state.locations.filter(loc => locationIds.includes(loc._id));
+        
+        // Wenn keine Zuweisung, alle Standorte verfügbar
+        if (action.payload.hasNoAssignment) {
+          state.availableLocations = state.locations;
+        } else {
+          state.availableLocations = availableLocs;
+        }
+        
+        // Setze aktuellen Standort
+        const savedLocationId = localStorage.getItem('currentLocationId');
+        let locationToSet: Location | null = null;
+        
+        if (savedLocationId && state.availableLocations.find(loc => loc._id === savedLocationId)) {
+          // Verwende gespeicherten Standort, falls verfügbar
+          locationToSet = state.availableLocations.find(loc => loc._id === savedLocationId) || null;
+        } else if (action.payload.primaryLocation) {
+          // Verwende Primary Location
+          locationToSet = state.availableLocations.find(loc => loc._id === action.payload.primaryLocation) || null;
+        } else if (state.availableLocations.length > 0) {
+          // Verwende ersten verfügbaren Standort
+          locationToSet = state.availableLocations[0];
+        }
+        
+        state.currentLocation = locationToSet;
+        if (locationToSet) {
+          localStorage.setItem('currentLocationId', locationToSet._id);
+        }
+      })
+      .addCase(fetchUserLocations.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
       });
   },
 });
 
-export const { clearError, setLoading } = locationSlice.actions;
+export const { clearError, setLoading, setCurrentLocation, setAvailableLocations, setHasNoAssignment } = locationSlice.actions;
 export default locationSlice.reducer;

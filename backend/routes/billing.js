@@ -109,10 +109,83 @@ router.post('/invoices', auth, [
 
     console.log('Creating invoice with data:', JSON.stringify(invoiceData, null, 2));
 
+    // Automatische e-card-Validierung für Kassenarzt-Rechnungen
+    if (invoiceData.billingType === 'kassenarzt' && invoiceData.patient?.id) {
+      try {
+        const PatientExtended = require('../models/PatientExtended');
+        const elgaService = require('../services/elgaService');
+        const ginaService = require('../services/ginaService');
+        
+        const patient = await PatientExtended.findById(invoiceData.patient.id);
+        if (patient && patient.ecard?.cardNumber) {
+          // Versuche zuerst über GINA, dann über ELGA
+          let validationResult = null;
+          try {
+            validationResult = await ginaService.validateECard(patient.ecard.cardNumber, {
+              socialSecurityNumber: patient.socialSecurityNumber,
+              dateOfBirth: patient.dateOfBirth,
+              lastName: patient.lastName,
+              firstName: patient.firstName
+            });
+          } catch (ginaError) {
+            console.warn('GINA-Validierung fehlgeschlagen, versuche ELGA:', ginaError.message);
+            try {
+              validationResult = await elgaService.validateECard(patient.ecard.cardNumber, {
+                socialSecurityNumber: patient.socialSecurityNumber,
+                dateOfBirth: patient.dateOfBirth,
+                lastName: patient.lastName
+              });
+            } catch (elgaError) {
+              console.warn('ELGA-Validierung fehlgeschlagen:', elgaError.message);
+            }
+          }
+          
+          if (validationResult && !validationResult.valid) {
+            console.warn(`⚠️ e-card-Validierung fehlgeschlagen für Patient ${patient._id}: ${validationResult.status}`);
+            // Warnung, aber Rechnung trotzdem erstellen
+          } else if (validationResult && validationResult.valid) {
+            console.log(`✅ e-card erfolgreich validiert für Patient ${patient._id}`);
+            // Aktualisiere Patientendaten mit Versicherungsdaten aus e-card
+            if (validationResult.insuranceData) {
+              patient.insuranceProvider = validationResult.insuranceData.insuranceProvider || patient.insuranceProvider;
+              patient.insuranceNumber = validationResult.insuranceData.insuranceNumber || patient.insuranceNumber;
+              await patient.save();
+            }
+          }
+        }
+      } catch (ecardError) {
+        console.warn(`⚠️ Fehler bei automatischer e-card-Validierung:`, ecardError.message);
+        // Fehler nicht an Client weitergeben, da Rechnung trotzdem erstellt werden soll
+      }
+    }
+
     const invoice = new Invoice(invoiceData);
     await invoice.save();
 
     await invoice.populate('patient.id', 'firstName lastName');
+
+    // Automatische Erstattungserstellung für Wahlarzt-Rechnungen
+    if (invoice.billingType === 'wahlarzt' && invoice.status === 'sent') {
+      try {
+        const autoReimbursementService = require('../services/autoReimbursementService');
+        await autoReimbursementService.createReimbursementForInvoice(invoice);
+        console.log(`✅ Automatische Erstattung für Rechnung ${invoice.invoiceNumber} erstellt`);
+      } catch (reimbursementError) {
+        console.warn(`⚠️ Fehler bei automatischer Erstattungserstellung:`, reimbursementError.message);
+        // Fehler nicht an Client weitergeben, da Rechnung bereits erstellt wurde
+      }
+    }
+    
+    // GIN-Integration: Automatische Übermittlung für Kassenarzt-Rechnungen (wenn aktiviert)
+    if (invoice.billingType === 'kassenarzt' && process.env.GINA_AUTO_SUBMIT === 'true') {
+      try {
+        const ginaService = require('../services/ginaService');
+        // GINA-Übermittlung würde hier erfolgen (falls implementiert)
+        console.log(`ℹ️ GIN-Integration: Rechnung ${invoice.invoiceNumber} bereit für Übermittlung`);
+      } catch (ginaError) {
+        console.warn(`⚠️ Fehler bei GIN-Integration:`, ginaError.message);
+      }
+    }
 
     res.status(201).json({
       success: true,

@@ -120,7 +120,7 @@ class DocumentVersionService {
    * @param {string} documentId - ID des Dokuments
    * @param {object} updates - Zu aktualisierende Felder
    * @param {object} user - Benutzer
-   * @param {object} options - Zusätzliche Optionen
+   * @param {object} options - Zusätzliche Optionen (expectedVersion für Optimistic Locking)
    * @returns {Promise<Document>} Aktualisiertes Dokument
    */
   async updateDocument(documentId, updates, user, options = {}) {
@@ -132,6 +132,18 @@ class DocumentVersionService {
 
     if (!document.canBeEdited()) {
       throw new Error('Dokument kann nicht bearbeitet werden. Status: ' + document.status);
+    }
+
+    // Optimistic Locking: Prüfe Version wenn erwartete Version übergeben wurde
+    if (options.expectedVersion !== undefined) {
+      if (!document.isVersionValid(options.expectedVersion)) {
+        const error = new Error('Dokument wurde von einem anderen Benutzer geändert. Bitte laden Sie die Seite neu.');
+        error.code = 'OPTIMISTIC_LOCK_CONFLICT';
+        error.currentVersion = document.getLockVersion();
+        error.lastModifiedBy = document.lastModifiedBy;
+        error.lastModifiedAt = document.lastModifiedAt;
+        throw error;
+      }
     }
 
     // Für medizinische Dokumente: Optional Version-Snapshot für DRAFT

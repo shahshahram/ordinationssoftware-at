@@ -330,6 +330,13 @@ interface NewEventState {
                   
                   const tooltipText = (event as any).tooltipText || `${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}\nPersonal: ${event.staffName || 'Unbekannt'}${event.roomName ? `\nRaum: ${event.roomName}` : ''}\nStatus: ${event.status}`;
                   
+                  // Mindesthöhe deutlich erhöht für Tagesansicht - mindestens 80px
+                  const minHeightForDay = Math.max(stackedHeight, 80);
+                  const actualHeight = Math.max(stackedHeight, minHeightForDay);
+                  
+                  // Für sehr kurze Termine: kompakte Darstellung mit Titel und Zeit in einer Zeile
+                  const isVeryShort = stackedHeight < 50;
+                  
                   return (
                     <Box
                       key={event.id}
@@ -343,24 +350,137 @@ interface NewEventState {
                       sx={{
                         position: 'absolute',
                         top: `${stackedTop}px`,
-                        left: 0,
-                        width: '100%',
-                        height: `${stackedHeight}px`,
+                        left: '4px',
+                        right: '4px',
+                        width: 'calc(100% - 8px)',
+                        height: `${actualHeight}px`,
+                        minHeight: `${minHeightForDay}px`,
                         backgroundColor: event.color || '#1976d2',
                         color: 'white',
-                        borderRadius: '4px',
-                        p: 0.5,
+                        borderRadius: '8px',
+                        p: isVeryShort ? 1 : 1.5,
                         overflow: 'hidden',
                         cursor: 'pointer',
-                        border: '1px solid rgba(0,0,0,0.2)',
+                        border: '2px solid rgba(255,255,255,0.4)',
+                        boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
                         zIndex: 1,
+                        display: 'flex',
+                        flexDirection: isVeryShort ? 'row' : 'column',
+                        alignItems: isVeryShort ? 'center' : 'flex-start',
+                        justifyContent: isVeryShort ? 'space-between' : 'flex-start',
+                        gap: isVeryShort ? 1 : 0,
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          transform: 'scale(1.02)',
+                          boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
+                          zIndex: 10,
+                          overflow: 'visible',
+                        }
                       }}
                       onClick={() => handleOpenEditEventDialog(event)}
                     >
-                      <Typography variant="caption" sx={{ fontWeight: 'bold' }}>{event.title}</Typography>
-                      <Typography variant="caption" display="block">{`${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}`}</Typography>
-                      <Typography variant="caption" display="block">{event.staffName}</Typography>
-                      {event.roomName && <Typography variant="caption" display="block">{event.roomName}</Typography>}
+                      {isVeryShort ? (
+                        // Kompakte Darstellung für sehr kurze Termine
+                        <>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              fontSize: '0.875rem',
+                              lineHeight: 1.2,
+                              textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              flex: 1,
+                              minWidth: 0
+                            }}
+                          >
+                            {event.title}
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontSize: '0.75rem',
+                              opacity: 0.95,
+                              textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                              fontWeight: '600',
+                              flexShrink: 0,
+                              ml: 1
+                            }}
+                          >
+                            {`${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}`}
+                          </Typography>
+                        </>
+                      ) : (
+                        // Normale Darstellung für längere Termine
+                        <>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 'bold',
+                              fontSize: '0.9rem',
+                              lineHeight: 1.3,
+                              mb: 0.5,
+                              textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}
+                          >
+                            {event.title}
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            display="block"
+                            sx={{ 
+                              fontSize: '0.8rem',
+                              opacity: 0.95,
+                              mb: 0.5,
+                              textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                              fontWeight: '600',
+                              flexShrink: 0
+                            }}
+                          >
+                            {`${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}`}
+                          </Typography>
+                          {event.staffName && actualHeight >= 100 && (
+                            <Typography 
+                              variant="caption" 
+                              display="block"
+                              sx={{ 
+                                fontSize: '0.75rem',
+                                opacity: 0.9,
+                                textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0
+                              }}
+                            >
+                              👤 {event.staffName}
+                            </Typography>
+                          )}
+                          {event.roomName && actualHeight >= 120 && (
+                            <Typography 
+                              variant="caption" 
+                              display="block"
+                              sx={{ 
+                                fontSize: '0.75rem',
+                                opacity: 0.9,
+                                textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                                flexShrink: 0
+                              }}
+                            >
+                              🏥 {event.roomName}
+                            </Typography>
+                          )}
+                        </>
+                      )}
                     </Box>
                   );
                 });
@@ -429,6 +549,10 @@ interface NewEventState {
                     const isStacked = eventsAtTime.length > 1;
                     const stackedHeight = isStacked ? height / eventsAtTime.length : height;
                     const stackedTop = isStacked ? top + (index * stackedHeight) : top;
+                    // Mindesthöhe deutlich erhöht für bessere Lesbarkeit
+                    const minHeight = Math.max(stackedHeight, 70);
+                    // Berechne die tatsächliche Höhe mit Mindesthöhe
+                    const actualHeight = Math.max(stackedHeight, minHeight);
 
                     const tooltipText = (event as any).tooltipText || `${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}\nPersonal: ${event.staffName || 'Unbekannt'}${event.roomName ? `\nRaum: ${event.roomName}` : ''}\nStatus: ${event.status}`;
                     
@@ -445,24 +569,96 @@ interface NewEventState {
                         sx={{
                           position: 'absolute',
                           top: `${stackedTop}px`,
-                          left: 0,
-                          right: 0,
-                          height: `${stackedHeight}px`,
+                          left: '2px',
+                          right: '2px',
+                          height: `${actualHeight}px`,
+                          minHeight: `${minHeight}px`,
                           backgroundColor: event.color || '#1976d2',
                           color: 'white',
-                          borderRadius: '4px',
-                          p: 0.5,
+                          borderRadius: '6px',
+                          p: 1.5,
                           overflow: 'hidden',
                           cursor: 'pointer',
-                          border: '1px solid rgba(0,0,0,0.2)',
+                          border: '2px solid rgba(255,255,255,0.4)',
+                          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                           zIndex: 1,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'flex-start',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            transform: 'scale(1.03)',
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                            zIndex: 10,
+                            overflow: 'visible',
+                          }
                         }}
                         onClick={() => handleOpenEditEventDialog(event)}
                       >
-                        <Typography variant="caption" sx={{ fontWeight: 'bold' }}>{event.title}</Typography>
-                        <Typography variant="caption" display="block">{`${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}`}</Typography>
-                        <Typography variant="caption" display="block">{event.staffName}</Typography>
-                        {event.roomName && <Typography variant="caption" display="block">{event.roomName}</Typography>}
+                        <Typography 
+                          variant="body2" 
+                          sx={{ 
+                            fontWeight: 'bold',
+                            fontSize: '0.875rem',
+                            lineHeight: 1.3,
+                            mb: 0.5,
+                            textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            flexShrink: 0
+                          }}
+                        >
+                          {event.title}
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          display="block"
+                          sx={{ 
+                            fontSize: '0.75rem',
+                            opacity: 0.95,
+                            textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                            fontWeight: '600',
+                            mb: 0.25,
+                            flexShrink: 0
+                          }}
+                        >
+                          {`${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}`}
+                        </Typography>
+                        {event.staffName && actualHeight >= 60 && (
+                          <Typography 
+                            variant="caption" 
+                            display="block"
+                            sx={{ 
+                              fontSize: '0.7rem',
+                              opacity: 0.9,
+                              textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}
+                          >
+                            👤 {event.staffName}
+                          </Typography>
+                        )}
+                        {event.roomName && actualHeight >= 80 && (
+                          <Typography 
+                            variant="caption" 
+                            display="block"
+                            sx={{ 
+                              fontSize: '0.7rem',
+                              opacity: 0.9,
+                              textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              flexShrink: 0
+                            }}
+                          >
+                            🏥 {event.roomName}
+                          </Typography>
+                        )}
                       </Box>
                     );
                   });
@@ -521,7 +717,7 @@ interface NewEventState {
               {dayEvents.map(event => {
                 const tooltipText = `${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}\nPersonal: ${event.staffName || 'Unbekannt'}${event.roomName ? `\nRaum: ${event.roomName}` : ''}\nStatus: ${event.status}`;
                 return (
-                  <span
+                  <Box
                     key={event.id}
                     onMouseEnter={(e) => {
                       console.log('MouseEnter event detected:', event.id);
@@ -535,23 +731,33 @@ interface NewEventState {
                       e.stopPropagation();
                       handleOpenEditEventDialog(event);
                     }}
-                    style={{
+                    sx={{
                       backgroundColor: event.color || '#1976d2',
                       color: 'white',
-                      borderRadius: '2px',
-                      fontSize: '0.7rem',
-                      padding: '2px 4px',
-                      marginBottom: '2px',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: '500',
+                      padding: '4px 6px',
+                      marginBottom: '3px',
                       overflow: 'hidden',
                       whiteSpace: 'nowrap',
                       textOverflow: 'ellipsis',
                       cursor: 'pointer',
                       display: 'block',
                       width: '100%',
+                      border: '1px solid rgba(255,255,255,0.3)',
+                      boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                      textShadow: '0 1px 2px rgba(0,0,0,0.3)',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        transform: 'scale(1.05)',
+                        boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+                        zIndex: 10,
+                      }
                     }}
                   >
                     {`${format(event.start, 'HH:mm')} ${event.title}`}
-                  </span>
+                  </Box>
                 );
               })}
             </Box>

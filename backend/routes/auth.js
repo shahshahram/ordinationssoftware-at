@@ -202,6 +202,26 @@ router.post('/login', [
       { expiresIn: '7d' }
     );
     
+    // Session Management: Erstelle Session in Datenbank
+    try {
+      const Session = require('../models/Session');
+      const maxSessions = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '5');
+      await Session.createSession(
+        user._id || user.id,
+        token,
+        refreshToken,
+        req.ip,
+        req.get('user-agent'),
+        {
+          maxSessions,
+          deviceInfo: req.get('user-agent')
+        }
+      );
+    } catch (sessionError) {
+      console.error('Session creation error:', sessionError);
+      // Session-Erstellung ist nicht kritisch, Login kann trotzdem fortgesetzt werden
+    }
+    
     // Update last login for MongoDB users
     if (!isMockUser) {
       user.lastLogin = new Date();
@@ -445,12 +465,23 @@ router.put('/password', auth, [
 });
 
 // @route   POST /api/auth/logout
-// @desc    Logout user (client-side token removal)
+// @desc    Logout user (beendet Session)
 // @access  Private
 router.post('/logout', auth, async (req, res) => {
   try {
-    // In a real application, you might want to blacklist the token
-    // For now, we just return success (client removes token)
+    const token = req.header('x-auth-token') || req.header('Authorization')?.replace('Bearer ', '');
+    
+    // Session Management: Beende aktuelle Session
+    try {
+      const Session = require('../models/Session');
+      if (token) {
+        await Session.endSession(token);
+      }
+    } catch (sessionError) {
+      // Session-Beendigung ist nicht kritisch
+      console.warn('Session end error:', sessionError.message);
+    }
+    
     res.json({
       success: true,
       message: 'Erfolgreich abgemeldet'

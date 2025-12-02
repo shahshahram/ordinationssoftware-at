@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -42,6 +43,7 @@ import WidgetSelectorDialog, { AVAILABLE_WIDGETS } from '../components/Dashboard
 import QRCodeGenerator from '../components/QRCodeGenerator';
 import TabletMode from '../components/TabletMode';
 import InternalMessagesDialog from '../components/InternalMessagesDialog';
+import { fetchUnreadCount, fetchMessages, markAsRead, InternalMessage } from '../store/slices/internalMessagesSlice';
 import {
   People,
   CalendarToday,
@@ -53,11 +55,15 @@ import {
   AttachMoney,
   EventNote,
   Assessment,
-  Medication
+  Medication,
+  LocalHospital,
+  Science
 } from '@mui/icons-material';
+import api from '../utils/api';
 
 const Dashboard: React.FC = () => {
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
@@ -65,6 +71,7 @@ const Dashboard: React.FC = () => {
   
   const { widgets, loading, error } = useAppSelector((state) => state.dashboardWidgets);
   const { qrCode, isLoading: qrLoading, error: qrError } = useAppSelector((state) => state.checkin);
+  const { user } = useAppSelector((state) => state.auth);
   
   const [editMode, setEditMode] = useState(false);
   const [widgetSelectorOpen, setWidgetSelectorOpen] = useState(false);
@@ -73,6 +80,317 @@ const Dashboard: React.FC = () => {
   const [messagesDialogOpen, setMessagesDialogOpen] = useState(false);
   const [layout, setLayout] = useState<GridLayout.Layout[]>([]);
   const [containerWidth, setContainerWidth] = useState(1200);
+  const [newLaborResults, setNewLaborResults] = useState<any[]>([]);
+  const [newDicomStudies, setNewDicomStudies] = useState<any[]>([]);
+  const [importantPatients, setImportantPatients] = useState<any[]>([]);
+  
+  // Refs um Widget-IDs zu speichern und Endlosschleifen zu vermeiden
+  const importantPatientsWidgetIdRef = useRef<string | null>(null);
+  const laborWidgetIdRef = useRef<string | null>(null);
+  const dicomWidgetIdRef = useRef<string | null>(null);
+  const lastImportantPatientsUpdateRef = useRef<string>('');
+  const lastLaborResultsUpdateRef = useRef<string>('');
+  const lastDicomStudiesUpdateRef = useRef<string>('');
+
+  // Initialisiere Widget-IDs wenn widgets geladen werden
+  useEffect(() => {
+    if (widgets.length > 0) {
+      const importantPatientsWidget = widgets.find(w => w.widgetId === 'important-patients');
+      if (importantPatientsWidget?._id) {
+        importantPatientsWidgetIdRef.current = importantPatientsWidget._id;
+      }
+      
+      const laborWidget = widgets.find(w => w.widgetId === 'new-labor-results');
+      if (laborWidget?._id) {
+        laborWidgetIdRef.current = laborWidget._id;
+      }
+      
+      const dicomWidget = widgets.find(w => w.widgetId === 'new-dicom-studies');
+      if (dicomWidget?._id) {
+        dicomWidgetIdRef.current = dicomWidget._id;
+      }
+    }
+  }, [widgets.length]); // Nur wenn sich die Anzahl der Widgets ändert
+
+  // Lade wichtige Patienten (mit Zusatzversicherungen)
+  useEffect(() => {
+    const fetchImportantPatients = async () => {
+      try {
+        const response = await api.get<any>('/patients-extended/important?limit=10');
+        if (response.data?.success && response.data?.data) {
+          const formattedPatients = response.data.data.map((patient: any) => ({
+            ...patient,
+            onClick: (e?: React.MouseEvent) => {
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              if (patient.patientId || patient._id) {
+                const patientId = patient.patientId || patient._id;
+                const patientIdStr = typeof patientId === 'string' ? patientId : String(patientId);
+                window.location.href = `/patient-organizer/${patientIdStr}`;
+              }
+            }
+          }));
+          
+          setImportantPatients(formattedPatients);
+          
+          // Update Widget-Daten nur wenn sich die Daten geändert haben
+          const itemsToSave = formattedPatients.map(({ onClick, ...rest }: any) => rest);
+          const itemsHash = JSON.stringify(itemsToSave);
+          
+          if (itemsHash !== lastImportantPatientsUpdateRef.current && importantPatientsWidgetIdRef.current) {
+            lastImportantPatientsUpdateRef.current = itemsHash;
+            dispatch(updateDashboardWidget({
+              id: importantPatientsWidgetIdRef.current,
+              updates: {
+                config: { items: itemsToSave }
+              }
+            }));
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching important patients:', error);
+      }
+    };
+    
+    fetchImportantPatients();
+    // Aktualisiere alle 5 Minuten
+    const interval = setInterval(fetchImportantPatients, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [dispatch]);
+  
+  // Lade neue Laborwerte
+  useEffect(() => {
+    const fetchNewLaborResults = async () => {
+      try {
+        // 3 Tage = 72 Stunden
+        const response = await api.get<any>('/labor/recent?hours=72&limit=10');
+        console.log('🔍 Dashboard: Labor results response:', response);
+        
+        // Die API-Klasse gibt { data: backendResponse, success, message } zurück
+        // Das Backend gibt { success: true, data: [...], count: ... } zurück
+        // Also ist response.data das Backend-Response-Objekt
+        const backendData = response.data;
+        const laborResultsArray = backendData?.data || backendData || [];
+        
+        console.log('🔍 Dashboard: Labor results array:', laborResultsArray);
+        
+        if (response.success && Array.isArray(laborResultsArray) && laborResultsArray.length > 0) {
+          // Sortiere nach Datum: neueste zuerst
+          const sortedResults = [...laborResultsArray].sort((a: any, b: any) => {
+            const dateA = new Date(a.receivedAt || a.createdAt || a.resultDate).getTime();
+            const dateB = new Date(b.receivedAt || b.createdAt || b.resultDate).getTime();
+            return dateB - dateA; // Neueste zuerst
+          });
+          
+          const formattedItems = sortedResults.map((item: any) => {
+            const date = new Date(item.receivedAt || item.createdAt || item.resultDate);
+            const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
+            const now = new Date();
+            const hoursSinceCreation = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+            const isNew = hoursSinceCreation < 24;
+            
+            // Stelle sicher, dass patientId vorhanden ist
+            const patientId = item.patientId;
+            console.log('🔍 Dashboard: Processing labor result item', { 
+              patientName: item.patientName, 
+              patientId: patientId, 
+              patientIdType: typeof patientId,
+              fullItem: item 
+            });
+            
+            return {
+              primary: item.patientName || 'Unbekannt',
+              secondary: `${item.testCount || 0} Tests • ${dateStr} ${timeStr}`,
+              icon: 'Science', // Labor-Icon (Reagenzglas)
+              chip: item.hasCriticalValues 
+                ? { label: `${item.criticalCount || 0} kritisch`, color: 'error' as const }
+                : { label: item.providerName || 'Unbekannt', color: 'default' as const },
+              details: `Laborwerte für ${item.patientName || 'Unbekannt'}\n\nAnzahl Tests: ${item.testCount || 0}\nLabor: ${item.providerName || 'Unbekannt'}\nEingetroffen: ${dateStr} um ${timeStr}${item.hasCriticalValues ? `\n\n⚠️ ${item.criticalCount || 0} kritische Werte vorhanden!` : ''}`,
+              patientId: patientId ? String(patientId) : null, // Speichere patientId explizit
+              isNew: isNew, // Flag für farbliche Hervorhebung
+              onClick: (e?: React.MouseEvent) => {
+                if (e) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+                // Navigiere zum Patienten
+                const currentPatientId = patientId || item.patientId;
+                if (currentPatientId) {
+                  // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
+                  const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
+                  console.log('🔍 Dashboard: onClick triggered - Navigating to patient labor values', { 
+                    patientId: patientIdStr, 
+                    originalPatientId: currentPatientId, 
+                    fullItem: item,
+                    hasPatientId: !!currentPatientId
+                  });
+                  // Verwende window.location für zuverlässige Navigation
+                  window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+                } else {
+                  console.error('❌ Dashboard: No patientId in labor result item - cannot navigate', item);
+                }
+              }
+            };
+          });
+          
+          console.log('🔍 Dashboard: Formatted items:', formattedItems);
+          // Prüfe ob patientId vorhanden ist
+          formattedItems.forEach((item: any, index: number) => {
+            console.log(`🔍 Dashboard: Item ${index}:`, { 
+              primary: item.primary, 
+              patientId: item.patientId, 
+              hasOnClick: !!item.onClick,
+              onClickType: typeof item.onClick
+            });
+          });
+          setNewLaborResults(formattedItems);
+          
+          // Aktualisiere Widget-Konfiguration nur wenn sich die Items geändert haben
+          // WICHTIG: Speichere KEINE onClick-Handler in der Widget-Konfiguration, da diese nicht serialisiert werden können
+          if (laborWidgetIdRef.current) {
+            // Entferne onClick-Handler und isNew Flag für Vergleich (werden nicht gespeichert)
+            const itemsToSave = formattedItems.map(({ onClick, isNew, ...rest }: any) => rest);
+            const itemsHash = JSON.stringify(itemsToSave);
+            
+            // Prüfe ob sich die Items geändert haben, um Endlosschleife zu vermeiden
+            if (itemsHash !== lastLaborResultsUpdateRef.current) {
+              lastLaborResultsUpdateRef.current = itemsHash;
+              dispatch(updateDashboardWidget({
+                id: laborWidgetIdRef.current,
+                updates: {
+                  config: { items: itemsToSave }
+                }
+              }));
+            }
+          }
+        } else {
+          console.log('🔍 Dashboard: No labor results found or empty array');
+          setNewLaborResults([]);
+        }
+      } catch (err) {
+        console.error('Error fetching new labor results:', err);
+        setNewLaborResults([]);
+      }
+    };
+    
+    fetchNewLaborResults();
+    // Aktualisiere alle 5 Minuten
+    const interval = setInterval(fetchNewLaborResults, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [dispatch]);
+
+  // Lade neue DICOM-Studien
+  useEffect(() => {
+    const fetchNewDicomStudies = async () => {
+      try {
+        // 3 Tage = 72 Stunden
+        const response = await api.get<any>('/dicom/recent?hours=72&limit=10');
+        console.log('🔍 Dashboard: DICOM studies response:', response);
+        
+        const backendData = response.data;
+        const dicomStudiesArray = backendData?.data || backendData || [];
+        
+        console.log('🔍 Dashboard: DICOM studies array:', dicomStudiesArray);
+        console.log('🔍 Dashboard: response.data.success:', backendData?.success);
+        console.log('🔍 Dashboard: Array length:', Array.isArray(dicomStudiesArray) ? dicomStudiesArray.length : 'not an array');
+        
+        if ((backendData?.success !== false) && Array.isArray(dicomStudiesArray) && dicomStudiesArray.length > 0) {
+          // Sortiere nach Datum: neueste zuerst
+          const sortedStudies = [...dicomStudiesArray].sort((a: any, b: any) => {
+            const dateA = new Date(a.uploadedAt || a.studyDate || 0).getTime();
+            const dateB = new Date(b.uploadedAt || b.studyDate || 0).getTime();
+            return dateB - dateA; // Neueste zuerst
+          });
+          
+          const formattedItems = sortedStudies.map((item: any) => {
+            const date = new Date(item.uploadedAt || item.studyDate);
+            const timeStr = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
+            const now = new Date();
+            const hoursSinceCreation = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+            const isNew = hoursSinceCreation < 24;
+            
+            const patientId = item.patientId;
+            
+            return {
+              primary: item.patientName || 'Unbekannt',
+              secondary: `${item.studyDescription || item.modality || 'DICOM-Studie'} • ${dateStr} ${timeStr}`,
+              icon: 'LocalHospital',
+              chip: item.modality 
+                ? { label: item.modality, color: 'primary' as const }
+                : { label: 'DICOM', color: 'default' as const },
+              details: `DICOM-Studie für ${item.patientName || 'Unbekannt'}\n\nStudie: ${item.studyDescription || item.modality || 'DICOM-Studie'}\nModalität: ${item.modality || 'Unbekannt'}\nHochgeladen: ${dateStr} um ${timeStr}`,
+              patientId: patientId ? String(patientId) : null,
+              isNew: isNew, // Flag für farbliche Hervorhebung
+              onClick: (e?: React.MouseEvent) => {
+                if (e) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+                const currentPatientId = patientId || item.patientId;
+                if (currentPatientId) {
+                  const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
+                  window.location.href = `/patient-organizer/${patientIdStr}?tab=dicom`;
+                }
+              }
+            };
+          });
+          
+          setNewDicomStudies(formattedItems);
+          
+          // Aktualisiere Widget-Konfiguration nur wenn sich die Items geändert haben
+          if (dicomWidgetIdRef.current) {
+            // Entferne onClick-Handler und isNew Flag für Vergleich (werden nicht gespeichert)
+            const itemsToSave = formattedItems.map(({ onClick, isNew, ...rest }: any) => rest);
+            const itemsHash = JSON.stringify(itemsToSave);
+            
+            // Prüfe ob sich die Items geändert haben, um Endlosschleife zu vermeiden
+            if (itemsHash !== lastDicomStudiesUpdateRef.current) {
+              lastDicomStudiesUpdateRef.current = itemsHash;
+              dispatch(updateDashboardWidget({
+                id: dicomWidgetIdRef.current,
+                updates: {
+                  config: { items: itemsToSave }
+                }
+              }));
+            }
+          }
+        } else {
+          setNewDicomStudies([]);
+        }
+      } catch (err) {
+        console.error('Error fetching new DICOM studies:', err);
+        setNewDicomStudies([]);
+      }
+    };
+    
+    fetchNewDicomStudies();
+    // Aktualisiere alle 5 Minuten
+    const interval = setInterval(fetchNewDicomStudies, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [dispatch]);
+        
+        // Handler für Nachrichten-Klicks
+        const handleMessageClick = (message: any) => {
+          // Wenn die Nachricht eine patientId hat, navigiere zum Patienten
+          if (message.patientId) {
+            // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
+            const patientIdStr = typeof message.patientId === 'string' ? message.patientId : String(message.patientId);
+            console.log('Dashboard: Navigating to patient labor values from handleMessageClick', { patientId: patientIdStr, originalPatientId: message.patientId, fullMessage: message });
+            // Verwende window.location für zuverlässige Navigation
+            window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+          } else {
+            // Sonst öffne den Nachrichten-Dialog
+            setMessagesDialogOpen(true);
+          }
+        };
 
   // Load widgets on mount
   useEffect(() => {
@@ -236,6 +554,95 @@ const Dashboard: React.FC = () => {
             details: 'Das automatische Backup wurde erfolgreich am 18.11.2024 um 02:00 Uhr durchgeführt. Alle Daten wurden gesichert.'
           }
         ];
+      case 'new-labor-results':
+        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
+        if (newLaborResults.length > 0) {
+          console.log('🔍 Dashboard: getWidgetData - Using newLaborResults', { count: newLaborResults.length, firstItem: newLaborResults[0] });
+          return newLaborResults;
+        }
+        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
+        const savedItems = widget.config?.items || [];
+        console.log('🔍 Dashboard: getWidgetData - Using saved items', { count: savedItems.length, firstItem: savedItems[0] });
+        return savedItems.map((item: any) => {
+          const patientId = item.patientId;
+          // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
+          // Versuche Datum aus secondary Text zu extrahieren oder verwende aktuelles Datum als Fallback
+          let isNew = false;
+          if (item.secondary) {
+            // Versuche Datum aus secondary zu extrahieren (Format: "Tests • DD.MM.YYYY HH:MM")
+            const dateMatch = item.secondary.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+            if (dateMatch) {
+              const [, day, month, year] = dateMatch;
+              const itemDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              const now = new Date();
+              const hoursSinceCreation = (now.getTime() - itemDate.getTime()) / (1000 * 60 * 60);
+              isNew = hoursSinceCreation < 24;
+            }
+          }
+          return {
+            ...item,
+            icon: 'Science', // Stelle sicher, dass das Icon immer Science ist
+            patientId: patientId ? String(patientId) : null, // Stelle sicher, dass patientId ein String ist
+            isNew: isNew, // Flag für farbliche Hervorhebung
+            onClick: (e?: React.MouseEvent) => {
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              // Navigiere zum Patienten
+              const currentPatientId = patientId || item.patientId;
+              if (currentPatientId) {
+                const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
+                console.log('🔍 Dashboard: onClick from saved item - Navigating to patient labor values', { patientId: patientIdStr, originalPatientId: currentPatientId, fullItem: item });
+                window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+              } else {
+                console.error('❌ Dashboard: No patientId in saved labor result item - cannot navigate', item);
+              }
+            }
+          };
+        });
+      case 'new-dicom-studies':
+        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
+        if (newDicomStudies.length > 0) {
+          console.log('🔍 Dashboard: getWidgetData - Using newDicomStudies', { count: newDicomStudies.length, firstItem: newDicomStudies[0] });
+          return newDicomStudies;
+        }
+        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
+        const savedDicomItems = widget.config?.items || [];
+        return savedDicomItems.map((item: any) => {
+          const patientId = item.patientId;
+          // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
+          // Versuche Datum aus secondary Text zu extrahieren oder verwende aktuelles Datum als Fallback
+          let isNew = false;
+          if (item.secondary) {
+            // Versuche Datum aus secondary zu extrahieren (Format: "Studie • DD.MM.YYYY HH:MM")
+            const dateMatch = item.secondary.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+            if (dateMatch) {
+              const [, day, month, year] = dateMatch;
+              const itemDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              const now = new Date();
+              const hoursSinceCreation = (now.getTime() - itemDate.getTime()) / (1000 * 60 * 60);
+              isNew = hoursSinceCreation < 24;
+            }
+          }
+          return {
+            ...item,
+            icon: 'LocalHospital',
+            patientId: patientId ? String(patientId) : null,
+            isNew: isNew, // Flag für farbliche Hervorhebung
+            onClick: (e?: React.MouseEvent) => {
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              const currentPatientId = patientId || item.patientId;
+              if (currentPatientId) {
+                const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
+                window.location.href = `/patient-organizer/${patientIdStr}?tab=dicom`;
+              }
+            }
+          };
+        });
       case 'system-status':
         return [
           { label: 'Datenbank', status: 'Online', value: 100, color: 'success' as const },
@@ -309,35 +716,35 @@ const Dashboard: React.FC = () => {
         ];
       case 'tasks':
       case 'todos':
-        return [
-          { id: '1', title: 'Patientenakte aktualisieren', description: 'Für Max Mustermann', completed: false, priority: 'high' as const },
-          { id: '2', title: 'Rezept ausstellen', description: 'Für Maria Musterfrau', completed: false, priority: 'medium' as const },
-          { id: '3', title: 'Laborwerte prüfen', description: 'Für Peter Schmidt', completed: true, priority: 'low' as const }
-        ];
+        // Tasks werden jetzt direkt im TasksWidget geladen
+        // Keine Mock-Daten mehr, da das Widget die Daten selbst lädt
+        return [];
       case 'important-patients':
-        return [
-          { 
-            primary: 'Max Mustermann', 
-            secondary: 'Allergie: Penicillin', 
-            icon: <Warning />,
-            hint: 'Warnung: Allergie',
-            details: 'Patient hat eine bekannte Allergie gegen Penicillin. Bitte bei Verschreibung von Antibiotika beachten und alternative Medikamente verwenden. Letzte Reaktion: 2023 - Hautausschlag.'
-          },
-          { 
-            primary: 'Maria Musterfrau', 
-            secondary: 'Nachsorge erforderlich', 
-            icon: <CheckCircle />,
-            hint: 'Nachsorge-Termin',
-            details: 'Nachsorge-Termin nach Operation am 15.11.2024. Wunde heilt gut, aber regelmäßige Kontrolle erforderlich. Nächster Termin sollte innerhalb von 2 Wochen vereinbart werden.'
-          },
-          { 
-            primary: 'Peter Schmidt', 
-            secondary: 'Kontrolltermin in 2 Wochen', 
-            icon: <Schedule />,
-            hint: 'Kontrolltermin',
-            details: 'Kontrolltermin für chronische Erkrankung. Letzte Untersuchung: 01.11.2024. Laborwerte müssen überprüft werden. Termin sollte am 15.11.2024 oder später vereinbart werden.'
-          }
-        ];
+        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
+        if (importantPatients.length > 0) {
+          return importantPatients;
+        }
+        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
+        const savedImportantPatients = widget.config?.items || [];
+        return savedImportantPatients.map((item: any) => {
+          const patientId = item.patientId || item._id;
+          return {
+            ...item,
+            icon: 'LocalHospital',
+            patientId: patientId ? String(patientId) : null,
+            onClick: (e?: React.MouseEvent) => {
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              const currentPatientId = patientId || item.patientId || item._id;
+              if (currentPatientId) {
+                const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
+                window.location.href = `/patient-organizer/${patientIdStr}`;
+              }
+            }
+          };
+        });
       case 'revenue-month':
         return { value: '€45,200', icon: <AttachMoney />, color: 'success' as const };
       case 'appointments-week':
@@ -370,13 +777,23 @@ const Dashboard: React.FC = () => {
       case 'internal-messages':
         return {
           onMessageClick: (message: any) => {
-            setMessagesDialogOpen(true);
+            // Wenn die Nachricht eine patientId hat, navigiere zum Patienten
+            if (message.patientId) {
+              // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
+              const patientIdStr = typeof message.patientId === 'string' ? message.patientId : String(message.patientId);
+              console.log('Dashboard: Navigating to patient labor values from getWidgetData', { patientId: patientIdStr, originalPatientId: message.patientId, fullMessage: message });
+              // Verwende window.location für zuverlässige Navigation
+              window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+            } else {
+              // Sonst öffne den Nachrichten-Dialog
+              setMessagesDialogOpen(true);
+            }
           }
         };
       default:
         return null;
     }
-  }, []);
+  }, [importantPatients, newLaborResults, newDicomStudies]);
 
   const handleGenerateQR = async () => {
     try {
@@ -598,7 +1015,19 @@ const Dashboard: React.FC = () => {
                     onDelete={editMode ? handleDeleteWidget : undefined}
                     data={getWidgetData(widget)}
                     isEditMode={editMode}
-                    onMessageClick={(_message: any) => setMessagesDialogOpen(true)}
+                    onMessageClick={(message: any) => {
+                      // Wenn die Nachricht eine patientId hat, navigiere zum Patienten
+                      if (message.patientId) {
+                        // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
+                        const patientIdStr = typeof message.patientId === 'string' ? message.patientId : String(message.patientId);
+                        console.log('Dashboard: Navigating to patient labor values from WidgetRenderer', { patientId: patientIdStr, originalPatientId: message.patientId, fullMessage: message });
+                        // Verwende window.location für zuverlässige Navigation
+                        window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+                      } else {
+                        // Sonst öffne den Nachrichten-Dialog
+                        setMessagesDialogOpen(true);
+                      }
+                    }}
                   />
                 </Box>
               ))}
@@ -675,7 +1104,11 @@ const Dashboard: React.FC = () => {
       {/* Internal Messages Dialog */}
       <InternalMessagesDialog
         open={messagesDialogOpen}
-        onClose={() => setMessagesDialogOpen(false)}
+        onClose={async () => {
+          setMessagesDialogOpen(false);
+          // Aktualisiere unreadCount nach dem Schließen
+          await dispatch(fetchUnreadCount());
+        }}
       />
     </Box>
   );

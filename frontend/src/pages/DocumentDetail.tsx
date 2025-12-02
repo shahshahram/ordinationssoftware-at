@@ -27,7 +27,6 @@ import {
   Cancel,
   Edit
 } from '@mui/icons-material';
-import axios from 'axios';
 import api from '../utils/api';
 import DocumentStatusWarning from '../components/DocumentStatusWarning';
 import DocumentVersionHistory from '../components/DocumentVersionHistory';
@@ -55,17 +54,14 @@ const DocumentDetail: React.FC = () => {
       try {
         setLoading(true);
         setError(null);
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:5001/api/documents/${id}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
+        const res = await api.get<any>(`/documents/${id}`);
         if (!active) return;
         const d = res.data?.data || res.data;
         setData(d);
         setEdit({ status: d?.status });
       } catch (e: any) {
         if (!active) return;
-        setError(e.response?.data?.message || 'Fehler beim Laden des Dokuments');
+        setError(e.message || e.response?.data?.message || 'Fehler beim Laden des Dokuments');
       } finally {
         if (active) setLoading(false);
       }
@@ -98,10 +94,7 @@ const DocumentDetail: React.FC = () => {
       setSaving(true);
       await api.post(`/documents/${id}/submit-review`);
       // Dokument neu laden
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:5001/api/documents/${id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const res = await api.get<any>(`/documents/${id}`);
       setData(res.data?.data || res.data);
     } catch (e: any) {
       setError(e.response?.data?.message || 'Fehler beim Einreichen zur Prüfung');
@@ -118,10 +111,7 @@ const DocumentDetail: React.FC = () => {
       setReleaseDialogOpen(false);
       setReleaseComment('');
       // Dokument neu laden
-      const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:5001/api/documents/${id}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
+      const res = await api.get<any>(`/documents/${id}`);
       setData(res.data?.data || res.data);
     } catch (e: any) {
       setError(e.response?.data?.message || 'Fehler beim Freigeben');
@@ -218,11 +208,9 @@ const DocumentDetail: React.FC = () => {
                   onClick={async () => {
                     try {
                       setSaving(true);
-                      const token = localStorage.getItem('token');
-                      const res = await axios.put(`http://localhost:5001/api/documents/${data._id || data.id || id}`,
-                        { status: edit.status },
-                        { headers: token ? { Authorization: `Bearer ${token}` } : undefined }
-                      );
+                      const res = await api.put<any>(`/documents/${data._id || data.id || id}`, {
+                        status: edit.status
+                      });
                       setData(res.data?.data || res.data);
                     } catch (e: any) {
                       setError(e.response?.data?.message || 'Aktualisieren fehlgeschlagen');
@@ -249,15 +237,9 @@ const DocumentDetail: React.FC = () => {
                     if (!files || files.length === 0) return;
                     try {
                       setUploading(true);
-                      const token = localStorage.getItem('token');
                       const formData = new FormData();
                       Array.from(files).forEach(f => formData.append('attachments', f));
-                      const res = await axios.post(`http://localhost:5001/api/documents/${data._id || data.id || id}/upload`, formData, {
-                        headers: {
-                          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                          'Content-Type': 'multipart/form-data'
-                        }
-                      });
+                      const res = await api.post<any>(`/documents/${data._id || data.id || id}/upload`, formData);
                       // Aktualisierte Anhänge übernehmen
                       const uploaded = res.data?.data || [];
                       setData((prev: any) => ({ ...prev, attachments: [...(prev?.attachments || []), ...uploaded] }));

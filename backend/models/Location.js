@@ -60,6 +60,84 @@ const locationSchema = new mongoose.Schema({
     default: true
   },
   
+  // Praxistyp für Abrechnung
+  practiceType: {
+    type: String,
+    enum: ['kassenpraxis', 'wahlarzt', 'privat', 'gemischt'],
+    default: 'gemischt',
+    required: true,
+    index: true
+  },
+  
+  // Abrechnungs-Konfiguration
+  billing: {
+    // Standard-Abrechnungstyp für diesen Standort
+    defaultBillingType: {
+      type: String,
+      enum: ['kassenarzt', 'wahlarzt', 'privat', 'sonderklasse'],
+      default: null // null = automatisch basierend auf Patient
+    },
+    // Kassenarzt-spezifische Einstellungen
+    kassenarzt: {
+      enabled: {
+        type: Boolean,
+        default: true
+      },
+      // ÖGK-Vertragsnummer (falls vorhanden)
+      ogkContractNumber: {
+        type: String,
+        trim: true
+      },
+      // Automatische OGK-Übermittlung
+      autoSubmitOGK: {
+        type: Boolean,
+        default: false
+      },
+      // ELGA-Integration aktiviert
+      elgaEnabled: {
+        type: Boolean,
+        default: false
+      },
+      // KIM-Integration aktiviert
+      kimEnabled: {
+        type: Boolean,
+        default: false
+      }
+    },
+    // Wahlarzt-spezifische Einstellungen
+    wahlarzt: {
+      enabled: {
+        type: Boolean,
+        default: true
+      },
+      // Standard-Erstattungssatz (z.B. 80%)
+      defaultReimbursementRate: {
+        type: Number,
+        default: 0.80,
+        min: 0,
+        max: 1
+      },
+      // Automatische Erstattungsberechnung
+      autoCalculateReimbursement: {
+        type: Boolean,
+        default: true
+      }
+    },
+    // Privat-spezifische Einstellungen
+    privat: {
+      enabled: {
+        type: Boolean,
+        default: true
+      },
+      // Standard-Tarif (GOÄ, etc.)
+      defaultTariff: {
+        type: String,
+        enum: ['GOÄ', 'custom'],
+        default: 'GOÄ'
+      }
+    }
+  },
+  
   // XDS Registry Konfiguration
   xdsRegistry: {
     enabled: {

@@ -63,6 +63,8 @@ import {
   CalendarToday,
   Schedule,
 } from '@mui/icons-material';
+import AdditionalInsuranceForm from '../components/Billing/AdditionalInsuranceForm';
+import ECardValidation from '../components/ECardValidation';
 
 
 const Patients: React.FC = () => {
@@ -550,8 +552,42 @@ const Patients: React.FC = () => {
   };
 
   // Patient Card Component - Modern Design
+  // Hilfsfunktion: Prüft ob Patient Zusatzversicherung hat ODER Privatversicherung als Hauptversicherung
+  const hasAdditionalInsurance = useCallback((patient: Patient) => {
+    // Prüfe zuerst auf Privatversicherung als Hauptversicherung
+    if (patient.insuranceProvider === 'Privatversicherung') {
+      return true;
+    }
+    
+    // Dann prüfe auf Zusatzversicherungen
+    const additionalInsurances = (patient as any).additionalInsurances;
+    if (!additionalInsurances) return false;
+    
+    return !!(
+      additionalInsurances.hospitalInsurance?.hasInsurance ||
+      additionalInsurances.privateDoctorInsurance?.hasInsurance ||
+      additionalInsurances.dentalInsurance?.hasInsurance ||
+      additionalInsurances.opticalInsurance?.hasInsurance ||
+      additionalInsurances.medicalAidsInsurance?.hasInsurance ||
+      additionalInsurances.travelInsurance?.hasInsurance
+    );
+  }, []);
+  
+  // Hilfsfunktion: Prüft ob Patient Sonderklasse hat
+  const hasSonderklasse = useCallback((patient: Patient) => {
+    return !!(patient as any).additionalInsurances?.hospitalInsurance?.hasInsurance;
+  }, []);
+  
+  // Hilfsfunktion: Prüft ob Patient Privatversicherung als Hauptversicherung hat
+  const hasPrivateInsurance = useCallback((patient: Patient) => {
+    return patient.insuranceProvider === 'Privatversicherung';
+  }, []);
+
   const PatientCard: React.FC<{ patient: Patient }> = ({ patient }) => {
     const lastVisit = getLastVisitDate(patient);
+    const isImportant = hasAdditionalInsurance(patient);
+    const isSonderklasse = hasSonderklasse(patient);
+    const isPrivateInsurance = hasPrivateInsurance(patient);
     const age = getAge(patient.dateOfBirth);
 
     // Action handlers
@@ -593,13 +629,23 @@ const Patients: React.FC = () => {
           cursor: 'pointer',
           transition: 'all 0.3s ease-in-out',
           borderRadius: 3,
-          border: patient.hasHint ? '3px solid' : '1px solid',
-          borderColor: patient.hasHint ? 'warning.main' : 'divider',
-          bgcolor: patient.hasHint ? 'warning.light' : 'background.paper',
+          border: patient.hasHint || isImportant ? '3px solid' : '1px solid',
+          borderColor: patient.hasHint 
+            ? 'warning.main' 
+            : isImportant 
+            ? (isSonderklasse ? 'primary.main' : isPrivateInsurance ? 'success.main' : 'warning.main')
+            : 'divider',
+          bgcolor: patient.hasHint 
+            ? 'warning.light' 
+            : isImportant 
+            ? (isSonderklasse ? 'rgba(25, 118, 210, 0.05)' : isPrivateInsurance ? 'rgba(46, 125, 50, 0.05)' : 'rgba(255, 152, 0, 0.05)')
+            : 'background.paper',
           '&:hover': {
             transform: 'translateY(-4px)',
             boxShadow: patient.hasHint 
               ? '0 8px 25px rgba(255, 152, 0, 0.3)' 
+              : isImportant
+              ? (isSonderklasse ? '0 8px 25px rgba(25, 118, 210, 0.3)' : isPrivateInsurance ? '0 8px 25px rgba(46, 125, 50, 0.3)' : '0 8px 25px rgba(255, 152, 0, 0.3)')
               : '0 8px 25px rgba(0,0,0,0.15)',
           }
         }}
@@ -637,6 +683,23 @@ const Patients: React.FC = () => {
                           '50%': { opacity: 0.5 },
                           '100%': { opacity: 1 },
                         },
+                      }} 
+                    />
+                  </Tooltip>
+                )}
+                {isImportant && (
+                  <Tooltip title={
+                    isSonderklasse 
+                      ? "Sonderklasse-Patient" 
+                      : isPrivateInsurance 
+                      ? "Privatversicherung" 
+                      : "Patient mit Zusatzversicherung"
+                  }>
+                    <LocalHospital 
+                      color={isSonderklasse ? "primary" : isPrivateInsurance ? "success" : "warning"} 
+                      sx={{ 
+                        fontSize: 20,
+                        ml: 0.5
                       }} 
                     />
                   </Tooltip>
@@ -681,6 +744,47 @@ const Patients: React.FC = () => {
                 {patient.insuranceProvider || 'Keine Versicherung'}
               </Typography>
             </Box>
+            {/* Zusatzversicherungen - Kompaktanzeige */}
+            {(patient as any).additionalInsurances && (
+              <Box display="flex" flexWrap="wrap" gap={0.5} mt={0.5}>
+                {(patient as any).additionalInsurances.hospitalInsurance?.hasInsurance && (
+                  <Chip 
+                    label="🏥 Sonderklasse" 
+                    size="small" 
+                    sx={{ height: 20, fontSize: '0.65rem' }}
+                    color="primary"
+                    variant="outlined"
+                  />
+                )}
+                {(patient as any).additionalInsurances.privateDoctorInsurance?.hasInsurance && (
+                  <Chip 
+                    label="👨‍⚕️ Wahlarzt" 
+                    size="small" 
+                    sx={{ height: 20, fontSize: '0.65rem' }}
+                    color="secondary"
+                    variant="outlined"
+                  />
+                )}
+                {(patient as any).additionalInsurances.dentalInsurance?.hasInsurance && (
+                  <Chip 
+                    label="🦷 Zahn" 
+                    size="small" 
+                    sx={{ height: 20, fontSize: '0.65rem' }}
+                    color="info"
+                    variant="outlined"
+                  />
+                )}
+                {(patient as any).additionalInsurances.opticalInsurance?.hasInsurance && (
+                  <Chip 
+                    label="👓 Brille" 
+                    size="small" 
+                    sx={{ height: 20, fontSize: '0.65rem' }}
+                    color="warning"
+                    variant="outlined"
+                  />
+                )}
+              </Box>
+            )}
           </Stack>
 
           {/* Status and Last Visit */}
@@ -764,6 +868,9 @@ const Patients: React.FC = () => {
 
   // Patient List Item Component
   const PatientListItem: React.FC<{ patient: Patient }> = ({ patient }) => {
+    const isImportant = hasAdditionalInsurance(patient);
+    const isSonderklasse = hasSonderklasse(patient);
+    const isPrivateInsurance = hasPrivateInsurance(patient);
     const healthStatus = getHealthStatus(patient);
     const lastVisit = getLastVisitDate(patient);
     const age = getAge(patient.dateOfBirth);
@@ -801,14 +908,23 @@ const Patients: React.FC = () => {
       <ListItem
         onClick={() => navigate(`/patient-organizer/${patient._id || patient.id}`)}
         sx={{
-          border: '1px solid',
-          borderColor: 'divider',
+          border: isImportant ? '2px solid' : '1px solid',
+          borderColor: isImportant 
+            ? (isSonderklasse ? 'primary.main' : isPrivateInsurance ? 'success.main' : 'warning.main') 
+            : 'divider',
           borderRadius: 2,
           mb: 1,
           cursor: 'pointer',
+          backgroundColor: isImportant 
+            ? (isSonderklasse ? 'rgba(25, 118, 210, 0.05)' : isPrivateInsurance ? 'rgba(46, 125, 50, 0.05)' : 'rgba(255, 152, 0, 0.05)') 
+            : 'transparent',
           '&:hover': {
-            bgcolor: 'action.hover',
-            borderColor: 'primary.main',
+            bgcolor: isImportant 
+              ? (isSonderklasse ? 'rgba(25, 118, 210, 0.1)' : isPrivateInsurance ? 'rgba(46, 125, 50, 0.1)' : 'rgba(255, 152, 0, 0.1)') 
+              : 'action.hover',
+            borderColor: isImportant 
+              ? (isSonderklasse ? 'primary.dark' : isPrivateInsurance ? 'success.dark' : 'warning.dark') 
+              : 'primary.main',
           }
         }}
       >
@@ -841,11 +957,27 @@ const Patients: React.FC = () => {
             <Typography variant="subtitle1" sx={{ fontWeight: 500, fontSize: '1rem' }}>
               {patient.firstName} {patient.lastName}
             </Typography>
-            <Chip
-              label={patient.status}
-              color={patient.status === 'aktiv' ? 'success' : patient.status === 'wartend' ? 'warning' : 'default'}
-              size="small"
-            />
+            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+              <Chip
+                label={patient.status}
+                color={patient.status === 'aktiv' ? 'success' : patient.status === 'wartend' ? 'warning' : 'default'}
+                size="small"
+              />
+              {isImportant && (
+                <Tooltip title={
+                  isSonderklasse 
+                    ? "Sonderklasse-Patient" 
+                    : isPrivateInsurance 
+                    ? "Privatversicherung" 
+                    : "Patient mit Zusatzversicherung"
+                }>
+                  <LocalHospital 
+                    color={isSonderklasse ? "primary" : isPrivateInsurance ? "success" : "warning"} 
+                    sx={{ fontSize: 18 }} 
+                  />
+                </Tooltip>
+              )}
+            </Box>
           </Box>
           <Box sx={{ mb: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
@@ -856,7 +988,25 @@ const Patients: React.FC = () => {
             <Typography variant="body2" color="text.secondary">
               SV-Nr.: {patient.socialSecurityNumber || 'Nicht angegeben'} • 
               Versicherung: {patient.insuranceProvider || 'Nicht angegeben'}
+              {(patient as any).insuranceNumber && ` • VN: ${(patient as any).insuranceNumber}`}
             </Typography>
+            {/* Zusatzversicherungen in Listenansicht */}
+            {(patient as any).additionalInsurances && (
+              <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {(patient as any).additionalInsurances.hospitalInsurance?.hasInsurance && (
+                  <Chip label="🏥 Sonderklasse" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                )}
+                {(patient as any).additionalInsurances.privateDoctorInsurance?.hasInsurance && (
+                  <Chip label="👨‍⚕️ Wahlarzt" size="small" color="secondary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                )}
+                {(patient as any).additionalInsurances.dentalInsurance?.hasInsurance && (
+                  <Chip label="🦷 Zahn" size="small" color="info" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                )}
+                {(patient as any).additionalInsurances.opticalInsurance?.hasInsurance && (
+                  <Chip label="👓 Brille" size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                )}
+              </Box>
+            )}
           </Box>
           <Typography variant="caption" color="text.secondary">
             Letzter Besuch: {lastVisit.toLocaleDateString('de-DE')} • {patient.address.city}
@@ -1380,6 +1530,13 @@ const Patients: React.FC = () => {
                     <SelectMenuItem value="Selbstzahler">Selbstzahler</SelectMenuItem>
                   </Select>
                 </FormControl>
+                <TextField
+                  fullWidth
+                  label="Versicherungsnummer"
+                  value={formData.insuranceNumber || ''}
+                  onChange={(e) => handleFormChange('insuranceNumber', e.target.value)}
+                  disabled={dialogMode === 'view'}
+                />
                 <FormControl fullWidth>
                   <InputLabel>Status</InputLabel>
                   <Select
@@ -1392,6 +1549,42 @@ const Patients: React.FC = () => {
                     <SelectMenuItem value="wartend">Wartend</SelectMenuItem>
                   </Select>
                 </FormControl>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="h6" gutterBottom>Zusatzversicherungen</Typography>
+                <AdditionalInsuranceForm
+                  value={formData.additionalInsurances || {}}
+                  onChange={(value: any) => handleFormChange('additionalInsurances', value)}
+                  disabled={dialogMode === 'view'}
+                />
+                {(dialogMode === 'edit' || dialogMode === 'view') && (formData._id || formData.id) && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" gutterBottom>e-card Validierung</Typography>
+                    <ECardValidation
+                      patientId={formData._id || formData.id || ''}
+                      ecardNumber={(formData as any).ecard?.cardNumber}
+                      onValidationComplete={(result: any) => {
+                        // Aktualisiere formData mit e-card Informationen
+                        if (result?.patient?.ecard) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            ecard: result.patient.ecard,
+                          }));
+                        }
+                        setSnackbar({ open: true, message: 'e-card erfolgreich validiert', severity: 'success' });
+                      }}
+                    />
+                  </>
+                )}
+                {dialogMode === 'add' && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="h6" gutterBottom>e-card Validierung</Typography>
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Die e-card Validierung ist nach dem Erstellen des Patienten verfügbar.
+                    </Alert>
+                  </>
+                )}
               </Box>
             )}
 

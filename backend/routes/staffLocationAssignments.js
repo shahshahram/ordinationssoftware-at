@@ -353,4 +353,85 @@ router.get('/location/:location_id', auth, async (req, res) => {
   }
 });
 
+// Standorte des aktuell eingeloggten Users abrufen
+router.get('/user/me', auth, async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    
+    // Finde StaffProfile für diesen User (StaffProfile verwendet 'userId' Feld)
+    const staffProfile = await StaffProfile.findOne({ userId: userId });
+    
+    if (!staffProfile) {
+      // Kein StaffProfile gefunden → Alle Standorte verfügbar
+      const allLocations = await Location.find({ is_active: true }).sort({ name: 1 });
+      return res.json({
+        success: true,
+        data: {
+          locations: allLocations.map(loc => ({
+            _id: loc._id,
+            name: loc.name,
+            code: loc.code,
+            city: loc.city,
+            is_primary: false
+          })),
+          hasNoAssignment: true,
+          primaryLocation: allLocations.length > 0 ? allLocations[0]._id : null
+        }
+      });
+    }
+
+    // Finde Standort-Zuweisungen für dieses StaffProfile
+    const assignments = await StaffLocationAssignment.find({ staff_id: staffProfile._id })
+      .populate('location_id', 'name code city address_line1 postal_code')
+      .populate('allowed_services', 'name code')
+      .sort({ is_primary: -1, location_id: 1 });
+
+    if (assignments.length === 0) {
+      // Keine Zuweisungen → Alle Standorte verfügbar
+      const allLocations = await Location.find({ is_active: true }).sort({ name: 1 });
+      return res.json({
+        success: true,
+        data: {
+          locations: allLocations.map(loc => ({
+            _id: loc._id,
+            name: loc.name,
+            code: loc.code,
+            city: loc.city,
+            is_primary: false
+          })),
+          hasNoAssignment: true,
+          primaryLocation: allLocations.length > 0 ? allLocations[0]._id : null
+        }
+      });
+    }
+
+    // Zuweisungen gefunden
+    const primaryAssignment = assignments.find(a => a.is_primary) || assignments[0];
+    
+    res.json({
+      success: true,
+      data: {
+        locations: assignments.map(a => ({
+          _id: typeof a.location_id === 'object' ? a.location_id._id : a.location_id,
+          name: typeof a.location_id === 'object' ? a.location_id.name : '',
+          code: typeof a.location_id === 'object' ? a.location_id.code : '',
+          city: typeof a.location_id === 'object' ? a.location_id.city : '',
+          is_primary: a.is_primary,
+          allowed_services: a.allowed_services || []
+        })),
+        hasNoAssignment: false,
+        primaryLocation: typeof primaryAssignment.location_id === 'object' 
+          ? primaryAssignment.location_id._id 
+          : primaryAssignment.location_id
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching user locations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Benutzer-Standorte'
+    });
+  }
+});
+
 module.exports = router;

@@ -23,9 +23,11 @@ import OnlineBooking from './pages/OnlineBooking';
 import ELGA from './pages/ELGA';
 import Users from './pages/Users';
 import Reports from './pages/Reports';
+import BillingReports from './pages/BillingReports';
 import Security from './pages/Security';
 import StaffManagement from './pages/StaffManagement';
 import Calendar from './pages/Calendar';
+import DemoCalendar from './pages/DemoCalendar';
 import EnhancedCalendar from './pages/EnhancedCalendar';
 import LocationManagement from './pages/LocationManagement';
 import LocationDashboard from './components/LocationDashboard';
@@ -61,6 +63,13 @@ import RBACManagement from './pages/RBACManagement';
 import RBACDiscovery from './pages/RBACDiscovery';
 import Checkin from './pages/Checkin';
 import InternalMessages from './pages/InternalMessages';
+import Reimbursements from './pages/Reimbursements';
+import Absences from './pages/Absences';
+import WorkShifts from './pages/WorkShifts';
+import ClinicHours from './pages/ClinicHours';
+import Availability from './pages/Availability';
+import ServiceCategories from './pages/ServiceCategories';
+import ECardValidation from './pages/ECardValidation';
 
 // Theme
 const theme = createTheme({
@@ -233,6 +242,14 @@ const AppContent: React.FC = () => {
                         } 
                       />
                       <Route 
+                        path="/demo-calendar" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <DemoCalendar />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
                         path="/enhanced-calendar" 
                         element={
                           <ProtectedRoute requiredPermissions={['appointments.read']}>
@@ -303,6 +320,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['billing.read']}>
                             <PerformanceList />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/reimbursements" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <Reimbursements />
                           </ProtectedRoute>
                         } 
                       />
@@ -412,6 +437,14 @@ const AppContent: React.FC = () => {
                         } 
                       />
                       <Route 
+                        path="/billing-reports" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <BillingReports />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
                         path="/security" 
                         element={
                           <ProtectedRoute requiredPermissions={['security.read']}>
@@ -460,6 +493,54 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['staff.read']}>
                             <StaffManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/absences" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['staff.read']}>
+                            <Absences />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/work-shifts" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['staff.read']}>
+                            <WorkShifts />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/clinic-hours" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <ClinicHours />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/availability" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <Availability />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/service-categories" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['services.read']}>
+                            <ServiceCategories />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/ecard-validation" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <ECardValidation />
                           </ProtectedRoute>
                         } 
                       />

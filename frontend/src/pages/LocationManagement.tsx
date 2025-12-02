@@ -132,6 +132,26 @@ const LocationManagement: React.FC = () => {
     email: '',
     color_hex: '#2563EB',
     is_active: true,
+    practiceType: 'gemischt' as 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt',
+    billing: {
+      defaultBillingType: null as 'kassenarzt' | 'wahlarzt' | 'privat' | 'sonderklasse' | null,
+      kassenarzt: {
+        enabled: true,
+        ogkContractNumber: '',
+        autoSubmitOGK: false,
+        elgaEnabled: false,
+        kimEnabled: false
+      },
+      wahlarzt: {
+        enabled: true,
+        defaultReimbursementRate: 0.80,
+        autoCalculateReimbursement: true
+      },
+      privat: {
+        enabled: true,
+        defaultTariff: 'GOÄ' as 'GOÄ' | 'custom'
+      }
+    },
     xdsRegistry: {
       enabled: false,
       registryUrl: '',
@@ -190,6 +210,25 @@ const LocationManagement: React.FC = () => {
         patientUploadMaxSize: 10485760,
         patientUploadAllowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
       };
+      const billing = location.billing || {
+        defaultBillingType: null,
+        kassenarzt: {
+          enabled: true,
+          ogkContractNumber: '',
+          autoSubmitOGK: false,
+          elgaEnabled: false,
+          kimEnabled: false
+        },
+        wahlarzt: {
+          enabled: true,
+          defaultReimbursementRate: 0.80,
+          autoCalculateReimbursement: true
+        },
+        privat: {
+          enabled: true,
+          defaultTariff: 'GOÄ'
+        }
+      };
       setLocationForm({
         name: location.name,
         code: location.code || '',
@@ -203,6 +242,26 @@ const LocationManagement: React.FC = () => {
         email: location.email || '',
         color_hex: location.color_hex,
         is_active: location.is_active,
+        practiceType: location.practiceType || 'gemischt',
+        billing: {
+          defaultBillingType: billing.defaultBillingType || null,
+          kassenarzt: {
+            enabled: billing.kassenarzt?.enabled ?? true,
+            ogkContractNumber: billing.kassenarzt?.ogkContractNumber || '',
+            autoSubmitOGK: billing.kassenarzt?.autoSubmitOGK || false,
+            elgaEnabled: billing.kassenarzt?.elgaEnabled || false,
+            kimEnabled: billing.kassenarzt?.kimEnabled || false
+          },
+          wahlarzt: {
+            enabled: billing.wahlarzt?.enabled ?? true,
+            defaultReimbursementRate: billing.wahlarzt?.defaultReimbursementRate || 0.80,
+            autoCalculateReimbursement: billing.wahlarzt?.autoCalculateReimbursement ?? true
+          },
+          privat: {
+            enabled: billing.privat?.enabled ?? true,
+            defaultTariff: (billing.privat?.defaultTariff || 'GOÄ') as 'GOÄ' | 'custom'
+          }
+        },
         xdsRegistry: {
           enabled: xdsRegistry.enabled || false,
           registryUrl: xdsRegistry.registryUrl || '',
@@ -229,6 +288,26 @@ const LocationManagement: React.FC = () => {
         email: '',
         color_hex: '#2563EB',
         is_active: true,
+        practiceType: 'gemischt',
+        billing: {
+          defaultBillingType: null,
+          kassenarzt: {
+            enabled: true,
+            ogkContractNumber: '',
+            autoSubmitOGK: false,
+            elgaEnabled: false,
+            kimEnabled: false
+          },
+          wahlarzt: {
+            enabled: true,
+            defaultReimbursementRate: 0.80,
+            autoCalculateReimbursement: true
+          },
+          privat: {
+            enabled: true,
+            defaultTariff: 'GOÄ'
+          }
+        },
         xdsRegistry: {
           enabled: false,
           registryUrl: '',
@@ -540,6 +619,7 @@ const LocationManagement: React.FC = () => {
                   <TableCell>Name</TableCell>
                   <TableCell>Code</TableCell>
                   <TableCell>Adresse</TableCell>
+                  <TableCell>Praxistyp</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Aktionen</TableCell>
                 </TableRow>
@@ -564,6 +644,25 @@ const LocationManagement: React.FC = () => {
                     <TableCell>{location.code || '-'}</TableCell>
                     <TableCell>
                       {location.address_line1}, {location.postal_code} {location.city}
+                    </TableCell>
+                    <TableCell>
+                      {location.practiceType && (
+                        <Chip
+                          label={
+                            location.practiceType === 'kassenpraxis' ? 'Kassenpraxis' :
+                            location.practiceType === 'wahlarzt' ? 'Wahlarzt' :
+                            location.practiceType === 'privat' ? 'Privat' :
+                            'Gemischt'
+                          }
+                          size="small"
+                          color={
+                            location.practiceType === 'kassenpraxis' ? 'primary' :
+                            location.practiceType === 'wahlarzt' ? 'secondary' :
+                            location.practiceType === 'privat' ? 'default' :
+                            'info'
+                          }
+                        />
+                      )}
                     </TableCell>
                     <TableCell>
                       <Chip
@@ -993,6 +1092,11 @@ const LocationManagement: React.FC = () => {
           sx: {
             borderRadius: 3,
             boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            overflow: 'visible',
+            '& .MuiDialogTitle-root': {
+              margin: 0,
+              padding: '24px 24px 16px 24px',
+            },
           }
         }}
       >
@@ -1002,7 +1106,7 @@ const LocationManagement: React.FC = () => {
           icon={<LocationOnIcon />}
           gradientColors={{ from: '#3b82f6', to: '#2563eb' }}
         />
-        <DialogContent sx={{ pt: 3, px: 3 }}>
+        <DialogContent sx={{ pt: 5, px: 3, overflow: 'visible' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField
@@ -1099,6 +1203,265 @@ const LocationManagement: React.FC = () => {
                 Standort ist aktiv
               </Typography>
             </Box>
+            
+            {/* Praxistyp & Abrechnung */}
+            <Accordion sx={{ mt: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="subtitle1">Praxistyp & Abrechnung</Typography>
+                  {locationForm.practiceType && (
+                    <Chip 
+                      label={
+                        locationForm.practiceType === 'kassenpraxis' ? 'Kassenpraxis' :
+                        locationForm.practiceType === 'wahlarzt' ? 'Wahlarzt' :
+                        locationForm.practiceType === 'privat' ? 'Privat' :
+                        'Gemischt'
+                      }
+                      size="small"
+                      color={
+                        locationForm.practiceType === 'kassenpraxis' ? 'primary' :
+                        locationForm.practiceType === 'wahlarzt' ? 'secondary' :
+                        locationForm.practiceType === 'privat' ? 'default' :
+                        'info'
+                      }
+                    />
+                  )}
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <FormControl fullWidth>
+                    <InputLabel>Praxistyp</InputLabel>
+                    <Select
+                      value={locationForm.practiceType}
+                      onChange={(e) => setLocationForm({ 
+                        ...locationForm, 
+                        practiceType: e.target.value as 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt'
+                      })}
+                    >
+                      <MenuItem value="gemischt">Gemischt (Kassen- und Wahlarzt/Privat)</MenuItem>
+                      <MenuItem value="kassenpraxis">Kassenpraxis</MenuItem>
+                      <MenuItem value="wahlarzt">Wahlarzt</MenuItem>
+                      <MenuItem value="privat">Privat</MenuItem>
+                    </Select>
+                  </FormControl>
+                  
+                  {locationForm.practiceType === 'kassenpraxis' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'primary.50', borderRadius: 1 }}>
+                      <Typography variant="subtitle2" color="primary">Kassenarzt-Konfiguration</Typography>
+                      <Box display="flex" alignItems="center">
+                        <Switch
+                          checked={locationForm.billing.kassenarzt.enabled}
+                          onChange={(e) => setLocationForm({
+                            ...locationForm,
+                            billing: {
+                              ...locationForm.billing,
+                              kassenarzt: { ...locationForm.billing.kassenarzt, enabled: e.target.checked }
+                            }
+                          })}
+                        />
+                        <Typography variant="body2" sx={{ ml: 1 }}>
+                          Kassenarzt-Abrechnung aktiviert
+                        </Typography>
+                      </Box>
+                      {locationForm.billing.kassenarzt.enabled && (
+                        <>
+                          <TextField
+                            fullWidth
+                            label="ÖGK-Vertragsnummer"
+                            value={locationForm.billing.kassenarzt.ogkContractNumber || ''}
+                            onChange={(e) => setLocationForm({
+                              ...locationForm,
+                              billing: {
+                                ...locationForm.billing,
+                                kassenarzt: { ...locationForm.billing.kassenarzt, ogkContractNumber: e.target.value }
+                              }
+                            })}
+                            placeholder="z.B. 12345"
+                          />
+                          <Box display="flex" alignItems="center">
+                            <Switch
+                              checked={locationForm.billing.kassenarzt.autoSubmitOGK || false}
+                              onChange={(e) => setLocationForm({
+                                ...locationForm,
+                                billing: {
+                                  ...locationForm.billing,
+                                  kassenarzt: { ...locationForm.billing.kassenarzt, autoSubmitOGK: e.target.checked }
+                                }
+                              })}
+                            />
+                            <Typography variant="body2" sx={{ ml: 1 }}>
+                              Automatische OGK-Übermittlung
+                            </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center">
+                            <Switch
+                              checked={locationForm.billing.kassenarzt.elgaEnabled || false}
+                              onChange={(e) => setLocationForm({
+                                ...locationForm,
+                                billing: {
+                                  ...locationForm.billing,
+                                  kassenarzt: { ...locationForm.billing.kassenarzt, elgaEnabled: e.target.checked }
+                                }
+                              })}
+                            />
+                            <Typography variant="body2" sx={{ ml: 1 }}>
+                              ELGA-Integration aktiviert
+                            </Typography>
+                          </Box>
+                          <Box display="flex" alignItems="center">
+                            <Switch
+                              checked={locationForm.billing.kassenarzt.kimEnabled || false}
+                              onChange={(e) => setLocationForm({
+                                ...locationForm,
+                                billing: {
+                                  ...locationForm.billing,
+                                  kassenarzt: { ...locationForm.billing.kassenarzt, kimEnabled: e.target.checked }
+                                }
+                              })}
+                            />
+                            <Typography variant="body2" sx={{ ml: 1 }}>
+                              KIM-Integration aktiviert
+                            </Typography>
+                          </Box>
+                        </>
+                      )}
+                    </Box>
+                  )}
+                  
+                  {locationForm.practiceType === 'wahlarzt' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'secondary.50', borderRadius: 1 }}>
+                      <Typography variant="subtitle2" color="secondary">Wahlarzt-Konfiguration</Typography>
+                      <Box display="flex" alignItems="center">
+                        <Switch
+                          checked={locationForm.billing.wahlarzt.enabled}
+                          onChange={(e) => setLocationForm({
+                            ...locationForm,
+                            billing: {
+                              ...locationForm.billing,
+                              wahlarzt: { ...locationForm.billing.wahlarzt, enabled: e.target.checked }
+                            }
+                          })}
+                        />
+                        <Typography variant="body2" sx={{ ml: 1 }}>
+                          Wahlarzt-Abrechnung aktiviert
+                        </Typography>
+                      </Box>
+                      {locationForm.billing.wahlarzt.enabled && (
+                        <>
+                          <TextField
+                            fullWidth
+                            type="number"
+                            label="Standard-Erstattungssatz"
+                            value={locationForm.billing.wahlarzt.defaultReimbursementRate || 0.80}
+                            onChange={(e) => setLocationForm({
+                              ...locationForm,
+                              billing: {
+                                ...locationForm.billing,
+                                wahlarzt: { 
+                                  ...locationForm.billing.wahlarzt, 
+                                  defaultReimbursementRate: parseFloat(e.target.value) 
+                                }
+                              }
+                            })}
+                            inputProps={{ min: 0, max: 1, step: 0.01 }}
+                            helperText="z.B. 0.80 = 80% Erstattung durch Kasse"
+                          />
+                          <Box display="flex" alignItems="center">
+                            <Switch
+                              checked={locationForm.billing.wahlarzt.autoCalculateReimbursement ?? true}
+                              onChange={(e) => setLocationForm({
+                                ...locationForm,
+                                billing: {
+                                  ...locationForm.billing,
+                                  wahlarzt: { 
+                                    ...locationForm.billing.wahlarzt, 
+                                    autoCalculateReimbursement: e.target.checked 
+                                  }
+                                }
+                              })}
+                            />
+                            <Typography variant="body2" sx={{ ml: 1 }}>
+                              Automatische Erstattungsberechnung
+                            </Typography>
+                          </Box>
+                        </>
+                      )}
+                    </Box>
+                  )}
+                  
+                  {locationForm.practiceType === 'privat' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                      <Typography variant="subtitle2">Privat-Konfiguration</Typography>
+                      <Box display="flex" alignItems="center">
+                        <Switch
+                          checked={locationForm.billing.privat.enabled}
+                          onChange={(e) => setLocationForm({
+                            ...locationForm,
+                            billing: {
+                              ...locationForm.billing,
+                              privat: { ...locationForm.billing.privat, enabled: e.target.checked }
+                            }
+                          })}
+                        />
+                        <Typography variant="body2" sx={{ ml: 1 }}>
+                          Privat-Abrechnung aktiviert
+                        </Typography>
+                      </Box>
+                      {locationForm.billing.privat.enabled && (
+                        <FormControl fullWidth>
+                          <InputLabel>Standard-Tarif</InputLabel>
+                          <Select
+                            value={locationForm.billing.privat.defaultTariff || 'GOÄ'}
+                            onChange={(e) => setLocationForm({
+                              ...locationForm,
+                              billing: {
+                                ...locationForm.billing,
+                                privat: { 
+                                  ...locationForm.billing.privat, 
+                                  defaultTariff: e.target.value as 'GOÄ' | 'custom'
+                                }
+                              }
+                            })}
+                          >
+                            <MenuItem value="GOÄ">GOÄ (Gebührenordnung für Ärzte)</MenuItem>
+                            <MenuItem value="custom">Individuell</MenuItem>
+                          </Select>
+                        </FormControl>
+                      )}
+                    </Box>
+                  )}
+                  
+                  {locationForm.practiceType === 'gemischt' && (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
+                      <Typography variant="subtitle2" color="info">Gemischt-Konfiguration</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Bei gemischter Praxis wird der Abrechnungstyp automatisch basierend auf Patient-Versicherung und Service-Konfiguration bestimmt.
+                      </Typography>
+                      <FormControl fullWidth>
+                        <InputLabel>Standard-Abrechnungstyp (optional)</InputLabel>
+                        <Select
+                          value={locationForm.billing.defaultBillingType || ''}
+                          onChange={(e) => setLocationForm({
+                            ...locationForm,
+                            billing: {
+                              ...locationForm.billing,
+                              defaultBillingType: e.target.value as 'kassenarzt' | 'wahlarzt' | 'privat' | 'sonderklasse' | null || null
+                            }
+                          })}
+                        >
+                          <MenuItem value="">Automatisch bestimmen</MenuItem>
+                          <MenuItem value="kassenarzt">Kassenarzt</MenuItem>
+                          <MenuItem value="wahlarzt">Wahlarzt</MenuItem>
+                          <MenuItem value="privat">Privat</MenuItem>
+                          <MenuItem value="sonderklasse">Sonderklasse</MenuItem>
+                        </Select>
+                      </FormControl>
+                    </Box>
+                  )}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
             
             {/* XDS Registry Konfiguration */}
             <Accordion sx={{ mt: 2 }}>
@@ -1242,7 +1605,7 @@ const LocationManagement: React.FC = () => {
           icon={<ScheduleIcon />}
           gradientColors={{ from: '#059669', to: '#047857' }}
         />
-        <DialogContent sx={{ pt: 3, px: 3 }}>
+        <DialogContent sx={{ pt: 5, px: 3, overflow: 'visible' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Standort</InputLabel>
@@ -1317,7 +1680,7 @@ const LocationManagement: React.FC = () => {
           icon={<CancelIcon />}
           gradientColors={{ from: '#dc2626', to: '#b91c1c' }}
         />
-        <DialogContent sx={{ pt: 3, px: 3 }}>
+        <DialogContent sx={{ pt: 5, px: 3, overflow: 'visible' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Standort</InputLabel>
@@ -1390,7 +1753,7 @@ const LocationManagement: React.FC = () => {
           icon={<PeopleIcon />}
           gradientColors={{ from: '#7c3aed', to: '#6d28d9' }}
         />
-        <DialogContent sx={{ pt: 3, px: 3 }}>
+        <DialogContent sx={{ pt: 5, px: 3, overflow: 'visible' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <FormControl fullWidth>
               <InputLabel>Personal</InputLabel>

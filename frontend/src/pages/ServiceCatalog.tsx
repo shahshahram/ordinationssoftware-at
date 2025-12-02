@@ -60,6 +60,9 @@ import {
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
+import { useSnackbar } from 'notistack';
+import { format } from 'date-fns';
+import { Refresh } from '@mui/icons-material';
 
 // Interface-Definitionen
 interface Location {
@@ -1328,6 +1331,7 @@ const ServiceCatalog: React.FC = () => {
               <Tab label="Zeit & Dauer" icon={<AccessTimeIcon />} iconPosition="start" />
               <Tab label="Zuordnung" icon={<GroupIcon />} iconPosition="start" />
               <Tab label="Preis & Billing" icon={<AttachMoneyIcon />} iconPosition="start" />
+              <Tab label="Update-Status" icon={<SettingsIcon />} iconPosition="start" />
               <Tab label="Geräte & Räume" icon={<RoomIcon />} iconPosition="start" />
               <Tab label="Einstellungen" icon={<SettingsIcon />} iconPosition="start" />
             </Tabs>
@@ -1937,7 +1941,12 @@ const ServiceCatalog: React.FC = () => {
               </Box>
             )}
 
-            {/* Tab 6: Einstellungen */}
+            {/* Tab 6: Update-Status */}
+            {activeTab === 6 && (
+              <ServiceCatalogUpdateStatus />
+            )}
+
+            {/* Tab 7: Einstellungen */}
             {activeTab === 5 && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField
@@ -2017,6 +2026,201 @@ const ServiceCatalog: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+};
+
+// ServiceCatalog Update-Status Komponente
+const ServiceCatalogUpdateStatus: React.FC = () => {
+  const { enqueueSnackbar } = useSnackbar();
+  const [updateStatus, setUpdateStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [triggering, setTriggering] = useState(false);
+
+  useEffect(() => {
+    loadUpdateStatus();
+  }, []);
+
+  const loadUpdateStatus = async () => {
+    setLoading(true);
+    try {
+      const response = await api.get<any>('/service-catalog/update-status');
+      if (response.success && response.data) {
+        setUpdateStatus(response.data);
+      } else if (response.data) {
+        setUpdateStatus(response.data);
+      }
+    } catch (error: any) {
+      enqueueSnackbar('Fehler beim Laden des Update-Status', { variant: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTriggerUpdate = async () => {
+    if (!window.confirm('Möchten Sie wirklich ein manuelles Update starten?')) {
+      return;
+    }
+    
+    setTriggering(true);
+    try {
+      const response = await api.post<any>('/service-catalog/trigger-update');
+      if (response.success) {
+        enqueueSnackbar('Update wurde gestartet', { variant: 'success' });
+        setTimeout(() => loadUpdateStatus(), 2000);
+      }
+    } catch (error: any) {
+      enqueueSnackbar(error?.response?.data?.message || 'Fehler beim Starten des Updates', { variant: 'error' });
+    } finally {
+      setTriggering(false);
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'success': return 'success';
+      case 'pending': return 'warning';
+      case 'never': return 'error';
+      default: return 'default';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'success': return 'Aktuell';
+      case 'pending': return 'Ausstehend';
+      case 'never': return 'Nie aktualisiert';
+      default: return status;
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  if (!updateStatus) {
+    return (
+      <Alert severity="info">Keine Update-Informationen verfügbar</Alert>
+    );
+  }
+
+  const statusData = updateStatus.data || updateStatus;
+
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Card>
+        <CardContent>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+            <Typography variant="h6">Update-Status</Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <Button
+                variant="outlined"
+                startIcon={<Refresh />}
+                onClick={loadUpdateStatus}
+                size="small"
+              >
+                Aktualisieren
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<SettingsIcon />}
+                onClick={handleTriggerUpdate}
+                disabled={triggering}
+                size="small"
+              >
+                {triggering ? 'Wird gestartet...' : 'Manuelles Update starten'}
+              </Button>
+            </Box>
+          </Box>
+          
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
+                <Typography variant="body2" color="text.secondary">Status</Typography>
+                <Chip
+                  label={getStatusLabel(statusData.status)}
+                  color={getStatusColor(statusData.status) as any}
+                  sx={{ mt: 1 }}
+                />
+              </Box>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
+                <Typography variant="body2" color="text.secondary">Letztes Update</Typography>
+                <Typography variant="body1" sx={{ mt: 1 }}>
+                  {statusData.lastUpdate
+                    ? format(new Date(statusData.lastUpdate), 'dd.MM.yyyy HH:mm')
+                    : 'Nie'}
+                </Typography>
+              </Box>
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Box sx={{ p: 2, bgcolor: 'background.default', borderRadius: 2 }}>
+                <Typography variant="body2" color="text.secondary">Nächstes Update</Typography>
+                <Typography variant="body1" sx={{ mt: 1 }}>
+                  {statusData.nextUpdate
+                    ? format(new Date(statusData.nextUpdate), 'dd.MM.yyyy')
+                    : 'N/A'}
+                </Typography>
+              </Box>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+
+      {statusData.statistics && (
+        <Card>
+          <CardContent>
+            <Typography variant="h6" gutterBottom>Statistiken</Typography>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'primary.light', borderRadius: 2 }}>
+                  <Typography variant="h4" color="primary.contrastText">
+                    {statusData.statistics.totalServices || 0}
+                  </Typography>
+                  <Typography variant="body2" color="primary.contrastText">
+                    Gesamt Services
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.light', borderRadius: 2 }}>
+                  <Typography variant="h4" color="success.contrastText">
+                    {statusData.statistics.activeServices || 0}
+                  </Typography>
+                  <Typography variant="body2" color="success.contrastText">
+                    Aktive Services
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 2 }}>
+                  <Typography variant="h4" color="info.contrastText">
+                    {statusData.statistics.newServicesThisYear || 0}
+                  </Typography>
+                  <Typography variant="body2" color="info.contrastText">
+                    Neue (dieses Jahr)
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 2 }}>
+                  <Typography variant="h4" color="warning.contrastText">
+                    {statusData.statistics.priceAdjustmentsThisYear || 0}
+                  </Typography>
+                  <Typography variant="body2" color="warning.contrastText">
+                    Preisänderungen
+                  </Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 };

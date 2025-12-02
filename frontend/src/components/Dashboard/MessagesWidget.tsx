@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Typography, 
@@ -22,7 +23,7 @@ import {
 } from '@mui/icons-material';
 import { DashboardWidget } from '../../store/slices/dashboardWidgetsSlice';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { fetchMessages, fetchUnreadCount, markAsRead, InternalMessage } from '../../store/slices/internalMessagesSlice';
+import { fetchMessages, fetchUnreadCount, markAsRead, markAllAsRead, InternalMessage } from '../../store/slices/internalMessagesSlice';
 import { addNotification } from '../../store/slices/uiSlice';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -36,13 +37,16 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const dispatch = useAppDispatch();
+  const navigate = useNavigate();
   const { inbox, unreadCount, loading } = useAppSelector((state) => state.internalMessages);
+  const { user } = useAppSelector((state) => state.auth);
 
   useEffect(() => {
     let previousUnreadCount = 0;
     
     const loadMessages = async () => {
-      await dispatch(fetchMessages({ type: 'inbox', limit: 5 }));
+      // Lade alle Nachrichten (keine Limitierung nach Alter)
+      await dispatch(fetchMessages({ type: 'inbox', limit: 50 }));
       const result = await dispatch(fetchUnreadCount());
       const currentUnreadCount = result.payload as number;
       
@@ -58,6 +62,7 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
       previousUnreadCount = currentUnreadCount;
     };
     
+    // Beim ersten Laden
     loadMessages();
     
     // Polling für neue Nachrichten alle 30 Sekunden
@@ -69,9 +74,21 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
   }, [dispatch]);
 
   const handleMessageClick = async (message: InternalMessage) => {
-    if (message.status !== 'read') {
-      await dispatch(markAsRead(message._id));
+    // Markiere die Nachricht als gelesen, wenn sie ungelesen ist und der aktuelle Benutzer der Empfänger ist
+    if ((message.status === 'sent' || message.status === 'delivered') && user) {
+      const recipientId = typeof message.recipientId === 'object' ? message.recipientId._id : message.recipientId;
+      if (recipientId === user._id) {
+        console.log('🔔 MessagesWidget: Markiere Nachricht als gelesen:', message._id, 'Aktueller unreadCount:', unreadCount);
+        // Redux reduziert den Count sofort, aber wir aktualisieren auch vom Backend für Konsistenz
+        await dispatch(markAsRead(message._id));
+        console.log('✅ MessagesWidget: Nachricht markiert, neuer unreadCount sollte reduziert sein');
+        // Aktualisiere unreadCount vom Backend nach kurzer Verzögerung (für Konsistenz)
+        setTimeout(async () => {
+          await dispatch(fetchUnreadCount());
+        }, 500);
+      }
     }
+    
     if (onMessageClick) {
       onMessageClick(message);
     }
@@ -121,13 +138,64 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
           </Typography>
         ) : (
           <List sx={{ py: 0 }}>
-            {inbox.map((message: InternalMessage, index: number) => {
+            {/* Sortiere Nachrichten nach Datum: neueste zuerst */}
+            {[...inbox].sort((a, b) => {
+              const dateA = new Date(a.createdAt).getTime();
+              const dateB = new Date(b.createdAt).getTime();
+              return dateB - dateA; // Neueste zuerst
+            }).map((message: InternalMessage, index: number, sortedArray) => {
               const isUnread = message.status === 'sent' || message.status === 'delivered';
+              
+              // Extrahiere patientId aus der Nachricht (kann ObjectId-Objekt oder String sein)
+              let patientId: string | null = null;
+              if (message.patientId) {
+                // Wenn patientId ein Objekt ist (z.B. ObjectId), extrahiere _id oder toString()
+                if (typeof message.patientId === 'object' && message.patientId !== null) {
+                  patientId = (message.patientId as any)._id ? String((message.patientId as any)._id) : String(message.patientId);
+                } else {
+                  patientId = String(message.patientId);
+                }
+              }
+              
+              console.log('🔍 MessagesWidget: Processing message', { 
+                messageId: message._id, 
+                subject: message.subject,
+                patientId: patientId,
+                patientIdType: typeof patientId,
+                fullMessage: message 
+              });
+              
               return (
                 <ListItem 
                   key={message._id} 
-                  divider={index < inbox.length - 1}
-                  onClick={() => handleMessageClick(message)}
+                  divider={index < sortedArray.length - 1}
+                  onClick={(e: React.MouseEvent) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    console.log('🔍 MessagesWidget: Item clicked', { 
+                      messageId: message._id, 
+                      patientId: patientId,
+                      hasPatientId: !!patientId,
+                      fullMessage: message 
+                    });
+                    
+                    // Wenn patientId vorhanden ist, navigiere zum Patienten
+                    if (patientId) {
+                      // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
+                      const patientIdStr = typeof patientId === 'string' ? patientId : String(patientId);
+                      console.log('🔍 MessagesWidget: Navigating to patient labor values', { 
+                        patientId: patientIdStr, 
+                        originalPatientId: patientId, 
+                        fullMessage: message 
+                      });
+                      // Verwende window.location für zuverlässige Navigation
+                      window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+                    } else {
+                      console.log('🔍 MessagesWidget: No patientId, using normal message handling', { messageId: message._id });
+                      // Sonst normale Nachrichten-Behandlung
+                      handleMessageClick(message);
+                    }
+                  }}
                   sx={{ 
                     py: { xs: 1, sm: 1.5 },
                     px: { xs: 0.5, sm: 1 },

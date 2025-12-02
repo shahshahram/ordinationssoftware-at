@@ -112,6 +112,81 @@ export interface PatientAdmissionData {
   hasHint?: boolean;
   hintText?: string;
   
+  // Versicherungsdaten (erweitert)
+  insuranceNumber?: string;
+  exemptFromCopay?: boolean;
+  copayExemptionReason?: 'chronically_ill' | 'low_income' | 'pensioner' | 'student' | 'other';
+  
+  // Zusatzversicherungen
+  additionalInsurances?: {
+    hospitalInsurance?: {
+      hasInsurance: boolean;
+      insuranceCompany?: string;
+      policyNumber?: string;
+      coverageType?: 'single_room' | 'double_room' | 'standard';
+      reimbursementRate?: number;
+      maxDailyRate?: number;
+      validFrom?: string;
+      validUntil?: string;
+    };
+    privateDoctorInsurance?: {
+      hasInsurance: boolean;
+      insuranceCompany?: string;
+      policyNumber?: string;
+      reimbursementRate?: number;
+      maxReimbursementPerYear?: number;
+      deductible?: number;
+      validFrom?: string;
+      validUntil?: string;
+    };
+    dentalInsurance?: {
+      hasInsurance: boolean;
+      insuranceCompany?: string;
+      policyNumber?: string;
+      reimbursementRate?: number;
+      maxReimbursementPerYear?: number;
+      validFrom?: string;
+      validUntil?: string;
+    };
+    opticalInsurance?: {
+      hasInsurance: boolean;
+      insuranceCompany?: string;
+      policyNumber?: string;
+      reimbursementRate?: number;
+      maxReimbursementPerYear?: number;
+      validFrom?: string;
+      validUntil?: string;
+    };
+    medicalAidsInsurance?: {
+      hasInsurance: boolean;
+      insuranceCompany?: string;
+      policyNumber?: string;
+      reimbursementRate?: number;
+      maxReimbursementPerYear?: number;
+      validFrom?: string;
+      validUntil?: string;
+    };
+    travelInsurance?: {
+      hasInsurance: boolean;
+      insuranceCompany?: string;
+      policyNumber?: string;
+      validFrom?: string;
+      validUntil?: string;
+      coverageCountries?: string[];
+    };
+  };
+  
+  // e-card Informationen
+  ecard?: {
+    cardNumber?: string;
+    validFrom?: string;
+    validUntil?: string;
+    lastValidated?: string;
+    validationStatus?: 'valid' | 'invalid' | 'expired' | 'not_checked';
+    elgaId?: string;
+    elgaStatus?: 'active' | 'inactive' | 'not_registered';
+  };
+  
   // Zusätzliche Notizen
   notes?: string;
   specialInstructions?: string;

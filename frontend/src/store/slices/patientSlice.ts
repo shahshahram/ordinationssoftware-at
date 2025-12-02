@@ -21,6 +21,12 @@ export interface Patient {
   socialSecurityNumber?: string;
   // Neue Felder (für erweiterte Patienten)
   insuranceProvider?: string;
+  insuranceNumber?: string;
+  additionalInsurances?: Record<string, any>;
+  ecard?: {
+    cardNumber?: string;
+    [key: string]: any;
+  };
   bloodType?: string;
   status: string;
   medicalHistory?: string[];

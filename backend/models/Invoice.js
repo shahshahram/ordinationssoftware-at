@@ -105,6 +105,24 @@ const InvoiceSchema = new mongoose.Schema({
     patientAmount: { type: Number, default: 0 }
   },
   
+  // ÖGK-spezifische Abrechnungsdaten
+  ogkBilling: {
+    xmlExported: { type: Boolean, default: false },
+    xmlExportDate: { type: Date },
+    elaNumber: { type: String },
+    billingPeriod: { type: String },
+    submissionDate: { type: Date },
+    status: { type: String, enum: ['pending', 'submitted', 'approved', 'rejected'] },
+    referenceNumber: { type: String }
+  },
+  
+  // Erstattungs-Referenz
+  reimbursementId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Reimbursement',
+    index: true
+  },
+  
   // Notizen
   notes: { type: String },
   

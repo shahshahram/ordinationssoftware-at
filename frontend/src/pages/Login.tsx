@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import { login, clearError } from '../store/slices/authSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { store } from '../store/store';
 import LoginTest from '../components/LoginTest';
 
 const Login: React.FC = () => {
@@ -37,14 +38,15 @@ const Login: React.FC = () => {
 
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { user, loading, error } = useAppSelector((state) => state.auth);
+  const { user, isAuthenticated, loading, error } = useAppSelector((state) => state.auth);
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) {
-      navigate('/dashboard');
+    if (user && isAuthenticated) {
+      console.log('Login: User authenticated, navigating to dashboard', { user, isAuthenticated });
+      navigate('/dashboard', { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, isAuthenticated, navigate]);
 
   // Clear errors when component unmounts
   useEffect(() => {
@@ -93,9 +95,28 @@ const Login: React.FC = () => {
     }
 
     try {
-      await dispatch(login(formData)).unwrap();
-      navigate('/dashboard');
+      const result = await dispatch(login(formData)).unwrap();
+      console.log('Login: Login successful', { result, hasUser: !!result?.user });
+      
+      // Navigation wird durch useEffect ausgelöst, wenn user und isAuthenticated gesetzt sind
+      // Falls das nicht sofort funktioniert, navigiere hier direkt nach kurzer Verzögerung
+      if (result && result.user) {
+        // Prüfe State nach kurzer Verzögerung
+        setTimeout(() => {
+          const currentState = store.getState().auth;
+          console.log('Login: Current auth state after login', currentState);
+          if (currentState?.user && currentState?.isAuthenticated) {
+            console.log('Login: Navigating to dashboard after state update');
+            navigate('/dashboard', { replace: true });
+          } else {
+            // Fallback: Navigiere trotzdem
+            console.log('Login: Fallback navigation to dashboard');
+            navigate('/dashboard', { replace: true });
+          }
+        }, 200);
+      }
     } catch (error) {
+      console.error('Login: Login failed', error);
       // Error is handled by Redux
     }
   };

@@ -6,6 +6,7 @@ const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const mongoSanitize = require('express-mongo-sanitize');
 const path = require('path');
+const fs = require('fs');
 const cron = require('node-cron');
 require('dotenv').config();
 
@@ -15,6 +16,7 @@ const patientRoutes = require('./routes/patients');
 const appointmentRoutes = require('./routes/appointments');
 const resourceRoutes = require('./routes/resources');
 const billingRoutes = require('./routes/billing');
+const billingReportsRoutes = require('./routes/billing-reports');
 const documentRoutes = require('./routes/documents');
 const onlineBookingRoutes = require('./routes/onlineBooking');
 const elgaRoutes = require('./routes/elga');
@@ -59,6 +61,24 @@ const inventoryRoutes = require('./routes/inventory');
 const setupRoutes = require('./routes/setup');
 const settingsRoutes = require('./routes/settings');
 const ambulanzbefundeRoutes = require('./routes/ambulanzbefunde');
+const dashboardWidgetsRoutes = require('./routes/dashboardWidgets');
+const dekursRoutes = require('./routes/dekurs');
+const internalMessagesRoutes = require('./routes/internalMessages');
+const vitalSignsRoutes = require('./routes/vitalSigns');
+const medicalDataHistoryRoutes = require('./routes/medicalDataHistory');
+const patientDataHistoryRoutes = require('./routes/patientDataHistory');
+const laborRoutes = require('./routes/labor');
+const tasksRoutes = require('./routes/tasks');
+const dicomRoutes = require('./routes/dicom');
+const reimbursementsRoutes = require('./routes/reimbursements');
+const ogkBillingRoutes = require('./routes/ogk-billing');
+const insuranceBillingRoutes = require('./routes/insurance-billing');
+const autoReimbursementRoutes = require('./routes/auto-reimbursement');
+const ecardValidationRoutes = require('./routes/ecard-validation');
+const kdokRoutes = require('./routes/kdok');
+const directBillingRoutes = require('./routes/direct-billing');
+const ginaRoutes = require('./routes/gina');
+const ginaBoxRoutes = require('./routes/gina-box');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -89,6 +109,7 @@ app.use(helmet({
       imgSrc: ["'self'", "data:", "https:"],
     },
   },
+  crossOriginResourcePolicy: { policy: "cross-origin" }, // Allow cross-origin requests for images
 }));
 
 // Rate limiting - temporarily disabled for development
@@ -103,8 +124,10 @@ app.use(helmet({
 app.use(cors({
   origin: process.env.NODE_ENV === 'production' 
     ? ['https://yourdomain.com'] 
-    : ['http://localhost:3000', 'http://localhost:3001', 'http://192.168.178.163:3000'],
-  credentials: true
+    : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://192.168.178.163:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
 }));
 
 // Body parsing middleware
@@ -118,8 +141,92 @@ app.use(mongoSanitize());
 // Compression
 app.use(compression());
 
-// Static files
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Static files with CORS headers - muss VOR den Routes kommen
+const allowedOrigins = process.env.NODE_ENV === 'production' 
+  ? ['https://yourdomain.com'] 
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://192.168.178.163:3000'];
+
+// Custom handler for static files to ensure CORS headers are always set
+const setCorsHeaders = (req, res, next) => {
+  const origin = req.headers.origin;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (allowedOrigins.length > 0) {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-auth-token');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+};
+
+// Special route handler for image files to ensure CORS headers are always set
+// This must come BEFORE express.static to intercept image requests
+const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+app.get('/uploads/*', (req, res, next) => {
+  const isImage = imageExtensions.some(ext => req.path.toLowerCase().endsWith(ext));
+  
+  if (isImage) {
+    const filePath = path.join(__dirname, 'uploads', req.path.replace('/uploads/', ''));
+    
+    // Check if file exists
+    if (!fs.existsSync(filePath)) {
+      return next(); // Let express.static handle 404
+    }
+    
+    // Set CORS headers BEFORE sending the file
+    const origin = req.headers.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (allowedOrigins.length > 0) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Type');
+    
+    // Disable caching to prevent 304 responses
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    
+    // Set proper content type
+    if (filePath.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (filePath.endsWith('.gif')) {
+      res.setHeader('Content-Type', 'image/gif');
+    } else if (filePath.endsWith('.webp')) {
+      res.setHeader('Content-Type', 'image/webp');
+    }
+    
+    // Send the file
+    return res.sendFile(filePath);
+  }
+  
+  next();
+});
+
+app.use('/uploads', setCorsHeaders);
+
+// Serve static files with CORS headers (fallback for non-image files)
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+  setHeaders: (res, filePath, stat) => {
+    // Set CORS headers for all static files
+    const origin = res.req?.headers?.origin;
+    if (origin && allowedOrigins.includes(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (allowedOrigins.length > 0) {
+      res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
+    }
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  }
+}));
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
@@ -144,6 +251,7 @@ function registerStaticRoutes(app) {
   app.use('/api/appointments', appointmentRoutes);
   app.use('/api/resources', resourceRoutes);
   app.use('/api/billing', billingRoutes);
+  app.use('/api/billing-reports', billingReportsRoutes);
   app.use('/api/checkin', require('./routes/checkin'));
   app.use('/api/documents', documentRoutes);
   app.use('/api/online-booking', onlineBookingRoutes);
@@ -189,6 +297,24 @@ function registerStaticRoutes(app) {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/medications', medicationCatalogRoutes);
   app.use('/api/ambulanzbefunde', ambulanzbefundeRoutes);
+  app.use('/api/dashboard-widgets', dashboardWidgetsRoutes);
+  app.use('/api/dekurs', dekursRoutes);
+  app.use('/api/internal-messages', internalMessagesRoutes);
+  app.use('/api/vital-signs', vitalSignsRoutes);
+app.use('/api/medical-data-history', medicalDataHistoryRoutes);
+  app.use('/api/patient-data-history', patientDataHistoryRoutes);
+  app.use('/api/labor', laborRoutes);
+  app.use('/api/tasks', tasksRoutes);
+  app.use('/api/dicom', dicomRoutes);
+  app.use('/api/reimbursements', reimbursementsRoutes);
+  app.use('/api/ogk-billing', ogkBillingRoutes);
+  app.use('/api/insurance-billing', insuranceBillingRoutes);
+  app.use('/api/auto-reimbursement', autoReimbursementRoutes);
+  app.use('/api/ecard-validation', ecardValidationRoutes);
+  app.use('/api/kdok', kdokRoutes);
+  app.use('/api/direct-billing', directBillingRoutes);
+  app.use('/api/gina', ginaRoutes);
+app.use('/api/gina-box', ginaBoxRoutes);
   
   // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)
   if (USE_MODULE_MANAGER) {
@@ -234,13 +360,54 @@ app.use('*', (req, res) => {
 });
 
 // Scheduled tasks
+const autoReimbursementService = require('./services/autoReimbursementService');
+const serviceCatalogUpdateService = require('./services/serviceCatalogUpdateService');
+const tariffUpdateService = require('./services/tariffUpdateService');
+
+// Daily backup at 2 AM
 if (process.env.NODE_ENV === 'production') {
-  // Daily backup at 2 AM
   cron.schedule(process.env.BACKUP_SCHEDULE || '0 2 * * *', () => {
     logger.info('Starte automatisches Backup...');
     backupService.createBackup();
   });
 }
+
+// Automatische Erstattungsverarbeitung (täglich um 3 Uhr)
+cron.schedule('0 3 * * *', async () => {
+  try {
+    logger.info('🔄 Starte automatische Erstattungsverarbeitung...');
+    const result = await autoReimbursementService.processPendingInvoices();
+    logger.info(`✅ Automatische Erstattungsverarbeitung abgeschlossen: ${result.created} Erstattungen erstellt`);
+  } catch (error) {
+    logger.error('❌ Fehler bei automatischer Erstattungsverarbeitung:', error);
+  }
+});
+
+// ServiceCatalog-Preis-Updates (wöchentlich montags um 4 Uhr)
+cron.schedule('0 4 * * 1', async () => {
+  try {
+    logger.info('🔄 Starte ServiceCatalog-Preis-Update...');
+    const result = await serviceCatalogUpdateService.updateAll();
+    logger.info(`✅ ServiceCatalog-Update abgeschlossen: ${result.totalUpdated} Services aktualisiert`);
+  } catch (error) {
+    logger.error('❌ Fehler bei ServiceCatalog-Update:', error);
+  }
+});
+
+// Tarifdatenbank-Updates (monatlich am 1. um 5 Uhr)
+cron.schedule('0 5 1 * *', async () => {
+  try {
+    logger.info('🔄 Starte Tarifdatenbank-Update...');
+    const result = await tariffUpdateService.checkAndUpdate();
+    if (result.hasUpdate) {
+      logger.info('✅ Tarifdatenbank-Update durchgeführt');
+    } else {
+      logger.info('ℹ️ Keine Tarifdatenbank-Updates verfügbar');
+    }
+  } catch (error) {
+    logger.error('❌ Fehler bei Tarifdatenbank-Update:', error);
+  }
+});
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
@@ -256,6 +423,12 @@ const server = app.listen(PORT, async () => {
   logger.info(`📊 Health Check: http://localhost:${PORT}/api/health`);
   logger.info(`🌍 Environment: ${process.env.NODE_ENV}`);
   logger.info(`🌐 Server erreichbar auf allen Interfaces`);
+  
+  // WebSocket-Support für GINA-Box
+  if (ginaBoxRoutes.setupWebSocket) {
+    ginaBoxRoutes.setupWebSocket(server);
+    logger.info('✅ GINA-Box WebSocket-Server gestartet');
+  }
   
   // Starte RBAC Auto-Discovery Service
   try {

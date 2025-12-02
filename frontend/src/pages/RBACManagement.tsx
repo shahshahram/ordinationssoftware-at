@@ -488,14 +488,25 @@ const RBACManagement: React.FC = () => {
 
   const handleExportAuditLogs = async () => {
     try {
-      const response = await api.get('/rbac/audit-logs/export', { responseType: 'blob' });
-      const url = window.URL.createObjectURL(new Blob([response.data as BlobPart]));
+      const token = localStorage.getItem('token');
+      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+      const response = await fetch(`${API_BASE_URL}/rbac/audit-logs/export`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      
+      if (!response.ok) {
+        throw new Error('Fehler beim Exportieren der Audit-Logs');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `audit-logs-${new Date().toISOString().split('T')[0]}.csv`);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url);
       setSnackbar({ open: true, message: 'Audit-Logs erfolgreich exportiert', severity: 'success' });
     } catch (error) {
       console.error('Error exporting audit logs:', error);

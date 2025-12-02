@@ -27,4 +27,10 @@ frontend/dev.log
 *.zip
 ordinationssoftware-at.zip
 
+# Certificates (ELGA/GINA)
+backend/certs/*.crt
+backend/certs/*.key
+backend/certs/*.pem
+!backend/certs/README.md
+
 

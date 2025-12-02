@@ -64,26 +64,44 @@ const PatientVisitHistory: React.FC<PatientVisitHistoryProps> = ({ patientId, li
       try {
         setLoading(true);
         setError(null);
-        const response: any = await api.get(`/patients-extended/${patientId}/visit-history?limit=${limit}`);
+        // Verwende die Appointments-API statt des nicht existierenden visit-history Endpoints
+        const response: any = await api.get(`/appointments?patientId=${patientId}&limit=${limit}&page=1`);
         
         console.log('Visit history response:', response);
         
-        // API gibt zurück: { success: true, data: { patientId, lastVisit, visitHistory, ... } }
-        // api.get wrappt das in: { data: { success: true, data: { ... } }, success: true }
-        // Also: response.data.data ist das eigentliche Datenobjekt
-        const apiData = response.data?.data || response.data;
+        // API gibt zurück: { success: true, data: [...appointments], pagination: {...} }
+        const appointments = response.data?.data || response.data || [];
         
-        if (response.success && apiData) {
-          // Stelle sicher, dass visitHistory ein Array ist
-          const visitHistoryData = {
-            ...apiData,
-            visitHistory: Array.isArray(apiData.visitHistory) 
-              ? apiData.visitHistory 
-              : [],
-            totalVisits: apiData.totalVisits || 0,
-            totalAppointments: apiData.totalAppointments || 0,
-            totalServices: apiData.totalServices || 0
+        if (response.success && Array.isArray(appointments)) {
+          // Konvertiere Appointments zu VisitHistoryItem Format
+          const visitHistory: VisitHistoryItem[] = appointments.map((apt: any) => ({
+            type: 'appointment',
+            date: apt.startTime || apt.date || new Date().toISOString(),
+            checkInTime: apt.checkInTime || null,
+            reason: apt.reason || apt.visitReason || apt.service?.name || 'Termin',
+            status: apt.status || 'geplant',
+            doctor: apt.doctor ? (typeof apt.doctor === 'object' ? `${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : apt.doctor) : null,
+            diagnosis: apt.diagnosis || null,
+            notes: apt.notes || apt.description || null
+          }));
+
+          // Berechne Statistiken
+          const lastVisit = visitHistory.length > 0 ? {
+            date: visitHistory[0].date,
+            reason: visitHistory[0].reason,
+            type: visitHistory[0].type,
+            status: visitHistory[0].status
+          } : null;
+
+          const visitHistoryData: VisitHistoryData = {
+            patientId,
+            lastVisit,
+            visitHistory,
+            totalVisits: visitHistory.length,
+            totalAppointments: visitHistory.length,
+            totalServices: 0
           };
+          
           setData(visitHistoryData);
         } else {
           setError('Fehler beim Laden der Besuchshistorie');

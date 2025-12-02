@@ -19,6 +19,7 @@ import uiReducer from './slices/uiSlice';
 import dekursReducer from './slices/dekursSlice';
 import dashboardWidgetsReducer from './slices/dashboardWidgetsSlice';
 import internalMessagesReducer from './slices/internalMessagesSlice';
+import tasksReducer from './slices/tasksSlice';
 
 export const store = configureStore({
   reducer: {
@@ -42,6 +43,7 @@ export const store = configureStore({
     dekurs: dekursReducer,
     dashboardWidgets: dashboardWidgetsReducer,
     internalMessages: internalMessagesReducer,
+    tasks: tasksReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

@@ -89,6 +89,7 @@ const Documents: React.FC = () => {
   const { documents, loading, error, statistics } = useAppSelector((state) => state.documents);
   const { templates: documentTemplates } = useAppSelector((state) => state.documentTemplates);
   const { patients } = useAppSelector((state) => state.patients);
+  const { currentLocation } = useAppSelector((state) => state.locations);
   
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
@@ -102,7 +103,8 @@ const Documents: React.FC = () => {
   const [snackbar, setSnackbar] = useState({ 
     open: false, 
     message: '', 
-    severity: 'success' as 'success' | 'error' | 'warning' | 'info' 
+    severity: 'success' as 'success' | 'error' | 'warning' | 'info',
+    autoHideDuration: 6000 as number
   });
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
   const [selectedPatientForTimeline, setSelectedPatientForTimeline] = useState<Patient | null>(null);
@@ -134,7 +136,7 @@ const Documents: React.FC = () => {
   // Show error messages
   useEffect(() => {
     if (error) {
-      setSnackbar({ open: true, message: error, severity: 'error' });
+      setSnackbar({ open: true, message: error, severity: 'error', autoHideDuration: 6000 });
       dispatch(clearError());
     }
   }, [error, dispatch]);
@@ -179,9 +181,9 @@ const Documents: React.FC = () => {
     if (window.confirm(`Möchten Sie das Dokument "${document.title}" wirklich löschen?`)) {
       try {
         await dispatch(deleteDocument(document._id || document.id || '')).unwrap();
-        setSnackbar({ open: true, message: 'Dokument erfolgreich gelöscht', severity: 'success' });
+        setSnackbar({ open: true, message: 'Dokument erfolgreich gelöscht', severity: 'success', autoHideDuration: 6000 });
       } catch (error) {
-        setSnackbar({ open: true, message: 'Fehler beim Löschen des Dokuments', severity: 'error' });
+        setSnackbar({ open: true, message: 'Fehler beim Löschen des Dokuments', severity: 'error', autoHideDuration: 6000 });
       }
     }
   };
@@ -218,31 +220,32 @@ const Documents: React.FC = () => {
       } else {
         navigate(`/patient-organizer/${patientId}`);
       }
-    } else {
-      setSnackbar({ 
-        open: true, 
-        message: 'Kein Patient ausgewählt. Bitte wählen Sie ein Dokument mit einem zugeordneten Patienten aus.', 
-        severity: 'warning' 
-      });
-    }
+      } else {
+        setSnackbar({ 
+          open: true, 
+          message: 'Kein Patient ausgewählt. Bitte wählen Sie ein Dokument mit einem zugeordneten Patienten aus.', 
+          severity: 'warning',
+          autoHideDuration: 6000
+        });
+      }
   };
 
   const handleSave = async () => {
     // Validierung
     if (!formData.title?.trim()) {
-      setSnackbar({ open: true, message: 'Titel ist erforderlich', severity: 'error' });
+      setSnackbar({ open: true, message: 'Titel ist erforderlich', severity: 'error', autoHideDuration: 6000 });
       return;
     }
     if (!formData.patient?.name?.trim()) {
-      setSnackbar({ open: true, message: 'Patientenname ist erforderlich', severity: 'error' });
+      setSnackbar({ open: true, message: 'Patientenname ist erforderlich', severity: 'error', autoHideDuration: 6000 });
       return;
     }
     if (!formData.patient?.dateOfBirth?.trim()) {
-      setSnackbar({ open: true, message: 'Geburtsdatum ist erforderlich', severity: 'error' });
+      setSnackbar({ open: true, message: 'Geburtsdatum ist erforderlich', severity: 'error', autoHideDuration: 6000 });
       return;
     }
     if (!formData.content?.text?.trim()) {
-      setSnackbar({ open: true, message: 'Inhalt ist erforderlich', severity: 'error' });
+      setSnackbar({ open: true, message: 'Inhalt ist erforderlich', severity: 'error', autoHideDuration: 6000 });
       return;
     }
 
@@ -253,23 +256,67 @@ const Documents: React.FC = () => {
         patient: {
           ...formData.patient,
           id: formData.patient?.id || `temp-${Date.now()}`
-        }
+        },
+        locationId: currentLocation?._id || undefined
       };
 
       if (dialogMode === 'add') {
         await dispatch(createDocument(documentData)).unwrap();
-        setSnackbar({ open: true, message: 'Dokument erfolgreich erstellt', severity: 'success' });
+        setSnackbar({ open: true, message: 'Dokument erfolgreich erstellt', severity: 'success', autoHideDuration: 6000 });
       } else if (dialogMode === 'edit') {
-        await dispatch(updateDocument({ 
+        // Optimistic Locking: Sende erwartete Version
+        const result = await dispatch(updateDocument({ 
           id: formData._id || formData.id || '', 
-          documentData: documentData 
+          documentData: documentData,
+          expectedVersion: formData.optimisticLockVersion
         })).unwrap();
-        setSnackbar({ open: true, message: 'Dokument erfolgreich aktualisiert', severity: 'success' });
+        
+        // Aktualisiere formData mit neuer Version
+        if (result?.data?.optimisticLockVersion !== undefined) {
+          setFormData(prev => ({
+            ...prev,
+            optimisticLockVersion: result.data.optimisticLockVersion
+          }));
+        }
+        
+        setSnackbar({ open: true, message: 'Dokument erfolgreich aktualisiert', severity: 'success', autoHideDuration: 6000 });
       }
       setOpenDialog(false);
       dispatch(fetchDocuments({}));
-    } catch (error) {
-      setSnackbar({ open: true, message: 'Fehler beim Speichern des Dokuments', severity: 'error' });
+    } catch (error: any) {
+      // Optimistic Locking Konflikt behandeln
+      if (error?.code === 'OPTIMISTIC_LOCK_CONFLICT') {
+        const conflictMessage = error.message || 'Dokument wurde von einem anderen Benutzer geändert.';
+        const lastModifiedBy = error.lastModifiedBy ? 
+          (typeof error.lastModifiedBy === 'object' ? 
+            `${error.lastModifiedBy.firstName || ''} ${error.lastModifiedBy.lastName || ''}`.trim() : 
+            'Einem anderen Benutzer') : 
+          'Einem anderen Benutzer';
+        
+        setSnackbar({ 
+          open: true, 
+          message: `⚠️ Konflikt: ${conflictMessage} Zuletzt geändert von: ${lastModifiedBy}. Das Dokument wird neu geladen.`, 
+          severity: 'warning',
+          autoHideDuration: 6000
+        });
+        
+        // Dokument neu laden
+        await dispatch(fetchDocuments({}));
+        
+        // Dialog schließen und neu öffnen mit aktualisierten Daten
+        setOpenDialog(false);
+        setTimeout(async () => {
+          await dispatch(fetchDocuments({}));
+          const updatedDocs = Array.isArray(documents) ? documents : ((documents as any)?.data || []);
+          const updatedDoc = updatedDocs.find((d: any) => (d._id || d.id) === (formData._id || formData.id));
+          if (updatedDoc) {
+            setFormData(updatedDoc);
+            setOpenDialog(true);
+          }
+        }, 1500);
+      } else {
+        setSnackbar({ open: true, message: error?.message || 'Fehler beim Speichern des Dokuments', severity: 'error', autoHideDuration: 6000 });
+      }
     }
   };
 
@@ -288,10 +335,10 @@ const Documents: React.FC = () => {
           id: selectedDocument._id || selectedDocument.id || '', 
           files: Array.from(files) 
         })).unwrap();
-        setSnackbar({ open: true, message: 'Anhänge erfolgreich hochgeladen', severity: 'success' });
+        setSnackbar({ open: true, message: 'Anhänge erfolgreich hochgeladen', severity: 'success', autoHideDuration: 6000 });
         dispatch(fetchDocuments({}));
       } catch (error) {
-        setSnackbar({ open: true, message: 'Fehler beim Hochladen der Anhänge', severity: 'error' });
+        setSnackbar({ open: true, message: 'Fehler beim Hochladen der Anhänge', severity: 'error', autoHideDuration: 6000 });
       }
     }
   };
@@ -923,7 +970,7 @@ const Documents: React.FC = () => {
 
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={6000}
+        autoHideDuration={snackbar.autoHideDuration}
         onClose={() => setSnackbar({ ...snackbar, open: false })}
       >
         <Alert

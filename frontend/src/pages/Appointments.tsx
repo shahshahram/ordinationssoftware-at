@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -54,6 +54,7 @@ import {
   Note,
   Search,
   Refresh,
+  Star,
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment } from '../store/slices/appointmentSlice';
@@ -304,10 +305,12 @@ const Appointments: React.FC = () => {
   const [patientSearchValue, setPatientSearchValue] = useState<Patient | null>(null);
   const [patientSearchInput, setPatientSearchInput] = useState('');
   const [patientSearchLoading, setPatientSearchLoading] = useState(false);
+  const [serviceSearchInput, setServiceSearchInput] = useState('');
   const [isInitialized, setIsInitialized] = useState(false);
   const [locations, setLocations] = useState<Array<{ _id: string; name: string; code: string }>>([]);
   const [staff, setStaff] = useState<Array<{ _id: string; display_name: string; first_name: string; last_name: string }>>([]);
   const [selectedLocation, setSelectedLocation] = useState<string>('');
+  const { currentLocation } = useAppSelector((state) => state.locations);
   const [selectedStaff, setSelectedStaff] = useState<string>('');
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<{ el: HTMLElement | null, appointmentId: string | null }>({ el: null, appointmentId: null });
   const [formData, setFormData] = useState<Partial<Appointment>>({
@@ -420,7 +423,12 @@ const Appointments: React.FC = () => {
     setPatientSearchValue(null);
     setPatientSearchInput('');
     // Standort reset - wird automatisch vorbelegt wenn nur einer existiert
-    setSelectedLocation(locations.length === 1 ? locations[0]._id : '');
+    // Verwende currentLocation wenn verfügbar, sonst ersten Standort
+    if (currentLocation) {
+      setSelectedLocation(currentLocation._id);
+    } else {
+      setSelectedLocation(locations.length === 1 ? locations[0]._id : '');
+    }
     setSelectedStaff('');
     setDialogMode('add');
     setActiveTab(0);
@@ -795,6 +803,23 @@ const Appointments: React.FC = () => {
     }));
   };
 
+  // Synchronisiere patientSearchValue mit formData.patientId, falls patientSearchValue gesetzt ist
+  useEffect(() => {
+    if (patientSearchValue?._id) {
+      console.log('🔄 Syncing patientSearchValue to formData:', patientSearchValue._id);
+      setFormData(prev => ({
+        ...prev,
+        patientId: patientSearchValue._id,
+        patient: patientSearchValue
+      }));
+    }
+  }, [patientSearchValue]);
+
+  // Debug: Log activeTab whenever it changes
+  useEffect(() => {
+    console.log('📊 activeTab changed to:', activeTab);
+  }, [activeTab]);
+
   const handleCheckAvailability = async (serviceId: string) => {
     setSelectedServiceForAvailability(serviceId);
     setLoadingAvailability(true);
@@ -854,11 +879,187 @@ const Appointments: React.FC = () => {
     }
   };
 
+  // Funktionen für die letzten 10 verwendeten Leistungen
+  const getRecentServices = (): string[] => {
+    try {
+      const recent = localStorage.getItem('recentServices');
+      return recent ? JSON.parse(recent) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const addToRecentServices = (serviceId: string) => {
+    try {
+      const recent = getRecentServices();
+      // Entferne die ID, falls sie bereits existiert
+      const filtered = recent.filter((id: string) => id !== serviceId);
+      // Füge sie am Anfang hinzu
+      const updated = [serviceId, ...filtered].slice(0, 10);
+      localStorage.setItem('recentServices', JSON.stringify(updated));
+    } catch (error) {
+      console.error('Error saving recent service:', error);
+    }
+  };
+
+  // Filtere und sortiere Leistungen: Favoriten zuerst, dann letzte 10, dann alle anderen
+  const getFilteredAndSortedServices = (): Service[] => {
+    // Filtere aktive Leistungen - prüfe sowohl Boolean als auch String/Number (für Backend-Kompatibilität)
+    const activeServices = services.filter(service => {
+      const isActive = service.is_active === true || 
+                      (service as any).is_active === 'true' || 
+                      (service as any).is_active === 1;
+      return isActive;
+    });
+    const recentIds = getRecentServices();
+    
+    // Debug: Prüfe ob "tribella" in den Leistungen ist
+    if (process.env.NODE_ENV === 'development') {
+      // Prüfe auch in allen Leistungen (nicht nur aktive)
+      // Suche nach "tribella" im Namen oder Code "K001"
+      const allTribellaServices = services.filter(s => 
+        s.name.toLowerCase().includes('tribella') || 
+        s.code?.toLowerCase().includes('tribella') ||
+        s.code === 'K001' ||
+        s.code?.toLowerCase() === 'k001'
+      );
+      const activeTribellaService = activeServices.find(s => 
+        s.name.toLowerCase().includes('tribella') || 
+        s.code?.toLowerCase().includes('tribella') ||
+        s.code === 'K001' ||
+        s.code?.toLowerCase() === 'k001'
+      );
+      
+      if (allTribellaServices.length > 0) {
+        console.log('🔍 Tribella gefunden (alle):', allTribellaServices);
+        if (!activeTribellaService) {
+          console.log('⚠️ Tribella ist inaktiv!', allTribellaServices.map(s => ({ name: s.name, is_active: s.is_active })));
+        } else {
+          console.log('✅ Tribella gefunden (aktiv):', activeTribellaService);
+        }
+      } else {
+        console.log('🔍 Tribella nicht gefunden. Aktive Leistungen:', activeServices.length);
+        console.log('🔍 Alle Leistungen (auch inaktive):', services.length);
+        // Suche nach ähnlichen Namen - erweiterte Suche
+        const similarNames = services.filter(s => 
+          s.name.toLowerCase().includes('trib') || 
+          s.name.toLowerCase().includes('behandlung')
+        );
+        if (similarNames.length > 0) {
+          console.log('🔍 Ähnliche Namen gefunden (Anzahl:', similarNames.length, '):');
+          // Zeige auch die vollständigen Objekte
+          similarNames.forEach((s, index) => {
+            console.log(`📋 Leistung ${index + 1}:`, s.name, '| Code:', s.code, '| Aktiv:', s.is_active, '| Favorit:', s.quick_select, '| ID:', s._id);
+          });
+        }
+        
+        // Erweiterte Suche: Prüfe auch Codes
+        const similarCodes = services.filter(s => 
+          s.code?.toLowerCase().includes('trib') || 
+          s.code?.toLowerCase().includes('tribe')
+        );
+        if (similarCodes.length > 0) {
+          console.log('🔍 Ähnliche Codes gefunden:', JSON.stringify(similarCodes.map(s => ({ name: s.name, code: s.code, is_active: s.is_active })), null, 2));
+        }
+        
+        // Zeige alle Leistungen mit "trib" im Namen oder Code (für Debugging)
+        const allTribServices = services.filter(s => 
+          s.name.toLowerCase().includes('trib') || 
+          s.code?.toLowerCase().includes('trib')
+        );
+        if (allTribServices.length > 0) {
+          console.log('🔍 ALLE Leistungen mit "trib" (Anzahl:', allTribServices.length, '):');
+          allTribServices.forEach(s => {
+            console.log('  -', s.name, '(Code:', s.code, ', Aktiv:', s.is_active, ', Favorit:', s.quick_select, ')');
+          });
+        } else {
+          console.log('🔍 KEINE Leistungen mit "trib" gefunden');
+        }
+        
+        // Suche speziell nach Code "K001"
+        const k001Service = services.find(s => s.code === 'K001' || s.code?.toLowerCase() === 'k001');
+        if (k001Service) {
+          console.log('✅ K001 gefunden:', {
+            name: k001Service.name,
+            code: k001Service.code,
+            is_active: k001Service.is_active,
+            quick_select: k001Service.quick_select,
+            _id: k001Service._id
+          });
+        } else {
+          console.log('❌ K001 nicht gefunden in', services.length, 'Leistungen');
+          // Zeige alle Codes zur Debugging
+          console.log('🔍 Alle Codes:', services.map(s => s.code).filter(Boolean).slice(0, 20));
+        }
+      }
+    }
+    
+    // Trenne in Kategorien
+    // Prüfe quick_select sowohl als Boolean als auch als String/Number (für Backend-Kompatibilität)
+    const favorites = activeServices.filter(s => {
+      return s.quick_select === true || 
+             (s as any).quick_select === 'true' || 
+             (s as any).quick_select === 1;
+    });
+    const recent = activeServices.filter(s => {
+      const isFavorite = s.quick_select === true || 
+                        (s as any).quick_select === 'true' || 
+                        (s as any).quick_select === 1;
+      return recentIds.includes(s._id) && !isFavorite;
+    });
+    const others = activeServices.filter(s => {
+      const isFavorite = s.quick_select === true || 
+                        (s as any).quick_select === 'true' || 
+                        (s as any).quick_select === 1;
+      return !isFavorite && !recentIds.includes(s._id);
+    });
+    
+    // Wenn Suche aktiv ist, filtere alle
+    if (serviceSearchInput.trim()) {
+      const searchLower = serviceSearchInput.toLowerCase();
+      const searchFilter = (s: Service) => 
+        s.name.toLowerCase().includes(searchLower) ||
+        s.code?.toLowerCase().includes(searchLower) ||
+        s.description?.toLowerCase().includes(searchLower) ||
+        s.category?.toLowerCase().includes(searchLower);
+      
+      const filtered = [
+        ...favorites.filter(searchFilter),
+        ...recent.filter(searchFilter),
+        ...others.filter(searchFilter)
+      ];
+      
+      // Debug für Suche
+      if (process.env.NODE_ENV === 'development' && searchLower.includes('tribella')) {
+        console.log('🔍 Suche nach "tribella":', filtered.length, 'Ergebnisse');
+      }
+      
+      return filtered;
+    }
+    
+    // Ohne Suche: Favoriten + letzte 10 + alle anderen
+    const allServices = [...favorites, ...recent, ...others];
+    
+    // Debug: Prüfe ob alle Leistungen enthalten sind
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Service-Statistik:', {
+        total: activeServices.length,
+        favorites: favorites.length,
+        recent: recent.length,
+        others: others.length,
+        returned: allServices.length
+      });
+    }
+    
+    return allServices;
+  };
+
   // Load services from service catalog
   const loadServices = async () => {
     try {
       console.log('Loading services...');
-      const response = await api.get<any>('/service-catalog');
+      // Lade alle Leistungen ohne Limit, damit auch K001 und KONS006 geladen werden
+      const response = await api.get<any>('/service-catalog?limit=1000&is_active=true');
       
       console.log('Services API Response:', response);
       
@@ -875,6 +1076,47 @@ const Appointments: React.FC = () => {
         }
         
         console.log('Services data:', servicesData);
+        
+        // Debug: Prüfe ob K001 in den geladenen Leistungen ist
+        const k001InLoaded = servicesData.find(s => s.code === 'K001' || s.code?.toLowerCase() === 'k001');
+        const tribellaInLoaded = servicesData.find(s => 
+          s.name.toLowerCase().includes('tribella') || 
+          s.code === 'K001' || 
+          s.code === 'KONS006'
+        );
+        
+        if (k001InLoaded) {
+          console.log('✅ K001 in geladenen Leistungen gefunden:', {
+            name: k001InLoaded.name,
+            code: k001InLoaded.code,
+            is_active: k001InLoaded.is_active,
+            quick_select: k001InLoaded.quick_select,
+            _id: k001InLoaded._id
+          });
+        } else {
+          console.log('❌ K001 nicht in geladenen Leistungen gefunden');
+        }
+        
+        if (tribellaInLoaded) {
+          console.log('✅ Tribella in geladenen Leistungen gefunden:', {
+            name: tribellaInLoaded.name,
+            code: tribellaInLoaded.code,
+            is_active: tribellaInLoaded.is_active,
+            quick_select: tribellaInLoaded.quick_select,
+            _id: tribellaInLoaded._id
+          });
+        }
+        
+        // Zeige alle Favoriten
+        const favoritesInLoaded = servicesData.filter(s => s.quick_select === true);
+        console.log('🔍 Favoriten in geladenen Leistungen:', favoritesInLoaded.length, 'Leistungen');
+        favoritesInLoaded.forEach(f => {
+          console.log('  -', f.name, '(Code:', f.code, ', Aktiv:', f.is_active, ')');
+        });
+        
+        // Zeige alle aktiven Leistungen
+        const activeInLoaded = servicesData.filter(s => s.is_active === true);
+        console.log('🔍 Aktive Leistungen:', activeInLoaded.length, 'von', servicesData.length);
         
         if (servicesData.length > 0) {
           setServices(servicesData);
@@ -1497,25 +1739,45 @@ const Appointments: React.FC = () => {
                   <Paper
                     key={appointment._id}
                     sx={{
-                      p: 2,
-                      mb: 2,
+                      p: 3,
+                      mb: 2.5,
                       display: 'flex',
-                      alignItems: 'center',
+                      alignItems: 'flex-start',
                       justifyContent: 'space-between',
-                      borderLeft: 4,
+                      borderLeft: 5,
                       borderLeftColor: `${getStatusColor(appointment.status)}.main`,
+                      borderRadius: 2,
+                      transition: 'all 0.2s ease',
                       '&:hover': {
-                        boxShadow: 2
+                        boxShadow: 4,
+                        transform: 'translateY(-2px)'
                       }
                     }}
                   >
-                    <Box display="flex" alignItems="center" sx={{ flexGrow: 1 }}>
-                      <Avatar sx={{ mr: 2, bgcolor: `${getStatusColor(appointment.status)}.main` }}>
+                    <Box display="flex" alignItems="flex-start" sx={{ flexGrow: 1, gap: 2 }}>
+                      <Avatar 
+                        sx={{ 
+                          width: 56, 
+                          height: 56,
+                          mr: 1, 
+                          bgcolor: `${getStatusColor(appointment.status)}.main`,
+                          fontSize: '1.5rem'
+                        }}
+                      >
                         {getStatusIcon(appointment.status)}
                       </Avatar>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Box display="flex" alignItems="center" gap={1} mb={0.5}>
-                          <Typography variant="subtitle1" fontWeight="bold">
+                      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                        {/* Zeit und Patient - Hauptzeile */}
+                        <Box display="flex" alignItems="center" gap={2} mb={1.5} flexWrap="wrap">
+                          <Typography 
+                            variant="h6" 
+                            fontWeight="bold"
+                            sx={{ 
+                              color: 'primary.main',
+                              fontSize: '1.25rem',
+                              minWidth: 'fit-content'
+                            }}
+                          >
                             {(() => {
                               try {
                                 const date = new Date(appointment.startTime);
@@ -1529,7 +1791,8 @@ const Appointments: React.FC = () => {
                             })()}
                           </Typography>
                           <Typography 
-                            variant="subtitle1"
+                            variant="h6"
+                            fontWeight="600"
                             onClick={() => {
                               if (appointment.patient?._id) {
                                 navigate(`/patient-organizer/${appointment.patient._id}`);
@@ -1537,6 +1800,7 @@ const Appointments: React.FC = () => {
                             }}
                             sx={{
                               cursor: appointment.patient?._id ? 'pointer' : 'default',
+                              fontSize: '1.1rem',
                               '&:hover': {
                                 textDecoration: appointment.patient?._id ? 'underline' : 'none',
                                 color: appointment.patient?._id ? 'primary.main' : 'inherit'
@@ -1547,57 +1811,102 @@ const Appointments: React.FC = () => {
                           </Typography>
                           <Chip
                             label={appointment.service?.name || appointmentTypes.find(t => t.value === appointment.type)?.label || appointment.type}
-                            size="small"
-                            variant="outlined"
+                            size="medium"
                             sx={{
-                              backgroundColor: appointment.service?.color_hex || 'default',
-                              color: appointment.service?.color_hex ? 'white' : 'default'
+                              backgroundColor: appointment.service?.color_hex || 'primary.main',
+                              color: 'white',
+                              fontWeight: 'bold',
+                              fontSize: '0.875rem',
+                              height: '28px'
                             }}
                           />
                         </Box>
-                        <Typography variant="body2" color="text.secondary" mb={0.5}>
-                          {appointment.startTime && <span>{new Date(appointment.startTime).toLocaleDateString('de-DE')} • </span>}
-                          {appointment.room ? appointment.room.name : 'Raum nicht zugewiesen'} • {appointment.duration} Min • {(() => {
+                        
+                        {/* Details - Zweite Zeile */}
+                        <Box display="flex" alignItems="center" gap={2} mb={1.5} flexWrap="wrap">
+                          {appointment.startTime && (
+                            <Box display="flex" alignItems="center" gap={0.5}>
+                              <CalendarToday sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                              <Typography variant="body1" color="text.secondary" fontWeight="500">
+                                {new Date(appointment.startTime).toLocaleDateString('de-DE', { 
+                                  weekday: 'short', 
+                                  day: '2-digit', 
+                                  month: '2-digit', 
+                                  year: 'numeric' 
+                                })}
+                              </Typography>
+                            </Box>
+                          )}
+                          {appointment.room && (
+                            <Box display="flex" alignItems="center" gap={0.5}>
+                              <LocalHospital sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                              <Typography variant="body1" color="text.secondary" fontWeight="500">
+                                {appointment.room.name}
+                              </Typography>
+                            </Box>
+                          )}
+                          <Box display="flex" alignItems="center" gap={0.5}>
+                            <AccessTime sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                            <Typography variant="body1" color="text.secondary" fontWeight="500">
+                              {appointment.duration} Min
+                            </Typography>
+                          </Box>
+                          {(() => {
                             // Prioritize assigned_users over doctor
-                            if (appointment.assigned_users && appointment.assigned_users.length > 0) {
-                              return appointment.assigned_users.map((u: any) => 
-                                u.display_name || `${u.firstName || u.first_name || ''} ${u.lastName || u.last_name || ''}`.trim()
-                              ).filter(Boolean).join(', ');
-                            }
-                            return appointment.doctor ? `${appointment.doctor.title || ''} ${appointment.doctor.lastName || ''}`.trim() : (appointment.doctorName || 'Unbekannt');
+                            const doctorName = (() => {
+                              if (appointment.assigned_users && appointment.assigned_users.length > 0) {
+                                return appointment.assigned_users.map((u: any) => 
+                                  u.display_name || `${u.firstName || u.first_name || ''} ${u.lastName || u.last_name || ''}`.trim()
+                                ).filter(Boolean).join(', ');
+                              }
+                              return appointment.doctor ? `${appointment.doctor.title || ''} ${appointment.doctor.lastName || ''}`.trim() : (appointment.doctorName || 'Unbekannt');
+                            })();
+                            return (
+                              <Box display="flex" alignItems="center" gap={0.5}>
+                                <Person sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                                <Typography variant="body1" color="text.secondary" fontWeight="500">
+                                  {doctorName}
+                                </Typography>
+                              </Box>
+                            );
                           })()}
                           {appointment.service?.price_cents && (
-                            <span> • €{(appointment.service.price_cents / 100).toFixed(2)}</span>
+                            <Typography variant="body1" color="text.secondary" fontWeight="600">
+                              €{(appointment.service.price_cents / 100).toFixed(2)}
+                            </Typography>
                           )}
-                        </Typography>
+                        </Box>
                         {/* Zugewiesene Ressourcen anzeigen */}
                         {((appointment.assigned_rooms && appointment.assigned_rooms.length > 0) || (appointment.assigned_devices && appointment.assigned_devices.length > 0) || (appointment.assigned_users && appointment.assigned_users.length > 0)) && (
-                          <Box display="flex" gap={1} mt={1} flexWrap="wrap">
+                          <Box display="flex" gap={1.5} mt={2} flexWrap="wrap">
                             {appointment.assigned_rooms?.map((room, index) => (
                               <Chip
                                 key={room._id || `room-${index}`}
-                                label={`Raum: ${room.name}`}
-                                size="small"
+                                label={`🏥 Raum: ${room.name}`}
+                                size="medium"
                                 variant="outlined"
                                 color="primary"
+                                sx={{ fontSize: '0.875rem', fontWeight: '500' }}
                               />
                             ))}
                             {appointment.assigned_devices?.map((device, index) => (
                               <Chip
                                 key={device._id || `device-${index}`}
-                                label={`Gerät: ${device.name}`}
-                                size="small"
+                                label={`🔧 Gerät: ${device.name}`}
+                                size="medium"
                                 variant="outlined"
                                 color="secondary"
+                                sx={{ fontSize: '0.875rem', fontWeight: '500' }}
                               />
                             ))}
                             {appointment.assigned_users?.map((user, index) => (
                               <Chip
                                 key={user._id || `user-${index}`}
-                                label={`Personal: ${user.display_name || user.firstName || user.first_name} ${user.lastName || user.last_name}`}
-                                size="small"
+                                label={`👤 ${user.display_name || user.firstName || user.first_name} ${user.lastName || user.last_name}`}
+                                size="medium"
                                 variant="outlined"
                                 color="success"
+                                sx={{ fontSize: '0.875rem', fontWeight: '500' }}
                               />
                             ))}
                           </Box>
@@ -1698,31 +2007,47 @@ const Appointments: React.FC = () => {
                           }
                           
                           return medicalChips.length > 0 ? (
-                            <Box display="flex" gap={1} mt={1} flexWrap="wrap">
-                              {medicalChips}
+                            <Box display="flex" gap={1.5} mt={2} flexWrap="wrap">
+                              {medicalChips.map((chip, index) => 
+                                React.cloneElement(chip, { 
+                                  key: chip.key || `medical-${index}`,
+                                  size: 'medium',
+                                  sx: { 
+                                    ...chip.props.sx,
+                                    fontSize: '0.875rem',
+                                    fontWeight: '600',
+                                    height: '28px'
+                                  }
+                                })
+                              )}
                             </Box>
                           ) : null;
                         })()}
                         {appointment.service?.description && (
-                          <Typography variant="caption" color="text.secondary" display="block">
+                          <Typography variant="body2" color="text.secondary" display="block" mt={1.5} sx={{ fontStyle: 'italic' }}>
                             {appointment.service.description}
                           </Typography>
                         )}
                         {appointment.notes && (
-                          <Typography variant="caption" color="text.secondary">
-                            {appointment.notes}
+                          <Typography variant="body2" color="text.secondary" mt={1} sx={{ fontStyle: 'italic' }}>
+                            📝 {appointment.notes}
                           </Typography>
                         )}
                       </Box>
                     </Box>
-                    <Box display="flex" alignItems="center" gap={1}>
+                    <Box display="flex" flexDirection="column" alignItems="flex-end" gap={1.5} sx={{ minWidth: 'fit-content' }}>
                       <Chip
                         label={appointment.status}
-                        size="small"
+                        size="medium"
                         color={getStatusColor(appointment.status)}
                         icon={getStatusIcon(appointment.status)}
                         onClick={(e) => handleOpenStatusMenu(e, appointment._id)}
-                        sx={{ cursor: 'pointer' }}
+                        sx={{ 
+                          cursor: 'pointer',
+                          fontWeight: 'bold',
+                          fontSize: '0.875rem',
+                          height: '32px'
+                        }}
                       />
                       <Menu
                         anchorEl={statusMenuAnchor.el}
@@ -1737,28 +2062,41 @@ const Appointments: React.FC = () => {
                         <MenuItem onClick={() => handleUpdateStatus('abgesagt')}>Abgesagt</MenuItem>
                         <MenuItem onClick={() => handleUpdateStatus('verschoben')}>Verschoben</MenuItem>
                       </Menu>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleViewAppointment(appointment)}
-                        title="Anzeigen"
-                      >
-                        <Visibility />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditAppointment(appointment)}
-                        title="Bearbeiten"
-                      >
-                        <Edit />
-                      </IconButton>
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDeleteAppointment(appointment._id)}
-                        title="Löschen"
-                        color="error"
-                      >
-                        <Delete />
-                      </IconButton>
+                      <Box display="flex" gap={1}>
+                        <IconButton
+                          size="medium"
+                          onClick={() => handleViewAppointment(appointment)}
+                          title="Anzeigen"
+                          sx={{ 
+                            bgcolor: 'action.hover',
+                            '&:hover': { bgcolor: 'primary.main', color: 'white' }
+                          }}
+                        >
+                          <Visibility />
+                        </IconButton>
+                        <IconButton
+                          size="medium"
+                          onClick={() => handleEditAppointment(appointment)}
+                          title="Bearbeiten"
+                          sx={{ 
+                            bgcolor: 'action.hover',
+                            '&:hover': { bgcolor: 'primary.main', color: 'white' }
+                          }}
+                        >
+                          <Edit />
+                        </IconButton>
+                        <IconButton
+                          size="medium"
+                          onClick={() => handleDeleteAppointment(appointment._id)}
+                          title="Löschen"
+                          sx={{ 
+                            bgcolor: 'action.hover',
+                            '&:hover': { bgcolor: 'error.main', color: 'white' }
+                          }}
+                        >
+                          <Delete />
+                        </IconButton>
+                      </Box>
                     </Box>
                   </Paper>
                 ))
@@ -2012,6 +2350,15 @@ const Appointments: React.FC = () => {
             boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
           }
         }}
+        slotProps={{
+          backdrop: {
+            onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+              if (dialogMode === 'view') {
+                setOpenDialog(false);
+              }
+            }
+          }
+        }}
       >
         <GradientDialogTitle
           isEdit={dialogMode === 'edit'}
@@ -2027,7 +2374,17 @@ const Appointments: React.FC = () => {
           <Box>
             <Tabs 
               value={activeTab} 
-              onChange={(_, newValue) => setActiveTab(newValue)}
+              onChange={(_, newValue) => {
+                console.log('🔄 Tab changed from', activeTab, 'to', newValue);
+                console.log('🔄 Tab change - patientSearchValue:', patientSearchValue);
+                console.log('🔄 Tab change - formData.patientId:', formData.patientId);
+                console.log('🔄 Tab change - formData.patient:', formData.patient);
+                setActiveTab(newValue);
+                // Force re-render after tab change
+                setTimeout(() => {
+                  console.log('🔄 After tab change - activeTab should be:', newValue);
+                }, 100);
+              }}
               sx={{ 
                 mb: 3,
                 borderBottom: '1px solid',
@@ -2079,130 +2436,145 @@ const Appointments: React.FC = () => {
                 />
               </Box>
               
-              <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                <FormControl fullWidth required sx={{ flex: 1 }}>
-                  <InputLabel>Leistung/Service *</InputLabel>
-                  <Select
-                    value={formData.serviceId || ''}
-                    onChange={(e) => {
-                      const selectedService = services.find(service => service._id === e.target.value);
-                      if (selectedService) {
-                        handleFormChange('serviceId', selectedService._id);
-                        handleFormChange('service', selectedService);
-                        handleFormChange('duration', selectedService.base_duration_min);
-                        handleFormChange('type', selectedService.code); // Legacy field
-                        
-                        // Automatisch den Raum aus der Leistung übernehmen, falls vorhanden
-                        if (selectedService.assigned_rooms && selectedService.assigned_rooms.length > 0) {
-                          const firstRoom = selectedService.assigned_rooms[0];
-                          handleFormChange('room', firstRoom);
-                        }
+              <Box sx={{ display: 'flex', gap: 2, mb: 2, flexDirection: 'column' }}>
+                <Autocomplete
+                  value={services.find(s => s._id === formData.serviceId) || null}
+                  onChange={(event: any, newValue: Service | null) => {
+                    if (newValue) {
+                      handleFormChange('serviceId', newValue._id);
+                      handleFormChange('service', newValue);
+                      handleFormChange('duration', newValue.base_duration_min);
+                      handleFormChange('type', newValue.code); // Legacy field
+                      
+                      // Speichere in den letzten 10 Leistungen
+                      addToRecentServices(newValue._id);
+                      
+                      // Automatisch den Raum aus der Leistung übernehmen, falls vorhanden
+                      if (newValue.assigned_rooms && newValue.assigned_rooms.length > 0) {
+                        const firstRoom = newValue.assigned_rooms[0];
+                        handleFormChange('room', firstRoom);
                       }
-                    }}
-                    disabled={dialogMode === 'view'}
-                  >
-                    {services.filter(service => service.is_active).map((service) => (
-                      <MenuItem key={service._id} value={service._id}>
+                    } else {
+                      handleFormChange('serviceId', '');
+                      handleFormChange('service', undefined);
+                    }
+                  }}
+                  inputValue={serviceSearchInput}
+                  onInputChange={(event, newInputValue) => {
+                    setServiceSearchInput(newInputValue);
+                  }}
+                  options={getFilteredAndSortedServices()}
+                  getOptionLabel={(option) => `${option.code || ''} - ${option.name}`}
+                  filterOptions={(options, state) => {
+                    // Die Filterung wird bereits in getFilteredAndSortedServices durchgeführt
+                    // Hier geben wir einfach alle Optionen zurück, die bereits gefiltert wurden
+                    return options;
+                  }}
+                  isOptionEqualToValue={(option, value) => option._id === value._id}
+                  ListboxProps={{
+                    style: { maxHeight: '400px' }
+                  }}
+                  renderOption={(props, option) => {
+                    const isFavorite = option.quick_select === true;
+                    const recentIds = getRecentServices();
+                    const isRecent = recentIds.includes(option._id) && !isFavorite;
+                    
+                    return (
+                      <Box component="li" {...props} key={option._id}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
                           <Box
                             sx={{
                               width: 12,
                               height: 12,
                               borderRadius: '50%',
-                              backgroundColor: service.color_hex || '#2563EB',
+                              backgroundColor: option.color_hex || '#2563EB',
                               flexShrink: 0
                             }}
                           />
                           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                            <Typography variant="body2" fontWeight="bold" noWrap>
-                              {service.name}
-                            </Typography>
-                            {service.code && (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Typography variant="body2" fontWeight="bold" noWrap>
+                                {option.name}
+                              </Typography>
+                              {isFavorite && (
+                                <Chip
+                                  icon={<Star sx={{ fontSize: '0.75rem !important' }} />}
+                                  label="Favorit"
+                                  size="small"
+                                  color="warning"
+                                  sx={{ fontSize: '0.65rem', height: '18px' }}
+                                />
+                              )}
+                              {isRecent && (
+                                <Chip
+                                  icon={<AccessTime sx={{ fontSize: '0.75rem !important' }} />}
+                                  label="Zuletzt"
+                                  size="small"
+                                  color="info"
+                                  sx={{ fontSize: '0.65rem', height: '18px' }}
+                                />
+                              )}
+                            </Box>
+                            {option.code && (
                               <Typography variant="caption" color="text.secondary" display="block">
-                                Code: {service.code}
+                                Code: {option.code}
                               </Typography>
                             )}
-                            {service.category && (
+                            {option.category && (
                               <Typography variant="caption" color="text.secondary" display="block">
-                                Kategorie: {service.category}
+                                Kategorie: {option.category}
                               </Typography>
                             )}
-                            {service.description && (
+                            {option.description && (
                               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                                {service.description}
-                              </Typography>
-                            )}
-                            {(service.assigned_users && service.assigned_users.length > 0) && (
-                              <Typography variant="caption" color="primary" display="block">
-                                Personal: {service.assigned_users.map((u: any) => {
-                                  if (u.firstName && u.lastName) {
-                                    return `${u.firstName} ${u.lastName}`;
-                                  } else if (u.first_name && u.last_name) {
-                                    return `${u.first_name} ${u.last_name}`;
-                                  } else if (u.display_name) {
-                                    return u.display_name;
-                                  } else if (u.firstName) {
-                                    return u.firstName;
-                                  } else if (u.first_name) {
-                                    return u.first_name;
-                                  } else {
-                                    return 'Unbekannt';
-                                  }
-                                }).join(', ')}
-                              </Typography>
-                            )}
-                            {(service.assigned_rooms && service.assigned_rooms.length > 0) && (
-                              <Typography variant="caption" color="primary" display="block">
-                                Raum: {service.assigned_rooms.map((r: any) => r.name).join(', ')}
-                              </Typography>
-                            )}
-                            {(service.assigned_devices && service.assigned_devices.length > 0) && (
-                              <Typography variant="caption" color="primary" display="block">
-                                Gerät: {service.assigned_devices.map((d: any) => d.name).join(', ')}
+                                {option.description}
                               </Typography>
                             )}
                           </Box>
                           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
                             <Chip
-                              label={`${service.base_duration_min}min`}
+                              label={`${option.base_duration_min}min`}
                               size="small"
                               variant="outlined"
                               sx={{ fontSize: '0.75rem' }}
                             />
-                            {service.price_cents && (
+                            {option.price_cents && (
                               <Chip
-                                label={`€${(service.price_cents / 100).toFixed(2)}`}
+                                label={`€${(option.price_cents / 100).toFixed(2)}`}
                                 size="small"
                                 color="primary"
                                 variant="outlined"
                                 sx={{ fontSize: '0.75rem' }}
                               />
                             )}
-                            {service.requires_room && (
-                              <Chip
-                                label="Raum"
-                                size="small"
-                                color="secondary"
-                                variant="outlined"
-                                sx={{ fontSize: '0.75rem' }}
-                              />
-                            )}
                           </Box>
                         </Box>
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {formData.serviceId && (
-                    <Button
-                      variant="outlined"
-                      startIcon={<Schedule />}
-                      onClick={() => handleCheckAvailability(formData.serviceId!)}
-                      sx={{ mt: 1, minHeight: '56px' }}
-                    >
-                      Verfügbarkeit prüfen
-                    </Button>
+                      </Box>
+                    );
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Leistung/Service *"
+                      required
+                      placeholder="Suche nach Leistung, Code oder Kategorie..."
+                      disabled={dialogMode === 'view'}
+                    />
                   )}
-                </FormControl>
+                  disabled={dialogMode === 'view'}
+                  noOptionsText="Keine Leistungen gefunden"
+                  loading={services.length === 0}
+                />
+                {formData.serviceId && (
+                  <Button
+                    variant="outlined"
+                    startIcon={<Schedule />}
+                    onClick={() => handleCheckAvailability(formData.serviceId!)}
+                    sx={{ minHeight: '40px' }}
+                  >
+                    Verfügbarkeit prüfen
+                  </Button>
+                )}
               </Box>
 
               <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
@@ -2306,6 +2678,7 @@ const Appointments: React.FC = () => {
                     console.log('Patient selected:', newValue);
                     setPatientSearchValue(newValue);
                     if (newValue) {
+                      console.log('🔄 Setting patient data immediately:', newValue._id);
                       handleFormChange('patient', newValue);
                       handleFormChange('patientId', newValue._id);
                       handleFormChange('patientName', `${newValue.firstName} ${newValue.lastName}`);
@@ -2574,22 +2947,65 @@ const Appointments: React.FC = () => {
             {/* Tab 3: Diagnosen */}
             {activeTab === 3 && (
             <Box sx={{ mt: 3 }}>
-              {formData.patientId && selectedAppointment?._id ? (
-                <DiagnosisManager
-                  patientId={formData.patientId}
-                  encounterId={selectedAppointment._id}
-                  allowEdit={dialogMode !== 'view'}
-                  showPrimaryToggle={true}
-                  context="medical"
-                  onDiagnosisChange={(diagnoses) => {
-                    console.log('Appointment Diagnosen aktualisiert:', diagnoses.length);
-                  }}
-                />
-              ) : (
-                <Alert severity="info">
-                  Bitte wählen Sie zuerst einen Patienten aus, um Diagnosen zu erfassen.
-                </Alert>
-              )}
+              <Typography variant="h6" gutterBottom sx={{ mb: 2, color: 'primary.main' }}>
+                Diagnosen
+              </Typography>
+              {(() => {
+                // Debug-Logging - IMMER ausführen
+                console.log('🔍🔍🔍 DIAGNOSE TAB GERENDERT 🔍🔍🔍');
+                console.log('🔍 Diagnose Tab - activeTab:', activeTab);
+                console.log('🔍 Diagnose Tab - openDialog:', openDialog);
+                console.log('🔍 Diagnose Tab - patientSearchValue:', patientSearchValue);
+                console.log('🔍 Diagnose Tab - patientSearchValue?._id:', patientSearchValue?._id);
+                console.log('🔍 Diagnose Tab - formData.patientId:', formData.patientId);
+                console.log('🔍 Diagnose Tab - formData.patient:', formData.patient);
+                console.log('🔍 Diagnose Tab - formData.patient type:', typeof formData.patient);
+                console.log('🔍 Diagnose Tab - formData.patient?._id:', formData.patient?._id);
+                console.log('🔍 Diagnose Tab - dialogMode:', dialogMode);
+                
+                // Verwende patientSearchValue als primäre Quelle, da es sofort gesetzt wird
+                // formData.patientId könnte verzögert aktualisiert werden
+                // Prüfe auch formData.patient als Objekt
+                const patientIdValue = 
+                  patientSearchValue?._id || 
+                  formData.patientId || 
+                  (typeof formData.patient === 'object' && formData.patient?._id) ||
+                  (typeof formData.patient === 'string' && formData.patient);
+                
+                console.log('🔍 Diagnose Tab - final patientIdValue:', patientIdValue);
+                
+                if (!patientIdValue) {
+                  console.log('❌ KEINE PATIENT-ID GEFUNDEN - Zeige Alert');
+                  return (
+                    <Alert severity="info">
+                      Bitte wählen Sie zuerst einen Patienten aus, um Diagnosen zu erfassen.
+                      <Box sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}>
+                        Debug-Info:
+                        <br />- activeTab: {activeTab}
+                        <br />- openDialog: {openDialog ? 'true' : 'false'}
+                        <br />- patientSearchValue: {patientSearchValue ? 'vorhanden' : 'nicht vorhanden'}
+                        <br />- patientSearchValue._id: {patientSearchValue?._id || 'nicht vorhanden'}
+                        <br />- formData.patientId: {formData.patientId || 'nicht vorhanden'}
+                        <br />- formData.patient: {formData.patient ? (typeof formData.patient === 'object' ? 'Objekt vorhanden' : formData.patient) : 'nicht vorhanden'}
+                      </Box>
+                    </Alert>
+                  );
+                }
+                
+                console.log('✅ PATIENT-ID GEFUNDEN - Zeige DiagnosisManager mit ID:', patientIdValue);
+                return (
+                  <DiagnosisManager
+                    patientId={patientIdValue}
+                    encounterId={selectedAppointment?._id || undefined}
+                    allowEdit={dialogMode !== 'view'}
+                    showPrimaryToggle={true}
+                    context="medical"
+                    onDiagnosisChange={(diagnoses) => {
+                      console.log('Appointment Diagnosen aktualisiert:', diagnoses.length);
+                    }}
+                  />
+                );
+              })()}
             </Box>
             )}
 

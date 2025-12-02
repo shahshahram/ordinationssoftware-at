@@ -544,6 +544,62 @@ router.get('/audit-logs', auth, rbacMiddleware.requireAdmin, async (req, res) =>
   }
 });
 
+/**
+ * @route   GET /api/rbac/audit-logs/export
+ * @desc    RBAC Audit Logs als CSV exportieren
+ * @access  Private (Admin)
+ */
+router.get('/audit-logs/export', auth, rbacMiddleware.requireAdmin, async (req, res) => {
+  try {
+    const { userId, action, resource } = req.query;
+    
+    const AuditLog = require('../models/AuditLog');
+    
+    const query = {
+      action: { $in: ['authorization', 'permission_granted', 'permission_denied', 'role_assigned', 'role_revoked'] }
+    };
+    
+    if (userId) query.userId = userId;
+    if (action) query.action = action;
+    if (resource) query.resource = resource;
+
+    const logs = await AuditLog.find(query)
+      .sort({ timestamp: -1 })
+      .populate('userId', 'firstName lastName email role')
+      .select('-__v')
+      .lean();
+
+    // CSV-Header
+    const csvHeader = 'Timestamp,User,Action,Resource,ResourceId,Result,Reason,IP Address\n';
+    
+    // CSV-Daten
+    const csvRows = logs.map(log => {
+      const user = log.userId ? `${log.userId.firstName || ''} ${log.userId.lastName || ''}`.trim() : 'Unknown';
+      const timestamp = log.timestamp ? new Date(log.timestamp).toISOString() : '';
+      const action = log.action || '';
+      const resource = log.resource || '';
+      const resourceId = log.resourceId || '';
+      const result = log.result || '';
+      const reason = (log.reason || '').replace(/"/g, '""'); // Escape quotes
+      const ipAddress = log.ipAddress || '';
+      
+      return `"${timestamp}","${user}","${action}","${resource}","${resourceId}","${result}","${reason}","${ipAddress}"`;
+    });
+    
+    const csvContent = csvHeader + csvRows.join('\n');
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="audit-logs-${new Date().toISOString().split('T')[0]}.csv"`);
+    res.send(csvContent);
+  } catch (error) {
+    console.error('Error exporting audit logs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Exportieren der Audit Logs'
+    });
+  }
+});
+
 // ===== HILFSFUNKTIONEN =====
 
 function getRoleLabel(role) {

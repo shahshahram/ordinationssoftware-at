@@ -45,6 +45,10 @@ import {
   Article,
   Assignment,
   Mail,
+  EventBusy,
+  Schedule,
+  CreditCard,
+  AccessTime,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -74,18 +78,22 @@ const menuItems = [
     subItems: [
       { text: 'Terminverwaltung', icon: <CalendarToday />, path: '/appointments' },
       { text: 'Kalender', icon: <CalendarToday />, path: '/calendar' },
+      { text: 'Demo-Kalender', icon: <CalendarToday />, path: '/demo-calendar' },
       { text: 'Dienst-Kalender', icon: <CalendarMonth />, path: '/enhanced-calendar' },
+      { text: 'Verfügbarkeiten', icon: <Schedule />, path: '/availability' },
     ]
   },
-  { 
-    text: 'Abrechnung', 
-    icon: <Receipt />, 
-    path: '/billing',
-    subItems: [
-      { text: 'Rechnungen', icon: <Receipt />, path: '/billing' },
-      { text: 'Leistungsabrechnung', icon: <Receipt />, path: '/performance-billing' },
-    ]
-  },
+      { 
+        text: 'Abrechnung', 
+        icon: <Receipt />, 
+        path: '/billing',
+        subItems: [
+          { text: 'Rechnungen', icon: <Receipt />, path: '/billing' },
+          { text: 'Leistungsabrechnung', icon: <Receipt />, path: '/performance-billing' },
+          { text: 'Erstattungen', icon: <Receipt />, path: '/reimbursements' },
+          { text: 'Abrechnungsberichte', icon: <Assessment />, path: '/billing-reports' },
+        ]
+      },
   { 
     text: 'Dokumente', 
     icon: <Description />, 
@@ -105,6 +113,7 @@ const menuItems = [
     subItems: [
       { text: 'ELGA Übersicht', icon: <HealthAndSafety />, path: '/elga' },
       { text: 'Valuesets', icon: <CategoryIcon />, path: '/elga-valuesets' },
+      { text: 'E-Card Validierung', icon: <CreditCard />, path: '/ecard-validation' },
     ]
   },
   { text: 'Interne Nachrichten', icon: <Mail />, path: '/internal-messages' },
@@ -114,6 +123,7 @@ const menuItems = [
     path: '/settings',
     subItems: [
       { text: 'Allgemeine Einstellungen', icon: <Settings />, path: '/settings' },
+      { text: 'Ordinationszeiten', icon: <AccessTime />, path: '/clinic-hours' },
       { text: 'Ressourcen', icon: <Business />, path: '/resources' },
       { 
         text: 'ICD-10', 
@@ -140,6 +150,7 @@ const menuItems = [
         path: '/service-catalog',
         subItems: [
           { text: 'Leistungskatalog', icon: <MedicalServices />, path: '/service-catalog' },
+          { text: 'Service-Kategorien', icon: <CategoryIcon />, path: '/service-categories' },
           { text: 'Buchungen', icon: <BookOnline />, path: '/service-bookings' },
         ]
       },

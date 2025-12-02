@@ -29,7 +29,9 @@ export interface InternalMessage {
     mimeType: string;
     size: number;
   }>;
-  replyTo?: string;
+  replyTo?: string | InternalMessage;
+  forwardedFrom?: string | InternalMessage;
+  patientId?: string; // Optional: Referenz zu einem Patienten
   createdAt: string;
   updatedAt: string;
 }
@@ -40,6 +42,7 @@ export interface CreateMessageData {
   message: string;
   priority?: 'low' | 'normal' | 'high' | 'urgent';
   replyTo?: string;
+  forwardedFrom?: string;
   attachments?: Array<{
     filename: string;
     url: string;
@@ -105,6 +108,14 @@ export const markAsRead = createAsyncThunk(
   'internalMessages/markAsRead',
   async (messageId: string) => {
     const response = await api.put(`/internal-messages/${messageId}/read`);
+    return (response.data as any).data;
+  }
+);
+
+export const markAllAsRead = createAsyncThunk(
+  'internalMessages/markAllAsRead',
+  async () => {
+    const response = await api.put('/internal-messages/mark-all-read');
     return (response.data as any).data;
   }
 );
@@ -180,15 +191,70 @@ const internalMessagesSlice = createSlice({
       .addCase(markAsRead.fulfilled, (state, action) => {
         const message = action.payload;
         const index = state.inbox.findIndex(m => m._id === message._id);
+        
+        console.log('🔔 Redux: markAsRead.fulfilled', {
+          messageId: message._id,
+          messageStatus: message.status,
+          index,
+          currentUnreadCount: state.unreadCount,
+          inboxLength: state.inbox.length
+        });
+        
+        // Prüfe, ob die Nachricht vorher ungelesen war (BEVOR wir sie aktualisieren)
+        let wasUnread = false;
+        if (index !== -1) {
+          const oldMessage = state.inbox[index];
+          const oldStatus = oldMessage.status;
+          wasUnread = oldStatus === 'sent' || oldStatus === 'delivered';
+          console.log('🔔 Redux: Alte Nachricht gefunden', {
+            oldStatus,
+            wasUnread,
+            newStatus: message.status,
+            oldMessageId: oldMessage._id
+          });
+        } else {
+          // Wenn die Nachricht nicht im Inbox ist, nehmen wir an, dass sie ungelesen war
+          // (da sie jetzt als 'read' zurückkommt)
+          wasUnread = message.status === 'read';
+          console.log('🔔 Redux: Nachricht nicht im Inbox gefunden, nehme an sie war ungelesen', {
+            messageStatus: message.status,
+            wasUnread
+          });
+        }
+        
+        // Aktualisiere die Nachricht im State
         if (index !== -1) {
           state.inbox[index] = message;
         }
         if (state.selectedMessage?._id === message._id) {
           state.selectedMessage = message;
         }
-        if (state.unreadCount > 0) {
+        
+        // Reduziere unreadCount nur wenn die Nachricht vorher ungelesen war
+        if (wasUnread && state.unreadCount > 0) {
+          const oldCount = state.unreadCount;
           state.unreadCount--;
+          console.log('✅ Redux: unreadCount reduziert von', oldCount, 'auf', state.unreadCount, 'für Nachricht', message._id);
+        } else {
+          console.log('⚠️ Redux: unreadCount NICHT reduziert', {
+            wasUnread,
+            currentCount: state.unreadCount,
+            reason: !wasUnread ? 'Nachricht war nicht ungelesen' : state.unreadCount <= 0 ? 'unreadCount ist bereits 0' : 'Unbekannt'
+          });
         }
+      })
+      // Mark All as Read
+      .addCase(markAllAsRead.fulfilled, (state, action) => {
+        const { markedCount, unreadCount } = action.payload;
+        // Aktualisiere alle Nachrichten im Inbox, die als gelesen markiert wurden
+        state.inbox = state.inbox.map(msg => {
+          if (msg.status === 'sent' || msg.status === 'delivered') {
+            return { ...msg, status: 'read' as const, readAt: new Date().toISOString() };
+          }
+          return msg;
+        });
+        state.unreadCount = unreadCount || 0;
+        console.log(`✅ ${markedCount} Nachrichten als gelesen markiert, verbleibende ungelesene: ${unreadCount}`);
       })
       // Archive Message
       .addCase(archiveMessage.fulfilled, (state, action) => {
@@ -221,5 +287,6 @@ const internalMessagesSlice = createSlice({
 
 export const { setSelectedMessage, clearError } = internalMessagesSlice.actions;
 export default internalMessagesSlice.reducer;
+
 
 

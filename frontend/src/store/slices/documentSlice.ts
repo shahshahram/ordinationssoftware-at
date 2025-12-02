@@ -36,6 +36,14 @@ export interface Document {
     template?: string;
     variables?: any;
   };
+  // Optimistic Locking
+  optimisticLockVersion?: number;
+  lastModifiedAt?: string;
+  lastModifiedBy?: {
+    _id?: string;
+    firstName?: string;
+    lastName?: string;
+  };
   medicalData?: {
     currentMedications?: Array<{
       name: string;
@@ -94,6 +102,7 @@ export interface Document {
   }>;
   isTemplate: boolean;
   templateCategory?: string;
+  locationId?: string;
   isConfidential: boolean;
   retentionPeriod: number;
   anonymizationDate?: string;
@@ -166,14 +175,38 @@ export const createDocument = createAsyncThunk(
 
 export const updateDocument = createAsyncThunk(
   'documents/updateDocument',
-  async ({ id, documentData }: { id: string; documentData: Partial<Document> }, { rejectWithValue }) => {
+  async ({ id, documentData, expectedVersion }: { id: string; documentData: Partial<Document>; expectedVersion?: number }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.put(`http://localhost:5001/api/documents/${id}`, documentData, {
+      
+      // Optimistic Locking: Füge erwartete Version hinzu
+      const payload = {
+        ...documentData,
+        optimisticLockVersion: expectedVersion !== undefined ? expectedVersion : documentData.optimisticLockVersion
+      };
+      
+      const response = await axios.put(`http://localhost:5001/api/documents/${id}`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      return response.data;
+      
+      // Neue Version aus Response extrahieren
+      const updatedData = response.data?.data || response.data;
+      if (response.data?.optimisticLockVersion !== undefined) {
+        updatedData.optimisticLockVersion = response.data.optimisticLockVersion;
+      }
+      
+      return { ...response.data, data: updatedData };
     } catch (error: any) {
+      // Optimistic Locking Konflikt behandeln
+      if (error.response?.status === 409 && error.response?.data?.code === 'OPTIMISTIC_LOCK_CONFLICT') {
+        return rejectWithValue({
+          code: 'OPTIMISTIC_LOCK_CONFLICT',
+          message: error.response.data.message,
+          currentVersion: error.response.data.currentVersion,
+          lastModifiedBy: error.response.data.lastModifiedBy,
+          lastModifiedAt: error.response.data.lastModifiedAt
+        });
+      }
       return rejectWithValue(error.response?.data?.message || 'Fehler beim Aktualisieren des Dokuments');
     }
   }

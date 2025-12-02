@@ -81,30 +81,45 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-// @route   GET /api/documents/:id
-// @desc    Get single document by ID
+// @route   GET /api/documents/statistics
+// @desc    Get document statistics
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/statistics', auth, async (req, res) => {
   try {
-    const document = await Document.findById(req.params.id)
-      .populate('patient', 'firstName lastName dateOfBirth')
-      .populate('doctor', 'firstName lastName');
-
-    if (!document) {
-      return res.status(404).json({
-        success: false,
-        message: 'Dokument nicht gefunden'
-      });
-    }
+    const totalDocuments = await Document.countDocuments().catch(err => {
+      console.error('Error counting documents:', err);
+      return 0;
+    });
+    
+    const documentsByType = await Document.aggregate([
+      { $group: { _id: '$type', count: { $sum: 1 } } }
+    ]).catch(err => {
+      console.error('Error aggregating by type:', err);
+      return [];
+    });
+    
+    const documentsByStatus = await Document.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]).catch(err => {
+      console.error('Error aggregating by status:', err);
+      return [];
+    });
 
     res.json({
       success: true,
-      data: document
+      data: {
+        total: totalDocuments || 0,
+        byType: documentsByType || [],
+        byStatus: documentsByStatus || []
+      }
     });
   } catch (error) {
+    console.error('Error fetching document statistics:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Laden des Dokuments'
+      message: 'Fehler beim Laden der Statistiken',
+      error: error.message
     });
   }
 });
@@ -135,34 +150,58 @@ router.get('/templates', auth, async (req, res) => {
   }
 });
 
-// @route   GET /api/documents/statistics
-// @desc    Get document statistics
+// @route   GET /api/documents/:id
+// @desc    Get single document by ID (mit Lock-Status)
 // @access  Private
-router.get('/statistics', auth, async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   try {
-    const totalDocuments = await Document.countDocuments();
-    const documentsByType = await Document.aggregate([
-      { $group: { _id: '$type', count: { $sum: 1 } } }
-    ]);
-    const documentsByStatus = await Document.aggregate([
-      { $group: { _id: '$status', count: { $sum: 1 } } }
-    ]);
+    const DocumentLock = require('../models/DocumentLock');
+    
+    const document = await Document.findById(req.params.id)
+      .populate('patient', 'firstName lastName dateOfBirth')
+      .populate('doctor', 'firstName lastName');
 
-    res.json({
+    if (!document) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dokument nicht gefunden'
+      });
+    }
+
+    // Prüfe ob Dokument gesperrt ist
+    const lock = await DocumentLock.checkLock(req.params.id);
+    
+    const response = {
       success: true,
-      data: {
-        total: totalDocuments,
-        byType: documentsByType,
-        byStatus: documentsByStatus
-      }
-    });
+      data: document.toObject()
+    };
+
+    // Füge Lock-Informationen hinzu
+    if (lock) {
+      response.lock = {
+        isLocked: true,
+        lockedBy: lock.userName,
+        lockedByUserId: lock.userId._id || lock.userId,
+        lockedAt: lock.lockedAt,
+        expiresAt: lock.expiresAt,
+        isLockedByCurrentUser: lock.userId._id?.toString() === req.user._id.toString() || lock.userId.toString() === req.user._id.toString()
+      };
+    } else {
+      response.lock = {
+        isLocked: false
+      };
+    }
+
+    res.json(response);
   } catch (error) {
+    console.error('Get document error:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Laden der Statistiken'
+      message: 'Fehler beim Laden des Dokuments'
     });
   }
 });
+
 
 // @route   POST /api/documents
 // @desc    Create a new document
@@ -252,7 +291,7 @@ router.post('/templates', auth, [
 });
 
 // @route   PUT /api/documents/:id
-// @desc    Update a document (mit Versionierung)
+// @desc    Update a document (mit Versionierung und Optimistic Locking)
 // @access  Private
 router.put('/:id', auth, async (req, res) => {
   try {
@@ -274,6 +313,9 @@ router.put('/:id', auth, async (req, res) => {
       });
     }
 
+    // Optimistic Locking: Erwartete Version aus Request-Body
+    const expectedVersion = req.body.optimisticLockVersion;
+
     // Verwende Version-Service für Update
     const updatedDocument = await documentVersionService.updateDocument(
       req.params.id,
@@ -282,20 +324,36 @@ router.put('/:id', auth, async (req, res) => {
       {
         reason: req.body.reason,
         ipAddress: req.ip,
-        userAgent: req.get('user-agent')
+        userAgent: req.get('user-agent'),
+        expectedVersion: expectedVersion // Optimistic Locking
       }
     );
 
     await updatedDocument.populate('patient', 'firstName lastName dateOfBirth');
     await updatedDocument.populate('doctor', 'firstName lastName');
     await updatedDocument.populate('currentVersion.versionId');
+    await updatedDocument.populate('lastModifiedBy', 'firstName lastName');
 
     res.json({
       success: true,
-      data: updatedDocument
+      data: updatedDocument,
+      optimisticLockVersion: updatedDocument.getLockVersion() // Neue Version zurückgeben
     });
   } catch (error) {
     console.error('Document update error:', error);
+    
+    // Optimistic Locking Konflikt
+    if (error.code === 'OPTIMISTIC_LOCK_CONFLICT') {
+      return res.status(409).json({
+        success: false,
+        message: error.message,
+        code: 'OPTIMISTIC_LOCK_CONFLICT',
+        currentVersion: error.currentVersion,
+        lastModifiedBy: error.lastModifiedBy,
+        lastModifiedAt: error.lastModifiedAt
+      });
+    }
+    
     res.status(500).json({
       success: false,
       message: error.message || 'Fehler beim Aktualisieren des Dokuments'

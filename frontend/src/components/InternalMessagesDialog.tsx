@@ -34,6 +34,7 @@ import {
   Archive,
   Delete,
   Reply,
+  Forward,
   PriorityHigh,
   Person
 } from '@mui/icons-material';
@@ -41,7 +42,8 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { 
   fetchMessages, 
   sendMessage, 
-  markAsRead, 
+  markAsRead,
+  markAllAsRead,
   archiveMessage, 
   deleteMessage,
   fetchUnreadCount,
@@ -57,12 +59,14 @@ import { de } from 'date-fns/locale';
 interface InternalMessagesDialogProps {
   open: boolean;
   onClose: () => void;
+  onOpen?: () => void | Promise<void>;
   initialTab?: 'inbox' | 'sent' | 'archived';
 }
 
 const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({ 
   open, 
-  onClose, 
+  onClose,
+  onOpen,
   initialTab = 'inbox' 
 }) => {
   const dispatch = useAppDispatch();
@@ -81,14 +85,25 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
     priority: 'normal'
   });
   const [replyingTo, setReplyingTo] = useState<InternalMessage | null>(null);
+  const [forwardingFrom, setForwardingFrom] = useState<InternalMessage | null>(null);
 
   useEffect(() => {
     if (open) {
-      dispatch(fetchMessages({ type: 'inbox' }));
-      dispatch(fetchMessages({ type: 'sent' }));
-      dispatch(fetchMessages({ type: 'archived' }));
-      dispatch(fetchUnreadCount());
-      dispatch(fetchStaffProfiles());
+      const loadMessages = async () => {
+        // Lade alle Nachrichten
+        await dispatch(fetchMessages({ type: 'inbox' }));
+        await dispatch(fetchMessages({ type: 'sent' }));
+        await dispatch(fetchMessages({ type: 'archived' }));
+        dispatch(fetchStaffProfiles());
+        await dispatch(fetchUnreadCount());
+        
+        // Rufe onOpen Callback auf, falls vorhanden
+        if (onOpen) {
+          await onOpen();
+        }
+      };
+      
+      loadMessages();
       
       if (initialTab === 'sent') {
         setActiveTab(1);
@@ -96,7 +111,7 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
         setActiveTab(2);
       }
     }
-  }, [open, dispatch, initialTab]);
+  }, [open, dispatch, initialTab, onOpen]);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -105,15 +120,65 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
   };
 
   const handleMessageClick = async (message: InternalMessage) => {
+    // Hole die User-ID (kann _id oder id sein)
+    const currentUserId = user?._id || (user as any)?.id || null;
+    const recipientId = typeof message.recipientId === 'object' ? message.recipientId._id : message.recipientId;
+    
+    console.log('🔔 handleMessageClick aufgerufen:', {
+      messageId: message._id,
+      messageStatus: message.status,
+      recipientId: recipientId,
+      currentUserId: currentUserId,
+      userObject: user,
+      user_id: user?._id,
+      user_id_alt: (user as any)?.id,
+      unreadCount: unreadCount
+    });
+    
     dispatch(setSelectedMessage(message));
-    if (message.status !== 'read' && message.recipientId._id === user?._id) {
-      await dispatch(markAsRead(message._id));
+    
+    // Markiere nur als gelesen, wenn die Nachricht ungelesen ist und der aktuelle Benutzer der Empfänger ist
+    const isUnread = message.status === 'sent' || message.status === 'delivered';
+    const isRecipient = currentUserId && recipientId && (recipientId.toString() === currentUserId.toString());
+    
+    console.log('🔔 Bedingungen geprüft:', {
+      isUnread,
+      isRecipient,
+      recipientId: recipientId?.toString(),
+      currentUserId: currentUserId?.toString(),
+      shouldMark: isUnread && isRecipient
+    });
+    
+    if (isUnread && isRecipient) {
+      console.log('🔔 Markiere Nachricht als gelesen:', message._id, 'Aktueller unreadCount:', unreadCount);
+      try {
+        // Redux reduziert den Count sofort, aber wir aktualisieren auch vom Backend für Konsistenz
+        const result = await dispatch(markAsRead(message._id));
+        console.log('✅ Nachricht markiert, Ergebnis:', result);
+        console.log('✅ Neuer unreadCount im State sollte reduziert sein');
+        
+        // Aktualisiere unreadCount vom Backend nach kurzer Verzögerung (für Konsistenz)
+        setTimeout(async () => {
+          const countResult = await dispatch(fetchUnreadCount());
+          console.log('✅ UnreadCount vom Backend aktualisiert:', countResult.payload);
+        }, 500);
+      } catch (error) {
+        console.error('❌ Fehler beim Markieren der Nachricht:', error);
+      }
+    } else {
+      console.log('⚠️ Nachricht wird nicht als gelesen markiert:', {
+        reason: !isUnread ? 'Nachricht ist bereits gelesen' : !isRecipient ? 'Benutzer ist nicht der Empfänger' : 'Unbekannt',
+        recipientId: recipientId?.toString(),
+        currentUserId: currentUserId?.toString(),
+        userExists: !!user
+      });
     }
   };
 
   const handleCompose = (replyTo?: InternalMessage) => {
     if (replyTo) {
       setReplyingTo(replyTo);
+      setForwardingFrom(null);
       setComposeData({
         recipientId: replyTo.senderId._id,
         subject: `Re: ${replyTo.subject}`,
@@ -123,6 +188,7 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
       });
     } else {
       setReplyingTo(null);
+      setForwardingFrom(null);
       setComposeData({
         recipientId: '',
         subject: '',
@@ -130,6 +196,19 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
         priority: 'normal'
       });
     }
+    setComposeOpen(true);
+  };
+
+  const handleForward = (message: InternalMessage) => {
+    setForwardingFrom(message);
+    setReplyingTo(null);
+    setComposeData({
+      recipientId: '',
+      subject: `Fwd: ${message.subject}`,
+      message: `\n\n--- Weitergeleitete Nachricht ---\nVon: ${message.senderId.firstName} ${message.senderId.lastName}\nAn: ${message.recipientId.firstName} ${message.recipientId.lastName}\nDatum: ${format(new Date(message.createdAt), 'dd.MM.yyyy HH:mm', { locale: de })}\nBetreff: ${message.subject}\n\n${message.message}`,
+      priority: message.priority || 'normal',
+      forwardedFrom: message._id
+    });
     setComposeOpen(true);
   };
 
@@ -148,6 +227,7 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
         priority: 'normal'
       });
       setReplyingTo(null);
+      setForwardingFrom(null);
       dispatch(fetchMessages({ type: 'sent' }));
       dispatch(fetchUnreadCount());
       dispatch(addNotification({
@@ -280,6 +360,16 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
                     </IconButton>
                   </Tooltip>
                 )}
+                {(activeTab === 0 || activeTab === 1) && (
+                  <Tooltip title="Weiterleiten">
+                    <IconButton size="small" onClick={(e) => {
+                      e.stopPropagation();
+                      handleForward(message);
+                    }}>
+                      <Forward fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                )}
                 <Tooltip title="Archivieren">
                   <IconButton size="small" onClick={(e) => {
                     e.stopPropagation();
@@ -391,8 +481,75 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
                     </Typography>
                   </Box>
                   <Divider sx={{ mb: 2 }} />
+                  
+                  {/* Zeige ursprüngliche Nachricht, wenn es eine Antwort ist */}
+                  {selectedMessage.replyTo && (
+                    <Box sx={{ mb: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1, borderLeft: '3px solid', borderLeftColor: 'primary.main' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>
+                        Antwort auf:
+                      </Typography>
+                      {typeof selectedMessage.replyTo === 'object' && selectedMessage.replyTo !== null ? (
+                        <>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Von: {selectedMessage.replyTo.senderId?.firstName || ''} {selectedMessage.replyTo.senderId?.lastName || ''}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Betreff: {selectedMessage.replyTo.subject}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap', mt: 1 }}>
+                            {selectedMessage.replyTo.message}
+                          </Typography>
+                        </>
+                      ) : (
+                        <Typography variant="body2" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
+                          {selectedMessage.message.includes('--- Ursprüngliche Nachricht ---')
+                            ? selectedMessage.message.split('--- Ursprüngliche Nachricht ---')[0].trim()
+                            : 'Ursprüngliche Nachricht'}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                  
+                  {/* Zeige ursprüngliche Nachricht, wenn es eine Weiterleitung ist */}
+                  {selectedMessage.forwardedFrom && (
+                    <Box sx={{ mb: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1, borderLeft: '3px solid', borderLeftColor: 'warning.main' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, fontWeight: 600 }}>
+                        Weitergeleitet von:
+                      </Typography>
+                      {typeof selectedMessage.forwardedFrom === 'object' && selectedMessage.forwardedFrom !== null ? (
+                        <>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Von: {selectedMessage.forwardedFrom.senderId?.firstName || ''} {selectedMessage.forwardedFrom.senderId?.lastName || ''}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            An: {selectedMessage.forwardedFrom.recipientId?.firstName || ''} {selectedMessage.forwardedFrom.recipientId?.lastName || ''}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Betreff: {selectedMessage.forwardedFrom.subject}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                            Datum: {format(new Date(selectedMessage.forwardedFrom.createdAt), 'dd.MM.yyyy HH:mm', { locale: de })}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap', mt: 1 }}>
+                            {selectedMessage.forwardedFrom.message}
+                          </Typography>
+                        </>
+                      ) : (
+                        <Typography variant="body2" sx={{ fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>
+                          {selectedMessage.message.includes('--- Weitergeleitete Nachricht ---')
+                            ? selectedMessage.message.split('--- Weitergeleitete Nachricht ---')[1]?.split('\n').slice(4).join('\n') || selectedMessage.message
+                            : 'Weitergeleitete Nachricht'}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                  
                   <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
-                    {selectedMessage.message}
+                    {selectedMessage.replyTo && selectedMessage.message.includes('--- Ursprüngliche Nachricht ---')
+                      ? selectedMessage.message.split('--- Ursprüngliche Nachricht ---')[1]?.split('\n').slice(4).join('\n').trim() || selectedMessage.message
+                      : selectedMessage.forwardedFrom && selectedMessage.message.includes('--- Weitergeleitete Nachricht ---')
+                      ? selectedMessage.message.split('--- Weitergeleitete Nachricht ---')[1]?.split('\n').slice(5).join('\n').trim() || selectedMessage.message
+                      : selectedMessage.message}
                   </Typography>
                   {selectedMessage.attachments && selectedMessage.attachments.length > 0 && (
                     <Box sx={{ mt: 2 }}>
@@ -409,6 +566,28 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
                       ))}
                     </Box>
                   )}
+                  
+                  {/* Reply- und Forward-Button in der Detailansicht */}
+                  <Box sx={{ mt: 3, display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                    {activeTab === 0 && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<Reply />}
+                        onClick={() => handleCompose(selectedMessage)}
+                      >
+                        Antworten
+                      </Button>
+                    )}
+                    {(activeTab === 0 || activeTab === 1) && (
+                      <Button
+                        variant="outlined"
+                        startIcon={<Forward />}
+                        onClick={() => handleForward(selectedMessage)}
+                      >
+                        Weiterleiten
+                      </Button>
+                    )}
+                  </Box>
                 </Paper>
               ) : (
                 <Box sx={{ textAlign: 'center', py: 8 }}>
@@ -432,20 +611,25 @@ const InternalMessagesDialog: React.FC<InternalMessagesDialogProps> = ({
         onClose={() => {
           setComposeOpen(false);
           setReplyingTo(null);
+          setForwardingFrom(null);
         }}
         maxWidth="sm"
         fullWidth
       >
         <DialogTitle>
-          {replyingTo ? 'Antworten' : 'Neue Nachricht'}
+          {replyingTo ? 'Antworten' : forwardingFrom ? 'Weiterleiten' : 'Neue Nachricht'}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <Autocomplete
-              options={staffProfiles}
-              getOptionLabel={(option) => `${option.first_name} ${option.last_name} (${option.email})`}
-              getOptionKey={(option) => option.user_id || option._id || `${option.first_name}-${option.last_name}`}
-              isOptionEqualToValue={(option, value) => option.user_id === value.user_id}
+              options={staffProfiles.filter((profile, index, self) => 
+                index === self.findIndex(p => p.user_id === profile.user_id)
+              )}
+              getOptionLabel={(option) => `${option.first_name} ${option.last_name} (${option.email || 'keine E-Mail'})`}
+              isOptionEqualToValue={(option, value) => {
+                if (!option || !value) return false;
+                return option.user_id === value.user_id || option._id === value._id;
+              }}
               value={staffProfiles.find(p => p.user_id === composeData.recipientId) || null}
               onChange={(_event, newValue) => {
                 setComposeData(prev => ({

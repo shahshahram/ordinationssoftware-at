@@ -46,6 +46,8 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { de } from 'date-fns/locale';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
+import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
 
 interface ServiceBooking {
   _id: string;
@@ -123,6 +125,7 @@ interface StaffProfile {
 
 const ServiceBookings: React.FC = () => {
   const dispatch = useDispatch();
+  const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
   
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
@@ -455,23 +458,49 @@ const ServiceBookings: React.FC = () => {
     );
   }
 
+  const handleCreateAppointment = () => {
+    // Navigiere zur Appointments-Seite mit geöffnetem Dialog
+    navigate('/appointments?openDialog=true');
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
-          Service-Buchungen
+          Dienst-Kalender
         </Typography>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="outlined"
+            startIcon={<CalendarIcon />}
+            onClick={handleCreateAppointment}
+          >
+            Termin anlegen
+          </Button>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleAddNew}
-          sx={{ ml: 2 }}
         >
           Neue Buchung
         </Button>
+        </Box>
       </Box>
 
-      {/* Filter */}
+      {/* Tabs für Service-Buchungen und Termine */}
+      <Tabs 
+        value={tabValue} 
+        onChange={(e, newValue) => setTabValue(newValue)}
+        sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab label="Service-Buchungen" />
+        <Tab label="Termine" />
+      </Tabs>
+
+      {/* Tab-spezifischer Inhalt */}
+      {tabValue === 0 ? (
+        <>
+          {/* Filter für Service-Buchungen */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 2, alignItems: 'center' }}>
@@ -645,6 +674,46 @@ const ServiceBookings: React.FC = () => {
           onRowsPerPageChange={handleChangeRowsPerPage}
         />
       </Card>
+        </>
+      ) : (
+        <>
+          {/* Termine-Ansicht */}
+          <Card sx={{ mb: 3 }}>
+            <CardContent>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
+                <CalendarIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+                <Typography variant="h6" gutterBottom>
+                  Termine verwalten
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 3, textAlign: 'center' }}>
+                  Verwenden Sie den Kalender oder die Terminliste, um Termine zu erstellen und zu verwalten.
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', justifyContent: 'center' }}>
+                  <Button
+                    variant="contained"
+                    startIcon={<CalendarIcon />}
+                    onClick={handleCreateAppointment}
+                  >
+                    Neuen Termin anlegen
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate('/appointments')}
+                  >
+                    Zur Terminliste
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate('/calendar')}
+                  >
+                    Zum Kalender
+                  </Button>
+                </Box>
+              </Box>
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       {/* Dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>

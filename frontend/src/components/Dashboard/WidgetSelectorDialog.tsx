@@ -35,7 +35,8 @@ import {
   EventNote,
   Medication,
   NotificationsActive,
-  Mail
+  Mail,
+  Science
 } from '@mui/icons-material';
 
 export interface AvailableWidget {
@@ -102,6 +103,42 @@ const AVAILABLE_WIDGETS: AvailableWidget[] = [
     icon: <Warning />,
     defaultConfig: { items: [] },
     defaultPosition: { x: 6, y: 4, w: 6, h: 8 }
+  },
+  {
+    widgetId: 'new-labor-results',
+    widgetType: 'list',
+    title: 'Neue Laborwerte',
+    description: 'Kürzlich eingetroffene Laborwerte',
+    icon: <Science />,
+    defaultConfig: { items: [] },
+    defaultPosition: { x: 0, y: 12, w: 6, h: 8 }
+  },
+  {
+    widgetId: 'reimbursements',
+    widgetType: 'list',
+    title: 'Erstattungen',
+    description: 'Ausstehende Erstattungen',
+    icon: <AttachMoney />,
+    defaultConfig: { items: [] },
+    defaultPosition: { x: 0, y: 20, w: 6, h: 8 }
+  },
+  {
+    widgetId: 'ogk-status',
+    widgetType: 'custom',
+    title: 'ÖGK-Status',
+    description: 'ÖGK-Abrechnungsstatus und Statistiken',
+    icon: <Receipt />,
+    defaultConfig: {},
+    defaultPosition: { x: 6, y: 20, w: 6, h: 8 }
+  },
+  {
+    widgetId: 'new-dicom-studies',
+    widgetType: 'list',
+    title: 'Neue DICOM-Studien',
+    description: 'Kürzlich eingetroffene DICOM-Studien',
+    icon: <LocalHospital />,
+    defaultConfig: { items: [] },
+    defaultPosition: { x: 6, y: 12, w: 6, h: 8 }
   },
   {
     widgetId: 'system-status',

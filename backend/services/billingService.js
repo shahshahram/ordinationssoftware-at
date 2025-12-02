@@ -117,10 +117,53 @@ class BillingService {
 
   /**
    * Abrechnungsroute bestimmen
+   * Berücksichtigt: Location practiceType > Doctor contractType > Options
    */
-  determineRoute(doctor, performance, options) {
-    const contractType = doctor.contractType || 'privat';
+  async determineRoute(doctor, performance, options = {}) {
+    const Location = require('../models/Location');
     
+    // Location-Praxistyp hat Priorität
+    let practiceType = null;
+    if (options.locationId) {
+      const location = await Location.findById(options.locationId);
+      if (location && location.practiceType) {
+        practiceType = location.practiceType;
+      }
+    }
+    
+    // Fallback: Doctor contractType
+    const contractType = practiceType || doctor.contractType || 'privat';
+    
+    // Wenn Location "gemischt" ist, kann Doctor contractType verwendet werden
+    if (practiceType === 'gemischt') {
+      const doctorContractType = doctor.contractType || 'privat';
+      return this._mapContractTypeToRoute(doctorContractType, options);
+    }
+    
+    // Location-spezifische Route bestimmen
+    return this._mapPracticeTypeToRoute(practiceType || contractType, options);
+  }
+  
+  /**
+   * Mappt Praxistyp zu Abrechnungsroute
+   */
+  _mapPracticeTypeToRoute(practiceType, options) {
+    switch (practiceType) {
+      case 'kassenpraxis':
+        return 'KASSE';
+      case 'wahlarzt':
+        return 'PATIENT+KASSE_REFUND';
+      case 'privat':
+        return options.insuranceClaim ? 'PATIENT+INSURANCE' : 'PATIENT';
+      default:
+        return 'PATIENT';
+    }
+  }
+  
+  /**
+   * Mappt Contract Type zu Abrechnungsroute (Fallback)
+   */
+  _mapContractTypeToRoute(contractType, options) {
     switch (contractType) {
       case 'kassenarzt':
         return 'KASSE';
