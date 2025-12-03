@@ -57,6 +57,8 @@ import {
   Star,
   AccessTime,
   Done,
+  Warning,
+  CheckCircle,
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, endOfWeek, isSameDay, isSameMonth, eachDayOfInterval, parseISO, addMonths, subMonths, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -67,6 +69,7 @@ import { fetchLocations, Location } from '../store/slices/locationSlice';
 import { fetchPatients, Patient } from '../store/slices/patientSlice';
 import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import { fetchRooms } from '../store/slices/roomSlice';
+import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import DiagnosisManager from '../components/DiagnosisManager';
 import CreateTaskDialog from '../components/Tasks/CreateTaskDialog';
@@ -174,6 +177,7 @@ const DemoCalendar: React.FC = () => {
   const { patients, loading: patientsLoading } = useAppSelector((state) => state.patients);
   const { staffProfiles } = useAppSelector((state) => state.staff);
   const { rooms } = useAppSelector((state) => state.rooms);
+  const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
 
   // Local State
   const [currentDate, setCurrentDate] = useState(() => startOfWeek(new Date(), { locale: de, weekStartsOn: 1 }));
@@ -253,6 +257,28 @@ const DemoCalendar: React.FC = () => {
     };
     loadDevices();
   }, [dispatch]);
+
+  // Lade Diagnosen für alle Patienten in den Terminen
+  useEffect(() => {
+    if (appointments && appointments.length > 0) {
+      const patientIds = new Set<string>();
+      appointments.forEach((apt: any) => {
+        if (apt.patient && typeof apt.patient === 'object' && apt.patient._id) {
+          patientIds.add(apt.patient._id);
+        } else if (apt.patient && typeof apt.patient === 'string') {
+          patientIds.add(apt.patient);
+        }
+      });
+      
+      // Lade Diagnosen für alle eindeutigen Patienten
+      patientIds.forEach(patientId => {
+        dispatch(fetchPatientDiagnoses({ 
+          patientId, 
+          status: 'active'
+        }));
+      });
+    }
+  }, [appointments, dispatch]);
   
   // Initialize selected location
   useEffect(() => {
@@ -1315,15 +1341,72 @@ const DemoCalendar: React.FC = () => {
                             sx={{
                               bgcolor: appointment.color,
                               color: 'white',
-                              p: 0.25,
+                              p: 0.5,
                               fontSize: '0.65rem',
                               cursor: 'pointer',
                               '&:hover': { opacity: 0.9 },
                             }}
                           >
-                            <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 600 }}>
+                            <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 600, display: 'block', mb: 0.25 }}>
                               {format(appointment.start, 'HH:mm')} {appointment.patientName}
                             </Typography>
+                            {(() => {
+                              const apt = appointment.appointment;
+                              const patient = apt?.patient;
+                              let patientId: string | null = null;
+                              let patientObj: any = null;
+                              
+                              if (patient) {
+                                if (typeof patient === 'string') {
+                                  patientId = patient;
+                                } else if (typeof patient === 'object' && patient !== null) {
+                                  patientId = (patient as any)._id || (patient as any).id || null;
+                                  patientObj = patient;
+                                }
+                              }
+                              
+                              // Finde Hauptdiagnose - auch wenn status nicht 'active' ist, solange isPrimary true ist
+                              const diagnoses = patientId ? patientDiagnoses.filter((d: PatientDiagnosis) => d.patientId === patientId) : [];
+                              // Suche zuerst nach aktiver Hauptdiagnose, dann nach jeder Hauptdiagnose
+                              let primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary && d.status === 'active');
+                              if (!primaryDiagnosis) {
+                                primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary);
+                              }
+                              
+                              // Debug-Logging
+                              if (patientId && diagnoses.length > 0) {
+                                console.log('DemoCalendar - Patient Diagnosen:', {
+                                  patientId,
+                                  totalDiagnoses: diagnoses.length,
+                                  primaryDiagnoses: diagnoses.filter(d => d.isPrimary).length,
+                                  activePrimary: diagnoses.filter(d => d.isPrimary && d.status === 'active').length,
+                                  foundPrimary: !!primaryDiagnosis,
+                                  primaryCode: primaryDiagnosis?.code
+                                });
+                              }
+                              
+                              // Prüfe Allergien
+                              const hasAllergies = patientObj && patientObj.allergies && Array.isArray(patientObj.allergies) && patientObj.allergies.length > 0;
+                              
+                              if (!hasAllergies && !primaryDiagnosis) return null;
+                              
+                              return (
+                                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, mt: 0.25 }}>
+                                  {hasAllergies && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.55rem' }}>
+                                      <Warning sx={{ fontSize: '0.6rem' }} />
+                                      <Typography variant="caption" sx={{ fontSize: '0.55rem' }}>Allergien</Typography>
+                                    </Box>
+                                  )}
+                                  {primaryDiagnosis && (
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.55rem' }}>
+                                      <CheckCircle sx={{ fontSize: '0.6rem' }} />
+                                      <Typography variant="caption" sx={{ fontSize: '0.55rem' }}>{primaryDiagnosis.display || primaryDiagnosis.code}</Typography>
+                                    </Box>
+                                  )}
+                                </Box>
+                              );
+                            })()}
                           </Paper>
                         ))}
                         {dayAppointments.length > 3 && (
@@ -1393,32 +1476,81 @@ const DemoCalendar: React.FC = () => {
                           },
                         }}
                       >
-                        <Typography 
-                          variant="caption" 
-                          sx={{ 
-                            fontWeight: 600, 
-                            fontSize: '0.7rem',
-                            textDecoration: appointment.patientId ? 'underline' : 'none',
-                            cursor: appointment.patientId ? 'pointer' : 'default',
-                            '&:hover': {
-                              opacity: appointment.patientId ? 0.8 : 1,
-                            }
-                          }}
-                          onClick={(e) => {
-                            if (appointment.patientId) {
-                              e.stopPropagation();
-                              const patientIdStr = typeof appointment.patientId === 'string' 
-                                ? appointment.patientId 
-                                : String(appointment.patientId);
+                        <Box>
+                          <Typography 
+                            variant="caption" 
+                            sx={{ 
+                              fontWeight: 600, 
+                              fontSize: '0.7rem',
+                              textDecoration: appointment.patientId ? 'underline' : 'none',
+                              cursor: appointment.patientId ? 'pointer' : 'default',
+                              display: 'block',
+                              mb: 0.5,
+                              '&:hover': {
+                                opacity: appointment.patientId ? 0.8 : 1,
+                              }
+                            }}
+                            onClick={(e) => {
+                              if (appointment.patientId) {
+                                e.stopPropagation();
+                                const patientIdStr = typeof appointment.patientId === 'string' 
+                                  ? appointment.patientId 
+                                  : String(appointment.patientId);
                               navigate(`/patient-organizer/${patientIdStr}`);
                             }
                           }}
                         >
                           {appointment.patientName}
                         </Typography>
-                        <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.9 }}>
+                        <Typography variant="caption" sx={{ fontSize: '0.65rem', opacity: 0.9, mb: 0.5 }}>
                           {appointment.type}
                         </Typography>
+                        {(() => {
+                          const apt = appointment.appointment;
+                          const patient = apt?.patient;
+                          let patientId: string | null = null;
+                          let patientObj: any = null;
+                          
+                          if (patient) {
+                            if (typeof patient === 'string') {
+                              patientId = patient;
+                            } else if (typeof patient === 'object' && patient !== null) {
+                              patientId = (patient as any)._id || (patient as any).id || null;
+                              patientObj = patient;
+                            }
+                          }
+                          
+                          // Finde Hauptdiagnose - auch wenn status nicht 'active' ist, solange isPrimary true ist
+                          const diagnoses = patientId ? patientDiagnoses.filter((d: PatientDiagnosis) => d.patientId === patientId) : [];
+                          // Suche zuerst nach aktiver Hauptdiagnose, dann nach jeder Hauptdiagnose
+                          let primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary && d.status === 'active');
+                          if (!primaryDiagnosis) {
+                            primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary);
+                          }
+                          
+                          // Prüfe Allergien
+                          const hasAllergies = patientObj && patientObj.allergies && Array.isArray(patientObj.allergies) && patientObj.allergies.length > 0;
+                          
+                          if (!hasAllergies && !primaryDiagnosis) return null;
+                          
+                          return (
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, mt: 0.5 }}>
+                              {hasAllergies && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.6rem' }}>
+                                  <Warning sx={{ fontSize: '0.65rem' }} />
+                                  <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Allergien</Typography>
+                                </Box>
+                              )}
+                              {primaryDiagnosis && (
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.6rem' }}>
+                                  <CheckCircle sx={{ fontSize: '0.65rem' }} />
+                                  <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>{primaryDiagnosis.display || primaryDiagnosis.code}</Typography>
+                                </Box>
+                              )}
+                            </Box>
+                          );
+                        })()}
+                        </Box>
                       </Paper>
                     );
                   })}

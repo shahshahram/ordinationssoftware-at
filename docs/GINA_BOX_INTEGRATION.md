@@ -278,3 +278,5 @@ const useGinaBox = () => {
 4. ✅ Frontend-Integration für automatische Patientenfindung
 5. ✅ Automatische Validierung bei Card-Insert
 
+
+

@@ -149,6 +149,11 @@ router.get('/:id', auth, async (req, res) => {
       });
     }
 
+    console.log('🔍 GET /dekurs-vorlagen/:id - Vorlage geladen, linkedMedications:', JSON.stringify(vorlage.linkedMedications, null, 2));
+    console.log('🔍 GET /dekurs-vorlagen/:id - vorlage.linkedMedications ist Array?', Array.isArray(vorlage.linkedMedications));
+    console.log('🔍 GET /dekurs-vorlagen/:id - vorlage.linkedMedications.length:', vorlage.linkedMedications?.length);
+    console.log('🔍 GET /dekurs-vorlagen/:id - vorlage.linkedMedications type:', typeof vorlage.linkedMedications);
+
     res.json({
       success: true,
       data: vorlage
@@ -205,12 +210,44 @@ router.post('/', auth, [
       locationIds,
       template,
       elga_structured,
+      linkedMedications,
       isActive = true,
       isDefault = false,
       sortOrder = 0,
       tags = [],
       version = 1
     } = req.body;
+
+    // Bereinige linkedMedications für POST
+    const cleanedLinkedMedications = (linkedMedications || [])
+      .filter(med => med.name && med.name.trim() !== '')
+      .map(med => {
+        const cleaned = {
+          name: med.name.trim(),
+          dosage: med.dosage || '',
+          dosageUnit: med.dosageUnit || '',
+          frequency: med.frequency || '',
+          duration: med.duration || '',
+          instructions: med.instructions || '',
+          quantity: med.quantity !== undefined && med.quantity !== null ? med.quantity : undefined,
+          quantityUnit: med.quantityUnit || '',
+          route: med.route || 'oral',
+          changeType: med.changeType || 'added',
+          notes: med.notes || ''
+        };
+        // Nur medicationId hinzufügen, wenn es nicht leer ist und eine gültige ObjectId ist
+        if (med.medicationId && med.medicationId.trim() !== '' && require('mongoose').Types.ObjectId.isValid(med.medicationId)) {
+          cleaned.medicationId = med.medicationId;
+        }
+        // Datum-Felder hinzufügen, wenn vorhanden
+        if (med.startDate) {
+          cleaned.startDate = med.startDate instanceof Date ? med.startDate : new Date(med.startDate);
+        }
+        if (med.endDate) {
+          cleaned.endDate = med.endDate instanceof Date ? med.endDate : new Date(med.endDate);
+        }
+        return cleaned;
+      });
 
     const vorlage = new DekursVorlage({
       code: code.trim(),
@@ -222,6 +259,7 @@ router.post('/', auth, [
       locationIds: Array.isArray(locationIds) ? locationIds : [],
       template: template || {},
       elga_structured: elga_structured || {},
+      linkedMedications: cleanedLinkedMedications,
       isActive,
       isDefault,
       sortOrder: parseInt(sortOrder) || 0,
@@ -277,6 +315,10 @@ router.put('/:id', auth, [
   })
 ], async (req, res) => {
   try {
+    console.log('🔍 PUT /dekurs-vorlagen/:id - Request empfangen, ID:', req.params.id);
+    console.log('🔍 PUT /dekurs-vorlagen/:id - Request Body Keys:', Object.keys(req.body));
+    console.log('🔍 PUT /dekurs-vorlagen/:id - linkedMedications im Body vorhanden:', req.body.linkedMedications !== undefined);
+    
     // Prüfe Berechtigung
     if (req.user.role !== 'admin' && req.user.role !== 'super_admin' && req.user.role !== 'arzt' && req.user.role !== 'doctor') {
       return res.status(403).json({
@@ -308,19 +350,109 @@ router.put('/:id', auth, [
     if (req.body.locationIds !== undefined) updateData.locationIds = Array.isArray(req.body.locationIds) ? req.body.locationIds : [];
     if (req.body.template !== undefined) updateData.template = req.body.template;
     if (req.body.elga_structured !== undefined) updateData.elga_structured = req.body.elga_structured;
+    if (req.body.linkedMedications !== undefined) {
+      console.log('🔍 PUT /dekurs-vorlagen/:id - linkedMedications im Request:', JSON.stringify(req.body.linkedMedications, null, 2));
+      // Bereinige linkedMedications
+      const cleanedLinkedMedications = (req.body.linkedMedications || [])
+        .filter(med => med.name && med.name.trim() !== '')
+        .map(med => {
+          const cleaned = {
+            name: med.name.trim(),
+            dosage: med.dosage || '',
+            dosageUnit: med.dosageUnit || '',
+            frequency: med.frequency || '',
+            duration: med.duration || '',
+            instructions: med.instructions || '',
+            quantity: med.quantity !== undefined && med.quantity !== null ? med.quantity : undefined,
+            quantityUnit: med.quantityUnit || '',
+            route: med.route || 'oral',
+            changeType: med.changeType || 'added',
+            notes: med.notes || ''
+          };
+          // Nur medicationId hinzufügen, wenn es nicht leer ist und eine gültige ObjectId ist
+          if (med.medicationId && med.medicationId.trim() !== '' && require('mongoose').Types.ObjectId.isValid(med.medicationId)) {
+            cleaned.medicationId = med.medicationId;
+          }
+          // Datum-Felder hinzufügen, wenn vorhanden
+          if (med.startDate) {
+            cleaned.startDate = med.startDate instanceof Date ? med.startDate : new Date(med.startDate);
+          }
+          if (med.endDate) {
+            cleaned.endDate = med.endDate instanceof Date ? med.endDate : new Date(med.endDate);
+          }
+          return cleaned;
+        });
+      console.log('🔍 PUT /dekurs-vorlagen/:id - Bereinigte linkedMedications:', JSON.stringify(cleanedLinkedMedications, null, 2));
+      updateData.linkedMedications = cleanedLinkedMedications;
+    }
     if (req.body.isActive !== undefined) updateData.isActive = req.body.isActive;
     if (req.body.isDefault !== undefined) updateData.isDefault = req.body.isDefault;
     if (req.body.sortOrder !== undefined) updateData.sortOrder = parseInt(req.body.sortOrder) || 0;
     if (req.body.tags !== undefined) updateData.tags = Array.isArray(req.body.tags) ? req.body.tags : [];
 
-    const vorlage = await DekursVorlage.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true, runValidators: true }
-    )
-      .populate('createdBy', 'firstName lastName email')
-      .populate('lastModifiedBy', 'firstName lastName email')
-      .populate('locationIds', 'name code');
+    // Wenn linkedMedications aktualisiert werden, müssen wir markModified verwenden
+    let vorlage;
+    if (req.body.linkedMedications !== undefined) {
+      console.log('🔍 PUT /dekurs-vorlagen/:id - Verwende markModified für linkedMedications');
+      // Für Subdocument-Arrays müssen wir findById verwenden, dann markModified und save
+      vorlage = await DekursVorlage.findById(req.params.id);
+      if (!vorlage) {
+        return res.status(404).json({
+          success: false,
+          message: 'Vorlage nicht gefunden'
+        });
+      }
+      console.log('🔍 PUT /dekurs-vorlagen/:id - Vorlage vor Update:', JSON.stringify(vorlage.linkedMedications, null, 2));
+      
+      // Aktualisiere alle anderen Felder
+      if (updateData.code !== undefined) vorlage.code = updateData.code;
+      if (updateData.title !== undefined) vorlage.title = updateData.title;
+      if (updateData.icd10 !== undefined) vorlage.icd10 = updateData.icd10;
+      if (updateData.icd10Title !== undefined) vorlage.icd10Title = updateData.icd10Title;
+      if (updateData.specialty !== undefined) vorlage.specialty = updateData.specialty;
+      if (updateData.specialties !== undefined) vorlage.specialties = updateData.specialties;
+      if (updateData.locationIds !== undefined) vorlage.locationIds = updateData.locationIds;
+      if (updateData.template !== undefined) vorlage.template = updateData.template;
+      if (updateData.elga_structured !== undefined) vorlage.elga_structured = updateData.elga_structured;
+      if (updateData.isActive !== undefined) vorlage.isActive = updateData.isActive;
+      if (updateData.isDefault !== undefined) vorlage.isDefault = updateData.isDefault;
+      if (updateData.sortOrder !== undefined) vorlage.sortOrder = updateData.sortOrder;
+      if (updateData.tags !== undefined) vorlage.tags = updateData.tags;
+      if (updateData.lastModifiedBy !== undefined) vorlage.lastModifiedBy = updateData.lastModifiedBy;
+      if (updateData.version !== undefined) vorlage.version = updateData.version;
+      
+      // Setze linkedMedications direkt (wie in dekurs.js)
+      vorlage.linkedMedications = updateData.linkedMedications;
+      vorlage.markModified('linkedMedications');
+      console.log('🔍 PUT /dekurs-vorlagen/:id - Vorlage nach Setzen von linkedMedications:', JSON.stringify(vorlage.linkedMedications, null, 2));
+      console.log('🔍 PUT /dekurs-vorlagen/:id - Vorlage.isModified(linkedMedications):', vorlage.isModified('linkedMedications'));
+      await vorlage.save();
+      console.log('🔍 PUT /dekurs-vorlagen/:id - Vorlage nach save:', JSON.stringify(vorlage.linkedMedications, null, 2));
+      
+      // Lade die Vorlage erneut aus der Datenbank, um sicherzustellen, dass die Daten gespeichert wurden
+      const savedVorlage = await DekursVorlage.findById(req.params.id)
+        .populate('createdBy', 'firstName lastName email')
+        .populate('lastModifiedBy', 'firstName lastName email')
+        .populate('locationIds', 'name code');
+      console.log('🔍 PUT /dekurs-vorlagen/:id - Vorlage aus DB nach save:', JSON.stringify(savedVorlage.linkedMedications, null, 2));
+      console.log('🔍 PUT /dekurs-vorlagen/:id - savedVorlage.linkedMedications ist Array?', Array.isArray(savedVorlage.linkedMedications));
+      console.log('🔍 PUT /dekurs-vorlagen/:id - savedVorlage.linkedMedications.length:', savedVorlage.linkedMedications?.length);
+      
+      // Verwende die neu geladene Vorlage für die Antwort
+      vorlage = savedVorlage;
+    } else {
+      // Normale Aktualisierung ohne Subdocument-Arrays
+      vorlage = await DekursVorlage.findByIdAndUpdate(
+        req.params.id,
+        updateData,
+        { new: true, runValidators: true }
+      )
+        .populate('createdBy', 'firstName lastName email')
+        .populate('lastModifiedBy', 'firstName lastName email')
+        .populate('locationIds', 'name code');
+    }
+    
+    console.log('🔍 PUT /dekurs-vorlagen/:id - Finale Vorlage mit linkedMedications:', JSON.stringify(vorlage.linkedMedications, null, 2));
 
     if (!vorlage) {
       return res.status(404).json({
@@ -602,4 +734,6 @@ router.get('/export/:id/xml', auth, async (req, res) => {
 });
 
 module.exports = router;
+
+
 

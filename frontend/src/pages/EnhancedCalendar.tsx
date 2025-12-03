@@ -34,6 +34,8 @@ import {
   ViewAgenda as ViewAgendaIcon,
   Cached as RefreshIcon,
   Event as EventIcon,
+  Warning,
+  CheckCircle,
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -45,6 +47,7 @@ import { fetchRooms } from '../store/slices/roomSlice';
 import { fetchLocations } from '../store/slices/locationSlice';
 import { fetchLocationWeeklySchedules } from '../store/slices/locationWeeklyScheduleSlice';
 import { fetchWeeklySchedules, deleteWeeklySchedulesByStaffId } from '../store/slices/weeklyScheduleSlice';
+import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import { eventBus, EVENTS } from '../utils/eventBus';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 
@@ -97,7 +100,8 @@ interface CalendarEvent {
   locationId?: string;
   locationName?: string;
   locationColor?: string;
-  patientId?: string;
+  patientId?: string | null;
+  patientObj?: any;
 }
 
 interface BackgroundEvent {
@@ -136,6 +140,7 @@ const EnhancedCalendar: React.FC = () => {
   const { locations, loading: locationsLoading } = useAppSelector((state) => state.locations);
   const { schedules: locationSchedules, loading: locationSchedulesLoading } = useAppSelector((state) => state.locationWeeklySchedules);
   const { schedules: weeklySchedules, loading: weeklySchedulesLoading } = useAppSelector((state) => state.weeklySchedules);
+  const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
 
   // State mit localStorage-Unterstützung
   // Initialisiere mit Start der aktuellen Woche für Wochenansicht
@@ -249,6 +254,28 @@ const EnhancedCalendar: React.FC = () => {
     dispatch(fetchLocationWeeklySchedules());
     dispatch(fetchWeeklySchedules());
   }, [dispatch]);
+
+  // Lade Diagnosen für alle Patienten in den Terminen
+  useEffect(() => {
+    if (appointments && appointments.length > 0) {
+      const patientIds = new Set<string>();
+      appointments.forEach((apt: any) => {
+        if (apt.patient && typeof apt.patient === 'object' && apt.patient._id) {
+          patientIds.add(apt.patient._id);
+        } else if (apt.patient && typeof apt.patient === 'string') {
+          patientIds.add(apt.patient);
+        }
+      });
+      
+      // Lade Diagnosen für alle eindeutigen Patienten
+      patientIds.forEach(patientId => {
+        dispatch(fetchPatientDiagnoses({ 
+          patientId, 
+          status: 'active'
+        }));
+      });
+    }
+  }, [appointments, dispatch]);
 
   // Force refresh data when component becomes visible
   useEffect(() => {
@@ -724,6 +751,20 @@ const EnhancedCalendar: React.FC = () => {
         const staffColor_hex = staff?.color_hex;
         const eventColor = serviceColor || staffColor_hex || '#9CA3AF';
         
+        // Extrahiere Patientendaten
+        const patient = appointment.patient;
+        let patientId: string | null = null;
+        let patientObj: any = null;
+        
+        if (patient) {
+          if (typeof patient === 'string') {
+            patientId = patient;
+          } else if (typeof patient === 'object' && patient !== null) {
+            patientId = (patient as any)._id || (patient as any).id || null;
+            patientObj = patient;
+          }
+        }
+        
         return {
           id: appointment._id,
           title: appointment.title || 'Termin',
@@ -740,6 +781,8 @@ const EnhancedCalendar: React.FC = () => {
           locationId: roomLocationId || appointment.locationId,
           locationName: location?.name,
           locationColor: location?.color_hex,
+          patientId: patientId,
+          patientObj: patientObj,
         };
       });
   }, [appointments, filteredStaff, rooms, locations, selectedLocation, medicalFilter, currentDate, viewMode]);
@@ -1079,7 +1122,25 @@ const EnhancedCalendar: React.FC = () => {
           const topPosition = startMinutes - (minHour * 60); // Offset relative to first hour shown
           const height = endMinutes - startMinutes;
           const leftPosition = `${((staffHours.length + index) * 100) / totalBars}%`;
-          const tooltipText = `${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}\nPersonal: ${event.staffName || 'Unbekannt'}${event.roomName ? `\nRaum: ${event.roomName}` : ''}\nStatus: ${event.status}`;
+          // Finde Hauptdiagnose - auch wenn status nicht 'active' ist, solange isPrimary true ist
+          const diagnoses = event.patientId ? patientDiagnoses.filter((d: PatientDiagnosis) => d.patientId === event.patientId) : [];
+          // Suche zuerst nach aktiver Hauptdiagnose, dann nach jeder Hauptdiagnose
+          let primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary && d.status === 'active');
+          if (!primaryDiagnosis) {
+            primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary);
+          }
+          
+          // Prüfe Allergien
+          const hasAllergies = event.patientObj && event.patientObj.allergies && Array.isArray(event.patientObj.allergies) && event.patientObj.allergies.length > 0;
+          
+          // Erweitere Tooltip mit Allergien und Hauptdiagnose
+          let tooltipText = `${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}\nPersonal: ${event.staffName || 'Unbekannt'}${event.roomName ? `\nRaum: ${event.roomName}` : ''}\nStatus: ${event.status}`;
+          if (hasAllergies) {
+            tooltipText += '\n⚠️ Allergien vorhanden';
+          }
+          if (primaryDiagnosis) {
+            tooltipText += `\n✓ Hauptdiagnose: ${primaryDiagnosis.display || primaryDiagnosis.code}`;
+          }
           
           return (
             <Box
@@ -1101,6 +1162,7 @@ const EnhancedCalendar: React.FC = () => {
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+                p: 0.5,
                 '&:hover': {
                   transform: 'scale(1.02)',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
@@ -1155,6 +1217,22 @@ const EnhancedCalendar: React.FC = () => {
                 >
                   {event.staffName}
                 </Typography>
+                {(hasAllergies || primaryDiagnosis) && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, mt: 0.5, alignItems: 'center' }}>
+                    {hasAllergies && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '8px' }}>
+                        <Warning sx={{ fontSize: '0.7rem' }} />
+                        <Typography variant="caption" sx={{ fontSize: '8px' }}>Allergien</Typography>
+                      </Box>
+                    )}
+                    {primaryDiagnosis && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '8px' }}>
+                        <CheckCircle sx={{ fontSize: '0.7rem' }} />
+                        <Typography variant="caption" sx={{ fontSize: '8px' }}>{primaryDiagnosis.display || primaryDiagnosis.code}</Typography>
+                      </Box>
+                    )}
+                  </Box>
+                )}
                 <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5 }}>
                   <Chip
                     label={event.bookingType === 'online' ? 'O' : 'I'}
@@ -1455,9 +1533,28 @@ const EnhancedCalendar: React.FC = () => {
                 {format(dayItem, 'd', { locale: de })}
               </Typography>
               {dayEvents.map(event => {
-                const tooltipText = `${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}\nPersonal: ${event.staffName || 'Unbekannt'}${event.roomName ? `\nRaum: ${event.roomName}` : ''}\nStatus: ${event.status}`;
+                // Finde Hauptdiagnose - auch wenn status nicht 'active' ist, solange isPrimary true ist
+                const diagnoses = event.patientId ? patientDiagnoses.filter((d: PatientDiagnosis) => d.patientId === event.patientId) : [];
+                // Suche zuerst nach aktiver Hauptdiagnose, dann nach jeder Hauptdiagnose
+                let primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary && d.status === 'active');
+                if (!primaryDiagnosis) {
+                  primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary);
+                }
+                
+                // Prüfe Allergien
+                const hasAllergies = event.patientObj && event.patientObj.allergies && Array.isArray(event.patientObj.allergies) && event.patientObj.allergies.length > 0;
+                
+                // Erweitere Tooltip mit Allergien und Hauptdiagnose
+                let tooltipText = `${event.title}\n${format(event.start, 'HH:mm')} - ${format(event.end, 'HH:mm')}\nPersonal: ${event.staffName || 'Unbekannt'}${event.roomName ? `\nRaum: ${event.roomName}` : ''}\nStatus: ${event.status}`;
+                if (hasAllergies) {
+                  tooltipText += '\n⚠️ Allergien vorhanden';
+                }
+                if (primaryDiagnosis) {
+                  tooltipText += `\n✓ Hauptdiagnose: ${primaryDiagnosis.display || primaryDiagnosis.code}`;
+                }
+                
                 return (
-                  <span
+                  <Box
                     key={event.id}
                     onMouseEnter={(e) => {
                       setTooltip({ text: tooltipText, x: e.clientX, y: e.clientY });
@@ -1472,16 +1569,13 @@ const EnhancedCalendar: React.FC = () => {
                       e.stopPropagation();
                       handleOpenEditEventDialog(event);
                     }}
-                    style={{
+                    sx={{
                       backgroundColor: event.staffColor,
                       color: 'white',
                       borderRadius: '2px',
                       fontSize: '0.7rem',
                       padding: '2px 4px',
                       marginBottom: '2px',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
                       cursor: 'pointer',
                       display: 'block',
                       width: '100%',
@@ -1489,8 +1583,28 @@ const EnhancedCalendar: React.FC = () => {
                       zIndex: 1,
                     }}
                   >
-                    {`${format(event.start, 'HH:mm')} ${event.title}`}
-                  </span>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: hasAllergies || primaryDiagnosis ? 0.25 : 0 }}>
+                      <Typography variant="caption" sx={{ fontSize: '0.7rem', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                        {format(event.start, 'HH:mm')} {event.title}
+                      </Typography>
+                    </Box>
+                    {(hasAllergies || primaryDiagnosis) && (
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, fontSize: '0.6rem' }}>
+                        {hasAllergies && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Warning sx={{ fontSize: '0.65rem' }} />
+                            <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>Allergien</Typography>
+                          </Box>
+                        )}
+                        {primaryDiagnosis && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <CheckCircle sx={{ fontSize: '0.65rem' }} />
+                            <Typography variant="caption" sx={{ fontSize: '0.6rem' }}>{primaryDiagnosis.display || primaryDiagnosis.code}</Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
                 );
               })}
             </Box>

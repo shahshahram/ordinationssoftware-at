@@ -20,6 +20,7 @@ import dekursReducer from './slices/dekursSlice';
 import dashboardWidgetsReducer from './slices/dashboardWidgetsSlice';
 import internalMessagesReducer from './slices/internalMessagesSlice';
 import tasksReducer from './slices/tasksSlice';
+import vitalSignsReducer from './slices/vitalSignsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -44,6 +45,7 @@ export const store = configureStore({
     dashboardWidgets: dashboardWidgetsReducer,
     internalMessages: internalMessagesReducer,
     tasks: tasksReducer,
+    vitalSigns: vitalSignsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

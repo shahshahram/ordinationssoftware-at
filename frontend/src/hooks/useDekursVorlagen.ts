@@ -1,6 +1,23 @@
 import { useState, useCallback } from 'react';
 import api from '../utils/api';
 
+export interface LinkedMedication {
+  medicationId?: string;
+  name: string;
+  dosage?: string;
+  dosageUnit?: string;
+  frequency?: string;
+  duration?: string;
+  instructions?: string;
+  startDate?: string | Date;
+  endDate?: string | Date;
+  quantity?: number;
+  quantityUnit?: string;
+  route?: 'oral' | 'topical' | 'injection' | 'inhalation' | 'rectal' | 'vaginal' | 'sublingual' | 'intravenous' | 'intramuscular' | 'subcutaneous' | 'other';
+  changeType?: 'added' | 'modified' | 'discontinued' | 'unchanged';
+  notes?: string;
+}
+
 export interface DekursVorlage {
   _id: string;
   code: string;
@@ -22,6 +39,7 @@ export interface DekursVorlage {
     imagingFindings?: string;
     laboratoryFindings?: string;
   };
+  linkedMedications?: LinkedMedication[];
   elga_structured?: any;
   isActive: boolean;
   isDefault: boolean;
@@ -98,6 +116,49 @@ export const useDekursVorlagen = () => {
         .replace(/\{\{doctorName\}\}/g, doctorName || '');
     };
 
+    // Medikamente aus Vorlage übernehmen
+    const linkedMedications = (template.linkedMedications || []).map((med: any) => {
+      let startDate: Date | undefined = undefined;
+      let endDate: Date | undefined = undefined;
+      
+      if (med.startDate) {
+        if (typeof med.startDate === 'string') {
+          startDate = new Date(med.startDate);
+        } else if (med.startDate instanceof Date) {
+          startDate = med.startDate;
+        } else if (med.startDate.toISOString) {
+          startDate = new Date(med.startDate.toISOString());
+        }
+      }
+      
+      if (med.endDate) {
+        if (typeof med.endDate === 'string') {
+          endDate = new Date(med.endDate);
+        } else if (med.endDate instanceof Date) {
+          endDate = med.endDate;
+        } else if (med.endDate.toISOString) {
+          endDate = new Date(med.endDate.toISOString());
+        }
+      }
+      
+      return {
+        medicationId: med.medicationId ? (typeof med.medicationId === 'string' ? med.medicationId : med.medicationId.toString()) : undefined,
+        name: med.name || '',
+        dosage: med.dosage || '',
+        dosageUnit: med.dosageUnit || '',
+        frequency: med.frequency || '',
+        duration: med.duration || '',
+        instructions: med.instructions || '',
+        startDate: startDate,
+        endDate: endDate,
+        quantity: med.quantity !== undefined && med.quantity !== null ? med.quantity : undefined,
+        quantityUnit: med.quantityUnit || '',
+        route: med.route || 'oral',
+        changeType: med.changeType || 'added',
+        notes: med.notes || ''
+      };
+    });
+
     return {
       visitReason: replacePlaceholders(templateData.visitReason),
       clinicalObservations: replacePlaceholders(templateData.clinicalObservations),
@@ -109,6 +170,7 @@ export const useDekursVorlagen = () => {
       medicationChanges: replacePlaceholders(templateData.medicationChanges),
       imagingFindings: replacePlaceholders(templateData.imagingFindings),
       laboratoryFindings: replacePlaceholders(templateData.laboratoryFindings),
+      linkedMedications: linkedMedications,
       templateId: template._id,
       templateName: template.title,
       templateUsed: {

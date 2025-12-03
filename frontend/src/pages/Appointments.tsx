@@ -58,6 +58,7 @@ import {
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment } from '../store/slices/appointmentSlice';
+import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import api from '../utils/api';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import DiagnosisManager from '../components/DiagnosisManager';
@@ -313,6 +314,8 @@ const Appointments: React.FC = () => {
   const { currentLocation } = useAppSelector((state) => state.locations);
   const [selectedStaff, setSelectedStaff] = useState<string>('');
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<{ el: HTMLElement | null, appointmentId: string | null }>({ el: null, appointmentId: null });
+  const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
+  const [patientDiagnosesMap, setPatientDiagnosesMap] = useState<Map<string, PatientDiagnosis[]>>(new Map());
   const [formData, setFormData] = useState<Partial<Appointment>>({
     patientId: '',
     patientName: '',
@@ -812,8 +815,29 @@ const Appointments: React.FC = () => {
         patientId: patientSearchValue._id,
         patient: patientSearchValue
       }));
+      
+      // Lade Diagnosen des Patienten
+      dispatch(fetchPatientDiagnoses({ 
+        patientId: patientSearchValue._id, 
+        status: 'active' 
+      }));
     }
-  }, [patientSearchValue]);
+  }, [patientSearchValue, dispatch]);
+
+  // Lade Diagnosen auch wenn formData.patient direkt gesetzt wird (z.B. beim Öffnen eines bestehenden Termins)
+  useEffect(() => {
+    const patientId = formData.patient?._id || (typeof formData.patient === 'object' && formData.patient?._id) 
+      ? formData.patient._id 
+      : null;
+    
+    if (patientId && patientId !== patientSearchValue?._id) {
+      console.log('🔄 Loading diagnoses for patient from formData:', patientId);
+      dispatch(fetchPatientDiagnoses({ 
+        patientId: patientId, 
+        status: 'active' 
+      }));
+    }
+  }, [formData.patient, dispatch, patientSearchValue]);
 
   // Debug: Log activeTab whenever it changes
   useEffect(() => {
@@ -1423,6 +1447,42 @@ const Appointments: React.FC = () => {
   // Use appointments from Redux store instead of local state
   const { appointments: reduxAppointments } = useAppSelector((state) => state.appointments);
   
+  // Lade Diagnosen für alle Patienten in den Terminen
+  useEffect(() => {
+    if (reduxAppointments && reduxAppointments.length > 0) {
+      const patientIds = new Set<string>();
+      reduxAppointments.forEach((apt: any) => {
+        if (apt.patient && typeof apt.patient === 'object' && apt.patient._id) {
+          patientIds.add(apt.patient._id);
+        } else if (apt.patient && typeof apt.patient === 'string') {
+          patientIds.add(apt.patient);
+        }
+      });
+      
+      // Lade Diagnosen für alle eindeutigen Patienten
+      patientIds.forEach(patientId => {
+        dispatch(fetchPatientDiagnoses({ 
+          patientId, 
+          status: 'active'
+        }));
+      });
+    }
+  }, [reduxAppointments, dispatch]);
+  
+  // Erstelle eine Map von Patient-ID zu Diagnosen
+  useEffect(() => {
+    if (patientDiagnoses && patientDiagnoses.length > 0) {
+      const newMap = new Map<string, PatientDiagnosis[]>();
+      patientDiagnoses.forEach((diag: PatientDiagnosis) => {
+        if (!newMap.has(diag.patientId)) {
+          newMap.set(diag.patientId, []);
+        }
+        newMap.get(diag.patientId)!.push(diag);
+      });
+      setPatientDiagnosesMap(newMap);
+    }
+  }, [patientDiagnoses]);
+  
   // Convert Redux appointments to local format for compatibility - only when Redux data changes
   useEffect(() => {
     if (reduxAppointments && reduxAppointments.length > 0) {
@@ -1978,6 +2038,24 @@ const Appointments: React.FC = () => {
                                   color="info"
                                 />
                               );
+                            }
+                            
+                            // Hauptdiagnose anzeigen
+                            if (patient._id) {
+                              const diagnoses = patientDiagnosesMap.get(patient._id) || [];
+                              const primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary && d.status === 'active');
+                              if (primaryDiagnosis) {
+                                medicalChips.push(
+                                  <Chip
+                                    key="primary-diagnosis"
+                                    label={`🏥 Hauptdiagnose: ${primaryDiagnosis.code} - ${primaryDiagnosis.display}`}
+                                    size="small"
+                                    variant="filled"
+                                    color="primary"
+                                    sx={{ fontWeight: 'bold' }}
+                                  />
+                                );
+                              }
                             }
                             
                             // Impfstatus prüfen
@@ -2846,6 +2924,95 @@ const Appointments: React.FC = () => {
                         disabled={true}
                         fullWidth
                       />
+                    </Box>
+                  )}
+                  
+                  {/* Allergien anzeigen */}
+                  {formData.patient.allergies && formData.patient.allergies.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', color: 'error.main' }}>
+                        <Warning sx={{ fontSize: 18, verticalAlign: 'middle', mr: 0.5 }} />
+                        Allergien
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {formData.patient.allergies.map((allergy, index) => {
+                          const allergyText = typeof allergy === 'string' 
+                            ? allergy 
+                            : allergy.description || allergy.type || 'Unbekannte Allergie';
+                          const severity = typeof allergy === 'object' ? allergy.severity : undefined;
+                          const getSeverityColor = (sev?: string) => {
+                            switch (sev) {
+                              case 'severe': case 'critical': return 'error';
+                              case 'moderate': return 'warning';
+                              default: return 'default';
+                            }
+                          };
+                          return (
+                            <Chip
+                              key={index}
+                              label={allergyText}
+                              color={getSeverityColor(severity) as any}
+                              size="small"
+                              icon={<Warning />}
+                              sx={{ fontWeight: 'bold' }}
+                            />
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  )}
+                  
+                  {/* Aktive Diagnosen anzeigen */}
+                  {patientDiagnoses && patientDiagnoses.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', color: 'primary.main' }}>
+                        <LocalHospital sx={{ fontSize: 18, verticalAlign: 'middle', mr: 0.5 }} />
+                        Aktive Diagnosen
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {patientDiagnoses
+                          .filter((diag: PatientDiagnosis) => diag.status === 'active')
+                          .slice(0, 5) // Zeige maximal 5 Diagnosen
+                          .map((diag: PatientDiagnosis) => (
+                            <Paper 
+                              key={diag._id} 
+                              elevation={1} 
+                              sx={{ 
+                                p: 1.5, 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'center',
+                                bgcolor: diag.isPrimary ? 'primary.50' : 'background.paper',
+                                borderLeft: diag.isPrimary ? '3px solid' : '1px solid',
+                                borderColor: diag.isPrimary ? 'primary.main' : 'divider'
+                              }}
+                            >
+                              <Box>
+                                <Typography variant="body2" fontWeight="bold">
+                                  {diag.code} - {diag.display}
+                                </Typography>
+                                {diag.notes && (
+                                  <Typography variant="caption" color="text.secondary">
+                                    {diag.notes}
+                                  </Typography>
+                                )}
+                              </Box>
+                              {diag.isPrimary && (
+                                <Chip
+                                  label="Hauptdiagnose"
+                                  size="small"
+                                  color="primary"
+                                  icon={<CheckCircle />}
+                                />
+                              )}
+                            </Paper>
+                          ))}
+                        {patientDiagnoses.filter((diag: PatientDiagnosis) => diag.status === 'active').length > 5 && (
+                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                            ... und {patientDiagnoses.filter((diag: PatientDiagnosis) => diag.status === 'active').length - 5} weitere
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                   )}
                 </Box>

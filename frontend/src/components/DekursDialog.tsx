@@ -44,7 +44,8 @@ import {
   Print,
   Edit,
   Star,
-  StarBorder
+  StarBorder,
+  MonitorHeart
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -64,7 +65,11 @@ import MedicationAutocomplete from './MedicationAutocomplete';
 import DekursVorlagenAutocomplete from './DekursVorlagenAutocomplete';
 import DicomRadiologieSelector from './DicomRadiologieSelector';
 import LaborWerteSelector from './LaborWerteSelector';
+import VitalSignsSelector from './VitalSignsSelector';
 import { useDekursVorlagen } from '../hooks/useDekursVorlagen';
+import { VitalSigns } from '../store/slices/vitalSignsSlice';
+import { format } from 'date-fns';
+import { de } from 'date-fns/locale';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -146,6 +151,23 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageName, setSelectedImageName] = useState<string>('');
   const [vorlagenDialogOpen, setVorlagenDialogOpen] = useState(false);
+  const [medicationDialogOpen, setMedicationDialogOpen] = useState(false);
+  const [editingMedicationIndex, setEditingMedicationIndex] = useState<number | null>(null);
+  const [selectedMedication, setSelectedMedication] = useState<any>(null);
+  const [medicationFormData, setMedicationFormData] = useState({
+    dosage: '',
+    dosageUnit: '',
+    frequency: '',
+    duration: '',
+    instructions: '',
+    startDate: '',
+    endDate: '',
+    quantity: '',
+    quantityUnit: '',
+    route: 'oral' as 'oral' | 'topical' | 'injection' | 'inhalation' | 'rectal' | 'vaginal' | 'other',
+    changeType: 'added' as 'added' | 'modified' | 'discontinued' | 'unchanged',
+    notes: ''
+  });
   const [dicomSelectorOpen, setDicomSelectorOpen] = useState(false);
   const [laborSelectorOpen, setLaborSelectorOpen] = useState(false);
   const [diagnosisEditDialogOpen, setDiagnosisEditDialogOpen] = useState(false);
@@ -218,7 +240,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
         setPendingPhotoPreviews([]);
       } else {
         // Wenn currentEntry vorhanden ist, lade die Daten
-        // Bereinige linkedMedications: Stelle sicher, dass medicationId eine String-ID ist
+        // Bereinige linkedMedications: Stelle sicher, dass medicationId eine String-ID ist und alle Felder erhalten bleiben
         const cleanedLinkedMedications = (currentEntry.linkedMedications || []).map((med: any) => {
           let medicationId: string | undefined = undefined;
           if (med.medicationId) {
@@ -233,9 +255,22 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
               medicationId = med.medicationId.toString();
             }
           }
+          // Stelle sicher, dass alle Felder explizit übernommen werden
           return {
-            ...med,
-            medicationId: medicationId
+            medicationId: medicationId,
+            name: med.name || '',
+            dosage: med.dosage,
+            dosageUnit: med.dosageUnit,
+            frequency: med.frequency,
+            duration: med.duration,
+            instructions: med.instructions,
+            startDate: med.startDate,
+            endDate: med.endDate,
+            quantity: med.quantity,
+            quantityUnit: med.quantityUnit,
+            route: med.route,
+            changeType: med.changeType || 'added',
+            notes: med.notes
           };
         });
         
@@ -253,6 +288,55 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleVitalSignsSelect = (vitalSigns: VitalSigns) => {
+    // Formatiere Vitalwerte als Text
+    const vitalTextParts: string[] = [];
+    
+    if (vitalSigns.bloodPressure?.systolic && vitalSigns.bloodPressure?.diastolic) {
+      vitalTextParts.push(`Blutdruck: ${vitalSigns.bloodPressure.systolic}/${vitalSigns.bloodPressure.diastolic} mmHg`);
+    }
+    if (vitalSigns.pulse) {
+      vitalTextParts.push(`Puls: ${vitalSigns.pulse} bpm`);
+    }
+    if (vitalSigns.respiratoryRate) {
+      vitalTextParts.push(`Atemfrequenz: ${vitalSigns.respiratoryRate} /min`);
+    }
+    if (vitalSigns.temperature?.value) {
+      const unit = vitalSigns.temperature.unit === 'celsius' ? '°C' : '°F';
+      vitalTextParts.push(`Temperatur: ${vitalSigns.temperature.value} ${unit}`);
+    }
+    if (vitalSigns.oxygenSaturation) {
+      vitalTextParts.push(`SpO2: ${vitalSigns.oxygenSaturation}%`);
+    }
+    if (vitalSigns.bloodGlucose?.value) {
+      vitalTextParts.push(`Blutzucker: ${vitalSigns.bloodGlucose.value} ${vitalSigns.bloodGlucose.unit}`);
+    }
+    if (vitalSigns.weight?.value) {
+      vitalTextParts.push(`Gewicht: ${vitalSigns.weight.value} ${vitalSigns.weight.unit}`);
+    }
+    if (vitalSigns.height?.value) {
+      vitalTextParts.push(`Größe: ${vitalSigns.height.value} ${vitalSigns.height.unit}`);
+    }
+    if (vitalSigns.bmi) {
+      vitalTextParts.push(`BMI: ${vitalSigns.bmi}`);
+    }
+    if (vitalSigns.painScale?.value !== undefined && vitalSigns.painScale?.value !== null && vitalSigns.painScale?.value !== '') {
+      vitalTextParts.push(`Schmerz (${vitalSigns.painScale.type}): ${vitalSigns.painScale.value}`);
+    }
+
+    const vitalText = vitalTextParts.length > 0 
+      ? `Vitalwerte (${vitalSigns.recordedAt ? format(new Date(vitalSigns.recordedAt), 'dd.MM.yyyy HH:mm', { locale: de }) : 'unbekannt'}):\n${vitalTextParts.join(', ')}`
+      : '';
+
+    // Füge Vitalwerte zu den klinischen Beobachtungen hinzu
+    const currentObservations = formData.clinicalObservations || '';
+    const newObservations = currentObservations 
+      ? `${currentObservations}\n\n${vitalText}`
+      : vitalText;
+    
+    handleFieldChange('clinicalObservations', newObservations);
+  };
+
   const handleVorlageSelect = async (vorlage: any) => {
     console.log('🔍 DekursDialog: Vorlage ausgewählt:', vorlage);
     
@@ -266,7 +350,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
       if (loadedVorlage) {
         fullVorlage = loadedVorlage;
         console.log('🔍 DekursDialog: Vollständige Vorlage geladen:', fullVorlage);
-      } else {
+              } else {
         console.error('🔍 DekursDialog: Fehler beim Laden der vollständigen Vorlage');
         setError('Fehler beim Laden der Vorlage');
         return;
@@ -280,10 +364,12 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     
     console.log('🔍 DekursDialog: Patient-Info:', { patientName, patientAge });
     console.log('🔍 DekursDialog: Vorlage template:', fullVorlage.template);
+    console.log('🔍 DekursDialog: Vorlage linkedMedications:', fullVorlage.linkedMedications);
     
     const templateData = insertTemplate(fullVorlage, patientName, patientAge);
     
     console.log('🔍 DekursDialog: Template-Daten nach insertTemplate:', templateData);
+    console.log('🔍 DekursDialog: Template-Daten linkedMedications:', templateData.linkedMedications);
     
     setFormData((prev) => {
       // Prüfe, ob bereits eine Diagnose mit diesem ICD-10 Code existiert
@@ -310,14 +396,43 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
         console.log('🔍 DekursDialog: ICD-10 Diagnose automatisch hinzugefügt:', newDiagnosis);
       }
       
+      // Medikamente aus Vorlage übernehmen (falls vorhanden)
+      const existingMedicationNames = new Set((prev.linkedMedications || []).map((m: any) => m.name));
+      let newLinkedMedications = [...(prev.linkedMedications || [])];
+      
+      console.log('🔍 DekursDialog: Vorhandene Medikamente:', Array.from(existingMedicationNames));
+      console.log('🔍 DekursDialog: Medikamente aus templateData:', templateData.linkedMedications);
+      
+      if (templateData.linkedMedications && Array.isArray(templateData.linkedMedications) && templateData.linkedMedications.length > 0) {
+        templateData.linkedMedications.forEach((med: any) => {
+          // Nur hinzufügen, wenn nicht bereits vorhanden
+          if (med.name && !existingMedicationNames.has(med.name)) {
+            console.log('🔍 DekursDialog: Füge Medikament hinzu:', med.name);
+            newLinkedMedications.push(med);
+          } else {
+            console.log('🔍 DekursDialog: Medikament bereits vorhanden oder ohne Name:', med.name);
+          }
+        });
+      } else {
+        console.log('🔍 DekursDialog: Keine Medikamente in templateData gefunden');
+      }
+      
+      console.log('🔍 DekursDialog: Finale linkedMedications:', newLinkedMedications);
+      
+      // Entferne linkedMedications aus templateData, da wir sie separat verarbeiten
+      const { linkedMedications: _, ...templateDataWithoutMedications } = templateData;
+      
       const newFormData = {
         ...prev,
-        ...templateData,
+        ...templateDataWithoutMedications,
         templateId: fullVorlage._id,
         templateName: fullVorlage.title,
-        linkedDiagnoses: newLinkedDiagnoses
+        linkedDiagnoses: newLinkedDiagnoses,
+        linkedMedications: newLinkedMedications
       };
       console.log('🔍 DekursDialog: Neues FormData:', newFormData);
+      console.log('🔍 DekursDialog: Medikamente aus Vorlage:', templateData.linkedMedications);
+      console.log('🔍 DekursDialog: Neue linkedMedications:', newLinkedMedications);
       return newFormData;
     });
     setSelectedVorlage(fullVorlage);
@@ -474,17 +589,154 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
       }
     }
     
-    const newMedication = {
-      medicationId: medicationId,
-      name: medication.name || medication.Name || medication.medicationName || '',
-      dosage: medication.dosage || '',
+    // Öffne den erweiterten Dialog für Medikamentenverordnung
+    setSelectedMedication(medication);
+    setEditingMedicationIndex(null);
+    setMedicationFormData({
+      dosage: medication.dosage || medication.strength || '',
+      dosageUnit: medication.strengthUnit || '',
       frequency: medication.frequency || '',
-      changeType: 'added' as const
+      duration: '',
+      instructions: '',
+      startDate: '',
+      endDate: '',
+      quantity: '',
+      quantityUnit: '',
+      route: 'oral',
+      changeType: 'added',
+      notes: ''
+    });
+    setMedicationDialogOpen(true);
+  };
+
+  const handleEditMedication = (index: number) => {
+    const med = formData.linkedMedications?.[index];
+    if (!med) return;
+    
+    setEditingMedicationIndex(index);
+    // Behalte das ursprüngliche Medikament-Objekt für medicationId
+    setSelectedMedication(med);
+    setMedicationFormData({
+      dosage: med.dosage || '',
+      dosageUnit: med.dosageUnit || '',
+      frequency: med.frequency || '',
+      duration: med.duration || '',
+      instructions: med.instructions || '',
+      startDate: med.startDate ? (typeof med.startDate === 'string' ? med.startDate.split('T')[0] : new Date(med.startDate).toISOString().split('T')[0]) : '',
+      endDate: med.endDate ? (typeof med.endDate === 'string' ? med.endDate.split('T')[0] : new Date(med.endDate).toISOString().split('T')[0]) : '',
+      quantity: med.quantity?.toString() || '',
+      quantityUnit: med.quantityUnit || '',
+      route: (med.route as any) || 'oral',
+      changeType: med.changeType || 'added',
+      notes: med.notes || ''
+    });
+    setMedicationDialogOpen(true);
+  };
+
+  const handleSaveMedication = () => {
+    if (!selectedMedication) return;
+    
+    let medicationId: string | undefined = undefined;
+    let medicationName: string = '';
+    
+    if (editingMedicationIndex !== null) {
+      // Beim Bearbeiten: Verwende die Daten aus dem ursprünglichen Medikament
+      const originalMed = formData.linkedMedications?.[editingMedicationIndex];
+      if (originalMed) {
+        medicationId = originalMed.medicationId;
+        medicationName = originalMed.name;
+      }
+    } else {
+      // Beim Hinzufügen: Extrahiere medicationId aus dem neuen Medikament
+      if (selectedMedication._id) {
+        medicationId = typeof selectedMedication._id === 'string' ? selectedMedication._id : selectedMedication._id.toString();
+      } else if (selectedMedication.id) {
+        medicationId = typeof selectedMedication.id === 'string' ? selectedMedication.id : selectedMedication.id.toString();
+      } else if (selectedMedication.medicationId) {
+        if (typeof selectedMedication.medicationId === 'object' && selectedMedication.medicationId._id) {
+          medicationId = typeof selectedMedication.medicationId._id === 'string' 
+            ? selectedMedication.medicationId._id 
+            : selectedMedication.medicationId._id.toString();
+        } else if (typeof selectedMedication.medicationId === 'string') {
+          medicationId = selectedMedication.medicationId;
+        } else {
+          medicationId = selectedMedication.medicationId.toString();
+        }
+      }
+      medicationName = selectedMedication.name || selectedMedication.Name || selectedMedication.medicationName || '';
+    }
+    
+    // Erstelle Medikament-Objekt mit allen Feldern - alle Felder werden explizit gesetzt
+    // Verwende leere Strings statt undefined, damit die Felder beim Speichern erhalten bleiben
+    const newMedication: any = {
+      medicationId: medicationId,
+      name: medicationName || selectedMedication.name || selectedMedication.Name || selectedMedication.medicationName || '',
+      changeType: medicationFormData.changeType || 'added',
+      dosage: medicationFormData.dosage?.trim() || '',
+      dosageUnit: medicationFormData.dosageUnit?.trim() || '',
+      frequency: medicationFormData.frequency?.trim() || '',
+      duration: medicationFormData.duration?.trim() || '',
+      instructions: medicationFormData.instructions?.trim() || '',
+      quantityUnit: medicationFormData.quantityUnit?.trim() || '',
+      route: medicationFormData.route || 'oral',
+      notes: medicationFormData.notes?.trim() || ''
     };
+    
+    // Datum-Felder (nur wenn gesetzt)
+    if (medicationFormData.startDate && medicationFormData.startDate.trim() !== '') {
+      newMedication.startDate = new Date(medicationFormData.startDate);
+    }
+    if (medicationFormData.endDate && medicationFormData.endDate.trim() !== '') {
+      newMedication.endDate = new Date(medicationFormData.endDate);
+    }
+    
+    // Quantity als Zahl (nur wenn gesetzt)
+    if (medicationFormData.quantity && medicationFormData.quantity.trim() !== '') {
+      const qty = parseFloat(medicationFormData.quantity);
+      if (!isNaN(qty)) {
+        newMedication.quantity = qty;
+      }
+    }
+    
+    if (editingMedicationIndex !== null) {
+      // Bearbeiten
+      setFormData((prev) => {
+        const updated = [...(prev.linkedMedications || [])];
+        updated[editingMedicationIndex] = newMedication;
+        return {
+          ...prev,
+          linkedMedications: updated
+        };
+      });
+    } else {
+      // Neu hinzufügen
     setFormData((prev) => ({
       ...prev,
       linkedMedications: [...(prev.linkedMedications || []), newMedication]
     }));
+    }
+    
+    handleCloseMedicationDialog();
+  };
+
+  const handleCloseMedicationDialog = () => {
+    setMedicationDialogOpen(false);
+    setEditingMedicationIndex(null);
+    setSelectedMedication(null);
+    setMedicationFormData({
+      dosage: '',
+      dosageUnit: '',
+      frequency: '',
+      duration: '',
+      instructions: '',
+      startDate: '',
+      endDate: '',
+      quantity: '',
+      quantityUnit: '',
+      route: 'oral',
+      changeType: 'added',
+      notes: ''
+    });
   };
 
   const handleRemoveMedication = (index: number) => {
@@ -573,7 +825,8 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     setError(null);
 
     try {
-      // Bereinige linkedMedications vor dem Speichern: Stelle sicher, dass medicationId eine String-ID ist
+      // Bereinige linkedMedications vor dem Speichern: Stelle sicher, dass medicationId eine String-ID ist und alle Felder erhalten bleiben
+      console.log('🔍 Frontend - formData.linkedMedications vor Bereinigung:', JSON.stringify(formData.linkedMedications, null, 2));
       const cleanedFormData = {
         ...formData,
         linkedMedications: (formData.linkedMedications || []).map((med: any) => {
@@ -590,12 +843,40 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
               medicationId = med.medicationId.toString();
             }
           }
-          return {
-            ...med,
-            medicationId: medicationId
+          
+          // Stelle sicher, dass alle Felder explizit gesetzt werden und erhalten bleiben
+          // Verwende leere Strings statt undefined, damit die Felder beim Speichern erhalten bleiben
+          const cleanedMed: any = {
+            medicationId: medicationId,
+            name: med.name || '',
+            changeType: med.changeType || 'added',
+            dosage: med.dosage || '',
+            dosageUnit: med.dosageUnit || '',
+            frequency: med.frequency || '',
+            duration: med.duration || '',
+            instructions: med.instructions || '',
+            quantityUnit: med.quantityUnit || '',
+            route: med.route || 'oral',
+            notes: med.notes || ''
           };
+          
+          // Datum-Felder (nur wenn gesetzt)
+          if (med.startDate !== undefined && med.startDate !== null) {
+            cleanedMed.startDate = typeof med.startDate === 'string' ? med.startDate : med.startDate.toISOString();
+          }
+          if (med.endDate !== undefined && med.endDate !== null) {
+            cleanedMed.endDate = typeof med.endDate === 'string' ? med.endDate : med.endDate.toISOString();
+          }
+          
+          // Quantity als Zahl (nur wenn gesetzt)
+          if (med.quantity !== undefined && med.quantity !== null) {
+            cleanedMed.quantity = med.quantity;
+          }
+          
+          return cleanedMed;
         })
       };
+      console.log('🔍 Frontend - cleanedFormData.linkedMedications nach Bereinigung:', JSON.stringify(cleanedFormData.linkedMedications, null, 2));
       
       let savedEntry: DekursEntry;
 
@@ -645,7 +926,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
       }
 
       // Schließe Dialog nach erfolgreichem Speichern (sowohl Entwurf als auch finalisiert)
-      onClose();
+        onClose();
     } catch (err: any) {
       setError(err.message || 'Fehler beim Speichern');
     } finally {
@@ -840,12 +1121,56 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
           ${entry.linkedMedications && entry.linkedMedications.length > 0 ? `
           <div class="info-section">
             <h2>Verknüpfte Medikamente</h2>
-            ${entry.linkedMedications.map((med: any) => `
-              <div style="margin-bottom: 10px;">
+            ${entry.linkedMedications.map((med: any) => {
+              const parts: string[] = [];
+              if (med.dosage) {
+                parts.push(`${med.dosage}${med.dosageUnit ? ` ${med.dosageUnit}` : ''}`);
+              }
+              if (med.frequency) {
+                parts.push(med.frequency);
+              }
+              if (med.duration) {
+                parts.push(`Dauer: ${med.duration}`);
+              }
+              if (med.route && med.route !== 'oral') {
+                const routeText = med.route === 'topical' ? 'topisch' : 
+                                  med.route === 'injection' ? 'Injektion' : 
+                                  med.route === 'inhalation' ? 'Inhalation' : 
+                                  med.route === 'rectal' ? 'rektal' : 
+                                  med.route === 'vaginal' ? 'vaginal' : 'sonstig';
+                parts.push(`Applikationsweg: ${routeText}`);
+              }
+              if (med.quantity && med.quantityUnit) {
+                parts.push(`Menge: ${med.quantity} ${med.quantityUnit}`);
+              }
+              if (med.startDate) {
+                const startDate = typeof med.startDate === 'string' ? new Date(med.startDate) : med.startDate;
+                parts.push(`Startdatum: ${startDate.toLocaleDateString('de-DE')}`);
+              }
+              if (med.endDate) {
+                const endDate = typeof med.endDate === 'string' ? new Date(med.endDate) : med.endDate;
+                parts.push(`Enddatum: ${endDate.toLocaleDateString('de-DE')}`);
+              }
+              if (med.instructions) {
+                parts.push(`Einnahmehinweise: ${med.instructions}`);
+              }
+              if (med.notes) {
+                parts.push(`Notizen: ${med.notes}`);
+              }
+              if (med.changeType && med.changeType !== 'added') {
+                const changeTypeText = med.changeType === 'modified' ? 'Geändert' : 
+                                      med.changeType === 'discontinued' ? 'Abgesetzt' : 
+                                      med.changeType === 'unchanged' ? 'Unverändert' : med.changeType;
+                parts.push(`Status: ${changeTypeText}`);
+              }
+              
+              return `
+              <div style="margin-bottom: 15px; padding: 8px; border-left: 3px solid #1976d2;">
                 <strong>${med.name}</strong>
-                ${med.dosage || med.frequency ? ` - ${med.dosage || ''} ${med.frequency || ''}` : ''}
+                ${parts.length > 0 ? `<div style="margin-top: 5px; font-size: 0.9em; color: #666;">${parts.join(' • ')}</div>` : ''}
               </div>
-            `).join('')}
+            `;
+            }).join('')}
           </div>
           ` : ''}
 
@@ -953,7 +1278,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
 
         {/* Vorlagen-Auswahl */}
         {!initialEntry && (
-          <Box sx={{ mb: 3 }}>
+        <Box sx={{ mb: 3 }}>
             <Button
               variant="outlined"
               onClick={() => setVorlagenDialogOpen(true)}
@@ -963,7 +1288,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
             >
               Vorlage einfügen
             </Button>
-          </Box>
+        </Box>
         )}
 
         {/* Basis-Informationen */}
@@ -1006,23 +1331,24 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
           <Tab label="Allgemein" icon={<LocalHospital />} iconPosition="start" />
           <Tab label="Medikamente" icon={<Medication />} iconPosition="start" />
           <Tab label="Diagnosen" icon={<CheckCircle />} iconPosition="start" />
+          <Tab label="Vitalwerte" icon={<MonitorHeart />} iconPosition="start" />
           <Tab label="Fotos" icon={<PhotoCamera />} iconPosition="start" />
         </Tabs>
 
         <TabPanel value={activeTab} index={0}>
           <Stack spacing={2}>
-            <TextField
-              fullWidth
+          <TextField
+            fullWidth
               label="Anamnese"
-              value={formData.clinicalObservations || ''}
-              onChange={(e) => handleFieldChange('clinicalObservations', e.target.value)}
-              multiline
+            value={formData.clinicalObservations || ''}
+            onChange={(e) => handleFieldChange('clinicalObservations', e.target.value)}
+            multiline
               rows={4}
-              disabled={isFinalized}
+            disabled={isFinalized}
               placeholder="Beschreiben Sie die Anamnese..."
-            />
-            <TextField
-              fullWidth
+          />
+          <TextField
+            fullWidth
               label="Status/Befund"
               value={formData.findings || ''}
               onChange={(e) => handleFieldChange('findings', e.target.value)}
@@ -1034,13 +1360,13 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
             <TextField
               fullWidth
               label="Beurteilung"
-              value={formData.progressChecks || ''}
-              onChange={(e) => handleFieldChange('progressChecks', e.target.value)}
-              multiline
+            value={formData.progressChecks || ''}
+            onChange={(e) => handleFieldChange('progressChecks', e.target.value)}
+            multiline
               rows={4}
-              disabled={isFinalized}
+            disabled={isFinalized}
               placeholder="Beschreiben Sie die Beurteilung..."
-            />
+          />
             <TextField
               fullWidth
               label="Therapie"
@@ -1077,7 +1403,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
               <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                 <Button
                   variant="outlined"
-                  size="small"
+                          size="small"
                   onClick={() => setDicomSelectorOpen(true)}
                   disabled={isFinalized}
                 >
@@ -1094,14 +1420,14 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
                 disabled={isFinalized}
                 placeholder="Bildgebende Befunde (wird automatisch befüllt wenn DICOM-Studien ausgewählt werden)..."
               />
-            </Box>
+                    </Box>
             <Divider />
             <Box>
               <Typography variant="subtitle2" sx={{ mb: 1 }}>Laborbefunde</Typography>
               <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                 <Button
                   variant="outlined"
-                  size="small"
+                        size="small"
                   onClick={() => setLaborSelectorOpen(true)}
                   disabled={isFinalized}
                 >
@@ -1147,16 +1473,57 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
             {formData.linkedMedications && formData.linkedMedications.length > 0 && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 {formData.linkedMedications.map((med, index) => (
-                  <Paper key={index} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Box>
+                  <Paper key={index} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Box sx={{ flex: 1 }}>
                       <Typography variant="body2" fontWeight="bold">{med.name}</Typography>
-                      {(med.dosage || med.frequency) && (
-                        <Typography variant="caption" color="text.secondary">
-                          {med.dosage} {med.frequency && `• ${med.frequency}`}
+                      <Box sx={{ mt: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          {med.dosage && med.dosageUnit ? `${med.dosage} ${med.dosageUnit}` : med.dosage ? med.dosage : ''}
+                          {med.frequency && ` • ${med.frequency}`}
+                          {med.duration && ` • Dauer: ${med.duration}`}
+                          {med.route && med.route !== 'oral' && ` • ${med.route === 'topical' ? 'topisch' : med.route === 'injection' ? 'Injektion' : med.route === 'inhalation' ? 'Inhalation' : med.route === 'rectal' ? 'rektal' : med.route === 'vaginal' ? 'vaginal' : 'sonstig'}`}
                         </Typography>
-                      )}
+                        {med.quantity && med.quantityUnit && (
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                            Menge: {med.quantity} {med.quantityUnit}
+                          </Typography>
+                        )}
+                        {med.startDate && (
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                            Startdatum: {typeof med.startDate === 'string' ? new Date(med.startDate).toLocaleDateString('de-DE') : new Date(med.startDate).toLocaleDateString('de-DE')}
+                          </Typography>
+                        )}
+                        {med.endDate && (
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                            Enddatum: {typeof med.endDate === 'string' ? new Date(med.endDate).toLocaleDateString('de-DE') : new Date(med.endDate).toLocaleDateString('de-DE')}
+                          </Typography>
+                        )}
+                        {med.instructions && (
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                            Einnahmehinweise: {med.instructions}
+                          </Typography>
+                        )}
+                        {med.notes && (
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                            Notizen: {med.notes}
+                          </Typography>
+                        )}
+                        {med.changeType && med.changeType !== 'added' && (
+                          <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                            Status: {med.changeType === 'modified' ? 'Geändert' : med.changeType === 'discontinued' ? 'Abgesetzt' : med.changeType === 'unchanged' ? 'Unverändert' : med.changeType}
+                          </Typography>
+                        )}
+                      </Box>
                     </Box>
                     {!isFinalized && (
+                      <Stack direction="row" spacing={0.5}>
+                        <IconButton
+                          size="small"
+                          onClick={() => handleEditMedication(index)}
+                          color="primary"
+                        >
+                          <Edit />
+                        </IconButton>
                       <IconButton
                         size="small"
                         onClick={() => handleRemoveMedication(index)}
@@ -1164,6 +1531,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
                       >
                         <Delete />
                       </IconButton>
+                      </Stack>
                     )}
                   </Paper>
                 ))}
@@ -1303,6 +1671,20 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
         </TabPanel>
 
         <TabPanel value={activeTab} index={3}>
+          <Stack spacing={2}>
+            <VitalSignsSelector
+              patientId={patientId}
+              appointmentId={encounterId}
+              onSelect={handleVitalSignsSelect}
+              allowCreate={!isFinalized}
+            />
+            <Alert severity="info">
+              Wählen Sie "Übernehmen", um die Vitalwerte in die Anamnese zu übernehmen.
+            </Alert>
+          </Stack>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={4}>
           <Stack spacing={2}>
             {!isFinalized && (
               <Box>
@@ -1704,6 +2086,170 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
             variant="contained"
           >
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog für Medikamentenverordnung */}
+      <Dialog
+        open={medicationDialogOpen}
+        onClose={handleCloseMedicationDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {editingMedicationIndex !== null ? 'Medikament bearbeiten' : 'Medikament hinzufügen'}
+          {selectedMedication && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {selectedMedication.name || selectedMedication.Name || selectedMedication.medicationName}
+            </Typography>
+          )}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={3} sx={{ mt: 1 }}>
+            <Grid container spacing={2}>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Dosis"
+                  value={medicationFormData.dosage}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, dosage: e.target.value }))}
+                  placeholder="z.B. 500"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Dosis-Einheit"
+                  value={medicationFormData.dosageUnit}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, dosageUnit: e.target.value }))}
+                  placeholder="z.B. mg, ml, Stk."
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Häufigkeit"
+                  value={medicationFormData.frequency}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, frequency: e.target.value }))}
+                  placeholder="z.B. 2x täglich, morgens und abends"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Applikationsweg</InputLabel>
+                  <Select
+                    value={medicationFormData.route}
+                    onChange={(e) => setMedicationFormData(prev => ({ ...prev, route: e.target.value as any }))}
+                    label="Applikationsweg"
+                  >
+                    <MenuItem value="oral">Oral</MenuItem>
+                    <MenuItem value="topical">Topisch</MenuItem>
+                    <MenuItem value="injection">Injektion</MenuItem>
+                    <MenuItem value="inhalation">Inhalation</MenuItem>
+                    <MenuItem value="rectal">Rektal</MenuItem>
+                    <MenuItem value="vaginal">Vaginal</MenuItem>
+                    <MenuItem value="other">Sonstig</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Dauer"
+                  value={medicationFormData.duration}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, duration: e.target.value }))}
+                  placeholder="z.B. 7 Tage, 2 Wochen"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <FormControl fullWidth>
+                  <InputLabel>Änderungstyp</InputLabel>
+                  <Select
+                    value={medicationFormData.changeType}
+                    onChange={(e) => setMedicationFormData(prev => ({ ...prev, changeType: e.target.value as any }))}
+                    label="Änderungstyp"
+                  >
+                    <MenuItem value="added">Hinzugefügt</MenuItem>
+                    <MenuItem value="modified">Geändert</MenuItem>
+                    <MenuItem value="discontinued">Abgesetzt</MenuItem>
+                    <MenuItem value="unchanged">Unverändert</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Startdatum"
+                  type="date"
+                  value={medicationFormData.startDate}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Enddatum"
+                  type="date"
+                  value={medicationFormData.endDate}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                  InputLabelProps={{ shrink: true }}
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Menge"
+                  type="number"
+                  value={medicationFormData.quantity}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, quantity: e.target.value }))}
+                  placeholder="z.B. 20"
+                />
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  fullWidth
+                  label="Mengen-Einheit"
+                  value={medicationFormData.quantityUnit}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, quantityUnit: e.target.value }))}
+                  placeholder="z.B. Stk., Packungen"
+                />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  fullWidth
+                  label="Einnahmehinweise"
+                  multiline
+                  rows={3}
+                  value={medicationFormData.instructions}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, instructions: e.target.value }))}
+                  placeholder="z.B. zu den Mahlzeiten, mit viel Wasser"
+                />
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <TextField
+                  fullWidth
+                  label="Notizen"
+                  multiline
+                  rows={3}
+                  value={medicationFormData.notes}
+                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, notes: e.target.value }))}
+                  placeholder="Zusätzliche Informationen..."
+                />
+              </Grid>
+            </Grid>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseMedicationDialog}>
+            Abbrechen
+          </Button>
+          <Button
+            onClick={handleSaveMedication}
+            variant="contained"
+          >
+            {editingMedicationIndex !== null ? 'Speichern' : 'Hinzufügen'}
           </Button>
         </DialogActions>
       </Dialog>

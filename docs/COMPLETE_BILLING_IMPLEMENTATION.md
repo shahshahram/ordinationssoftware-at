@@ -219,3 +219,5 @@
 3. **E-Mail-Benachrichtigungen**: Bei Updates und Erstattungsstatus-Änderungen
 4. **Update-Historie**: Protokollierung aller Updates
 
+
+

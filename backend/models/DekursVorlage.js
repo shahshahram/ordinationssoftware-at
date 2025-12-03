@@ -164,6 +164,66 @@ const DekursVorlageSchema = new mongoose.Schema({
     },
     _id: false
   }],
+  // Verknüpfte Medikamente für Vorlage (werden beim Auslösen automatisch eingefügt)
+  linkedMedications: [{
+    medicationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MedicationCatalog'
+    },
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    dosage: {
+      type: String,
+      trim: true
+    },
+    dosageUnit: {
+      type: String,
+      trim: true
+    },
+    frequency: {
+      type: String,
+      trim: true
+    },
+    duration: {
+      type: String,
+      trim: true
+    },
+    instructions: {
+      type: String,
+      trim: true
+    },
+    startDate: {
+      type: Date
+    },
+    endDate: {
+      type: Date
+    },
+    quantity: {
+      type: Number
+    },
+    quantityUnit: {
+      type: String,
+      trim: true
+    },
+    route: {
+      type: String,
+      enum: ['oral', 'topical', 'injection', 'inhalation', 'rectal', 'vaginal', 'sublingual', 'intravenous', 'intramuscular', 'subcutaneous', 'other'],
+      default: 'oral'
+    },
+    changeType: {
+      type: String,
+      enum: ['added', 'modified', 'discontinued', 'unchanged'],
+      default: 'added'
+    },
+    notes: {
+      type: String,
+      trim: true
+    },
+    _id: false
+  }],
   
   // ELGA-konforme Struktur (für Export)
   elga_structured: {

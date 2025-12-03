@@ -8,6 +8,7 @@ export interface DekursAttachment {
   size: number;
   path: string;
   uploadedAt: string;
+  folderName?: string;
 }
 
 export interface LinkedDiagnosis {
@@ -29,8 +30,17 @@ export interface LinkedMedication {
   medicationId?: string;
   name: string;
   dosage?: string;
+  dosageUnit?: string;
   frequency?: string;
+  duration?: string;
+  instructions?: string;
+  startDate?: string | Date;
+  endDate?: string | Date;
+  quantity?: number;
+  quantityUnit?: string;
+  route?: 'oral' | 'topical' | 'injection' | 'inhalation' | 'rectal' | 'vaginal' | 'other';
   changeType?: 'added' | 'modified' | 'discontinued' | 'unchanged';
+  notes?: string;
 }
 
 export interface LinkedDocument {

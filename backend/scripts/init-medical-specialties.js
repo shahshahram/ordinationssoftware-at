@@ -70,3 +70,5 @@ async function initMedicalSpecialties() {
 
 initMedicalSpecialties();
 
+
+

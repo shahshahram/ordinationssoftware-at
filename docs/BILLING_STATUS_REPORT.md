@@ -183,3 +183,5 @@
 4. **ServiceCatalog-Auto-Updates**: Automatische Preis-Updates implementieren
 5. **Update-Dashboard**: Frontend-Widget für Update-Status erstellen
 
+
+

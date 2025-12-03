@@ -44,6 +44,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
   const { allUsers, loading } = useAppSelector((state) => state.tasks);
   
   const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
+  const [selectAll, setSelectAll] = useState(false);
   const [formData, setFormData] = useState<CreateTaskData>({
     title: '',
     description: '',
@@ -60,13 +61,26 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
   }, [open, dispatch]);
 
   useEffect(() => {
-    setFormData(prev => ({
-      ...prev,
-      assignedTo: selectedUsers
-    }));
-  }, [selectedUsers]);
+    if (selectAll && allUsers.length > 0) {
+      // Wenn "Alle" ausgewählt ist, setze alle User-IDs
+      const allUserIds = allUsers.map((user: User) => user._id);
+      setFormData(prev => ({
+        ...prev,
+        assignedTo: allUserIds
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        assignedTo: selectedUsers
+      }));
+    }
+  }, [selectedUsers, selectAll, allUsers]);
 
   const handleUserToggle = (userId: string) => {
+    // Wenn ein einzelner User ausgewählt wird, deaktiviere "Alle"
+    if (selectAll) {
+      setSelectAll(false);
+    }
     setSelectedUsers(prev => {
       if (prev.includes(userId)) {
         return prev.filter(id => id !== userId);
@@ -74,6 +88,18 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
         return [...prev, userId];
       }
     });
+  };
+
+  const handleSelectAllToggle = () => {
+    if (selectAll) {
+      // "Alle" deaktivieren
+      setSelectAll(false);
+      setSelectedUsers([]);
+    } else {
+      // "Alle" aktivieren
+      setSelectAll(true);
+      setSelectedUsers([]); // Leere individuelle Auswahl
+    }
   };
 
   const handleInputChange = (field: keyof CreateTaskData, value: string | string[] | undefined) => {
@@ -86,8 +112,8 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       return;
     }
 
-    if (formData.assignedTo.length === 0) {
-      enqueueSnackbar('Bitte wählen Sie mindestens einen Benutzer aus', { variant: 'warning' });
+    if (!selectAll && formData.assignedTo.length === 0) {
+      enqueueSnackbar('Bitte wählen Sie mindestens einen Benutzer aus oder wählen Sie "Alle"', { variant: 'warning' });
       return;
     }
 
@@ -110,6 +136,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
       patientId
     });
     setSelectedUsers([]);
+    setSelectAll(false);
     onClose();
   };
 
@@ -155,8 +182,22 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
               </Typography>
             ) : (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1, minHeight: 60 }}>
+                {/* "Alle"-Chip */}
+                <Chip
+                  label="Alle"
+                  onClick={handleSelectAllToggle}
+                  color={selectAll ? 'primary' : 'default'}
+                  variant={selectAll ? 'filled' : 'outlined'}
+                  sx={{
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    '&:hover': {
+                      bgcolor: selectAll ? 'primary.dark' : 'action.hover'
+                    }
+                  }}
+                />
                 {allUsers.map((user: User) => {
-                  const isSelected = selectedUsers.includes(user._id);
+                  const isSelected = !selectAll && selectedUsers.includes(user._id);
                   return (
                     <Chip
                       key={user._id}
@@ -164,10 +205,12 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
                       onClick={() => handleUserToggle(user._id)}
                       color={isSelected ? 'primary' : 'default'}
                       variant={isSelected ? 'filled' : 'outlined'}
+                      disabled={selectAll}
                       sx={{
-                        cursor: 'pointer',
+                        cursor: selectAll ? 'not-allowed' : 'pointer',
+                        opacity: selectAll ? 0.5 : 1,
                         '&:hover': {
-                          bgcolor: isSelected ? 'primary.dark' : 'action.hover'
+                          bgcolor: selectAll ? 'transparent' : (isSelected ? 'primary.dark' : 'action.hover')
                         }
                       }}
                     />
@@ -175,9 +218,9 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
                 })}
               </Box>
             )}
-            {selectedUsers.length > 0 && (
+            {(selectAll || selectedUsers.length > 0) && (
               <Typography variant="caption" color="primary" sx={{ mt: 1, display: 'block' }}>
-                {selectedUsers.length} Benutzer ausgewählt
+                {selectAll ? `Alle ${allUsers.length} Benutzer ausgewählt` : `${selectedUsers.length} Benutzer ausgewählt`}
               </Typography>
             )}
           </Box>
@@ -219,7 +262,7 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
           onClick={handleSubmit}
           variant="contained"
           color="primary"
-          disabled={loading || !formData.title || formData.assignedTo.length === 0}
+          disabled={loading || !formData.title || (!selectAll && formData.assignedTo.length === 0)}
         >
           {loading ? <CircularProgress size={24} color="inherit" /> : 'Aufgabe erstellen'}
         </Button>
@@ -229,6 +272,8 @@ const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
 };
 
 export default CreateTaskDialog;
+
+
 
 
 

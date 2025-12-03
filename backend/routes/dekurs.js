@@ -535,12 +535,26 @@ router.post('/', auth, [
         const cleaned = {
           name: med.name.trim(),
           dosage: med.dosage || '',
+          dosageUnit: med.dosageUnit || '',
           frequency: med.frequency || '',
-          changeType: med.changeType || 'added'
+          duration: med.duration || '',
+          instructions: med.instructions || '',
+          quantity: med.quantity !== undefined && med.quantity !== null ? med.quantity : undefined,
+          quantityUnit: med.quantityUnit || '',
+          route: med.route || 'oral',
+          changeType: med.changeType || 'added',
+          notes: med.notes || ''
         };
         // Nur medicationId hinzufügen, wenn es nicht leer ist und eine gültige ObjectId ist
         if (med.medicationId && med.medicationId.trim() !== '' && mongoose.Types.ObjectId.isValid(med.medicationId)) {
           cleaned.medicationId = med.medicationId;
+        }
+        // Datum-Felder hinzufügen, wenn vorhanden
+        if (med.startDate) {
+          cleaned.startDate = med.startDate instanceof Date ? med.startDate : new Date(med.startDate);
+        }
+        if (med.endDate) {
+          cleaned.endDate = med.endDate instanceof Date ? med.endDate : new Date(med.endDate);
         }
         return cleaned;
       });
@@ -1162,27 +1176,47 @@ router.put('/:id', auth, [
 
     // Bereinige und aktualisiere linkedMedications
     if (req.body.linkedMedications !== undefined) {
+      console.log('🔍 PUT /api/dekurs/:id - linkedMedications im Request:', JSON.stringify(req.body.linkedMedications, null, 2));
       const cleanedLinkedMedications = (req.body.linkedMedications || [])
         .filter(med => med.name && med.name.trim() !== '') // Filtere Einträge ohne Name
         .map(med => {
           const cleaned = {
             name: med.name.trim(),
             dosage: med.dosage || '',
+            dosageUnit: med.dosageUnit || '',
             frequency: med.frequency || '',
-            changeType: med.changeType || 'added'
+            duration: med.duration || '',
+            instructions: med.instructions || '',
+            quantity: med.quantity !== undefined && med.quantity !== null ? med.quantity : undefined,
+            quantityUnit: med.quantityUnit || '',
+            route: med.route || 'oral',
+            changeType: med.changeType || 'added',
+            notes: med.notes || ''
           };
           // Nur medicationId hinzufügen, wenn es nicht leer ist und eine gültige ObjectId ist
           if (med.medicationId && med.medicationId.trim() !== '' && mongoose.Types.ObjectId.isValid(med.medicationId)) {
             cleaned.medicationId = med.medicationId;
           }
+          // Datum-Felder hinzufügen, wenn vorhanden
+          if (med.startDate) {
+            cleaned.startDate = med.startDate instanceof Date ? med.startDate : new Date(med.startDate);
+          }
+          if (med.endDate) {
+            cleaned.endDate = med.endDate instanceof Date ? med.endDate : new Date(med.endDate);
+          }
+          console.log('🔍 PUT /api/dekurs/:id - Bereinigtes Medikament:', JSON.stringify(cleaned, null, 2));
           return cleaned;
         });
+      console.log('🔍 PUT /api/dekurs/:id - Alle bereinigten linkedMedications:', JSON.stringify(cleanedLinkedMedications, null, 2));
       dekursEntry.linkedMedications = cleanedLinkedMedications;
+      dekursEntry.markModified('linkedMedications'); // Wichtig: Markiere Subdokument-Array als geändert
+      console.log('🔍 PUT /api/dekurs/:id - linkedMedications nach markModified:', JSON.stringify(dekursEntry.linkedMedications, null, 2));
     }
 
     try {
       await dekursEntry.save();
       console.log('✅ PUT /api/dekurs/:id - Dekurs-Eintrag erfolgreich gespeichert');
+      console.log('🔍 PUT /api/dekurs/:id - linkedMedications nach save:', JSON.stringify(dekursEntry.linkedMedications, null, 2));
     } catch (saveError) {
       console.error('❌ PUT /api/dekurs/:id - Fehler beim Speichern des Dekurs-Eintrags:', saveError);
       console.error('❌ Save-Error-Stack:', saveError.stack);

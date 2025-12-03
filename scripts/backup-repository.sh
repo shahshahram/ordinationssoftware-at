@@ -80,3 +80,5 @@ BACKUP_COUNT=$(find "${BACKUP_DIR}" -type d -name "backup_*" | wc -l | tr -d ' '
 echo -e "${GREEN}📊 Gespeicherte Backups: ${BACKUP_COUNT}${NC}"
 echo -e "${GREEN}📁 Backup-Verzeichnis: ${BACKUP_DIR}${NC}"
 
+
+

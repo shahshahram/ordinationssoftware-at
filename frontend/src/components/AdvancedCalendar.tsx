@@ -50,6 +50,7 @@ import {
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment } from '../store/slices/appointmentSlice';
 import { fetchPatients } from '../store/slices/patientSlice';
+import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import { 
   reserveSlot, 
   confirmReservation, 
@@ -112,6 +113,7 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
   const { appointments, loading } = useAppSelector((state) => state.appointments);
   const { patients } = useAppSelector((state) => state.patients);
   const { user } = useAppSelector((state) => state.auth);
+  const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
   const { 
     reservations, 
     availableSlots, 
@@ -162,6 +164,30 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
     dispatch(fetchAppointments());
     dispatch(fetchPatients(1));
   }, [dispatch]);
+
+  // Lade Diagnosen für alle Patienten in den Terminen
+  useEffect(() => {
+    if (appointments && appointments.length > 0) {
+      const patientIds = new Set<string>();
+      appointments.forEach((apt: any) => {
+        if (apt.patient && typeof apt.patient === 'object' && apt.patient._id) {
+          patientIds.add(apt.patient._id);
+        } else if (apt.patient && typeof apt.patient === 'string') {
+          patientIds.add(apt.patient);
+        }
+      });
+      
+      console.log('AdvancedCalendar: Loading diagnoses for patients:', Array.from(patientIds));
+      
+      // Lade Diagnosen für alle eindeutigen Patienten
+      patientIds.forEach(patientId => {
+        dispatch(fetchPatientDiagnoses({ 
+          patientId, 
+          status: 'active'
+        }));
+      });
+    }
+  }, [appointments, dispatch]);
 
   // Check for slot conflicts using Redux
   const checkSlotConflicts = useCallback(async (start: Date, end: Date, resourceId?: string) => {
@@ -383,21 +409,39 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
   }, [selectedAppointment, dispatch]);
 
   // Convert appointments to FullCalendar events
-  const calendarEvents = appointments.map(apt => ({
-    id: apt._id,
-    title: apt.title,
-    start: apt.startTime,
-    end: apt.endTime,
-    resourceId: (apt as any).resourceId,
-    backgroundColor: getEventColor(apt.type, apt.status),
-    borderColor: getEventColor(apt.type, apt.status),
-    extendedProps: {
-      type: apt.type,
-      status: apt.status,
-      patient: apt.patient,
-      notes: (apt as any).notes
+  const calendarEvents = appointments.map(apt => {
+    // Stelle sicher, dass Patientendaten vollständig sind
+    const patient = apt.patient;
+    let patientId = null;
+    let patientObj = null;
+    
+    if (patient) {
+      if (typeof patient === 'string') {
+        patientId = patient;
+      } else if (typeof patient === 'object' && patient !== null) {
+        patientId = (patient as any)._id || (patient as any).id || null;
+        patientObj = patient;
+      }
     }
-  }));
+    
+    return {
+      id: apt._id,
+      title: apt.title,
+      start: apt.startTime,
+      end: apt.endTime,
+      resourceId: (apt as any).resourceId,
+      backgroundColor: getEventColor(apt.type, apt.status),
+      borderColor: getEventColor(apt.type, apt.status),
+      extendedProps: {
+        type: apt.type,
+        status: apt.status,
+        patient: apt.patient,
+        patientId: patientId,
+        patientObj: patientObj,
+        notes: (apt as any).notes
+      }
+    };
+  });
 
   // Get event color based on type and status
   const getEventColor = (type: string, status: string) => {
@@ -407,6 +451,89 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
     if (type === 'follow-up') return '#ff9800';
     if (type === 'emergency') return '#f44336';
     return '#9e9e9e';
+  };
+
+  // Event Content Renderer - zeigt Allergien und Hauptdiagnose
+  const renderEventContent = (eventInfo: any) => {
+    // Verwende extendedProps, die bereits beim Erstellen der Events gesetzt wurden
+    const patientId = eventInfo.event.extendedProps?.patientId;
+    const patientObj = eventInfo.event.extendedProps?.patientObj;
+    
+    // Finde Hauptdiagnose - auch wenn status nicht 'active' ist, solange isPrimary true ist
+    const diagnoses = patientId ? patientDiagnoses.filter((d: PatientDiagnosis) => {
+      // Normalisiere patientId für Vergleich - handle sowohl String als auch ObjectId
+      const dPatientId = typeof d.patientId === 'string' ? d.patientId : String(d.patientId);
+      const normalizedPatientId = typeof patientId === 'string' ? patientId : String(patientId);
+      // Vergleiche sowohl direkt als auch nach Normalisierung
+      return dPatientId === normalizedPatientId || dPatientId === patientId || String(dPatientId) === String(patientId);
+    }) : [];
+    
+    // Suche zuerst nach aktiver Hauptdiagnose, dann nach jeder Hauptdiagnose
+    let primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary && d.status === 'active');
+    if (!primaryDiagnosis) {
+      primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary);
+    }
+    
+    // Debug-Logging
+    if (patientId) {
+      console.log('AdvancedCalendar renderEventContent:', {
+        eventId: eventInfo.event.id,
+        patientId,
+        patientIdType: typeof patientId,
+        hasPatientObj: !!patientObj,
+        allergies: patientObj?.allergies,
+        totalPatientDiagnosesInStore: patientDiagnoses.length,
+        allPatientIdsInStore: Array.from(new Set(patientDiagnoses.map(d => d.patientId))),
+        diagnosesForPatient: diagnoses.length,
+        allDiagnoses: diagnoses.map(d => ({ 
+          id: d._id, 
+          patientId: d.patientId, 
+          patientIdType: typeof d.patientId,
+          code: d.code, 
+          isPrimary: d.isPrimary, 
+          status: d.status 
+        })),
+        primaryDiagnoses: diagnoses.filter(d => d.isPrimary).map(d => ({ id: d._id, code: d.code, status: d.status })),
+        activePrimary: diagnoses.filter(d => d.isPrimary && d.status === 'active').length,
+        foundPrimary: !!primaryDiagnosis,
+        primaryCode: primaryDiagnosis?.code,
+        primaryStatus: primaryDiagnosis?.status
+      });
+    }
+    
+    // Prüfe Allergien
+    const hasAllergies = patientObj && patientObj.allergies && Array.isArray(patientObj.allergies) && patientObj.allergies.length > 0;
+    
+    // Erstelle HTML-String für FullCalendar - verwende innerHTML für bessere Kompatibilität
+    const title = eventInfo.event.title || 'Termin';
+    let content = `<div style="padding: 2px; font-size: 0.75rem; line-height: 1.2; overflow: hidden;">
+      <div style="font-weight: bold; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>`;
+    
+    if (hasAllergies) {
+      content += `<div style="display: inline-flex; align-items: center; gap: 2px; margin-right: 4px; font-size: 0.6rem; color: #f44336;">
+        <span>⚠️</span>
+        <span>Allergien</span>
+      </div>`;
+    }
+    
+    if (primaryDiagnosis) {
+      content += `<div style="display: inline-flex; align-items: center; gap: 2px; font-size: 0.6rem; color: #4caf50;">
+        <span>✓</span>
+        <span>${primaryDiagnosis.display || primaryDiagnosis.code}</span>
+      </div>`;
+    }
+    
+    content += `</div>`;
+    
+    // Erstelle DOM-Element
+    const el = document.createElement('div');
+    el.innerHTML = content;
+    el.style.padding = '2px';
+    el.style.fontSize = '0.75rem';
+    el.style.lineHeight = '1.2';
+    el.style.overflow = 'hidden';
+    
+    return { domNodes: [el] };
   };
 
   // Calendar options
@@ -426,6 +553,7 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
     select: handleDateSelect,
     eventClick: handleEventClick,
     events: calendarEvents,
+    eventContent: renderEventContent,
     slotMinTime: bookingSettings.workingHours.start,
     slotMaxTime: bookingSettings.workingHours.end,
     slotDuration: `${bookingSettings.slotDuration}:00:00`,

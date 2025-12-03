@@ -159,11 +159,13 @@ router.post('/', [
     });
 
     // Validate appointment
+    // For internal bookings (authenticated users), skip minimum booking window requirement
     try {
       await validator.validateAppointment({
         startTime,
         endTime,
-        resourceId
+        resourceId,
+        skipMinBookingWindow: true // Allow internal bookings without 2-hour minimum
       });
     } catch (validationError) {
       console.log('Appointment validation failed:', validationError.message);
@@ -219,9 +221,17 @@ router.post('/', [
         });
         
         if (validUsers.length !== assigned_users.length) {
+          // Finde die nicht verfügbaren Benutzer
+          const validUserIds = validUsers.map(u => u._id.toString());
+          const invalidUserIds = assigned_users.filter(id => !validUserIds.includes(id.toString()));
+          const invalidUsers = await User.find({ _id: { $in: invalidUserIds } });
+          const invalidUserNames = invalidUsers.map(u => `${u.firstName} ${u.lastName}`).join(', ');
+          
           return res.status(400).json({
             success: false,
-            message: 'Ein oder mehrere Benutzer sind nicht verfügbar'
+            message: invalidUserNames 
+              ? `Folgende Benutzer sind nicht aktiv oder nicht verfügbar: ${invalidUserNames}`
+              : 'Ein oder mehrere Benutzer sind nicht aktiv oder nicht verfügbar'
           });
         }
 

@@ -32,7 +32,8 @@ import {
   Card,
   CardContent,
   Grid,
-  CircularProgress
+  CircularProgress,
+  Badge
 } from '@mui/material';
 import { 
   Add, 
@@ -68,7 +69,9 @@ import {
   CameraAlt,
   Delete as DeleteIcon,
   Close,
-  CreditCard
+  CreditCard,
+  Email,
+  Phone
 } from '@mui/icons-material';
 import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -96,9 +99,12 @@ import DicomStudiesList from '../components/DicomStudiesList';
 import ECardValidation from '../components/ECardValidation';
 import GinaBoxStatus from '../components/GinaBoxStatus';
 import PatientEPA from '../components/PatientEPA';
+import VitalSignsManager from '../components/VitalSignsManager';
 import ErrorBoundary from '../components/ErrorBoundary';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
-import { Article, Storage, Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, History } from '@mui/icons-material';
+import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
+import { Article, Storage, Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, History, MonitorHeart } from '@mui/icons-material';
+import api from '../utils/api';
 import { Specialization } from '../types/ambulanzbefund';
 
 // Spezialisierungs-Labels
@@ -177,9 +183,16 @@ const PatientOrganizer: React.FC = () => {
   const { appointments, loading: appointmentsLoading } = useAppSelector((s: any) => s.appointments);
   const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((s: any) => s.diagnoses);
   const { documents, loading: documentsLoading } = useAppSelector((s: any) => s.documents);
+  const { entries: dekursEntries } = useAppSelector((s: any) => s.dekurs);
+  const { vitalSigns } = useAppSelector((s: any) => s.vitalSigns);
   const { locations } = useAppSelector((s: any) => s.locations);
   const { user } = useAppSelector((s: any) => s.auth);
   const { templates: documentTemplates } = useAppSelector((s: any) => s.documentTemplates);
+  
+  // State für neue Einträge (für Badges)
+  const [laborResults, setLaborResults] = useState<any[]>([]);
+  const [dicomStudies, setDicomStudies] = useState<any[]>([]);
+  const [photos, setPhotos] = useState<any[]>([]);
   
   // State für XDS-Dokumente
   const [xdsDocuments, setXdsDocuments] = useState<any[]>([]);
@@ -190,7 +203,7 @@ const PatientOrganizer: React.FC = () => {
   // State für Ambulanzbefunde
   const [ambulanzbefunde, setAmbulanzbefunde] = useState<any[]>([]);
   const [loadingAmbulanzbefunde, setLoadingAmbulanzbefunde] = useState(false);
-
+  
   // State für Tabs
   const [activeTab, setActiveTab] = useState(0);
   const [isNavigating, setIsNavigating] = useState(false); // Flag um Race Conditions zu vermeiden
@@ -213,16 +226,75 @@ const PatientOrganizer: React.FC = () => {
   const tabMapping = React.useMemo(() => ({
     'epa': 0,
     'dekurs': 1,
-    'laborwerte': 2,
-    'dicom': 3,
-    'stammdaten': 4,
-    'medizinisch': 5,
-    'termine': 6,
+    'medizinisch': 2,
+    'diagnosen': 3,
+    'vitalwerte': 4,
+    'labor': 5,
+    'dicom': 6,
     'dokumente': 7,
-    'fotos': 8
+    'termine': 8,
+    'fotos': 9,
+    'stammdaten': 10, // Wird als Button angezeigt, nicht als Tab (TabPanel index 10)
+    // Legacy-Mappings für Kompatibilität
+    'laborwerte': 5, // Legacy - wird zu 'labor'
+    'vitalparameter': 4 // Legacy - wird zu 'vitalwerte'
   }), []);
 
-  const tabNames = React.useMemo(() => ['epa', 'dekurs', 'laborwerte', 'dicom', 'stammdaten', 'medizinisch', 'termine', 'dokumente', 'fotos'], []);
+  // Funktion zum Zählen neuer Einträge (heute erstellt)
+  const countNewEntries = React.useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const isToday = (date: Date | string | undefined): boolean => {
+      if (!date) return false;
+      const entryDate = new Date(date);
+      return entryDate >= today && entryDate <= todayEnd;
+    };
+
+    // Dekurs-Einträge
+    const newDekurs = (dekursEntries || []).filter((entry: any) => 
+      isToday(entry.createdAt || entry.entryDate)
+    ).length;
+
+    // Laborwerte
+    const newLabor = (laborResults || []).filter((entry: any) => 
+      isToday(entry.createdAt || entry.date)
+    ).length;
+
+    // DICOM-Studien
+    const newDicom = (dicomStudies || []).filter((entry: any) => 
+      isToday(entry.createdAt || entry.studyDate)
+    ).length;
+
+    // Dokumente
+    const docsArray = Array.isArray(documents) ? documents : (documents?.data || []);
+    const newDocuments = docsArray.filter((entry: any) => 
+      entry.patientId === patientId && isToday(entry.createdAt || entry.date)
+    ).length;
+
+    // Fotos
+    const newPhotos = (photos || []).filter((entry: any) => 
+      isToday(entry.createdAt || entry.uploadedAt || entry.date)
+    ).length;
+
+    // Vitalwerte
+    const newVital = (vitalSigns || []).filter((entry: any) => 
+      isToday(entry.createdAt || entry.recordedAt)
+    ).length;
+
+    return {
+      dekurs: newDekurs,
+      labor: newLabor,
+      dicom: newDicom,
+      documents: newDocuments,
+      photos: newPhotos,
+      vital: newVital
+    };
+  }, [dekursEntries, laborResults, dicomStudies, documents, photos, vitalSigns, patientId]);
+
+  const tabNames = React.useMemo(() => ['epa', 'dekurs', 'medizinisch', 'diagnosen', 'vitalwerte', 'labor', 'dicom', 'dokumente', 'termine', 'fotos'], []);
 
   // Zentrale Navigation-Funktion
   const handleTabNavigation = React.useCallback((tabIndex: number, updateUrl: boolean = true) => {
@@ -351,14 +423,14 @@ const PatientOrganizer: React.FC = () => {
 
   React.useEffect(() => {
     if (!patients || (patients as Patient[]).length === 0) {
-      dispatch(fetchPatients(1));
+        dispatch(fetchPatients(1));
     } else if (patientId) {
       // Prüfe, ob der spezifische Patient im Store ist
       const all = patients as Patient[];
       const foundPatient = all.find(p => (p._id || p.id) === patientId);
       if (!foundPatient) {
         // Patient nicht gefunden, lade Patienten neu (möglicherweise ist er auf einer anderen Seite)
-        dispatch(fetchPatients(1));
+              dispatch(fetchPatients(1));
       }
     }
   }, [dispatch, patients, patientId]);
@@ -373,6 +445,46 @@ const PatientOrganizer: React.FC = () => {
     dispatch(fetchLocations());
     // Lade Dekurs-Einträge für Foto-Galerie
     dispatch(fetchDekursEntries({ patientId, limit: 1000 }));
+    // Lade Vitalwerte für Badges
+    dispatch(fetchVitalSigns(patientId));
+    
+    // Lade Laborwerte, DICOM-Studien und Fotos für Badges
+    const loadDataForBadges = async () => {
+      try {
+        // Laborwerte
+        const laborResponse: any = await api.get(`/labor/patient/${patientId}`);
+        if (laborResponse?.data?.success && laborResponse?.data?.data) {
+          const laborData = Array.isArray(laborResponse.data.data) ? laborResponse.data.data : [];
+          setLaborResults(laborData);
+        }
+      } catch (error) {
+          setLaborResults([]);
+        }
+      
+      try {
+        // DICOM-Studien
+        const dicomResponse: any = await api.get(`/dicom/patient/${patientId}`);
+        if (dicomResponse?.data?.success && dicomResponse?.data?.data) {
+          const dicomData = Array.isArray(dicomResponse.data.data) ? dicomResponse.data.data : [];
+          setDicomStudies(dicomData);
+        }
+      } catch (error) {
+        setDicomStudies([]);
+      }
+      
+      try {
+        // Fotos
+        const photosResponse: any = await api.get(`/patients-extended/${patientId}/photos`);
+        if (photosResponse?.data?.success && photosResponse?.data?.data) {
+          const photosData = Array.isArray(photosResponse.data.data) ? photosResponse.data.data : [];
+          setPhotos(photosData);
+        }
+      } catch (error) {
+        setPhotos([]);
+      }
+    };
+    
+    loadDataForBadges();
   }, [dispatch, patientId]);
 
   // Lade Ambulanzbefunde für den Patienten
@@ -1697,11 +1809,66 @@ const PatientOrganizer: React.FC = () => {
                 )}
               </Box>
             </Box>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end', minWidth: 250 }}>
+              {/* Kontaktdaten */}
+              {patient && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-end' }}>
+                  {patient.email && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Email sx={{ fontSize: 16 }} />
+                      <Typography 
+                        component="a"
+                        href={`mailto:${patient.email}`}
+                        variant="body2"
+                        sx={{ 
+                          color: 'inherit',
+                          textDecoration: 'none',
+                          '&:hover': {
+                            textDecoration: 'underline'
+                          }
+                        }}
+                      >
+                        {patient.email}
+                      </Typography>
+                    </Box>
+                  )}
+                  {patient.phone && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Phone sx={{ fontSize: 16 }} />
+                      <Typography variant="body2">
+                        {patient.phone}
+                      </Typography>
+                    </Box>
+                  )}
+                </Box>
+              )}
+              {/* Hauptdiagnose */}
+              {(() => {
+                const primaryDiagnosis = (patientDiagnoses || []).find((diag: PatientDiagnosis) => diag.isPrimary && diag.status === 'active');
+                if (primaryDiagnosis) {
+                  return (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
+                      <LocalHospital sx={{ fontSize: 16 }} />
+                      <Chip
+                        label={`Hauptdiagnose: ${primaryDiagnosis.code} - ${primaryDiagnosis.display}`}
+                        size="small"
+                        sx={{ 
+                          bgcolor: 'rgba(255, 255, 255, 0.2)', 
+                          color: 'inherit',
+                          fontSize: '0.75rem',
+                          height: 'auto',
+                          py: 0.5
+                        }}
+                      />
+                    </Box>
+                  );
+                }
+                return null;
+              })()}
               <Tooltip title="Patienten-Workspace öffnen">
                 <IconButton 
                   onClick={() => setSidebarOpen(true)}
-                  sx={{ color: 'inherit' }}
+                  sx={{ color: 'inherit', mt: 1 }}
                   size="large"
                 >
                   <MenuIcon />
@@ -1754,11 +1921,14 @@ const PatientOrganizer: React.FC = () => {
             <Button
               variant="outlined"
               size="small"
-              startIcon={<Edit />}
-              onClick={handleEditStammdaten}
+              startIcon={<AccountCircle />}
+              onClick={() => {
+                setActiveTab(10);
+                handleTabNavigation(10, true);
+              }}
               disabled={!patient}
             >
-              Bearbeiten
+              Stammdaten
             </Button>
             <Button
               variant="outlined"
@@ -1784,15 +1954,92 @@ const PatientOrganizer: React.FC = () => {
             scrollButtons="auto"
             sx={{ borderBottom: 1, borderColor: 'divider' }}
           >
-            <Tab label="ePA" icon={<Info />} iconPosition="start" />
-            <Tab label="Dekurs" icon={<Assignment />} iconPosition="start" />
-            <Tab label="Laborwerte" icon={<Science />} iconPosition="start" />
-            <Tab label="DICOM" icon={<Image />} iconPosition="start" />
-            <Tab label="Stammdaten" icon={<AccountCircle />} iconPosition="start" />
+            <Tab 
+              label="ePA" 
+              icon={<Info />} 
+              iconPosition="start"
+            />
+            <Tab 
+              label={
+                countNewEntries.dekurs > 0 ? (
+                  <Badge badgeContent={countNewEntries.dekurs} color="error" sx={{ '& .MuiBadge-badge': { right: -8, top: 8 } }}>
+                    Dekurs
+                </Badge>
+                ) : (
+                  'Dekurs'
+                )
+              } 
+              icon={<Assignment />} 
+              iconPosition="start"
+            />
             <Tab label="Medizinisch" icon={<MedicalServices />} iconPosition="start" />
-            <Tab label="Termine & Besuche" icon={<CalendarToday />} iconPosition="start" />
-            <Tab label="Dokumente" icon={<Description />} iconPosition="start" />
-            <Tab label="Fotos" icon={<PhotoCamera />} iconPosition="start" />
+            <Tab label="Diagnosen" icon={<LocalHospital />} iconPosition="start" />
+            <Tab 
+              label={
+                countNewEntries.vital > 0 ? (
+                  <Badge badgeContent={countNewEntries.vital} color="error" sx={{ '& .MuiBadge-badge': { right: -8, top: 8 } }}>
+                    Vitalwerte
+                </Badge>
+                ) : (
+                  'Vitalwerte'
+                )
+              } 
+              icon={<MonitorHeart />} 
+              iconPosition="start"
+            />
+            <Tab 
+              label={
+                countNewEntries.labor > 0 ? (
+                  <Badge badgeContent={countNewEntries.labor} color="error" sx={{ '& .MuiBadge-badge': { right: -8, top: 8 } }}>
+                    Labor
+                </Badge>
+                ) : (
+                  'Labor'
+                )
+              } 
+              icon={<Science />} 
+              iconPosition="start"
+            />
+            <Tab 
+              label={
+                countNewEntries.dicom > 0 ? (
+                  <Badge badgeContent={countNewEntries.dicom} color="error" sx={{ '& .MuiBadge-badge': { right: -8, top: 8 } }}>
+                    DICOM
+                </Badge>
+                ) : (
+                  'DICOM'
+                )
+              } 
+              icon={<Image />} 
+              iconPosition="start"
+            />
+            <Tab 
+              label={
+                countNewEntries.documents > 0 ? (
+                  <Badge badgeContent={countNewEntries.documents} color="error" sx={{ '& .MuiBadge-badge': { right: -8, top: 8 } }}>
+                    Dokumente
+                </Badge>
+                ) : (
+                  'Dokumente'
+                )
+              } 
+              icon={<Description />} 
+              iconPosition="start"
+            />
+            <Tab label="Termine" icon={<CalendarToday />} iconPosition="start" />
+            <Tab 
+              label={
+                countNewEntries.photos > 0 ? (
+                  <Badge badgeContent={countNewEntries.photos} color="error" sx={{ '& .MuiBadge-badge': { right: -8, top: 8 } }}>
+                    Fotos
+                </Badge>
+                ) : (
+                  'Fotos'
+                )
+              } 
+              icon={<PhotoCamera />} 
+              iconPosition="start"
+            />
           </Tabs>
         </Paper>
 
@@ -1846,7 +2093,7 @@ const PatientOrganizer: React.FC = () => {
                 <Alert severity="warning">
                   Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
                 </Alert>
-              </Paper>
+      </Paper>
             )}
           </ErrorBoundary>
         </TabPanel>
@@ -1854,52 +2101,144 @@ const PatientOrganizer: React.FC = () => {
         <TabPanel value={activeTab} index={1}>
           {/* Dekurs Tab */}
           <ErrorBoundary>
-            {patientsLoading ? (
+          {patientsLoading ? (
+            <Paper sx={{ p: 2 }}>
               <Box display="flex" justifyContent="center" p={4}>
                 <CircularProgress />
               </Box>
-            ) : !patientId ? (
-              <Alert severity="warning">
-                Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
-              </Alert>
-            ) : !patient ? (
-              <Alert severity="error">
-                Patient nicht gefunden. Bitte versuchen Sie es erneut.
-              </Alert>
-            ) : (
-              <Stack spacing={2}>
-                {/* Schnelleingabe */}
-                <DekursQuickEntry
-                  patientId={patientId}
-                  compact={false}
-                  onSave={() => {
-                    // Lade Dekurs-Historie neu
-                    setSnackbar({
-                      open: true,
-                      message: 'Dekurs erfolgreich erstellt',
-                      severity: 'success'
-                    });
-                  }}
-                />
-                {/* Historie */}
-                <DekursHistory
-                  patientId={patientId}
-                  onEntrySelect={(entry) => {
-                    setSelectedDekursEntry(entry);
-                    setDekursDialogOpen(true);
-                  }}
-                />
-              </Stack>
-            )}
+            </Paper>
+          ) : !patientId ? (
+            <Alert severity="warning">
+              Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
+            </Alert>
+          ) : !patient ? (
+            <Alert severity="error">
+              Patient nicht gefunden. Bitte versuchen Sie es erneut.
+            </Alert>
+          ) : (
+            <Stack spacing={2}>
+              {/* Schnelleingabe */}
+              <DekursQuickEntry
+                patientId={patientId}
+                compact={false}
+                onSave={() => {
+                  // Lade Dekurs-Historie neu
+                  setSnackbar({
+                    open: true,
+                    message: 'Dekurs erfolgreich erstellt',
+                    severity: 'success'
+                  });
+                }}
+              />
+              {/* Historie */}
+              <DekursHistory
+                patientId={patientId}
+                onEntrySelect={(entry) => {
+                  setSelectedDekursEntry(entry);
+                  setDekursDialogOpen(true);
+                }}
+              />
+            </Stack>
+          )}
           </ErrorBoundary>
         </TabPanel>
 
         <TabPanel value={activeTab} index={2}>
-          {/* Laborwerte Tab */}
+          {/* Medizinisch Tab */}
+          <ErrorBoundary>
+            {patient ? (
+            <Paper sx={{ p: 2 }}>
+              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                <Typography variant="h6">Medizinische Daten</Typography>
+                <Button
+                  variant="outlined"
+                      size="small"
+                  startIcon={<Edit />}
+                  onClick={handleEditMedicalData}
+                >
+                  Bearbeiten
+                </Button>
+                </Box>
+              <Divider sx={{ mb: 2 }} />
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Grunddaten</Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Bloodtype color="action" />
+                    <Typography variant="body2"><strong>Blutgruppe:</strong> {patient.bloodType || 'Nicht erfasst'}</Typography>
+            </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Height color="action" />
+                    <Typography variant="body2"><strong>Größe:</strong> {patient.height ? `${patient.height} cm` : 'Nicht erfasst'}</Typography>
+              </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <MonitorWeight color="action" />
+                    <Typography variant="body2"><strong>Gewicht:</strong> {patient.weight ? `${patient.weight} kg` : 'Nicht erfasst'}</Typography>
+                </Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <Favorite color="action" />
+                    <Typography variant="body2"><strong>BMI:</strong> {patient.bmi ? patient.bmi.toFixed(1) : 'Nicht berechnet'}</Typography>
+              </Box>
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  {patient.allergies && patient.allergies.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Allergien</Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {patient.allergies.map((allergy, index) => (
+                    <Chip
+                      key={index}
+                            label={typeof allergy === 'string' ? allergy : allergy.description}
+                            color="warning"
+                      size="small"
+                    />
+                  ))}
+                </Box>
+                    </Box>
+                  )}
+                  {patient.currentMedications && patient.currentMedications.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Aktuelle Medikamente</Typography>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {patient.currentMedications.map((medication, index) => (
+                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                            <LocalPharmacy color="primary" />
+                      <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2">
+                                {typeof medication === 'string' ? medication : medication.name}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  ))}
+                </Box>
+                  </Box>
+                )}
+                </Grid>
+              </Grid>
+            </Paper>
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
+          </ErrorBoundary>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={3}>
+          {/* Diagnosen Tab */}
           <ErrorBoundary>
             {patientId ? (
               <Paper sx={{ p: 2 }}>
-                <LaborResults patientId={patientId} />
+                <Typography variant="h6" gutterBottom>Diagnosen</Typography>
+                <Divider sx={{ mb: 2 }} />
+                <DiagnosisManager
+                  patientId={patientId}
+                  allowEdit={true}
+                  showPrimaryToggle={true}
+                  context="medical"
+                />
               </Paper>
             ) : (
               <Paper sx={{ p: 2 }}>
@@ -1911,7 +2250,37 @@ const PatientOrganizer: React.FC = () => {
           </ErrorBoundary>
         </TabPanel>
 
-        <TabPanel value={activeTab} index={3}>
+        <TabPanel value={activeTab} index={4}>
+          {/* Vitalwerte Tab */}
+          <ErrorBoundary>
+          {patientId ? (
+            <VitalSignsManager patientId={patientId} />
+          ) : (
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                Kein Patient ausgewählt
+              </Typography>
+            </Paper>
+          )}
+          </ErrorBoundary>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={5}>
+          {/* Labor Tab */}
+          <ErrorBoundary>
+            {patientId ? (
+              <LaborResults patientId={patientId} />
+            ) : (
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Kein Patient ausgewählt
+                </Typography>
+              </Paper>
+            )}
+          </ErrorBoundary>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={6}>
           {/* DICOM Tab */}
           <ErrorBoundary>
             {patientId ? (
@@ -1925,7 +2294,7 @@ const PatientOrganizer: React.FC = () => {
                   >
                     DICOM hochladen
                   </Button>
-                </Box>
+              </Box>
                 <Divider sx={{ mb: 2 }} />
                 <DicomStudiesList patientId={patientId} />
               </Paper>
@@ -1939,8 +2308,10 @@ const PatientOrganizer: React.FC = () => {
           </ErrorBoundary>
         </TabPanel>
 
-        <TabPanel value={activeTab} index={4}>
-          {/* Stammdaten Tab */}
+
+
+        <TabPanel value={activeTab} index={10}>
+          {/* Stammdaten Tab - wird über Button aufgerufen */}
           <ErrorBoundary>
             {patient ? (
             <Paper sx={{ p: 2 }}>
@@ -1972,7 +2343,7 @@ const PatientOrganizer: React.FC = () => {
                     e-card validieren
                   </Button>
                 </Stack>
-              </Box>
+            </Box>
               <Divider sx={{ mb: 2 }} />
               
               {/* GINA-Box Status */}
@@ -2015,10 +2386,10 @@ const PatientOrganizer: React.FC = () => {
                     <CardContent>
                       <Stack direction="row" spacing={2} alignItems="center">
                         <CreditCard />
-                        <Box sx={{ flex: 1 }}>
+                      <Box sx={{ flex: 1 }}>
                           <Typography variant="subtitle2" fontWeight="bold">
                             e-card Status
-                          </Typography>
+                        </Typography>
                           <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
                             <Chip
                               label={patient.ecard.validationStatus === 'valid' ? 'Gültig' : 
@@ -2030,7 +2401,7 @@ const PatientOrganizer: React.FC = () => {
                               size="small"
                             />
                             {patient.ecard.cardNumber && (
-                              <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary">
                                 {patient.ecard.cardNumber.slice(0, 4)}...{patient.ecard.cardNumber.slice(-4)}
                               </Typography>
                             )}
@@ -2038,13 +2409,13 @@ const PatientOrganizer: React.FC = () => {
                           {patient.ecard.lastValidated && (
                             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
                               Letzte Validierung: {new Date(patient.ecard.lastValidated).toLocaleDateString('de-DE')}
-                            </Typography>
-                          )}
-                        </Box>
+                          </Typography>
+                        )}
+                      </Box>
                       </Stack>
                     </CardContent>
                   </Card>
-                </Box>
+                    </Box>
               )}
 
               <Grid container spacing={2}>
@@ -2079,123 +2450,11 @@ const PatientOrganizer: React.FC = () => {
             </Paper>
           ) : (
             <Paper sx={{ p: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                Kein Patient ausgewählt
-              </Typography>
-            </Paper>
-          )}
-          </ErrorBoundary>
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={5}>
-          {/* Medizinisch Tab */}
-          <ErrorBoundary>
-            {patient ? (
-            <Paper sx={{ p: 2 }}>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6">Medizinische Daten</Typography>
-                <Button
-                  variant="outlined"
-                  size="small"
-                  startIcon={<Edit />}
-                  onClick={handleEditMedicalData}
-                >
-                  Bearbeiten
-                </Button>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-              <Grid container spacing={2}>
-                <Grid size={{ xs: 12, md: 6 }}>
-                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Grunddaten</Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Bloodtype color="action" />
-                    <Typography variant="body2"><strong>Blutgruppe:</strong> {patient.bloodType || 'Nicht erfasst'}</Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Height color="action" />
-                    <Typography variant="body2"><strong>Größe:</strong> {patient.height ? `${patient.height} cm` : 'Nicht erfasst'}</Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <MonitorWeight color="action" />
-                    <Typography variant="body2"><strong>Gewicht:</strong> {patient.weight ? `${patient.weight} kg` : 'Nicht erfasst'}</Typography>
-                  </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Favorite color="action" />
-                    <Typography variant="body2"><strong>BMI:</strong> {patient.bmi ? patient.bmi.toFixed(1) : 'Nicht berechnet'}</Typography>
-                  </Box>
-                </Grid>
-                <Grid size={{ xs: 12 }}>
-                  {patient.allergies && patient.allergies.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Allergien</Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {patient.allergies.map((allergy, index) => (
-                          <Chip
-                            key={index}
-                            label={typeof allergy === 'string' ? allergy : allergy.description}
-                            color="warning"
-                            size="small"
-                          />
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-                  {patient.currentMedications && patient.currentMedications.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Aktuelle Medikamente</Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        {patient.currentMedications.map((medication, index) => (
-                          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                            <LocalPharmacy color="primary" />
-                            <Box sx={{ flex: 1 }}>
-                              <Typography variant="body2">
-                                {typeof medication === 'string' ? medication : medication.name}
-                              </Typography>
-                            </Box>
-                          </Box>
-                        ))}
-                      </Box>
-                    </Box>
-                  )}
-                </Grid>
-                {patientId && (
-                  <Grid size={{ xs: 12 }}>
-                    <DiagnosisManager
-                      patientId={patientId}
-                      allowEdit={true}
-                      showPrimaryToggle={true}
-                      context="medical"
-                    />
-                  </Grid>
-                )}
-              </Grid>
-            </Paper>
-          ) : (
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="body2" color="text.secondary">
-                Kein Patient ausgewählt
-              </Typography>
-            </Paper>
-          )}
-          </ErrorBoundary>
-        </TabPanel>
-
-        <TabPanel value={activeTab} index={6}>
-          {/* Termine & Besuche Tab */}
-          <ErrorBoundary>
-            {patientId ? (
-              <Paper sx={{ p: 2 }}>
-                <Typography variant="h6" gutterBottom>Termine & Besuche</Typography>
-                <Divider sx={{ mb: 2 }} />
-                <PatientVisitHistory patientId={patientId} limit={20} />
-              </Paper>
-            ) : (
-              <Paper sx={{ p: 2 }}>
                 <Typography variant="body2" color="text.secondary">
-                  Kein Patient ausgewählt
+                Kein Patient ausgewählt
                 </Typography>
-              </Paper>
-            )}
+            </Paper>
+          )}
           </ErrorBoundary>
         </TabPanel>
 
@@ -2209,7 +2468,7 @@ const PatientOrganizer: React.FC = () => {
                 {patientDocuments && patientDocuments.length > 0 ? (
                   <List>
                     {patientDocuments.slice(0, 20).map((doc, index) => (
-                      <ListItemButton
+                        <ListItemButton
                         key={doc._id || index}
                         onClick={() => {
                           if (doc.type === 'cda' || doc.content?.format === 'cda') {
@@ -2217,24 +2476,24 @@ const PatientOrganizer: React.FC = () => {
                             setCdaViewerOpen(true);
                           } else {
                             navigate(`/documents/${doc._id || doc.id}`);
-                          }
-                        }}
-                      >
-                        <ListItemText
+                            }
+                          }}
+                        >
+                          <ListItemText
                           primary={doc.title || doc.name || 'Unbenanntes Dokument'}
-                          secondary={
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">
+                            secondary={
+                              <Box>
+                                <Typography variant="caption" color="text.secondary">
                                 {doc.createdAt ? new Date(doc.createdAt).toLocaleDateString('de-DE') : '—'}
-                              </Typography>
+                                </Typography>
                               {doc.type && (
                                 <Chip label={doc.type} size="small" sx={{ ml: 1 }} />
                               )}
-                            </Box>
-                          }
-                          secondaryTypographyProps={{ component: 'div' }}
-                        />
-                      </ListItemButton>
+                              </Box>
+                            }
+                            secondaryTypographyProps={{ component: 'div' }}
+                          />
+                        </ListItemButton>
                     ))}
                   </List>
                 ) : (
@@ -2248,23 +2507,42 @@ const PatientOrganizer: React.FC = () => {
                 <Typography variant="body2" color="text.secondary">
                   Kein Patient ausgewählt
                 </Typography>
-              </Paper>
+            </Paper>
             )}
           </ErrorBoundary>
         </TabPanel>
 
         <TabPanel value={activeTab} index={8}>
-          {/* Fotos Tab */}
+          {/* Termine Tab */}
           <ErrorBoundary>
             {patientId ? (
-              <PatientPhotoGallery patientId={patientId} />
+            <Paper sx={{ p: 2 }}>
+                <Typography variant="h6" gutterBottom>Termine</Typography>
+                <Divider sx={{ mb: 2 }} />
+                <PatientVisitHistory patientId={patientId} limit={20} />
+              </Paper>
             ) : (
               <Paper sx={{ p: 2 }}>
-                <Alert severity="warning">
-                  Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
-                </Alert>
-              </Paper>
+                <Typography variant="body2" color="text.secondary">
+                  Kein Patient ausgewählt
+                          </Typography>
+                  </Paper>
             )}
+          </ErrorBoundary>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={9}>
+          {/* Fotos Tab */}
+          <ErrorBoundary>
+          {patientId ? (
+            <PatientPhotoGallery patientId={patientId} />
+          ) : (
+              <Paper sx={{ p: 2 }}>
+            <Alert severity="warning">
+              Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
+            </Alert>
+              </Paper>
+          )}
           </ErrorBoundary>
         </TabPanel>
 

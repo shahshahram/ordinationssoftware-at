@@ -17,7 +17,6 @@ import {
   TextField,
   Menu,
   MenuItem,
-  Tooltip,
   Tabs,
   Tab,
   useMediaQuery,
@@ -34,8 +33,6 @@ import {
   Close,
   CloudUpload,
   Assignment,
-  Description,
-  LocalHospital,
   Scanner,
   CameraAlt,
   FlipCameraIos,
@@ -48,7 +45,7 @@ import {
   DriveFileMove
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { fetchDekursEntries, DekursEntry } from '../store/slices/dekursSlice';
+import { fetchDekursEntries, DekursEntry, DekursAttachment } from '../store/slices/dekursSlice';
 import api from '../utils/api';
 
 interface PatientPhoto {
@@ -115,11 +112,11 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
         return;
       }
       
-      setLoading(true);
-      setError(null);
-      try {
-        // Sammle alle Fotos aus Dekurs-Einträgen
-        const dekursPhotos: PatientPhoto[] = [];
+    setLoading(true);
+    setError(null);
+    try {
+      // Sammle alle Fotos aus Dekurs-Einträgen
+      const dekursPhotos: PatientPhoto[] = [];
         
         // Lade Dekurs-Einträge und warte auf das Ergebnis
         try {
@@ -127,22 +124,23 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
           // Verwende nur die geladenen Einträge aus dem Result, nicht aus dem Redux Store
           // um Endlosschleifen zu vermeiden
           const entries = dekursResult?.data || [];
-        if (Array.isArray(entries)) {
-          entries.forEach((entry: DekursEntry) => {
+      if (Array.isArray(entries)) {
+        entries.forEach((entry: DekursEntry) => {
             try {
-              if (entry.attachments && entry.attachments.length > 0) {
-                entry.attachments.forEach((attachment) => {
+          if (entry.attachments && entry.attachments.length > 0) {
+                entry.attachments.forEach((attachment: DekursAttachment) => {
                   try {
-                    dekursPhotos.push({
-                      id: `${entry._id}-${attachment.filename}`,
-                      url: `http://localhost:5001/${attachment.path}`,
-                      filename: attachment.filename,
-                      originalName: attachment.originalName,
-                      source: 'dekurs',
-                      sourceId: entry._id,
+              dekursPhotos.push({
+                id: `${entry._id}-${attachment.filename}`,
+                url: `http://localhost:5001/${attachment.path}`,
+                filename: attachment.filename,
+                originalName: attachment.originalName,
+                source: 'dekurs',
+                sourceId: entry._id,
                       sourceName: `Dekurs vom ${entry.entryDate ? new Date(entry.entryDate).toLocaleDateString('de-DE') : 'Unbekannt'}`,
                       uploadedAt: attachment.uploadedAt || entry.entryDate || new Date().toISOString(),
-                      uploadedBy: entry.createdBy
+                      uploadedBy: entry.createdBy,
+                      folderName: attachment.folderName
                     });
                   } catch (attachError) {
                     console.warn('Fehler beim Verarbeiten eines Attachments:', attachError);
@@ -168,48 +166,52 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
           const directPhotos: PatientPhoto[] = backendResponse.data
             .map((photo: any): PatientPhoto | null => {
               try {
-                // Der Pfad sollte relativ zu uploads sein (z.B. "patient-photos/68fbf91109f619287f04a78f/scan-2025-11-24_14-53-59/file.jpg")
-                const photoPath = photo.path || photo.filename;
-                
-                // Konstruiere URL: Der Pfad ist relativ zu uploads, also einfach /uploads/ + path
-                let photoUrl: string;
+            // Der Pfad sollte relativ zu uploads sein (z.B. "patient-photos/68fbf91109f619287f04a78f/scan-2025-11-24_14-53-59/file.jpg")
+            const photoPath = photo.path || photo.filename;
+            
+            // Konstruiere URL: Der Pfad ist relativ zu uploads, also einfach /uploads/ + path
+            let photoUrl: string;
                 if (photoPath && photoPath.startsWith('uploads/')) {
-                  // Bereits vollständiger Pfad mit uploads/
-                  photoUrl = `http://localhost:5001/${photoPath}`;
+              // Bereits vollständiger Pfad mit uploads/
+              photoUrl = `http://localhost:5001/${photoPath}`;
                 } else if (photoPath && (photoPath.startsWith('/') || photoPath.startsWith('C:') || photoPath.startsWith('D:'))) {
-                  // Absoluter Pfad (alte Einträge) - extrahiere relativen Teil
-                  const uploadsIndex = photoPath.indexOf('uploads');
-                  if (uploadsIndex !== -1) {
-                    const relativePath = photoPath.substring(uploadsIndex);
-                    photoUrl = `http://localhost:5001/${relativePath.replace(/\\/g, '/')}`;
-                  } else {
-                    // Fallback: verwende filename
+              // Absoluter Pfad (alte Einträge) - extrahiere relativen Teil
+              const uploadsIndex = photoPath.indexOf('uploads');
+              if (uploadsIndex !== -1) {
+                const relativePath = photoPath.substring(uploadsIndex);
+                photoUrl = `http://localhost:5001/${relativePath.replace(/\\/g, '/')}`;
+              } else {
+                // Fallback: verwende filename
                     photoUrl = `http://localhost:5001/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
-                  }
+              }
                 } else if (photoPath) {
-                  // Relativer Pfad (neue Einträge) - path beginnt mit "patient-photos/"
-                  // Normalisiere den Pfad (entferne doppelte Slashes, normalisiere Backslashes)
-                  const normalizedPath = photoPath.replace(/\\/g, '/').replace(/\/+/g, '/');
-                  photoUrl = `http://localhost:5001/uploads/${normalizedPath}`;
+              // Relativer Pfad (neue Einträge) - path beginnt mit "patient-photos/"
+              // Normalisiere den Pfad (entferne doppelte Slashes, normalisiere Backslashes)
+              const normalizedPath = photoPath.replace(/\\/g, '/').replace(/\/+/g, '/');
+              photoUrl = `http://localhost:5001/uploads/${normalizedPath}`;
                 } else {
                   // Fallback: verwende filename
                   photoUrl = `http://localhost:5001/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
-                }
-                
-                // Extrahiere Ordnernamen aus filename (z.B. "68fbf91109f619287f04a78f/scan-2025-11-24_15-22-17/file.png")
-                const folderMatch = photo.filename?.match(/scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}/);
-                const folderName = folderMatch ? folderMatch[0] : undefined;
-                
-                return {
+            }
+            
+            // Verwende folderName aus der API-Antwort, falls vorhanden
+            // Fallback: Extrahiere Ordnernamen aus filename (z.B. "68fbf91109f619287f04a78f/scan-2025-11-24_15-22-17/file.png")
+            let folderName = photo.folderName;
+            if (!folderName && photo.filename) {
+              const folderMatch = photo.filename.match(/scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:_(.+))?/);
+              folderName = folderMatch ? folderMatch[0] : undefined;
+            }
+            
+            return {
                   id: photo._id || photo.id || `photo-${Date.now()}-${Math.random()}`,
-                  url: photoUrl,
+              url: photoUrl,
                   filename: photo.filename || 'unknown.jpg',
                   originalName: photo.originalName || photo.filename || 'unknown.jpg',
-                  source: 'direct',
+              source: 'direct',
                   uploadedAt: photo.uploadedAt || photo.createdAt || new Date().toISOString(),
-                  uploadedBy: photo.uploadedBy,
-                  folderName: folderName
-                };
+              uploadedBy: photo.uploadedBy,
+              folderName: folderName
+            };
               } catch (photoError) {
                 console.warn('Fehler beim Verarbeiten eines Fotos:', photoError);
                 return null;
@@ -234,14 +236,14 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
         }
       });
 
-        setPhotos(dekursPhotos);
-      } catch (err: any) {
+      setPhotos(dekursPhotos);
+    } catch (err: any) {
         console.error('Fehler beim Laden der Fotos:', err);
-        setError(err.message || 'Fehler beim Laden der Fotos');
+      setError(err.message || 'Fehler beim Laden der Fotos');
         setPhotos([]); // Setze leeres Array im Fehlerfall
-      } finally {
-        setLoading(false);
-      }
+    } finally {
+      setLoading(false);
+    }
     };
 
     if (patientId) {
@@ -277,7 +279,7 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
           entries.forEach((entry: DekursEntry) => {
             try {
               if (entry.attachments && entry.attachments.length > 0) {
-                entry.attachments.forEach((attachment) => {
+                entry.attachments.forEach((attachment: DekursAttachment) => {
                   try {
                     dekursPhotos.push({
                       id: `${entry._id}-${attachment.filename}`,
@@ -288,7 +290,8 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                       sourceId: entry._id,
                       sourceName: `Dekurs vom ${entry.entryDate ? new Date(entry.entryDate).toLocaleDateString('de-DE') : 'Unbekannt'}`,
                       uploadedAt: attachment.uploadedAt || entry.entryDate || new Date().toISOString(),
-                      uploadedBy: entry.createdBy
+                      uploadedBy: entry.createdBy,
+                      folderName: attachment.folderName
                     });
                   } catch (attachError) {
                     console.warn('Fehler beim Verarbeiten eines Attachments:', attachError);
@@ -342,9 +345,13 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                   photoUrl = `http://localhost:5001/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
                 }
                 
-                // Extrahiere Ordnernamen aus filename (z.B. "68fbf91109f619287f04a78f/scan-2025-11-24_15-22-17/file.png")
-                const folderMatch = photo.filename?.match(/scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}/);
-                const folderName = folderMatch ? folderMatch[0] : undefined;
+                // Verwende folderName aus der API-Antwort, falls vorhanden
+                // Fallback: Extrahiere Ordnernamen aus filename (z.B. "68fbf91109f619287f04a78f/scan-2025-11-24_15-22-17/file.png")
+                let folderName = photo.folderName;
+                if (!folderName && photo.filename) {
+                  const folderMatch = photo.filename.match(/scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:_(.+))?/);
+                  folderName = folderMatch ? folderMatch[0] : undefined;
+                }
                 
                 return {
                   id: photo._id || photo.id || `photo-${Date.now()}-${Math.random()}`,
@@ -443,12 +450,13 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
   const handleMovePhotosToFolder = async () => {
     if (selectedPhotos.length === 0) return;
     
-    if (!newFolderName.trim() && existingFolders.length === 0) {
-      setError('Bitte geben Sie einen Ordnernamen ein oder wählen Sie einen bestehenden Ordner aus.');
+    // Prüfe, ob ein Ordner ausgewählt wurde
+    if (!newFolderName.trim()) {
+      setError('Bitte wählen Sie einen bestehenden Ordner aus oder geben Sie einen neuen Ordnernamen ein.');
       return;
     }
 
-    const targetFolder = newFolderName.trim() || (existingFolders.length > 0 ? existingFolders[0] : '');
+    const targetFolder = newFolderName.trim();
     if (!targetFolder) {
       setError('Bitte geben Sie einen Ordnernamen ein.');
       return;
@@ -463,12 +471,16 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
         folderName: targetFolder
       });
 
+      // Erfolg - Fotos wurden verschoben
+      setError(null);
       setMoveToFolderDialogOpen(false);
       setSelectedPhotos([]);
       setNewFolderName('');
       await loadPhotos();
     } catch (err: any) {
-      setError(err.response?.data?.message || err.message || 'Fehler beim Verschieben der Fotos');
+      const errorMessage = err.response?.data?.message || err.message || 'Fehler beim Verschieben der Fotos';
+      setError(errorMessage);
+      console.error('Fehler beim Verschieben der Fotos:', err);
     } finally {
       setUploading(false);
     }
@@ -682,7 +694,7 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
     } finally {
       setUploading(false);
     }
-  }, [capturedImage, selectedFiles, uploadDescription, patientId, loadPhotos, scanFileInputRef]);
+  }, [capturedImage, selectedFiles, uploadDescription, folderName, patientId, loadPhotos, scanFileInputRef]);
 
   // Aktualisiere Video-Element, wenn Stream sich ändert
   useEffect(() => {
@@ -801,16 +813,16 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
 
   // Einfacher Fallback-Render bei Fehlern
   try {
-    if (loading) {
-      return (
-        <Box display="flex" justifyContent="center" p={4}>
-          <CircularProgress />
-        </Box>
-      );
-    }
-
+  if (loading) {
     return (
-      <Box>
+      <Box display="flex" justifyContent="center" p={4}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  return (
+    <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h6">Fotos</Typography>
         <Stack direction="row" spacing={1} flexWrap="wrap">
@@ -921,34 +933,34 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
         <Box>
           {(() => {
             try {
-              // Gruppiere Fotos nach Ordnern
-              const groupedPhotos: Record<string, PatientPhoto[]> = {};
-              const ungroupedPhotos: PatientPhoto[] = [];
-              
+            // Gruppiere Fotos nach Ordnern
+            const groupedPhotos: Record<string, PatientPhoto[]> = {};
+            const ungroupedPhotos: PatientPhoto[] = [];
+            
               if (Array.isArray(safePhotos)) {
                 safePhotos.forEach((photo: PatientPhoto) => {
                   if (!photo) return;
                   try {
-                    if (photo.folderName) {
-                      if (!groupedPhotos[photo.folderName]) {
-                        groupedPhotos[photo.folderName] = [];
-                      }
-                      groupedPhotos[photo.folderName].push(photo);
-                    } else {
-                      ungroupedPhotos.push(photo);
+              if (photo.folderName) {
+                if (!groupedPhotos[photo.folderName]) {
+                  groupedPhotos[photo.folderName] = [];
+                }
+                groupedPhotos[photo.folderName].push(photo);
+              } else {
+                ungroupedPhotos.push(photo);
                     }
                   } catch (photoError) {
                     console.warn('Fehler beim Verarbeiten eines Fotos:', photoError);
-                  }
-                });
+              }
+            });
               }
             
-              // Sortiere Ordner nach Datum (neueste zuerst)
-              const sortedFolders = Object.keys(groupedPhotos).sort((a, b) => {
+            // Sortiere Ordner nach Datum (neueste zuerst)
+            const sortedFolders = Object.keys(groupedPhotos).sort((a, b) => {
                 try {
                   const dateA = groupedPhotos[a]?.[0]?.uploadedAt || '';
                   const dateB = groupedPhotos[b]?.[0]?.uploadedAt || '';
-                  return new Date(dateB).getTime() - new Date(dateA).getTime();
+              return new Date(dateB).getTime() - new Date(dateA).getTime();
                 } catch {
                   return 0;
                 }
@@ -959,12 +971,12 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                   return null;
                 }
                 return (
-                  <Grid container spacing={2}>
+              <Grid container spacing={2}>
                     {photoList.map((photo: PatientPhoto) => {
                       if (!photo || !photo.id) return null;
-                      const isSelected = selectedPhotos.includes(photo.id);
-                      return (
-                        <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={photo.id}>
+                  const isSelected = selectedPhotos.includes(photo.id);
+                  return (
+                    <Grid size={{ xs: 12, sm: 6, md: 4, lg: 3 }} key={photo.id}>
                     <Paper
                       sx={{
                         p: 1,
@@ -1064,81 +1076,81 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                       </Box>
                     </Paper>
                     </Grid>
-                      );
-                    })}
-                  </Grid>
-                );
+                  );
+                })}
+              </Grid>
+            );
               };
-              
-              return (
-                <Stack spacing={3}>
-                  {/* Gruppierte Fotos nach Ordnern */}
+            
+            return (
+              <Stack spacing={3}>
+                {/* Gruppierte Fotos nach Ordnern */}
                   {sortedFolders.map((folderName: string) => {
                     try {
-                      const folderPhotos = groupedPhotos[folderName];
+                  const folderPhotos = groupedPhotos[folderName];
                       if (!folderPhotos || folderPhotos.length === 0) return null;
                       
-                      // Parse Ordnername zu lesbarem Datum
-                      const folderMatch = folderName.match(/scan-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
-                      let folderDate = folderName;
-                      if (folderMatch) {
-                        const [, year, month, day, hour, minute] = folderMatch;
-                        folderDate = `${day}.${month}.${year} ${hour}:${minute}`;
-                      }
-                      
-                      const isExpanded = expandedFolders[folderName] !== undefined 
-                        ? expandedFolders[folderName] 
-                        : true; // Standardmäßig geöffnet
-                      
-                      return (
-                        <Accordion 
-                          key={folderName}
-                          expanded={isExpanded}
-                          onChange={(_, expanded) => {
-                            setExpandedFolders(prev => ({
-                              ...prev,
-                              [folderName]: expanded
-                            }));
-                          }}
-                        >
-                          <AccordionSummary expandIcon={<ExpandMore />}>
-                            <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%' }}>
-                              <Folder color="primary" />
-                              <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
-                                {folderDate}
-                              </Typography>
-                              <Chip 
-                                label={`${folderPhotos.length} Foto${folderPhotos.length !== 1 ? 's' : ''}`} 
-                                size="small" 
-                                color="primary"
-                                variant="outlined"
-                              />
-                            </Stack>
-                          </AccordionSummary>
-                          <AccordionDetails>
-                            <Divider sx={{ mb: 2 }} />
-                            {renderPhotoGrid(folderPhotos)}
-                          </AccordionDetails>
-                        </Accordion>
-                      );
+                  // Parse Ordnername zu lesbarem Datum
+                  const folderMatch = folderName.match(/scan-(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})/);
+                  let folderDate = folderName;
+                  if (folderMatch) {
+                    const [, year, month, day, hour, minute] = folderMatch;
+                    folderDate = `${day}.${month}.${year} ${hour}:${minute}`;
+                  }
+                  
+                  const isExpanded = expandedFolders[folderName] !== undefined 
+                    ? expandedFolders[folderName] 
+                    : true; // Standardmäßig geöffnet
+                  
+                  return (
+                    <Accordion 
+                      key={folderName}
+                      expanded={isExpanded}
+                      onChange={(_, expanded) => {
+                        setExpandedFolders(prev => ({
+                          ...prev,
+                          [folderName]: expanded
+                        }));
+                      }}
+                    >
+                      <AccordionSummary expandIcon={<ExpandMore />}>
+                        <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%' }}>
+                          <Folder color="primary" />
+                          <Typography variant="subtitle1" sx={{ flexGrow: 1 }}>
+                            {folderDate}
+                          </Typography>
+                          <Chip 
+                            label={`${folderPhotos.length} Foto${folderPhotos.length !== 1 ? 's' : ''}`} 
+                            size="small" 
+                            color="primary"
+                            variant="outlined"
+                          />
+                        </Stack>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        <Divider sx={{ mb: 2 }} />
+                        {renderPhotoGrid(folderPhotos)}
+                      </AccordionDetails>
+                    </Accordion>
+                  );
                     } catch (folderError) {
                       console.warn('Fehler beim Rendern eines Ordners:', folderError);
                       return null;
                     }
-                  })}
-                  
-                  {/* Ungruppierte Fotos (z.B. Dekurs-Fotos ohne Ordner) */}
-                  {ungroupedPhotos.length > 0 && (
-                    <Box>
-                      <Typography variant="h6" gutterBottom>
-                        Weitere Fotos
-                      </Typography>
-                      <Divider sx={{ mb: 2 }} />
-                      {renderPhotoGrid(ungroupedPhotos)}
-                    </Box>
-                  )}
-                </Stack>
-              );
+                })}
+                
+                {/* Ungruppierte Fotos (z.B. Dekurs-Fotos ohne Ordner) */}
+                {ungroupedPhotos.length > 0 && (
+                  <Box>
+                    <Typography variant="h6" gutterBottom>
+                      Weitere Fotos
+                    </Typography>
+                    <Divider sx={{ mb: 2 }} />
+                    {renderPhotoGrid(ungroupedPhotos)}
+                  </Box>
+                )}
+              </Stack>
+            );
             } catch (renderError) {
               console.error('Fehler beim Rendern der Foto-Galerie:', renderError);
               return (
@@ -1699,6 +1711,12 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
         </DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
+            {error && (
+              <Alert severity="error" onClose={() => setError(null)}>
+                {error}
+              </Alert>
+            )}
+            
             <Typography variant="body2" color="text.secondary">
               {selectedPhotos.length} Foto(s) ausgewählt
             </Typography>
@@ -1718,16 +1736,22 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                         ? `${day}.${month}.${year} ${hour}:${minute} - ${customName.replace(/-/g, ' ')}`
                         : `${day}.${month}.${year} ${hour}:${minute}`;
                     }
+                    const isSelected = newFolderName === folder;
                     return (
                       <Button
                         key={folder}
-                        variant={newFolderName === folder ? 'contained' : 'outlined'}
-                        onClick={() => setNewFolderName(folder)}
+                        variant={isSelected ? 'contained' : 'outlined'}
+                        color={isSelected ? 'primary' : 'inherit'}
+                        onClick={() => {
+                          setNewFolderName(folder);
+                          setError(null); // Fehler zurücksetzen bei Auswahl
+                        }}
                         fullWidth
                         sx={{ justifyContent: 'flex-start' }}
                       >
                         <Folder sx={{ mr: 1 }} />
                         {displayName}
+                        {isSelected && <CheckCircle sx={{ ml: 'auto' }} />}
                       </Button>
                     );
                   })}
@@ -1743,9 +1767,13 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                 fullWidth
                 label="Ordnername"
                 value={newFolderName}
-                onChange={(e) => setNewFolderName(e.target.value)}
+                onChange={(e) => {
+                  setNewFolderName(e.target.value);
+                  setError(null); // Fehler zurücksetzen bei Eingabe
+                }}
                 placeholder="z.B. Befund, Röntgen, etc."
                 helperText="Der Ordnername wird dem aktuellen Datum/Uhrzeit hinzugefügt"
+                error={!!error && !newFolderName.trim()}
               />
             </Box>
           </Stack>
@@ -1762,15 +1790,15 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
           <Button
             variant="contained"
             onClick={handleMovePhotosToFolder}
-            disabled={!newFolderName.trim() && existingFolders.length === 0 || uploading}
+            disabled={!newFolderName.trim() || uploading}
             startIcon={uploading ? <CircularProgress size={20} /> : <DriveFileMove />}
           >
-            Verschieben
+            {uploading ? 'Wird verschoben...' : 'Verschieben'}
           </Button>
         </DialogActions>
       </Dialog>
     </Box>
-    );
+  );
   } catch (error) {
     console.error('❌ Kritischer Fehler in PatientPhotoGallery:', error);
     return (

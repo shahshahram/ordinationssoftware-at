@@ -17,16 +17,26 @@ class AppointmentValidator {
 
   // Validate appointment slot
   async validateAppointment(appointmentData) {
-    const { startTime, endTime, resourceId } = appointmentData;
+    const { startTime, endTime, resourceId, skipMinBookingWindow = false } = appointmentData;
     
     // Check working hours
     if (!this.isWithinWorkingHours(startTime, endTime)) {
       throw new Error('Appointment outside working hours');
     }
 
-    // Check booking window
-    if (!this.isWithinBookingWindow(startTime)) {
-      throw new Error('Appointment outside booking window');
+    // Check booking window (skipMinBookingWindow allows internal bookings without minimum time restriction)
+    if (!this.isWithinBookingWindow(startTime, skipMinBookingWindow)) {
+      const now = new Date();
+      const appointmentTime = new Date(startTime);
+      const diffHours = (appointmentTime - now) / (1000 * 60 * 60);
+      
+      if (!skipMinBookingWindow && diffHours < this.bookingWindow.min) {
+        throw new Error(`Termin muss mindestens ${this.bookingWindow.min} Stunden im Voraus gebucht werden`);
+      } else if (diffHours > (this.bookingWindow.max * 24)) {
+        throw new Error(`Termin kann maximal ${this.bookingWindow.max} Tage im Voraus gebucht werden`);
+      } else {
+        throw new Error('Appointment outside booking window');
+      }
     }
 
     // Check for conflicts
@@ -67,13 +77,15 @@ class AppointmentValidator {
   }
 
   // Check if appointment is within booking window
-  isWithinBookingWindow(startTime) {
+  isWithinBookingWindow(startTime, skipMinWindow = false) {
     const now = new Date();
     const appointmentTime = new Date(startTime);
     const diffHours = (appointmentTime - now) / (1000 * 60 * 60);
 
-    return diffHours >= this.bookingWindow.min && 
-           diffHours <= (this.bookingWindow.max * 24);
+    // Skip minimum window check for internal bookings (skipMinWindow = true)
+    const minCheck = skipMinWindow ? true : diffHours >= this.bookingWindow.min;
+    
+    return minCheck && diffHours <= (this.bookingWindow.max * 24);
   }
 
   // Check for conflicts

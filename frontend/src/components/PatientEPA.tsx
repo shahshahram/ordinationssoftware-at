@@ -41,20 +41,22 @@ import {
   Search,
   FilterList,
   Visibility,
-  Edit
+  Edit,
+  MonitorHeart
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses } from '../store/slices/diagnosisSlice';
 import { fetchDocuments } from '../store/slices/documentSlice';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
+import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 interface EPAEntry {
   id: string;
-  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo';
+  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo' | 'vital';
   date: Date;
   title: string;
   description?: string;
@@ -66,7 +68,7 @@ interface EPAEntry {
 
 interface GroupedEPAEntry {
   id: string;
-  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo';
+  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo' | 'vital';
   date: Date;
   title: string;
   description?: string;
@@ -89,6 +91,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((state) => state.diagnoses);
   const { documents, loading: documentsLoading } = useAppSelector((state) => state.documents);
   const { entries: dekursEntries, loading: dekursLoading } = useAppSelector((state) => state.dekurs);
+  const { vitalSigns, loading: vitalSignsLoading } = useAppSelector((state) => state.vitalSigns);
 
   const [epaEntries, setEpaEntries] = useState<EPAEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,6 +115,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           dispatch(fetchPatientDiagnoses({ patientId })).catch(() => {}),
           dispatch(fetchDocuments({ patientId })).catch(() => {}),
           dispatch(fetchDekursEntries({ patientId, limit: 100 })).catch(() => {}),
+          dispatch(fetchVitalSigns(patientId)).catch(() => {}),
           // Laborwerte
           api.get<any>(`/labor/patient/${patientId}`).then((response: any) => {
             if (response.success) {
@@ -289,6 +293,59 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         console.error('Fehler beim Verarbeiten von Fotos:', error);
       }
 
+      // Vitalwerte
+      try {
+        (vitalSigns || []).forEach((vital: any) => {
+          const vitalParts: string[] = [];
+          
+          if (vital.bloodPressure?.systolic && vital.bloodPressure?.diastolic) {
+            vitalParts.push(`RR: ${vital.bloodPressure.systolic}/${vital.bloodPressure.diastolic} mmHg`);
+          }
+          if (vital.pulse) {
+            vitalParts.push(`Puls: ${vital.pulse} bpm`);
+          }
+          if (vital.respiratoryRate) {
+            vitalParts.push(`AF: ${vital.respiratoryRate} /min`);
+          }
+          if (vital.temperature?.value) {
+            const unit = vital.temperature.unit === 'celsius' ? '°C' : '°F';
+            vitalParts.push(`Temp: ${vital.temperature.value} ${unit}`);
+          }
+          if (vital.oxygenSaturation) {
+            vitalParts.push(`SpO2: ${vital.oxygenSaturation}%`);
+          }
+          if (vital.bloodGlucose?.value) {
+            vitalParts.push(`BZ: ${vital.bloodGlucose.value} ${vital.bloodGlucose.unit}`);
+          }
+          if (vital.weight?.value) {
+            vitalParts.push(`Gewicht: ${vital.weight.value} ${vital.weight.unit}`);
+          }
+          if (vital.height?.value) {
+            vitalParts.push(`Größe: ${vital.height.value} ${vital.height.unit}`);
+          }
+          if (vital.bmi) {
+            vitalParts.push(`BMI: ${vital.bmi}`);
+          }
+          if (vital.painScale?.value !== undefined && vital.painScale?.value !== null && vital.painScale?.value !== '') {
+            vitalParts.push(`Schmerz (${vital.painScale.type}): ${vital.painScale.value}`);
+          }
+
+          const description = vitalParts.length > 0 ? vitalParts.join(', ') : 'Vitalwerte erfasst';
+          
+          entries.push({
+            id: `vital-${vital._id || vital.id}`,
+            type: 'vital',
+            date: new Date(vital.recordedAt || vital.createdAt || new Date()),
+            title: 'Vitalwerte',
+            description: description,
+            doctor: vital.recordedBy ? (typeof vital.recordedBy === 'object' ? `${vital.recordedBy.firstName || ''} ${vital.recordedBy.lastName || ''}`.trim() : vital.recordedBy) : undefined,
+            metadata: vital
+          });
+        });
+      } catch (error) {
+        console.error('Fehler beim Verarbeiten von Vitalwerten:', error);
+      }
+
       // Sortiere chronologisch (neueste zuerst)
       entries.sort((a, b) => b.date.getTime() - a.date.getTime());
 
@@ -297,7 +354,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       console.error('Fehler beim Erstellen der EPA-Einträge:', error);
       setEpaEntries([]);
     }
-  }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos]);
+  }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns]);
 
   // Filtere Einträge
   const filteredEntries = React.useMemo(() => {
@@ -338,6 +395,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       case 'dicom': return <Image />;
       case 'document': return <Description />;
       case 'photo': return <PhotoCamera />;
+      case 'vital': return <MonitorHeart />;
       default: return <Description />;
     }
   };
@@ -352,6 +410,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       case 'dicom': return 'DICOM';
       case 'document': return 'Dokument';
       case 'photo': return 'Foto';
+      case 'vital': return 'Vitalwerte';
       default: return type;
     }
   };
@@ -366,6 +425,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       case 'dicom': return 'secondary';
       case 'document': return 'primary';
       case 'photo': return 'secondary';
+      case 'vital': return 'warning';
       default: return 'primary';
     }
   };
@@ -567,6 +627,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
               <MenuItem value="dicom">DICOM</MenuItem>
               <MenuItem value="document">Dokumente</MenuItem>
               <MenuItem value="photo">Fotos</MenuItem>
+              <MenuItem value="vital">Vitalwerte</MenuItem>
             </Select>
           </FormControl>
         </Stack>
@@ -666,6 +727,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                                   break;
                                 case 'photo':
                                   tabIndex = 8; // Fotos
+                                  break;
+                                case 'vital':
+                                  tabIndex = 9; // Vitalparameter
                                   break;
                                 default:
                                   return;
@@ -822,6 +886,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           <Chip label={`DICOM: ${(epaEntries || []).filter(e => e?.type === 'dicom').length}`} size="small" color="secondary" />
           <Chip label={`Dokumente: ${(epaEntries || []).filter(e => e?.type === 'document').length}`} size="small" />
           <Chip label={`Fotos: ${(epaEntries || []).filter(e => e?.type === 'photo').length}`} size="small" />
+          <Chip label={`Vitalwerte: ${(epaEntries || []).filter(e => e?.type === 'vital').length}`} size="small" color="warning" />
         </Stack>
       </Paper>
     </Box>

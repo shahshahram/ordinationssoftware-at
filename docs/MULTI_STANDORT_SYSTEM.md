@@ -175,3 +175,5 @@ POST /api/staff-location-assignments
 ### Können Patienten an mehreren Standorten behandelt werden?
 **Antwort:** Ja, Patienten können über das `locationIds[]` Array mehreren Standorten zugeordnet sein. Termine werden jedoch immer an einem spezifischen Standort erstellt.
 
+
+

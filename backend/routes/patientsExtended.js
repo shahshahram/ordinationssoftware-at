@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const PatientExtended = require('../models/PatientExtended');
 const PatientPhoto = require('../models/PatientPhoto');
+const DekursEntry = require('../models/DekursEntry');
+const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
@@ -1138,9 +1140,21 @@ router.post('/:id/photos/batch', auth, photoUpload.array('photos', 10), async (r
 // @desc    Fotos in Ordner verschieben
 // @access  Private
 router.put('/:id/photos/move-to-folder', auth, async (req, res) => {
+  // Verwende Logger für persistente Logs
+  const logger = require('../utils/logger');
+  
   try {
     const { id } = req.params;
     const { photoIds, folderName } = req.body;
+
+    logger.info('PUT /api/patients-extended/:id/photos/move-to-folder aufgerufen', {
+      patientId: id,
+      photoIdsCount: photoIds?.length,
+      folderName: folderName
+    });
+
+    console.log(`📋 PUT /api/patients-extended/${id}/photos/move-to-folder`);
+    console.log(`   Request body:`, { photoIds, folderName, photoIdsCount: photoIds?.length });
 
     if (!photoIds || !Array.isArray(photoIds) || photoIds.length === 0) {
       return res.status(400).json({
@@ -1156,9 +1170,19 @@ router.put('/:id/photos/move-to-folder', auth, async (req, res) => {
       });
     }
 
+    // Validiere patientId-Format
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      console.error(`❌ Ungültige Patient-ID: ${id}`);
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültige Patient-ID'
+      });
+    }
+
     // Prüfe ob Patient existiert
     const patient = await PatientExtended.findById(id);
     if (!patient) {
+      console.error(`❌ Patient nicht gefunden: ${id}`);
       return res.status(404).json({
         success: false,
         message: 'Patient nicht gefunden'
@@ -1167,29 +1191,224 @@ router.put('/:id/photos/move-to-folder', auth, async (req, res) => {
 
     // Prüfe Berechtigung
     if (req.user.role !== 'admin' && req.user.role !== 'super_admin' && patient.userId?.toString() !== req.user.id?.toString()) {
+      console.error(`❌ Keine Berechtigung: User ${req.user.id} versucht auf Patient ${id} zuzugreifen`);
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für diesen Patienten'
       });
     }
 
-    // Aktualisiere Fotos
-    const result = await PatientPhoto.updateMany(
-      { _id: { $in: photoIds }, patientId: id },
-      { $set: { folderName } }
-    );
+    // Trenne Dekurs-Fotos und direkte Fotos
+    const directPhotoIds = [];
+    const dekursPhotoIds = [];
 
+    console.log(`📋 Verarbeite ${photoIds.length} Foto-ID(s):`, photoIds);
+
+    for (const photoId of photoIds) {
+      // Prüfe ob es eine gültige MongoDB ObjectId ist
+      // WICHTIG: Direkte Foto-IDs müssen genau 24 Zeichen lang sein, eine gültige ObjectId sein
+      // UND dürfen KEINEN Bindestrich enthalten (da Dekurs-Foto-IDs Bindestriche enthalten)
+      if (photoId.length === 24 && 
+          mongoose.Types.ObjectId.isValid(photoId) && 
+          !photoId.includes('-')) {
+        directPhotoIds.push(photoId);
+        console.log(`   ✅ Direkte Foto-ID erkannt: ${photoId}`);
+      } else if (photoId.includes('-')) {
+        // Dekurs-Foto-Format: {dekursEntryId}-{filename}
+        dekursPhotoIds.push(photoId);
+        console.log(`   ✅ Dekurs-Foto-ID erkannt: ${photoId}`);
+      } else {
+        console.warn(`   ⚠️ Unbekanntes Foto-ID-Format: ${photoId} (Länge: ${photoId.length}, Enthält Bindestrich: ${photoId.includes('-')})`);
+      }
+    }
+
+    console.log(`📊 Aufgeteilt: ${directPhotoIds.length} direkte, ${dekursPhotoIds.length} Dekurs-Fotos`);
+
+    let directPhotoCount = 0;
+    let dekursPhotoCount = 0;
+
+    // Aktualisiere direkte Fotos (PatientPhoto)
+    if (directPhotoIds.length > 0) {
+      try {
+        console.log(`   🔄 Aktualisiere ${directPhotoIds.length} direkte Foto(s)...`);
+        const result = await PatientPhoto.updateMany(
+          { _id: { $in: directPhotoIds }, patientId: id },
+          { $set: { folderName } }
+        );
+        directPhotoCount = result.modifiedCount;
+        console.log(`   ✅ ${directPhotoCount} direkte Foto(s) erfolgreich aktualisiert`);
+      } catch (error) {
+        console.error(`   ❌ Fehler beim Aktualisieren der direkten Fotos:`, error);
+        console.error(`      Error name: ${error.name}`);
+        console.error(`      Error message: ${error.message}`);
+        console.error(`      Error stack: ${error.stack}`);
+        // Wir fahren mit Dekurs-Fotos fort, statt komplett zu scheitern
+      }
+    }
+
+    // Aktualisiere Dekurs-Fotos
+    if (dekursPhotoIds.length > 0) {
+      for (const dekursPhotoId of dekursPhotoIds) {
+        try {
+          // Parse Dekurs-Foto-ID: Format ist {dekursEntryId}-{filename}
+          // MongoDB ObjectId ist genau 24 Zeichen lang
+          // Beispiel: "691cda92d4dc82f17ab5477f-dekurs-691cda92d4dc82f17ab5477f-1763498669567-530558816.png"
+          console.log(`🔍 Parse Dekurs-Foto-ID: "${dekursPhotoId}" (Länge: ${dekursPhotoId.length})`);
+          
+          if (dekursPhotoId.length > 25 && dekursPhotoId[24] === '-') {
+            // Die ersten 24 Zeichen sind die Dekurs-Eintrags-ID
+            const dekursEntryId = dekursPhotoId.substring(0, 24);
+            // Alles nach dem Bindestrich (ab Index 25) ist der Dateiname
+            const filename = dekursPhotoId.substring(25);
+            
+            console.log(`   📝 Dekurs-Eintrags-ID: "${dekursEntryId}"`);
+            console.log(`   📝 Dateiname: "${filename}"`);
+
+            if (mongoose.Types.ObjectId.isValid(dekursEntryId)) {
+              console.log(`   🔍 Suche Dekurs-Eintrag: _id=${dekursEntryId}, patientId=${id}`);
+              
+              const dekursEntry = await DekursEntry.findOne({
+                _id: dekursEntryId,
+                patientId: id
+              });
+
+              if (!dekursEntry) {
+                console.warn(`⚠️ Dekurs-Eintrag ${dekursEntryId} nicht gefunden für Patient ${id}`);
+                // Versuche auch ohne patientId-Filter (falls patientId nicht gesetzt ist oder nicht übereinstimmt)
+                const dekursEntryWithoutPatient = await DekursEntry.findById(dekursEntryId);
+                if (dekursEntryWithoutPatient) {
+                  console.log(`   ℹ️ Dekurs-Eintrag gefunden, aber patientId stimmt nicht überein. Dekurs patientId: ${dekursEntryWithoutPatient.patientId}, Request patientId: ${id}`);
+                  console.log(`   ⚠️ Überspringe diesen Eintrag aus Sicherheitsgründen (patientId-Mismatch)`);
+                } else {
+                  console.warn(`   ⚠️ Dekurs-Eintrag ${dekursEntryId} existiert nicht`);
+                }
+                continue;
+              }
+
+              console.log(`   ✅ Dekurs-Eintrag gefunden. Anzahl Attachments: ${dekursEntry.attachments?.length || 0}`);
+
+              if (!dekursEntry.attachments || dekursEntry.attachments.length === 0) {
+                console.warn(`⚠️ Dekurs-Eintrag ${dekursEntryId} hat keine Attachments`);
+                continue;
+              }
+
+              // Finde das Attachment mit dem passenden Dateinamen
+              // Versuche zuerst exakte Übereinstimmung
+              let attachmentIndex = dekursEntry.attachments.findIndex(
+                att => att.filename === filename
+              );
+
+              console.log(`   🔍 Exakte Suche nach "${filename}": ${attachmentIndex !== -1 ? 'gefunden' : 'nicht gefunden'}`);
+
+              // Falls nicht gefunden, versuche Teilübereinstimmung (falls Dateiname geändert wurde)
+              if (attachmentIndex === -1) {
+                // Suche nach Dateinamen, die den gesuchten Dateinamen enthalten
+                attachmentIndex = dekursEntry.attachments.findIndex(
+                  att => att.filename.includes(filename) || filename.includes(att.filename)
+                );
+                console.log(`   🔍 Teilübereinstimmung Suche: ${attachmentIndex !== -1 ? 'gefunden' : 'nicht gefunden'}`);
+              }
+
+              if (attachmentIndex === -1) {
+                console.warn(`⚠️ Attachment mit Dateinamen "${filename}" nicht gefunden in Dekurs-Eintrag ${dekursEntryId}.`);
+                console.warn(`   Verfügbare Dateinamen:`, dekursEntry.attachments.map(a => a.filename));
+                continue;
+              }
+
+              console.log(`   ✅ Attachment gefunden an Index ${attachmentIndex}`);
+
+              // Aktualisiere folderName für das Attachment
+              // Verwende markModified, da attachments ein Subdocument-Array ist
+              dekursEntry.attachments[attachmentIndex].folderName = folderName;
+              dekursEntry.markModified('attachments');
+              
+              console.log(`   💾 Speichere Dekurs-Eintrag...`);
+              
+              try {
+                await dekursEntry.save();
+                dekursPhotoCount++;
+                console.log(`✅ Dekurs-Foto "${filename}" erfolgreich in Ordner "${folderName}" verschoben`);
+              } catch (saveError) {
+                console.error(`❌ Fehler beim Speichern von Dekurs-Eintrag ${dekursEntryId}:`, saveError);
+                console.error(`   Save error name: ${saveError.name}`);
+                console.error(`   Save error message: ${saveError.message}`);
+                console.error(`   Save error stack: ${saveError.stack}`);
+                // Wir fahren mit den anderen Fotos fort, statt komplett zu scheitern
+                // Der Fehler wird nicht weitergeworfen, damit andere Fotos noch verarbeitet werden können
+              }
+            } else {
+              console.warn(`⚠️ Ungültige Dekurs-Eintrags-ID: ${dekursEntryId}`);
+            }
+          } else {
+            console.warn(`Ungültiges Format für Dekurs-Foto-ID: ${dekursPhotoId} (Länge: ${dekursPhotoId.length}, Zeichen 24: "${dekursPhotoId[24]}")`);
+          }
+        } catch (error) {
+          console.error(`❌ Fehler beim Verarbeiten von Dekurs-Foto-ID ${dekursPhotoId}:`, error);
+          console.error(`   Error message: ${error.message}`);
+          console.error(`   Error stack: ${error.stack}`);
+          // Wir fahren mit den anderen Fotos fort, statt komplett zu scheitern
+          // Der Fehler wird nicht weitergeworfen, damit andere Fotos noch verarbeitet werden können
+        }
+      }
+    }
+
+    const totalCount = directPhotoCount + dekursPhotoCount;
+
+    if (totalCount === 0) {
+      console.warn(`⚠️ Keine Fotos konnten verschoben werden. Direkte Fotos: ${directPhotoIds.length}, Dekurs-Fotos: ${dekursPhotoIds.length}`);
+      console.warn(`   Direkte Foto-IDs:`, directPhotoIds);
+      console.warn(`   Dekurs-Foto-IDs:`, dekursPhotoIds);
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Fotos konnten verschoben werden. Bitte überprüfen Sie die Foto-IDs.',
+        data: { 
+          modifiedCount: 0,
+          directPhotos: directPhotoCount,
+          dekursPhotos: dekursPhotoCount,
+          requestedDirectPhotos: directPhotoIds.length,
+          requestedDekursPhotos: dekursPhotoIds.length
+        }
+      });
+    }
+
+    console.log(`✅ Erfolgreich ${totalCount} Foto(s) verschoben (${directPhotoCount} direkte, ${dekursPhotoCount} Dekurs-Fotos)`);
     res.json({
       success: true,
-      message: `${result.modifiedCount} Foto(s) erfolgreich verschoben`,
-      data: { modifiedCount: result.modifiedCount }
+      message: `${totalCount} Foto(s) erfolgreich verschoben`,
+      data: { 
+        modifiedCount: totalCount,
+        directPhotos: directPhotoCount,
+        dekursPhotos: dekursPhotoCount
+      }
     });
   } catch (error) {
-    console.error('Error moving photos to folder:', error);
+    console.error('❌ Error moving photos to folder:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
+    console.error('   Request params:', { id: req.params?.id });
+    console.error('   Request body:', { 
+      photoIds: req.body?.photoIds, 
+      folderName: req.body?.folderName,
+      photoIdsCount: req.body?.photoIds?.length 
+    });
+    console.error('   Request user:', req.user ? { id: req.user.id, role: req.user.role } : 'Kein User');
+    
+    // Verwende auch den Logger für persistente Logs
+    const logger = require('../utils/logger');
+    logger.error('Fehler beim Verschieben von Fotos in Ordner', {
+      error: error.message,
+      stack: error.stack,
+      patientId: req.params?.id,
+      photoIds: req.body?.photoIds,
+      folderName: req.body?.folderName
+    });
+    
     res.status(500).json({
       success: false,
       message: 'Fehler beim Verschieben der Fotos',
-      error: error.message
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });

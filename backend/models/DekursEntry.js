@@ -140,14 +140,48 @@ const DekursEntrySchema = new mongoose.Schema({
       type: String,
       trim: true
     },
+    dosageUnit: {
+      type: String,
+      trim: true
+    },
     frequency: {
       type: String,
+      trim: true
+    },
+    duration: {
+      type: String,
+      trim: true
+    },
+    instructions: {
+      type: String,
+      trim: true
+    },
+    startDate: {
+      type: Date
+    },
+    endDate: {
+      type: Date
+    },
+    quantity: {
+      type: Number
+    },
+    quantityUnit: {
+      type: String,
+      trim: true
+    },
+    route: {
+      type: String,
+      enum: ['oral', 'topical', 'injection', 'inhalation', 'rectal', 'vaginal', 'other'],
       trim: true
     },
     changeType: {
       type: String,
       enum: ['added', 'modified', 'discontinued', 'unchanged'],
       default: 'unchanged'
+    },
+    notes: {
+      type: String,
+      trim: true
     },
     _id: false
   }],
@@ -197,6 +231,10 @@ const DekursEntrySchema = new mongoose.Schema({
     uploadedAt: {
       type: Date,
       default: Date.now
+    },
+    folderName: {
+      type: String,
+      // Ordner-Name für Gruppierung (z.B. "scan-2025-11-24_15-22-17_Befund")
     },
     _id: false
   }],

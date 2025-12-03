@@ -265,7 +265,15 @@ const diagnosisSlice = createSlice({
       })
       .addCase(fetchPatientDiagnoses.fulfilled, (state, action) => {
         state.loading = false;
-        state.patientDiagnoses = action.payload.data || [];
+        const newDiagnoses = action.payload.data || [];
+        // Akkumuliere Diagnosen statt sie zu überschreiben
+        // Entferne zuerst alte Diagnosen für denselben Patienten
+        if (newDiagnoses.length > 0 && newDiagnoses[0].patientId) {
+          const patientId = newDiagnoses[0].patientId;
+          state.patientDiagnoses = state.patientDiagnoses.filter(d => d.patientId !== patientId);
+        }
+        // Füge neue Diagnosen hinzu
+        state.patientDiagnoses = [...state.patientDiagnoses, ...newDiagnoses];
         state.error = null;
       })
       .addCase(fetchPatientDiagnoses.rejected, (state, action) => {
