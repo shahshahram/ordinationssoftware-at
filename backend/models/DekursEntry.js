@@ -339,6 +339,30 @@ const DekursEntrySchema = new mongoose.Schema({
   finalizedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  
+  // ELGA-Übermittlung
+  elgaSubmission: {
+    submittedAt: {
+      type: Date
+    },
+    submittedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    elgaDocumentId: {
+      type: String,
+      trim: true
+    },
+    status: {
+      type: String,
+      enum: ['submitted', 'failed', 'pending'],
+      default: 'pending'
+    },
+    errorMessage: {
+      type: String,
+      trim: true
+    }
   }
 }, {
   timestamps: true,

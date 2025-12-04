@@ -7,7 +7,11 @@ const PatientExtended = require('../models/PatientExtended');
 const Appointment = require('../models/Appointment');
 const PatientDiagnosis = require('../models/PatientDiagnosis');
 const Icd10Catalog = require('../models/Icd10Catalog');
+const Location = require('../models/Location');
+const User = require('../models/User');
 const auth = require('../middleware/auth');
+const CdaGeneratorService = require('../services/CdaGeneratorService');
+const elgaService = require('../services/elgaService');
 const { body, validationResult } = require('express-validator');
 const multer = require('multer');
 const path = require('path');
@@ -861,6 +865,146 @@ router.get('/patient/:patientId/export', auth, async (req, res) => {
   } catch (error) {
     console.error('Fehler beim Exportieren des Dekurs:', error);
     res.status(500).json({ success: false, message: 'Server-Fehler', error: error.message });
+  }
+});
+
+// @route   POST /api/dekurs/:id/send-to-elga
+// @desc    Dekurs-Eintrag als CDA-Dokument an ELGA senden
+// @access  Private
+router.post('/:id/send-to-elga', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Lade Dekurs-Eintrag mit allen benötigten Daten
+    const dekursEntry = await DekursEntry.findById(id)
+      .populate('patientId')
+      .populate('createdBy')
+      .populate('linkedDiagnoses.diagnosisId')
+      .populate('linkedMedications.medicationId');
+    
+    if (!dekursEntry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dekurs-Eintrag nicht gefunden'
+      });
+    }
+
+    // Prüfe ob Status "finalized" ist
+    if (dekursEntry.status !== 'finalized') {
+      return res.status(400).json({
+        success: false,
+        message: 'Nur finalisierte Dekurs-Einträge können an ELGA gesendet werden'
+      });
+    }
+
+    const patient = dekursEntry.patientId;
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient nicht gefunden'
+      });
+    }
+
+    // Prüfe ob Patient ELGA-registriert ist
+    if (!patient.ecard?.elgaId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient ist nicht in ELGA registriert'
+      });
+    }
+
+    // Lade Location (aus User oder Patient)
+    let location = null;
+    if (req.user.locationId) {
+      location = await Location.findById(req.user.locationId);
+    }
+    if (!location && patient.locationId) {
+      location = await Location.findById(patient.locationId);
+    }
+    if (!location) {
+      // Fallback: Erste verfügbare Location
+      location = await Location.findOne();
+    }
+    if (!location) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Location gefunden'
+      });
+    }
+
+    // Autor (User)
+    const author = dekursEntry.createdBy || req.user;
+    if (!author) {
+      return res.status(400).json({
+        success: false,
+        message: 'Autor nicht gefunden'
+      });
+    }
+
+    // Generiere CDA XML
+    const cdaXml = await CdaGeneratorService.generateDekursCDA(
+      dekursEntry,
+      patient,
+      location,
+      author
+    );
+
+    // Sende an ELGA
+    const token = await elgaService.authenticate();
+    const axios = require('axios');
+    const elgaConfig = require('../config/elga.config');
+    
+    const response = await axios.post(
+      `${elgaConfig.activeConfig.baseUrl}/v1/patient/${patient.ecard.elgaId}/documents`,
+      {
+        title: `Dekurs - ${patient.firstName} ${patient.lastName} - ${new Date(dekursEntry.entryDate).toLocaleDateString('de-AT')}`,
+        classCode: 'CDA',
+        typeCode: '11534-6', // Progress Note (LOINC)
+        formatCode: 'urn:oid:1.2.40.0.34.10.61', // ELGA Formatcode
+        content: cdaXml,
+        author: {
+          id: author._id.toString(),
+          name: `${author.firstName || ''} ${author.lastName || ''}`.trim() || author.email,
+          role: author.role || 'doctor'
+        }
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000
+      }
+    );
+
+    // Speichere ELGA-Referenz im Dekurs-Eintrag (optional)
+    dekursEntry.elgaSubmission = {
+      submittedAt: new Date(),
+      submittedBy: req.user._id,
+      elgaDocumentId: response.data.documentId || response.data.id,
+      status: 'submitted'
+    };
+    await dekursEntry.save();
+
+    // Lade den aktualisierten Eintrag neu
+    const updatedEntry = await DekursEntry.findById(id)
+      .populate('createdBy', 'firstName lastName title')
+      .populate('encounterId', 'startTime endTime service')
+      .populate('linkedDiagnoses.diagnosisId', 'code display status')
+      .populate('linkedMedications.medicationId', 'name activeIngredient');
+
+    res.json({
+      success: true,
+      message: 'Dekurs-Eintrag erfolgreich an ELGA gesendet',
+      data: updatedEntry
+    });
+  } catch (error) {
+    console.error('Fehler beim Senden des Dekurs-Eintrags an ELGA:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Senden an ELGA',
+      error: error.message
+    });
   }
 });
 

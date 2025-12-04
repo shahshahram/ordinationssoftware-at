@@ -420,6 +420,291 @@ ${JSON.stringify(ambefund.formData, null, 2)}
 
     return cdaXml;
   }
+
+  /**
+   * Generiert CDA Dekurs-Eintrag aus DekursEntry-Objekt
+   * @param {Object} dekursEntry - DekursEntry Object (populated)
+   * @param {Object} patient - Patient Object
+   * @param {Object} location - Location Object
+   * @param {Object} author - User Object (Autor)
+   * @returns {String} CDA XML als String
+   */
+  static async generateDekursCDA(dekursEntry, patient, location, author) {
+    try {
+      // Validiere erforderliche Felder
+      if (!dekursEntry || !patient || !location || !author) {
+        throw new Error('Dekurs-Eintrag, Patient, Location und Autor sind erforderlich');
+      }
+
+      // Generiere CDA XML
+      const cdaXml = this.buildDekursCDAXML({
+        dekursEntry,
+        patient,
+        location,
+        author
+      });
+
+      logger.info(`CDA XML generiert für Dekurs-Eintrag: ${dekursEntry._id}`);
+      return cdaXml;
+    } catch (error) {
+      logger.error(`Fehler beim Generieren des CDA für Dekurs: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Baut CDA XML für Dekurs-Eintrag zusammen
+   * @param {Object} params - Alle erforderlichen Parameter
+   * @returns {String} CDA XML
+   */
+  static buildDekursCDAXML({ dekursEntry, patient, location, author }) {
+    if (!patient || !location || !author || !dekursEntry) {
+      throw new Error('Alle Parameter (patient, location, author, dekursEntry) sind erforderlich');
+    }
+    
+    const now = new Date();
+    const hl7Timestamp = formatHL7Timestamp(now, true, false, true);
+    const entryDate = dekursEntry.entryDate 
+      ? formatHL7Timestamp(new Date(dekursEntry.entryDate), true, false, true)
+      : hl7Timestamp;
+
+    // Generiere gültige HL7 UIDs
+    const docId = uuidv4();
+    const authorId = uuidv4();
+    const custodianId = uuidv4();
+    const patientId = patient && patient._id ? patient._id.toString() : '';
+    const svnr = (patient && patient.socialSecurityNumber) ? patient.socialSecurityNumber : '';
+
+    // Patient-Name
+    const patientName = patient && patient.firstName && patient.lastName
+      ? `${patient.firstName} ${patient.lastName}`
+      : 'Unbekannt';
+
+    // Autor-Name
+    const authorName = author && author.firstName && author.lastName
+      ? `${author.firstName} ${author.lastName}`
+      : (author && author.email ? author.email : 'Unbekannt');
+
+    // Location-Name
+    const locationName = location && location.name ? location.name : 'Unbekannter Standort';
+
+    // Geburtsdatum
+    const birthDate = patient && patient.dateOfBirth
+      ? formatHL7Timestamp(new Date(patient.dateOfBirth), false)
+      : '';
+
+    // ELGA Codes für Dekurs (Ordinationsbefund)
+    // ClassCode: CDA (Clinical Document Architecture)
+    // TypeCode: Ordinationsbefund (kann je nach ELGA-Spezifikation angepasst werden)
+    const classCode = 'CDA';
+    const classCodeScheme = '1.2.40.0.34.10.39'; // ELGA_Dokumentenklassen
+    const typeCode = '11534-6'; // Progress Note (LOINC)
+    const typeCodeScheme = '2.16.840.1.113883.6.1'; // LOINC
+    const formatCode = 'urn:oid:1.2.40.0.34.10.61'; // ELGA Formatcode
+
+    // Extrahiere Diagnosen
+    const primaryDiagnoses = (dekursEntry.linkedDiagnoses || []).filter(d => d.isPrimary);
+    const secondaryDiagnoses = (dekursEntry.linkedDiagnoses || []).filter(d => !d.isPrimary);
+
+    // Extrahiere Medikamente
+    const medications = dekursEntry.linkedMedications || [];
+
+    // Baue CDA XML
+    const cdaXml = `<?xml version="1.0" encoding="UTF-8"?>
+<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <realmCode code="AT"/>
+  <typeId root="2.16.840.1.113883.1.3" extension="POCD_HD000040"/>
+  <templateId root="1.2.40.0.34.11.1"/>
+  <id root="${docId}"${dekursEntry._id ? ` extension="${dekursEntry._id.toString()}"` : ''}/>
+  <code code="${classCode}" codeSystem="${classCodeScheme}" displayName="Ordinationsbefund"/>
+  <title>Dekurs - ${patientName}</title>
+  <effectiveTime value="${entryDate}"/>
+  <confidentialityCode code="N" codeSystem="2.16.840.1.113883.5.25"/>
+  <languageCode code="de-AT"/>
+  
+  <!-- Patient -->
+  <recordTarget>
+    <patientRole>
+      ${svnr || patientId ? `<id root="2.16.840.1.113883.2.7" extension="${svnr || patientId}"/>` : `<id root="2.16.840.1.113883.2.7"/>`}
+      <patient>
+        ${(patient.firstName || patient.lastName) ? `<name>
+          ${patient.firstName ? `<given>${this.escapeXml(patient.firstName)}</given>` : ''}
+          ${patient.lastName ? `<family>${this.escapeXml(patient.lastName)}</family>` : ''}
+        </name>` : '<name><family>Unbekannt</family></name>'}
+        ${birthDate ? `<birthTime value="${birthDate}"/>` : ''}
+      </patient>
+    </patientRole>
+  </recordTarget>
+  
+  <!-- Autor -->
+  <author>
+    <time value="${entryDate}"/>
+    <assignedAuthor>
+      ${author && author._id ? `<id root="${authorId}" extension="${author._id.toString()}"/>` : `<id root="${authorId}"/>`}
+      <assignedPerson>
+        ${(author.firstName || author.lastName) ? `<name>
+          ${author.firstName ? `<given>${this.escapeXml(author.firstName)}</given>` : ''}
+          ${author.lastName ? `<family>${this.escapeXml(author.lastName)}</family>` : ''}
+        </name>` : `<name><family>${this.escapeXml(author.email || 'Unbekannt')}</family></name>`}
+      </assignedPerson>
+      <representedOrganization>
+        <name>${this.escapeXml(locationName)}</name>
+      </representedOrganization>
+    </assignedAuthor>
+  </author>
+  
+  <!-- Custodian -->
+  <custodian>
+    <assignedCustodian>
+      <representedCustodianOrganization>
+        ${location && location._id ? `<id root="${custodianId}" extension="${location._id.toString()}"/>` : `<id root="${custodianId}"/>`}
+        <name>${this.escapeXml(locationName)}</name>
+      </representedCustodianOrganization>
+    </assignedCustodian>
+  </custodian>
+  
+  <!-- Dokumenten-Information -->
+  <component>
+    <structuredBody>
+      ${dekursEntry.visitReason ? `
+      <!-- Besuchsgrund -->
+      <component>
+        <section>
+          <code code="10154-3" codeSystem="2.16.840.1.113883.6.1" displayName="Chief Complaint"/>
+          <text>${this.escapeXml(dekursEntry.visitReason)}</text>
+        </section>
+      </component>` : ''}
+      
+      ${dekursEntry.clinicalObservations ? `
+      <!-- Klinische Beobachtungen -->
+      <component>
+        <section>
+          <code code="11348-0" codeSystem="2.16.840.1.113883.6.1" displayName="History of Present Illness"/>
+          <text>${this.escapeXml(dekursEntry.clinicalObservations)}</text>
+        </section>
+      </component>` : ''}
+      
+      ${dekursEntry.findings ? `
+      <!-- Befunde -->
+      <component>
+        <section>
+          <code code="29545-1" codeSystem="2.16.840.1.113883.6.1" displayName="Physical Examination"/>
+          <text>${this.escapeXml(dekursEntry.findings)}</text>
+        </section>
+      </component>` : ''}
+      
+      ${primaryDiagnoses && primaryDiagnoses.length > 0 ? `
+      <!-- Primärdiagnosen -->
+      <component>
+        <section>
+          <code code="29548-5" codeSystem="2.16.840.1.113883.6.1" displayName="Diagnose"/>
+          ${primaryDiagnoses.map(diag => `
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <code code="${this.escapeXml(diag.icd10Code || diag.code || '')}" codeSystem="${getCodeSystemOID(diag.codingScheme || 'ICD-10')}"${diag.display ? ` displayName="${this.escapeXml(diag.display)}"` : ''}/>
+              ${diag.notes ? `<text>${this.escapeXml(diag.notes)}</text>` : ''}
+            </act>
+          </entry>`).join('')}
+        </section>
+      </component>` : ''}
+      
+      ${secondaryDiagnoses && secondaryDiagnoses.length > 0 ? `
+      <!-- Sekundärdiagnosen -->
+      <component>
+        <section>
+          <code code="29548-5" codeSystem="2.16.840.1.113883.6.1" displayName="Sekundärdiagnosen"/>
+          ${secondaryDiagnoses.map(diag => `
+          <entry>
+            <act classCode="ACT" moodCode="EVN">
+              <code code="${this.escapeXml(diag.icd10Code || diag.code || '')}" codeSystem="${getCodeSystemOID(diag.codingScheme || 'ICD-10')}"${diag.display ? ` displayName="${this.escapeXml(diag.display)}"` : ''}/>
+              ${diag.notes ? `<text>${this.escapeXml(diag.notes)}</text>` : ''}
+            </act>
+          </entry>`).join('')}
+        </section>
+      </component>` : ''}
+      
+      ${medications && medications.length > 0 ? `
+      <!-- Medikamente -->
+      <component>
+        <section>
+          <code code="10160-0" codeSystem="2.16.840.1.113883.6.1" displayName="Medications"/>
+          <text>
+            ${medications.map(med => {
+              const parts = [];
+              if (med.name) parts.push(med.name);
+              if (med.dosage && med.dosageUnit) parts.push(`${med.dosage} ${med.dosageUnit}`);
+              else if (med.dosage) parts.push(med.dosage);
+              if (med.frequency) parts.push(med.frequency);
+              if (med.route) parts.push(`(${med.route})`);
+              if (med.instructions) parts.push(`- ${med.instructions}`);
+              return parts.join(' ');
+            }).join('; ')}
+          </text>
+          ${medications.map(med => `
+          <entry>
+            <substanceAdministration classCode="SBADM" moodCode="EVN">
+              <consumable>
+                <manufacturedProduct>
+                  <manufacturedMaterial>
+                    <code code="${med.medicationId || ''}" displayName="${this.escapeXml(med.name || '')}"/>
+                  </manufacturedMaterial>
+                </manufacturedProduct>
+              </consumable>
+              ${med.dosage ? `<doseQuantity value="${this.escapeXml(med.dosage)}"${med.dosageUnit ? ` unit="${this.escapeXml(med.dosageUnit)}"` : ''}/>` : ''}
+              ${med.frequency ? `<rateQuantity value="${this.escapeXml(med.frequency)}"/>` : ''}
+              ${med.instructions ? `<text>${this.escapeXml(med.instructions)}</text>` : ''}
+            </substanceAdministration>
+          </entry>`).join('')}
+        </section>
+      </component>` : ''}
+      
+      ${dekursEntry.treatmentDetails ? `
+      <!-- Behandlungsdetails -->
+      <component>
+        <section>
+          <code code="18776-5" codeSystem="2.16.840.1.113883.6.1" displayName="Plan of Care"/>
+          <text>${this.escapeXml(dekursEntry.treatmentDetails)}</text>
+        </section>
+      </component>` : ''}
+      
+      ${dekursEntry.progressChecks ? `
+      <!-- Verlaufskontrollen -->
+      <component>
+        <section>
+          <code code="11348-0" codeSystem="2.16.840.1.113883.6.1" displayName="History of Present Illness"/>
+          <text>${this.escapeXml(dekursEntry.progressChecks)}</text>
+        </section>
+      </component>` : ''}
+      
+      ${dekursEntry.notes ? `
+      <!-- Notizen -->
+      <component>
+        <section>
+          <code code="48767-8" codeSystem="2.16.840.1.113883.6.1" displayName="Clinical Note"/>
+          <text>${this.escapeXml(dekursEntry.notes)}</text>
+        </section>
+      </component>` : ''}
+    </structuredBody>
+  </component>
+</ClinicalDocument>`;
+
+    return cdaXml;
+  }
+
+  /**
+   * Escaped XML-Sonderzeichen
+   * @param {String} text - Text zum Escapen
+   * @returns {String} - Escapeter Text
+   */
+  static escapeXml(text) {
+    if (!text) return '';
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
 }
 
 module.exports = CdaGeneratorService;

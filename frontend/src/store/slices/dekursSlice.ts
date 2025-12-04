@@ -102,6 +102,13 @@ export interface DekursEntry {
   updatedAt?: string;
   finalizedAt?: string;
   finalizedBy?: string;
+  elgaSubmission?: {
+    submittedAt?: string;
+    submittedBy?: string;
+    elgaDocumentId?: string;
+    status?: 'submitted' | 'failed' | 'pending';
+    errorMessage?: string;
+  };
 }
 
 export interface DekursVorlage {
@@ -252,6 +259,18 @@ export const finalizeDekursEntry = createAsyncThunk(
       return response.data?.data || response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Fehler beim Finalisieren des Dekurs-Eintrags');
+    }
+  }
+);
+
+export const sendDekursToElga = createAsyncThunk(
+  'dekurs/sendToElga',
+  async (entryId: string, { rejectWithValue }) => {
+    try {
+      const response: any = await api.post(`/dekurs/${entryId}/send-to-elga`);
+      return response.data?.data || response.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data?.message || 'Fehler beim Senden an ELGA');
     }
   }
 );
@@ -485,6 +504,30 @@ const dekursSlice = createSlice({
         if (state.selectedEntry?._id === action.payload._id) {
           state.selectedEntry = action.payload;
         }
+      });
+
+    // Send to ELGA
+    builder
+      .addCase(sendDekursToElga.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(sendDekursToElga.fulfilled, (state, action) => {
+        state.loading = false;
+        // Backend gibt die aktualisierte Entry zurück
+        if (action.payload && action.payload._id) {
+          const index = state.entries.findIndex(e => e._id === action.payload._id);
+          if (index !== -1) {
+            state.entries[index] = action.payload;
+          }
+          if (state.selectedEntry?._id === action.payload._id) {
+            state.selectedEntry = action.payload;
+          }
+        }
+      })
+      .addCase(sendDekursToElga.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
       });
 
     // Upload Photo

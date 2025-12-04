@@ -45,13 +45,17 @@ import {
   Add,
   Visibility,
   Close,
-  Print
+  Print,
+  CloudUpload,
+  CheckCircleOutline
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   fetchDekursEntries,
   deleteDekursEntry,
   exportDekursForArztbrief,
+  sendDekursToElga,
+  fetchDekursEntry,
   DekursEntry
 } from '../store/slices/dekursSlice';
 import DekursDialog from './DekursDialog';
@@ -80,6 +84,11 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
   const [imagePreviewOpen, setImagePreviewOpen] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [selectedImageName, setSelectedImageName] = useState<string>('');
+  const [elgaConfirmDialogOpen, setElgaConfirmDialogOpen] = useState(false);
+  const [elgaEntryToSend, setElgaEntryToSend] = useState<DekursEntry | null>(null);
+  const [sendingToElga, setSendingToElga] = useState(false);
+  const [elgaSuccessMessage, setElgaSuccessMessage] = useState<string | null>(null);
+  const [elgaErrorMessage, setElgaErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (patientId) {
@@ -142,6 +151,45 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
   const handlePreview = (entry: DekursEntry) => {
     setPreviewEntry(entry);
     setPreviewDialogOpen(true);
+  };
+
+  const handleSendToElga = (entry: DekursEntry) => {
+    setElgaEntryToSend(entry);
+    setElgaConfirmDialogOpen(true);
+  };
+
+  const handleConfirmSendToElga = async () => {
+    if (!elgaEntryToSend?._id) return;
+
+    try {
+      setSendingToElga(true);
+      setElgaErrorMessage(null);
+      setElgaSuccessMessage(null);
+
+      const updatedEntry = await dispatch(sendDekursToElga(elgaEntryToSend._id)).unwrap();
+
+      // Backend gibt bereits die aktualisierte Entry zurück, aber wir laden die Liste trotzdem neu
+      await loadEntries();
+
+      setElgaSuccessMessage('Dekurs-Eintrag erfolgreich an ELGA gesendet');
+      setElgaConfirmDialogOpen(false);
+      setElgaEntryToSend(null);
+
+      // Verstecke Erfolgsmeldung nach 5 Sekunden
+      setTimeout(() => {
+        setElgaSuccessMessage(null);
+      }, 5000);
+    } catch (error: any) {
+      setElgaErrorMessage(error || 'Fehler beim Senden an ELGA');
+    } finally {
+      setSendingToElga(false);
+    }
+  };
+
+  const handleCancelSendToElga = () => {
+    setElgaConfirmDialogOpen(false);
+    setElgaEntryToSend(null);
+    setElgaErrorMessage(null);
   };
 
   const handlePrint = (entry: DekursEntry) => {
@@ -592,6 +640,14 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
                         color="info"
                       />
                     )}
+                    {entry.elgaSubmission?.status === 'submitted' && (
+                      <Chip
+                        icon={<CheckCircleOutline />}
+                        label="An ELGA gesendet"
+                        size="small"
+                        color="success"
+                      />
+                    )}
                   </Stack>
                 </Box>
 
@@ -608,6 +664,29 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
                       <Visibility />
                     </IconButton>
                   </Tooltip>
+                  {entry.status === 'finalized' && (
+                    <Tooltip 
+                      title={
+                        entry.elgaSubmission?.status === 'submitted' 
+                          ? 'Bereits an ELGA gesendet' 
+                          : 'An ELGA senden'
+                      }
+                    >
+                      <span>
+                        <IconButton
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSendToElga(entry);
+                          }}
+                          color={entry.elgaSubmission?.status === 'submitted' ? 'success' : 'primary'}
+                          disabled={entry.elgaSubmission?.status === 'submitted'}
+                          sx={{ mr: 1 }}
+                        >
+                          <CloudUpload />
+                        </IconButton>
+                      </span>
+                    </Tooltip>
+                  )}
                   {entry.status !== 'finalized' && (
                     <IconButton
                       onClick={(e) => {
@@ -1041,6 +1120,101 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ELGA Bestätigungsdialog */}
+      <Dialog
+        open={elgaConfirmDialogOpen}
+        onClose={handleCancelSendToElga}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          An ELGA senden
+        </DialogTitle>
+        <DialogContent>
+          {elgaErrorMessage && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {elgaErrorMessage}
+            </Alert>
+          )}
+          {elgaSuccessMessage && (
+            <Alert severity="success" sx={{ mb: 2 }}>
+              {elgaSuccessMessage}
+            </Alert>
+          )}
+          <Typography variant="body1" sx={{ mb: 2 }}>
+            Möchten Sie diesen Dekurs-Eintrag wirklich an ELGA senden?
+          </Typography>
+          {elgaEntryToSend && (
+            <Box sx={{ bgcolor: 'grey.100', p: 2, borderRadius: 1, mb: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                <strong>Datum:</strong> {new Date(elgaEntryToSend.entryDate).toLocaleDateString('de-DE', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit'
+                })}
+              </Typography>
+              {elgaEntryToSend.visitReason && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  <strong>Besuchsgrund:</strong> {elgaEntryToSend.visitReason}
+                </Typography>
+              )}
+            </Box>
+          )}
+          <Alert severity="info" sx={{ mt: 2 }}>
+            Der Dekurs-Eintrag wird in CDA-Format konvertiert und an ELGA übermittelt. 
+            Nach erfolgreicher Übermittlung kann der Eintrag nicht mehr erneut gesendet werden.
+          </Alert>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCancelSendToElga} disabled={sendingToElga}>
+            Abbrechen
+          </Button>
+          <Button
+            onClick={handleConfirmSendToElga}
+            variant="contained"
+            color="primary"
+            disabled={sendingToElga}
+            startIcon={sendingToElga ? <CircularProgress size={20} /> : <CloudUpload />}
+          >
+            {sendingToElga ? 'Wird gesendet...' : 'An ELGA senden'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Erfolgs-/Fehlermeldung Snackbar */}
+      {elgaSuccessMessage && (
+        <Alert 
+          severity="success" 
+          sx={{ 
+            position: 'fixed', 
+            bottom: 20, 
+            right: 20, 
+            zIndex: 9999,
+            minWidth: 300
+          }}
+          onClose={() => setElgaSuccessMessage(null)}
+        >
+          {elgaSuccessMessage}
+        </Alert>
+      )}
+      {elgaErrorMessage && (
+        <Alert 
+          severity="error" 
+          sx={{ 
+            position: 'fixed', 
+            bottom: 20, 
+            right: 20, 
+            zIndex: 9999,
+            minWidth: 300
+          }}
+          onClose={() => setElgaErrorMessage(null)}
+        >
+          {elgaErrorMessage}
+        </Alert>
+      )}
     </Box>
   );
 };
