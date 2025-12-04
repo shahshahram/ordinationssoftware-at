@@ -307,7 +307,7 @@ router.post('/sync', auth, async (req, res) => {
 router.post('/', auth, [
   body('userId').notEmpty().withMessage('Benutzer-ID ist erforderlich'),
   body('displayName').notEmpty().withMessage('Anzeigename ist erforderlich'),
-  body('roleHint').isIn(['arzt', 'assistenz', 'therapeut', 'admin', 'staff', 'nurse', 'receptionist', 'assistant', 'doctor']).withMessage('Ungültige Rolle')
+  body('roleHint').isIn(['super_admin', 'admin', 'arzt', 'assistent', 'assistenz', 'rezeption', 'billing', 'patient', 'therapeut', 'staff', 'nurse', 'receptionist', 'assistant', 'doctor']).withMessage('Ungültige Rolle')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -380,7 +380,7 @@ router.post('/', auth, [
 // Personalprofil aktualisieren
 router.put('/:id', auth, [
   body('displayName').optional().notEmpty().withMessage('Anzeigename darf nicht leer sein'),
-  body('roleHint').optional().isIn(['arzt', 'assistenz', 'therapeut', 'admin']).withMessage('Ungültige Rolle')
+  body('roleHint').optional().isIn(['super_admin', 'admin', 'arzt', 'assistent', 'assistenz', 'rezeption', 'billing', 'patient', 'therapeut', 'staff', 'nurse', 'receptionist', 'assistant', 'doctor']).withMessage('Ungültige Rolle')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

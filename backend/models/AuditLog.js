@@ -46,6 +46,7 @@ const AuditLogSchema = new mongoose.Schema({
       'absences.read', 'absences.create', 'absences.update', 'absences.delete', 'absences.approve',
       'availability.read', 'availability.check', 'availability.utilization', 'availability.staff',
       'locations.read', 'locations.create', 'locations.update', 'locations.delete',
+      'locations.update.logo', 'locations.delete.logo',
       'staff-location-assignments.read', 'staff-location-assignments.create', 'staff-location-assignments.update', 'staff-location-assignments.delete',
       'location-hours.read', 'location-hours.create', 'location-hours.update', 'location-hours.delete',
       'location-closures.read', 'location-closures.create', 'location-closures.update', 'location-closures.delete',

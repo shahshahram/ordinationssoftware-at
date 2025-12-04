@@ -19,7 +19,7 @@ const StaffProfileSchema = new mongoose.Schema({
   // Rollenhinweis
   roleHint: { 
     type: String, 
-    enum: ['arzt', 'assistenz', 'therapeut', 'admin', 'staff', 'nurse', 'receptionist', 'assistant', 'doctor'], 
+    enum: ['super_admin', 'admin', 'arzt', 'assistent', 'assistenz', 'rezeption', 'billing', 'patient', 'therapeut', 'staff', 'nurse', 'receptionist', 'assistant', 'doctor'], 
     required: true 
   },
   

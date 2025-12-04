@@ -91,6 +91,15 @@ export interface Patient {
   referralDoctor?: string;
   visitReason?: string;
   
+  // Infektionen
+  infections?: Array<{
+    type: string; // z.B. "MRSA", "MRGN", "VRE", "Clostridium difficile", etc.
+    detectedDate?: string;
+    location?: string; // z.B. "Wunde", "Urin", "Blut", etc.
+    status?: 'active' | 'resolved' | 'colonized';
+    notes?: string;
+  }>;
+  
   // Zusätzliche Felder vom Backend
   previousSurgeries?: string[];
   dataProtectionConsent?: boolean;

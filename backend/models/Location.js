@@ -60,6 +60,86 @@ const locationSchema = new mongoose.Schema({
     default: true
   },
   
+  // Leitung der Ordination
+  owner: {
+    title: {
+      type: String,
+      trim: true,
+      enum: ['Dr.', 'Dr. med.', 'Dr. med. univ.', 'Prim. Dr.', 'Univ.-Prof. Dr.', 'OA Dr.', 'Ass. Dr.', 'Mag.', 'Dipl.', '']
+    },
+    firstName: {
+      type: String,
+      trim: true
+    },
+    lastName: {
+      type: String,
+      trim: true
+    },
+    gender: {
+      type: String,
+      enum: ['male', 'female', 'diverse', ''],
+      trim: true
+    },
+    specialty: {
+      type: String,
+      trim: true
+    },
+    academicTitle: {
+      type: String,
+      trim: true
+    },
+    licenseNumber: {
+      type: String,
+      trim: true
+    },
+    phone: {
+      type: String,
+      trim: true
+    },
+    email: {
+      type: String,
+      trim: true,
+      lowercase: true
+    },
+    website: {
+      type: String,
+      trim: true
+    }
+  },
+  
+  // Logo für Briefkopf
+  logo: {
+    filename: {
+      type: String,
+      trim: true
+    },
+    originalName: {
+      type: String,
+      trim: true
+    },
+    mimeType: {
+      type: String,
+      trim: true
+    },
+    size: {
+      type: Number
+    },
+    path: {
+      type: String,
+      trim: true
+    },
+    uploadedAt: {
+      type: Date,
+      default: Date.now
+    },
+    width: {
+      type: Number
+    },
+    height: {
+      type: Number
+    }
+  },
+  
   // Praxistyp für Abrechnung
   practiceType: {
     type: String,

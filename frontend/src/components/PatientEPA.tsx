@@ -25,7 +25,11 @@ import {
   Select,
   Collapse,
   Card,
-  CardContent
+  CardContent,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   CalendarToday,
@@ -42,7 +46,9 @@ import {
   FilterList,
   Visibility,
   Edit,
-  MonitorHeart
+  MonitorHeart,
+  ShowChart,
+  Close
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
@@ -53,6 +59,7 @@ import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import VitalSignsChart from './VitalSignsChart';
 
 interface EPAEntry {
   id: string;
@@ -77,6 +84,7 @@ interface GroupedEPAEntry {
   count: number;
   entries: EPAEntry[];
   isGrouped: boolean;
+  metadata?: any;
 }
 
 interface PatientEPAProps {
@@ -93,6 +101,24 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const { entries: dekursEntries, loading: dekursLoading } = useAppSelector((state) => state.dekurs);
   const { vitalSigns, loading: vitalSignsLoading } = useAppSelector((state) => state.vitalSigns);
 
+  // Debug: Log documents and appointments when they change
+  useEffect(() => {
+    console.log('PatientEPA: Documents from Redux store:', {
+      documents,
+      documentsType: typeof documents,
+      isArray: Array.isArray(documents),
+      length: Array.isArray(documents) ? documents.length : 'N/A',
+      patientId
+    });
+    console.log('PatientEPA: Appointments from Redux store:', {
+      appointments,
+      appointmentsType: typeof appointments,
+      isArray: Array.isArray(appointments),
+      length: Array.isArray(appointments) ? appointments.length : 'N/A',
+      patientId
+    });
+  }, [documents, appointments, patientId]);
+
   const [epaEntries, setEpaEntries] = useState<EPAEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -101,6 +127,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const [laborResults, setLaborResults] = useState<any[]>([]);
   const [dicomStudies, setDicomStudies] = useState<any[]>([]);
   const [photos, setPhotos] = useState<any[]>([]);
+  const [patient, setPatient] = useState<any>(null);
+  const [vitalSignsChartOpen, setVitalSignsChartOpen] = useState(false);
 
   // Lade alle Daten
   useEffect(() => {
@@ -116,6 +144,15 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           dispatch(fetchDocuments({ patientId })).catch(() => {}),
           dispatch(fetchDekursEntries({ patientId, limit: 100 })).catch(() => {}),
           dispatch(fetchVitalSigns(patientId)).catch(() => {}),
+          // Lade Patientendaten für Medikamente
+          api.get<any>(`/patients-extended/${patientId}`).then((response: any) => {
+            if (response.success) {
+              setPatient(response.data || response);
+            }
+          }).catch((error: any) => {
+            console.warn('Fehler beim Laden der Patientendaten:', error);
+            setPatient(null);
+          }),
           // Laborwerte
           api.get<any>(`/labor/patient/${patientId}`).then((response: any) => {
             if (response.success) {
@@ -170,8 +207,29 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
       // Termine
       try {
+        console.log('PatientEPA: Processing appointments:', { 
+          totalAppointments: (appointments || []).length, 
+          patientId, 
+          sampleAppointment: (appointments || [])[0] 
+        });
         (appointments || []).forEach((apt: any) => {
-          if (apt.patient === patientId || apt.patientId === patientId) {
+          // Prüfe verschiedene mögliche Strukturen für patientId
+          const aptPatientId = apt.patientId 
+            || (apt.patient && typeof apt.patient === 'string' ? apt.patient : null)
+            || (apt.patient && typeof apt.patient === 'object' ? apt.patient._id : null)
+            || (apt.patient && typeof apt.patient === 'object' ? apt.patient.id : null);
+          
+          const matches = aptPatientId && (
+            aptPatientId === patientId || 
+            String(aptPatientId) === String(patientId)
+          );
+          
+          if (matches) {
+            console.log('PatientEPA: Adding appointment to entries:', { 
+              aptId: apt._id, 
+              title: apt.title, 
+              patientId: aptPatientId 
+            });
             entries.push({
               id: `appointment-${apt._id}`,
               type: 'appointment',
@@ -180,10 +238,32 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
               description: apt.reason || apt.notes || apt.description,
               status: apt.status,
               doctor: apt.doctor ? (typeof apt.doctor === 'object' ? `${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : apt.doctor) : undefined,
-              metadata: apt
+              metadata: {
+                ...apt,
+                // Stelle sicher, dass wichtige Felder verfügbar sind
+                startTime: apt.startTime,
+                endTime: apt.endTime,
+                duration: apt.duration || (apt.startTime && apt.endTime ? Math.round((new Date(apt.endTime).getTime() - new Date(apt.startTime).getTime()) / (1000 * 60)) : null),
+                reason: apt.reason,
+                notes: apt.notes,
+                type: apt.type,
+                bookingType: apt.bookingType,
+                priority: apt.priority,
+                roomName: apt.roomName || (apt.room && typeof apt.room === 'object' ? apt.room.name : null),
+                service: apt.service,
+                locationName: apt.locationName || (apt.locationId && typeof apt.locationId === 'object' ? apt.locationId.name : null)
+              }
+            });
+          } else {
+            console.log('PatientEPA: Appointment does not match patient:', { 
+              aptId: apt._id, 
+              aptPatientId, 
+              patientId,
+              patient: apt.patient
             });
           }
         });
+        console.log('PatientEPA: Total appointment entries added:', entries.filter(e => e.type === 'appointment').length);
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Terminen:', error);
       }
@@ -201,6 +281,43 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             doctor: dekurs.createdBy ? (typeof dekurs.createdBy === 'object' ? `${dekurs.createdBy.firstName || ''} ${dekurs.createdBy.lastName || ''}`.trim() : dekurs.createdBy) : undefined,
             metadata: dekurs
           });
+          
+          // Medikamente aus Dekurs-Einträgen
+          if (dekurs.linkedMedications && Array.isArray(dekurs.linkedMedications)) {
+            dekurs.linkedMedications.forEach((linkedMed: any, medIndex: number) => {
+              const med = linkedMed.medicationId || linkedMed;
+              const medName = typeof med === 'object' ? (med.name || med.activeIngredient || 'Unbekanntes Medikament') : med;
+              const medDosage = linkedMed.dosage || '';
+              const medDosageUnit = linkedMed.dosageUnit || '';
+              const medFrequency = linkedMed.frequency || '';
+              const medRoute = linkedMed.route || '';
+              const medNotes = linkedMed.notes || '';
+              
+              const medDescription = [
+                medDosage && medDosageUnit && `Dosierung: ${medDosage} ${medDosageUnit}`,
+                medFrequency && `Häufigkeit: ${medFrequency}`,
+                medRoute && `Applikation: ${medRoute}`,
+                medNotes && `Notizen: ${medNotes}`
+              ].filter(Boolean).join(', ') || 'Medikament erfasst';
+              
+              entries.push({
+                id: `medication-dekurs-${dekurs._id}-${medIndex}`,
+                type: 'medication',
+                date: new Date(dekurs.entryDate || dekurs.createdAt),
+                title: medName,
+                description: medDescription,
+                status: 'aktiv',
+                doctor: dekurs.createdBy ? (typeof dekurs.createdBy === 'object' ? `${dekurs.createdBy.firstName || ''} ${dekurs.createdBy.lastName || ''}`.trim() : dekurs.createdBy) : undefined,
+                metadata: {
+                  ...linkedMed,
+                  medicationId: med,
+                  dekursId: dekurs._id,
+                  source: 'dekurs'
+                },
+                changeType: 'prescribed'
+              });
+            });
+          }
         });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Dekurs-Einträgen:', error);
@@ -223,11 +340,70 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         console.error('Fehler beim Verarbeiten von Diagnosen:', error);
       }
 
+      // Medikamente
+      try {
+        if (patient && patient.currentMedications && Array.isArray(patient.currentMedications)) {
+          patient.currentMedications.forEach((med: any, index: number) => {
+            // Medikament kann ein String oder ein Objekt sein
+            const medName = typeof med === 'string' ? med : (med.name || 'Unbekanntes Medikament');
+            const medDosage = typeof med === 'object' ? med.dosage : '';
+            const medFrequency = typeof med === 'object' ? med.frequency : '';
+            const medStartDate = typeof med === 'object' ? med.startDate : null;
+            const medPrescribedBy = typeof med === 'object' ? med.prescribedBy : '';
+            
+            // Erstelle Beschreibung aus Dosierung, Häufigkeit, etc.
+            const medDescription = [
+              medDosage && `Dosierung: ${medDosage}`,
+              medFrequency && `Häufigkeit: ${medFrequency}`,
+              medPrescribedBy && `Verschrieben von: ${medPrescribedBy}`
+            ].filter(Boolean).join(', ') || 'Medikament erfasst';
+            
+            entries.push({
+              id: `medication-${patientId}-${index}-${Date.now()}`,
+              type: 'medication',
+              date: medStartDate ? new Date(medStartDate) : new Date(patient.updatedAt || patient.createdAt || new Date()),
+              title: medName,
+              description: medDescription,
+              status: 'aktiv',
+              metadata: {
+                ...(typeof med === 'object' ? med : { name: med }),
+                patientId: patientId
+              },
+              changeType: 'prescribed'
+            });
+          });
+          console.log('PatientEPA: Total medication entries added:', entries.filter(e => e.type === 'medication').length);
+        }
+      } catch (error) {
+        console.error('Fehler beim Verarbeiten von Medikamenten:', error);
+      }
+
       // Dokumente
       try {
         const docsArray = Array.isArray(documents) ? documents : ((documents as any)?.data || []);
+        console.log('PatientEPA: Processing documents:', { 
+          totalDocs: docsArray.length, 
+          patientId, 
+          sampleDoc: docsArray[0] 
+        });
         docsArray.forEach((doc: any) => {
-          if (doc.patientId === patientId || doc.patient === patientId) {
+          // Prüfe verschiedene mögliche Strukturen für patientId
+          const docPatientId = doc.patientId 
+            || (doc.patient && typeof doc.patient === 'string' ? doc.patient : null)
+            || (doc.patient && typeof doc.patient === 'object' ? doc.patient.id : null)
+            || (doc.patient && typeof doc.patient === 'object' ? doc.patient._id : null);
+          
+          const matches = docPatientId && (
+            docPatientId === patientId || 
+            String(docPatientId) === String(patientId)
+          );
+          
+          if (matches) {
+            console.log('PatientEPA: Adding document to entries:', { 
+              docId: doc._id, 
+              title: doc.title, 
+              patientId: docPatientId 
+            });
             entries.push({
               id: `document-${doc._id}`,
               type: 'document',
@@ -237,8 +413,16 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
               status: doc.status,
               metadata: doc
             });
+          } else {
+            console.log('PatientEPA: Document does not match patient:', { 
+              docId: doc._id, 
+              docPatientId, 
+              patientId,
+              patient: doc.patient
+            });
           }
         });
+        console.log('PatientEPA: Total document entries added:', entries.filter(e => e.type === 'document').length);
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Dokumenten:', error);
       }
@@ -296,41 +480,61 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       // Vitalwerte
       try {
         (vitalSigns || []).forEach((vital: any) => {
-          const vitalParts: string[] = [];
+          const vitalParts: Array<{ text: string; isAbnormal: boolean }> = [];
+          let hasAbnormalValues = false;
           
           if (vital.bloodPressure?.systolic && vital.bloodPressure?.diastolic) {
-            vitalParts.push(`RR: ${vital.bloodPressure.systolic}/${vital.bloodPressure.diastolic} mmHg`);
+            const sysAbnormal = isVitalValueAbnormal('bloodPressure_systolic', vital.bloodPressure.systolic);
+            const diaAbnormal = isVitalValueAbnormal('bloodPressure_diastolic', vital.bloodPressure.diastolic);
+            vitalParts.push({ 
+              text: `RR: ${vital.bloodPressure.systolic}/${vital.bloodPressure.diastolic} mmHg`, 
+              isAbnormal: sysAbnormal || diaAbnormal 
+            });
+            if (sysAbnormal || diaAbnormal) hasAbnormalValues = true;
           }
           if (vital.pulse) {
-            vitalParts.push(`Puls: ${vital.pulse} bpm`);
+            const pulseAbnormal = isVitalValueAbnormal('pulse', vital.pulse);
+            vitalParts.push({ text: `Puls: ${vital.pulse} bpm`, isAbnormal: pulseAbnormal });
+            if (pulseAbnormal) hasAbnormalValues = true;
           }
           if (vital.respiratoryRate) {
-            vitalParts.push(`AF: ${vital.respiratoryRate} /min`);
+            const respAbnormal = isVitalValueAbnormal('respiratoryRate', vital.respiratoryRate);
+            vitalParts.push({ text: `AF: ${vital.respiratoryRate} /min`, isAbnormal: respAbnormal });
+            if (respAbnormal) hasAbnormalValues = true;
           }
           if (vital.temperature?.value) {
             const unit = vital.temperature.unit === 'celsius' ? '°C' : '°F';
-            vitalParts.push(`Temp: ${vital.temperature.value} ${unit}`);
+            const tempAbnormal = isVitalValueAbnormal('temperature', vital.temperature.value, vital.temperature.unit);
+            vitalParts.push({ text: `Temp: ${vital.temperature.value} ${unit}`, isAbnormal: tempAbnormal });
+            if (tempAbnormal) hasAbnormalValues = true;
           }
           if (vital.oxygenSaturation) {
-            vitalParts.push(`SpO2: ${vital.oxygenSaturation}%`);
+            const spo2Abnormal = isVitalValueAbnormal('oxygenSaturation', vital.oxygenSaturation);
+            vitalParts.push({ text: `SpO2: ${vital.oxygenSaturation}%`, isAbnormal: spo2Abnormal });
+            if (spo2Abnormal) hasAbnormalValues = true;
           }
           if (vital.bloodGlucose?.value) {
-            vitalParts.push(`BZ: ${vital.bloodGlucose.value} ${vital.bloodGlucose.unit}`);
+            const unit = vital.bloodGlucose.unit || 'mg/dL';
+            const bgAbnormal = isVitalValueAbnormal('bloodGlucose', vital.bloodGlucose.value);
+            vitalParts.push({ text: `BZ: ${vital.bloodGlucose.value} ${unit}`, isAbnormal: bgAbnormal });
+            if (bgAbnormal) hasAbnormalValues = true;
           }
           if (vital.weight?.value) {
-            vitalParts.push(`Gewicht: ${vital.weight.value} ${vital.weight.unit}`);
+            vitalParts.push({ text: `Gewicht: ${vital.weight.value} ${vital.weight.unit}`, isAbnormal: false });
           }
           if (vital.height?.value) {
-            vitalParts.push(`Größe: ${vital.height.value} ${vital.height.unit}`);
+            vitalParts.push({ text: `Größe: ${vital.height.value} ${vital.height.unit}`, isAbnormal: false });
           }
           if (vital.bmi) {
-            vitalParts.push(`BMI: ${vital.bmi}`);
+            const bmiAbnormal = isVitalValueAbnormal('bmi', vital.bmi);
+            vitalParts.push({ text: `BMI: ${vital.bmi}`, isAbnormal: bmiAbnormal });
+            if (bmiAbnormal) hasAbnormalValues = true;
           }
           if (vital.painScale?.value !== undefined && vital.painScale?.value !== null && vital.painScale?.value !== '') {
-            vitalParts.push(`Schmerz (${vital.painScale.type}): ${vital.painScale.value}`);
+            vitalParts.push({ text: `Schmerz (${vital.painScale.type}): ${vital.painScale.value}`, isAbnormal: false });
           }
 
-          const description = vitalParts.length > 0 ? vitalParts.join(', ') : 'Vitalwerte erfasst';
+          const description = vitalParts.length > 0 ? vitalParts.map(p => p.text).join(', ') : 'Vitalwerte erfasst';
           
           entries.push({
             id: `vital-${vital._id || vital.id}`,
@@ -338,8 +542,12 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             date: new Date(vital.recordedAt || vital.createdAt || new Date()),
             title: 'Vitalwerte',
             description: description,
+            status: hasAbnormalValues ? 'abnormal' : 'normal',
             doctor: vital.recordedBy ? (typeof vital.recordedBy === 'object' ? `${vital.recordedBy.firstName || ''} ${vital.recordedBy.lastName || ''}`.trim() : vital.recordedBy) : undefined,
-            metadata: vital
+            metadata: {
+              ...vital,
+              vitalParts: vitalParts // Speichere die formatierten Teile mit Abnormal-Flags
+            }
           });
         });
       } catch (error) {
@@ -354,7 +562,58 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       console.error('Fehler beim Erstellen der EPA-Einträge:', error);
       setEpaEntries([]);
     }
-  }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns]);
+  }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns, patient]);
+
+  // Funktion zum rekursiven Durchsuchen aller Felder eines Objekts
+  const searchInObject = (obj: any, searchTerm: string): boolean => {
+    if (!obj || !searchTerm) {
+      return false;
+    }
+    
+    const searchLower = searchTerm.toLowerCase();
+    
+    // Durchsuche alle Eigenschaften des Objekts
+    for (const key in obj) {
+      if (obj.hasOwnProperty(key)) {
+        const value = obj[key];
+        
+        // Überspringe bestimmte Felder, die nicht durchsucht werden sollen
+        if (key === '_id' || key === '__v' || key === 'id') {
+          continue;
+        }
+        
+        // Wenn der Wert ein String ist, suche darin
+        if (typeof value === 'string' && value.toLowerCase().includes(searchLower)) {
+          return true;
+        }
+        
+        // Wenn der Wert ein Array ist, durchsuche jedes Element
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            if (searchInObject(item, searchTerm)) {
+              return true;
+            }
+          }
+        }
+        
+        // Wenn der Wert ein Objekt ist, durchsuche es rekursiv
+        if (typeof value === 'object' && value !== null) {
+          if (searchInObject(value, searchTerm)) {
+            return true;
+          }
+        }
+        
+        // Wenn der Wert eine Zahl ist, konvertiere zu String und suche
+        if (typeof value === 'number') {
+          if (value.toString().includes(searchTerm)) {
+            return true;
+          }
+        }
+      }
+    }
+    
+    return false;
+  };
 
   // Filtere Einträge
   const filteredEntries = React.useMemo(() => {
@@ -367,9 +626,22 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           return false;
         }
         try {
-          const matchesSearch = !searchTerm || 
-            (entry.title && entry.title.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (entry.description && entry.description.toLowerCase().includes(searchTerm.toLowerCase()));
+          // Erweiterte Suche: Durchsuche alle Felder des Eintrags
+          let matchesSearch = true;
+          if (searchTerm) {
+            const searchLower = searchTerm.toLowerCase();
+            
+            // Suche in den Standardfeldern
+            const titleMatch = entry.title && entry.title.toLowerCase().includes(searchLower);
+            const descriptionMatch = entry.description && entry.description.toLowerCase().includes(searchLower);
+            const statusMatch = entry.status && entry.status.toLowerCase().includes(searchLower);
+            const doctorMatch = entry.doctor && entry.doctor.toLowerCase().includes(searchLower);
+            
+            // Suche in den Metadaten (alle Felder des ursprünglichen Objekts)
+            const metadataMatch = entry.metadata && searchInObject(entry.metadata, searchTerm);
+            
+            matchesSearch = titleMatch || descriptionMatch || statusMatch || doctorMatch || metadataMatch;
+          }
           
           const matchesType = filterType === 'all' || entry.type === filterType;
 
@@ -442,6 +714,43 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
   const formatDate = (date: Date) => {
     return format(date, 'dd.MM.yyyy HH:mm', { locale: de });
+  };
+
+  // Funktion zum Prüfen, ob ein Vitalwert außerhalb der Norm ist
+  const isVitalValueAbnormal = (type: string, value: number, unit?: string): boolean => {
+    switch (type) {
+      case 'bloodPressure_systolic':
+        return value >= 130; // Hypertonie
+      case 'bloodPressure_diastolic':
+        return value >= 90; // Hypertonie
+      case 'pulse':
+        return value < 60 || value > 100; // Bradykardie oder Tachykardie
+      case 'respiratoryRate':
+        return value < 12 || value > 20; // Zu niedrig oder zu hoch
+      case 'temperature':
+        const tempCelsius = unit === 'fahrenheit' ? (value - 32) * 5/9 : value;
+        return tempCelsius < 35 || tempCelsius >= 38; // Hypothermie oder Fieber
+      case 'oxygenSaturation':
+        return value < 95; // Hypoxie
+      case 'bloodGlucose':
+        // Normal nüchtern: 70-100 mg/dL, postprandial <140 mg/dL
+        // Wir prüfen auf nüchtern-Werte (konservativer Ansatz)
+        return value < 70 || value > 100;
+      case 'bmi':
+        return value < 18.5 || value >= 25; // Untergewicht oder Übergewicht
+      default:
+        return false;
+    }
+  };
+
+  // Funktion zum Erstellen einer formatierten Vitalwert-Anzeige mit Markierung
+  const formatVitalValue = (label: string, value: number | string, type: string, unit?: string): { text: string; isAbnormal: boolean } => {
+    const numValue = typeof value === 'number' ? value : parseFloat(String(value));
+    if (isNaN(numValue)) {
+      return { text: `${label}: ${value}`, isAbnormal: false };
+    }
+    const isAbnormal = isVitalValueAbnormal(type, numValue, unit);
+    return { text: `${label}: ${value}${unit ? ` ${unit}` : ''}`, isAbnormal };
   };
 
   // Gruppiere Einträge nach Datum und Typ (muss vor bedingtem Return sein)
@@ -524,7 +833,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                   doctor: firstEntry.doctor,
                   count: typeEntries.length,
                   entries: typeEntries,
-                  isGrouped: true
+                  isGrouped: true,
+                  metadata: firstEntry.metadata
                 });
               } else {
                 // Einzelner Eintrag
@@ -538,7 +848,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                   doctor: firstEntry.doctor,
                   count: 1,
                   entries: [firstEntry],
-                  isGrouped: false
+                  isGrouped: false,
+                  metadata: firstEntry.metadata
                 });
               }
             } catch (error) {
@@ -702,20 +1013,22 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                               
                               switch (groupedEntry.type) {
                                 case 'appointment':
-                                  tabIndex = 6; // Termine
+                                  tabIndex = 8; // Termine
                                   break;
                                 case 'dekurs':
                                   tabIndex = 1; // Dekurs
                                   break;
                                 case 'diagnosis':
+                                  tabIndex = 3; // Diagnosen
+                                  break;
                                 case 'medication':
-                                  tabIndex = 5; // Medizinisch
+                                  tabIndex = 2; // Medizinisch
                                   break;
                                 case 'dicom':
-                                  tabIndex = 3; // DICOM
+                                  tabIndex = 6; // DICOM
                                   break;
                                 case 'labor':
-                                  tabIndex = 2; // Laborwerte
+                                  tabIndex = 5; // Laborwerte
                                   break;
                                 case 'document':
                                   // Wenn es ein einzelnes Dokument ist, versuche zur Dokumenten-ID zu navigieren
@@ -726,10 +1039,10 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                                   }
                                   break;
                                 case 'photo':
-                                  tabIndex = 8; // Fotos
+                                  tabIndex = 9; // Fotos
                                   break;
                                 case 'vital':
-                                  tabIndex = 9; // Vitalparameter
+                                  tabIndex = 4; // Vitalwerte
                                   break;
                                 default:
                                   return;
@@ -753,7 +1066,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                                 }, 10);
                               } else if (onNavigate && tabIndex !== null) {
                                 // Fallback: Verwende onNavigate
-                                const tabNames = ['epa', 'dekurs', 'laborwerte', 'dicom', 'stammdaten', 'medizinisch', 'termine', 'dokumente', 'fotos'];
+                                // Tab-Namen müssen mit dem Tab-Mapping in PatientOrganizer.tsx übereinstimmen
+                                const tabNames = ['epa', 'dekurs', 'medizinisch', 'diagnosen', 'vitalwerte', 'labor', 'dicom', 'dokumente', 'termine', 'fotos', 'stammdaten'];
                                 const tabName = tabNames[tabIndex];
                                 if (tabName) {
                                   setTimeout(() => {
@@ -829,13 +1143,104 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                                     {groupedEntry.title}
                                   </Typography>
                                   {groupedEntry.description && (
-                                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-                                      {groupedEntry.isGrouped 
-                                        ? `${(groupedEntry.entries || []).slice(0, 3).map(e => e?.title || '').filter(Boolean).join(', ')}${(groupedEntry.count || 0) > 3 ? '...' : ''}`
-                                        : (groupedEntry.description || '').length > 150 
-                                          ? `${(groupedEntry.description || '').substring(0, 150)}...` 
-                                          : (groupedEntry.description || '')}
-                                    </Typography>
+                                    <Box sx={{ mt: 0.5 }}>
+                                      {groupedEntry.isGrouped ? (
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                          {(groupedEntry.entries || []).slice(0, 3).map(e => e?.title || '').filter(Boolean).join(', ')}{(groupedEntry.count || 0) > 3 ? '...' : ''}
+                                        </Typography>
+                                      ) : groupedEntry.type === 'vital' && groupedEntry.metadata?.vitalParts ? (
+                                        // Spezielle Anzeige für Vitalwerte mit Markierung
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                          {groupedEntry.metadata.vitalParts.map((part: { text: string; isAbnormal: boolean }, index: number) => (
+                                            <Typography
+                                              key={index}
+                                              variant="caption"
+                                              sx={{
+                                                display: 'inline-block',
+                                                px: 0.75,
+                                                py: 0.25,
+                                                borderRadius: 1,
+                                                bgcolor: part.isAbnormal ? '#fff3cd' : 'transparent', // Gelber/Amber Hintergrund für besseren Kontrast
+                                                color: part.isAbnormal ? '#856404' : 'text.secondary', // Dunkler Text auf gelbem Hintergrund
+                                                fontWeight: part.isAbnormal ? 600 : 400,
+                                                border: part.isAbnormal ? '1px solid #ffc107' : 'none' // Optional: Roter Rahmen für zusätzliche Betonung
+                                              }}
+                                            >
+                                              {part.text}
+                                            </Typography>
+                                          ))}
+                                        </Box>
+                                      ) : (
+                                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                                          {(groupedEntry.description || '').length > 150 
+                                            ? `${(groupedEntry.description || '').substring(0, 150)}...` 
+                                            : (groupedEntry.description || '')}
+                                        </Typography>
+                                      )}
+                                    </Box>
+                                  )}
+                                  {/* Termin-Details */}
+                                  {!groupedEntry.isGrouped && groupedEntry.type === 'appointment' && groupedEntry.metadata && (
+                                    <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                                      {groupedEntry.metadata.reason && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Grund:</strong> {groupedEntry.metadata.reason}
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.startTime && groupedEntry.metadata.endTime && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Zeit:</strong> {format(new Date(groupedEntry.metadata.startTime), 'HH:mm', { locale: de })} - {format(new Date(groupedEntry.metadata.endTime), 'HH:mm', { locale: de })}
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.duration && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Dauer:</strong> {groupedEntry.metadata.duration} Min.
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.roomName && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Raum:</strong> {groupedEntry.metadata.roomName}
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.service?.name && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Leistung:</strong> {groupedEntry.metadata.service.name}
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.type && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Art:</strong> {groupedEntry.metadata.type}
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.bookingType && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Buchungsart:</strong> {
+                                            groupedEntry.metadata.bookingType === 'online' ? 'Online' :
+                                            groupedEntry.metadata.bookingType === 'internal' ? 'Intern' :
+                                            groupedEntry.metadata.bookingType === 'phone' ? 'Telefon' :
+                                            groupedEntry.metadata.bookingType === 'walk_in' ? 'Walk-in' :
+                                            groupedEntry.metadata.bookingType
+                                          }
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.priority && (
+                                        <Typography variant="caption" color="text.secondary">
+                                          <strong>Priorität:</strong> {
+                                            groupedEntry.metadata.priority === 'urgent' ? 'Dringend' :
+                                            groupedEntry.metadata.priority === 'high' ? 'Hoch' :
+                                            groupedEntry.metadata.priority === 'normal' ? 'Normal' :
+                                            groupedEntry.metadata.priority
+                                          }
+                                        </Typography>
+                                      )}
+                                      {groupedEntry.metadata.notes && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                                          <strong>Notizen:</strong> {groupedEntry.metadata.notes.length > 200 
+                                            ? `${groupedEntry.metadata.notes.substring(0, 200)}...` 
+                                            : groupedEntry.metadata.notes}
+                                        </Typography>
+                                      )}
+                                    </Box>
                                   )}
                                   {groupedEntry.doctor && (
                                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
@@ -873,9 +1278,21 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
       {/* Zusammenfassung */}
       <Paper sx={{ p: 2, mt: 2 }}>
-        <Typography variant="subtitle2" gutterBottom>
-          Zusammenfassung
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+          <Typography variant="subtitle2">
+            Zusammenfassung
+          </Typography>
+          {(vitalSigns || []).length > 0 && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<ShowChart />}
+              onClick={() => setVitalSignsChartOpen(true)}
+            >
+              Vitalwerte-Verlauf anzeigen
+            </Button>
+          )}
+        </Box>
         <Stack direction="row" spacing={1} flexWrap="wrap">
           <Chip label={`Gesamt: ${(epaEntries || []).length}`} size="small" />
           <Chip label={`Termine: ${(epaEntries || []).filter(e => e?.type === 'appointment').length}`} size="small" color="primary" />
@@ -889,6 +1306,37 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           <Chip label={`Vitalwerte: ${(epaEntries || []).filter(e => e?.type === 'vital').length}`} size="small" color="warning" />
         </Stack>
       </Paper>
+
+      {/* Vitalwerte-Chart Dialog */}
+      <Dialog
+        open={vitalSignsChartOpen}
+        onClose={() => setVitalSignsChartOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '90vh' }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Vitalwerte-Verlauf</Typography>
+            <IconButton
+              edge="end"
+              color="inherit"
+              onClick={() => setVitalSignsChartOpen(false)}
+              aria-label="close"
+            >
+              <Close />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <VitalSignsChart vitalSigns={vitalSigns || []} patientId={patientId} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVitalSignsChartOpen(false)}>Schließen</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
     );
   } catch (renderError) {

@@ -41,6 +41,30 @@ export interface LocationBillingConfig {
   };
 }
 
+export interface LocationOwner {
+  title?: string;
+  firstName?: string;
+  lastName?: string;
+  gender?: 'male' | 'female' | 'diverse' | '';
+  specialty?: string;
+  academicTitle?: string;
+  licenseNumber?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+}
+
+export interface LocationLogo {
+  filename?: string;
+  originalName?: string;
+  mimeType?: string;
+  size?: number;
+  path?: string;
+  uploadedAt?: string;
+  width?: number;
+  height?: number;
+}
+
 export interface Location {
   _id: string;
   name: string;
@@ -59,6 +83,8 @@ export interface Location {
   specialties?: string[]; // Medizinische Fachrichtungen
   billing?: LocationBillingConfig;
   xdsRegistry?: XdsRegistryConfig;
+  owner?: LocationOwner;
+  logo?: LocationLogo | null;
   createdAt: string;
   updatedAt: string;
 }

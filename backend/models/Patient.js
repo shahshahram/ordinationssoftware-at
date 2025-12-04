@@ -43,6 +43,19 @@ const PatientSchema = new mongoose.Schema({
   allergies: [{ type: String }],
   medications: [{ type: String }],
   
+  // Infektionen
+  infections: [{
+    type: { type: String, trim: true }, // z.B. "MRSA", "MRGN", "VRE", "Clostridium difficile", etc.
+    detectedDate: { type: Date },
+    location: { type: String, trim: true }, // z.B. "Wunde", "Urin", "Blut", etc.
+    status: { 
+      type: String, 
+      enum: ['active', 'resolved', 'colonized'],
+      default: 'active'
+    },
+    notes: { type: String, trim: true }
+  }],
+  
   // Notfallkontakt
   emergencyContact: {
     name: { type: String, trim: true },

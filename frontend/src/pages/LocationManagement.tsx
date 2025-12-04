@@ -67,6 +67,7 @@ import {
   LocationHours,
   LocationClosure,
   StaffLocationAssignment,
+  LocationOwner
 } from '../store/slices/locationSlice';
 import {
   fetchLocationWeeklySchedules,
@@ -137,6 +138,19 @@ const LocationManagement: React.FC = () => {
     is_active: true,
     practiceType: 'gemischt' as 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt',
     specialties: [] as string[], // Medizinische Fachrichtungen
+    owner: {
+      title: '',
+      firstName: '',
+      lastName: '',
+      gender: '',
+      specialty: '',
+      academicTitle: '',
+      licenseNumber: '',
+      phone: '',
+      email: '',
+      website: ''
+    } as LocationOwner,
+    logo: null as any,
     billing: {
       defaultBillingType: null as 'kassenarzt' | 'wahlarzt' | 'privat' | 'sonderklasse' | null,
       kassenarzt: {
@@ -167,6 +181,9 @@ const LocationManagement: React.FC = () => {
       patientUploadAllowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
     }
   });
+  
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const [hoursForm, setHoursForm] = useState({
     location_id: '',
@@ -326,8 +343,40 @@ const LocationManagement: React.FC = () => {
           allowPatientUpload: xdsRegistry.allowPatientUpload || false,
           patientUploadMaxSize: xdsRegistry.patientUploadMaxSize || 10485760,
           patientUploadAllowedTypes: xdsRegistry.patientUploadAllowedTypes || ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
-        }
+        },
+        owner: location.owner ? {
+          title: location.owner.title || '',
+          firstName: location.owner.firstName || '',
+          lastName: location.owner.lastName || '',
+          gender: location.owner.gender || '',
+          specialty: location.owner.specialty || '',
+          academicTitle: location.owner.academicTitle || '',
+          licenseNumber: location.owner.licenseNumber || '',
+          phone: location.owner.phone || '',
+          email: location.owner.email || '',
+          website: location.owner.website || ''
+        } : {
+          title: '',
+          firstName: '',
+          lastName: '',
+          gender: '',
+          specialty: '',
+          academicTitle: '',
+          licenseNumber: '',
+          phone: '',
+          email: '',
+          website: ''
+        } as LocationOwner,
+        logo: location.logo || null
       });
+      
+      // Logo-Preview setzen, falls vorhanden
+      if (location.logo && location.logo.path) {
+        const logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/${location.logo.path}`;
+        setLogoPreview(logoUrl);
+      } else {
+        setLogoPreview(null);
+      }
     } else {
       setEditingLocation(null);
       setLocationForm({
@@ -373,8 +422,21 @@ const LocationManagement: React.FC = () => {
           allowPatientUpload: false,
           patientUploadMaxSize: 10485760,
           patientUploadAllowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
-        }
+        },
+        owner: {
+          title: '',
+          firstName: '',
+          lastName: '',
+          specialty: '',
+          academicTitle: '',
+          licenseNumber: '',
+          phone: '',
+          email: '',
+          website: ''
+        },
+        logo: null
       });
+      setLogoPreview(null);
     }
     setLocationDialogOpen(true);
   };
@@ -408,6 +470,69 @@ const LocationManagement: React.FC = () => {
       } catch (error) {
         console.error('Error deleting location:', error);
       }
+    }
+  };
+
+  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!editingLocation || !editingLocation._id) {
+      alert('Bitte speichern Sie zuerst den Standort, bevor Sie ein Logo hochladen.');
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('logo', file);
+
+      // Für FormData wird Content-Type automatisch vom Browser gesetzt, daher keine headers nötig
+      const response: any = await api.post(`/locations/${editingLocation._id}/logo`, formData);
+
+      if (response.data?.success) {
+        // Logo-Preview aktualisieren
+        if (response.data.data?.path) {
+          const logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/${response.data.data.path}`;
+          setLogoPreview(logoUrl);
+        }
+        // Location-Form aktualisieren
+        setLocationForm(prev => ({
+          ...prev,
+          logo: response.data.data
+        }));
+        // Location neu laden
+        dispatch(fetchLocations());
+      }
+    } catch (error: any) {
+      console.error('Error uploading logo:', error);
+      const errorMessage = error.response?.data?.error || error.response?.data?.message || error.message || 'Fehler beim Hochladen des Logos';
+      const errorDetails = error.response?.data?.details;
+      console.error('Error details:', errorDetails);
+      alert(`${errorMessage}${errorDetails ? `\n\nDetails: ${JSON.stringify(errorDetails, null, 2)}` : ''}`);
+    } finally {
+      setLogoUploading(false);
+      // Reset file input
+      event.target.value = '';
+    }
+  };
+
+  const handleLogoDelete = async () => {
+    if (!editingLocation || !editingLocation._id) return;
+
+    if (!window.confirm('Möchten Sie das Logo wirklich löschen?')) return;
+
+    try {
+      await api.delete(`/locations/${editingLocation._id}/logo`);
+      setLogoPreview(null);
+      setLocationForm(prev => ({
+        ...prev,
+        logo: null
+      }));
+      dispatch(fetchLocations());
+    } catch (error: any) {
+      console.error('Error deleting logo:', error);
+      alert(error.response?.data?.message || 'Fehler beim Löschen des Logos');
     }
   };
 
@@ -1489,6 +1614,207 @@ const LocationManagement: React.FC = () => {
                 Standort ist aktiv
               </Typography>
             </Box>
+            
+            {/* Leitung der Ordination */}
+            <Accordion sx={{ mt: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle1">Leitung der Ordination</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Titel</InputLabel>
+                      <Select
+                        value={locationForm.owner.title}
+                        onChange={(e) => setLocationForm({
+                          ...locationForm,
+                          owner: { ...locationForm.owner, title: e.target.value }
+                        })}
+                        label="Titel"
+                      >
+                        <MenuItem value="">Kein Titel</MenuItem>
+                        <MenuItem value="Dr.">Dr.</MenuItem>
+                        <MenuItem value="Dr. med.">Dr. med.</MenuItem>
+                        <MenuItem value="Dr. med. univ.">Dr. med. univ.</MenuItem>
+                        <MenuItem value="Prim. Dr.">Prim. Dr.</MenuItem>
+                        <MenuItem value="Univ.-Prof. Dr.">Univ.-Prof. Dr.</MenuItem>
+                        <MenuItem value="OA Dr.">OA Dr.</MenuItem>
+                        <MenuItem value="Ass. Dr.">Ass. Dr.</MenuItem>
+                        <MenuItem value="Mag.">Mag.</MenuItem>
+                        <MenuItem value="Dipl.">Dipl.</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      fullWidth
+                      label="Vorname"
+                      value={locationForm.owner.firstName}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, firstName: e.target.value }
+                      })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Nachname"
+                      value={locationForm.owner.lastName}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, lastName: e.target.value }
+                      })}
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel>Geschlecht</InputLabel>
+                      <Select
+                        value={locationForm.owner.gender || ''}
+                        onChange={(e) => setLocationForm({
+                          ...locationForm,
+                          owner: { ...locationForm.owner, gender: e.target.value }
+                        })}
+                        label="Geschlecht"
+                      >
+                        <MenuItem value="">Nicht angegeben</MenuItem>
+                        <MenuItem value="male">Männlich</MenuItem>
+                        <MenuItem value="female">Weiblich</MenuItem>
+                        <MenuItem value="diverse">Divers</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      fullWidth
+                      label="Fachrichtung"
+                      value={locationForm.owner.specialty}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, specialty: e.target.value }
+                      })}
+                      placeholder="z.B. Allgemeinmedizin, Kardiologie"
+                    />
+                    <TextField
+                      fullWidth
+                      label="Akademischer Titel"
+                      value={locationForm.owner.academicTitle}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, academicTitle: e.target.value }
+                      })}
+                      placeholder="z.B. Facharzt für..."
+                    />
+                    <TextField
+                      fullWidth
+                      label="Ärztekammer-Nummer"
+                      value={locationForm.owner.licenseNumber}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, licenseNumber: e.target.value }
+                      })}
+                    />
+                  </Box>
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      fullWidth
+                      label="Telefon"
+                      value={locationForm.owner.phone}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, phone: e.target.value }
+                      })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="E-Mail"
+                      type="email"
+                      value={locationForm.owner.email}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, email: e.target.value }
+                      })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Website"
+                      value={locationForm.owner.website}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, website: e.target.value }
+                      })}
+                      placeholder="https://..."
+                    />
+                  </Box>
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+            
+            {/* Logo Upload */}
+            <Accordion sx={{ mt: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="subtitle1">Logo für Briefkopf</Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {logoPreview && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="body2" sx={{ mb: 1 }}>Aktuelles Logo:</Typography>
+                      <Box
+                        component="img"
+                        src={logoPreview}
+                        alt="Logo Preview"
+                        sx={{
+                          maxWidth: '300px',
+                          maxHeight: '150px',
+                          objectFit: 'contain',
+                          border: '1px solid #ddd',
+                          borderRadius: 1,
+                          p: 1,
+                          bgcolor: '#f5f5f5'
+                        }}
+                      />
+                      {editingLocation && (
+                        <Button
+                          variant="outlined"
+                          color="error"
+                          size="small"
+                          onClick={handleLogoDelete}
+                          sx={{ mt: 1 }}
+                        >
+                          Logo löschen
+                        </Button>
+                      )}
+                    </Box>
+                  )}
+                  {editingLocation && editingLocation._id ? (
+                    <Box>
+                      <input
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        id="logo-upload-input"
+                        type="file"
+                        onChange={handleLogoUpload}
+                        disabled={logoUploading}
+                      />
+                      <label htmlFor="logo-upload-input">
+                        <Button
+                          variant="outlined"
+                          component="span"
+                          disabled={logoUploading}
+                          startIcon={logoUploading ? <CircularProgress size={20} /> : <AddIcon />}
+                        >
+                          {logoPreview ? 'Logo ersetzen' : 'Logo hochladen'}
+                        </Button>
+                      </label>
+                      <Typography variant="caption" display="block" sx={{ mt: 1, color: 'text.secondary' }}>
+                        Empfohlene Auflösung: mindestens 300x150px. Formate: JPEG, PNG, GIF, WebP, SVG (max. 5MB)
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Alert severity="info">
+                      Bitte speichern Sie zuerst den Standort, bevor Sie ein Logo hochladen können.
+                    </Alert>
+                  )}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
             
             {/* Medizinische Fachrichtungen */}
             <Autocomplete

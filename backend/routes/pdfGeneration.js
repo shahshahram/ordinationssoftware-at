@@ -2,6 +2,7 @@ const express = require('express');
 const auth = require('../middleware/auth');
 const DocumentTemplate = require('../models/DocumentTemplate');
 const DocumentRevision = require('../models/DocumentRevision');
+const Location = require('../models/Location');
 const pdfGenerator = require('../utils/pdfGenerator');
 const { body, validationResult } = require('express-validator');
 const router = express.Router();
@@ -48,11 +49,28 @@ router.post('/generate', [
       });
     }
 
+    // Location-Daten laden für Briefkopf
+    let location = null;
+    if (options.locationId) {
+      location = await Location.findById(options.locationId);
+    } else if (req.user.locationId) {
+      location = await Location.findById(req.user.locationId);
+    } else {
+      // Fallback: Erste aktive Location
+      location = await Location.findOne({ is_active: true });
+    }
+
+    // Location zu options hinzufügen
+    const pdfOptions = {
+      ...options,
+      location: location
+    };
+
     // Generate PDF
     const pdfBuffer = await pdfGenerator.generateDocumentPDF(
       template.content,
       placeholders,
-      options
+      pdfOptions
     );
 
     // Create revision

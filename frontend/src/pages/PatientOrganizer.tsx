@@ -71,7 +71,8 @@ import {
   Close,
   CreditCard,
   Email,
-  Phone
+  Phone,
+  BugReport
 } from '@mui/icons-material';
 import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -856,7 +857,9 @@ const PatientOrganizer: React.FC = () => {
       smokingStatus: patient.smokingStatus || 'non-smoker',
       cigarettesPerDay: patient.cigarettesPerDay || undefined,
       yearsOfSmoking: patient.yearsOfSmoking || undefined,
-      quitSmokingDate: patient.quitSmokingDate || undefined
+      quitSmokingDate: patient.quitSmokingDate || undefined,
+      // Infektionen
+      infections: patient.infections || []
     });
     setMedicalDialogOpen(true);
   };
@@ -1805,6 +1808,27 @@ const PatientOrganizer: React.FC = () => {
                         }}
                       />
                     )}
+                    {patient.infections && patient.infections.length > 0 && patient.infections.some(inf => inf.status === 'active') && (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {patient.infections.filter(inf => inf.status === 'active').map((infection, index) => {
+                          const isMRSAOrMRGN = infection.type?.toUpperCase().includes('MRSA') || infection.type?.toUpperCase().includes('MRGN');
+                          return (
+                            <Chip
+                              key={index}
+                              icon={<BugReport />}
+                              label={infection.type || 'Infektion'}
+                              size="small"
+                              color={isMRSAOrMRGN ? 'error' : 'success'}
+                              sx={{ 
+                                bgcolor: isMRSAOrMRGN ? 'rgba(211, 47, 47, 0.3)' : 'rgba(46, 125, 50, 0.3)',
+                                color: 'inherit',
+                                fontWeight: 600
+                              }}
+                            />
+                          );
+                        })}
+                      </Box>
+                    )}
                   </Box>
                 )}
               </Box>
@@ -2181,6 +2205,28 @@ const PatientOrganizer: React.FC = () => {
               </Box>
                 </Grid>
                 <Grid size={{ xs: 12 }}>
+                  {/* Infektionen */}
+                  {patient.infections && patient.infections.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Infektionen</Typography>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {patient.infections.map((infection, index) => {
+                          const isMRSAOrMRGN = infection.type?.toUpperCase().includes('MRSA') || infection.type?.toUpperCase().includes('MRGN');
+                          return (
+                            <Chip
+                              key={index}
+                              icon={<BugReport />}
+                              label={`${infection.type}${infection.location ? ` (${infection.location})` : ''}${infection.status === 'active' ? ' - Aktiv' : infection.status === 'resolved' ? ' - Abgeklungen' : infection.status === 'colonized' ? ' - Kolonisiert' : ''}`}
+                              color={isMRSAOrMRGN ? 'error' : 'success'}
+                              size="small"
+                              sx={{ fontWeight: infection.status === 'active' ? 600 : 400 }}
+                            />
+                          );
+                        })}
+                      </Box>
+                    </Box>
+                  )}
+                  
                   {patient.allergies && patient.allergies.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Allergien</Typography>
@@ -2213,6 +2259,114 @@ const PatientOrganizer: React.FC = () => {
                 </Box>
                   </Box>
                 )}
+                  
+                  {/* Vorerkrankungen */}
+                  {patient.preExistingConditions && patient.preExistingConditions.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Vorerkrankungen</Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {patient.preExistingConditions.map((condition, index) => (
+                          <Typography key={index} variant="body2">• {condition}</Typography>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                  
+                  {/* Medizinische Vorgeschichte */}
+                  {patient.medicalHistory && patient.medicalHistory.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Medizinische Vorgeschichte</Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {patient.medicalHistory.map((history, index) => (
+                          <Typography key={index} variant="body2">• {history}</Typography>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                  
+                  {/* Impfungen */}
+                  {patient.vaccinations && patient.vaccinations.length > 0 && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Impfungen</Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {patient.vaccinations.map((vaccination, index) => (
+                          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                            <Vaccines color="primary" />
+                            <Box sx={{ flex: 1 }}>
+                              <Typography variant="body2"><strong>{vaccination.name}</strong></Typography>
+                              {vaccination.date && (
+                                <Typography variant="caption" color="text.secondary">
+                                  Datum: {new Date(vaccination.date).toLocaleDateString('de-DE')}
+                                </Typography>
+                              )}
+                              {vaccination.nextDue && (
+                                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                  Nächste fällig: {new Date(vaccination.nextDue).toLocaleDateString('de-DE')}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                  
+                  {/* Schwangerschaft & Stillen */}
+                  {(patient.isPregnant || patient.isBreastfeeding) && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Schwangerschaft & Stillen</Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {patient.isPregnant && (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <PregnantWoman color="primary" />
+                            <Typography variant="body2">
+                              Schwanger{patient.pregnancyWeek ? ` - ${patient.pregnancyWeek}. Woche` : ''}
+                            </Typography>
+                          </Box>
+                        )}
+                        {patient.isBreastfeeding && (
+                          <Typography variant="body2">Stillend</Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  )}
+                  
+                  {/* Implantate & Geräte */}
+                  {(patient.hasPacemaker || patient.hasDefibrillator || (patient.implants && patient.implants.length > 0)) && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Implantate & Geräte</Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                        {patient.hasPacemaker && <Typography variant="body2">• Schrittmacher</Typography>}
+                        {patient.hasDefibrillator && <Typography variant="body2">• Defibrillator</Typography>}
+                        {patient.implants && patient.implants.map((implant, index) => (
+                          <Typography key={index} variant="body2">
+                            • {implant.type}{implant.location ? ` (${implant.location})` : ''}{implant.date ? ` - ${new Date(implant.date).toLocaleDateString('de-DE')}` : ''}
+                          </Typography>
+                        ))}
+                      </Box>
+                    </Box>
+                  )}
+                  
+                  {/* Raucherstatus */}
+                  {patient.smokingStatus && patient.smokingStatus !== 'non-smoker' && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Raucherstatus</Typography>
+                      <Typography variant="body2">
+                        {patient.smokingStatus === 'current-smoker' ? 'Raucher' : patient.smokingStatus === 'former-smoker' ? 'Ehemaliger Raucher' : 'Nichtraucher'}
+                        {patient.cigarettesPerDay && ` - ${patient.cigarettesPerDay} Zigaretten/Tag`}
+                        {patient.yearsOfSmoking && ` - ${patient.yearsOfSmoking} Jahre`}
+                        {patient.quitSmokingDate && ` - Aufgehört: ${new Date(patient.quitSmokingDate).toLocaleDateString('de-DE')}`}
+                      </Typography>
+                    </Box>
+                  )}
+                  
+                  {/* Medizinische Notizen */}
+                  {patient.medicalNotes && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Medizinische Notizen</Typography>
+                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{patient.medicalNotes}</Typography>
+                    </Box>
+                  )}
                 </Grid>
               </Grid>
             </Paper>
@@ -3359,6 +3513,101 @@ const PatientOrganizer: React.FC = () => {
                   InputLabelProps={{ shrink: true }}
                 />
               )}
+            </Box>
+
+            {/* Infektionen */}
+            <Typography variant="h6" sx={{ mb: 2, mt: 3 }}>Infektionen</Typography>
+            <Box sx={{ mb: 2 }}>
+              {medicalData.infections?.map((infection, index) => (
+                <Box key={index} sx={{ display: 'flex', gap: 1, mb: 2, alignItems: 'center', flexWrap: 'wrap', p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                  <TextField
+                    label="Infektionstyp"
+                    value={infection.type}
+                    onChange={(e) => {
+                      const newInfections = [...(medicalData.infections || [])];
+                      newInfections[index] = { ...infection, type: e.target.value };
+                      handleMedicalDataChange('infections', newInfections);
+                    }}
+                    size="small"
+                    sx={{ minWidth: 150, flex: 1 }}
+                    placeholder="z.B. MRSA, MRGN, VRE"
+                  />
+                  <TextField
+                    label="Lokalisation"
+                    value={infection.location || ''}
+                    onChange={(e) => {
+                      const newInfections = [...(medicalData.infections || [])];
+                      newInfections[index] = { ...infection, location: e.target.value };
+                      handleMedicalDataChange('infections', newInfections);
+                    }}
+                    size="small"
+                    sx={{ minWidth: 120, flex: 1 }}
+                    placeholder="z.B. Wunde, Urin"
+                  />
+                  <TextField
+                    label="Nachweisdatum"
+                    type="date"
+                    value={infection.detectedDate || ''}
+                    onChange={(e) => {
+                      const newInfections = [...(medicalData.infections || [])];
+                      newInfections[index] = { ...infection, detectedDate: e.target.value };
+                      handleMedicalDataChange('infections', newInfections);
+                    }}
+                    size="small"
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 150 }}
+                  />
+                  <FormControl size="small" sx={{ minWidth: 120 }}>
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      value={infection.status || 'active'}
+                      onChange={(e) => {
+                        const newInfections = [...(medicalData.infections || [])];
+                        newInfections[index] = { ...infection, status: e.target.value as 'active' | 'resolved' | 'colonized' };
+                        handleMedicalDataChange('infections', newInfections);
+                      }}
+                      label="Status"
+                    >
+                      <MenuItem value="active">Aktiv</MenuItem>
+                      <MenuItem value="resolved">Abgeklungen</MenuItem>
+                      <MenuItem value="colonized">Kolonisiert</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="Notizen"
+                    value={infection.notes || ''}
+                    onChange={(e) => {
+                      const newInfections = [...(medicalData.infections || [])];
+                      newInfections[index] = { ...infection, notes: e.target.value };
+                      handleMedicalDataChange('infections', newInfections);
+                    }}
+                    size="small"
+                    sx={{ minWidth: 120, flex: 1 }}
+                  />
+                  <Button 
+                    size="small" 
+                    color="error"
+                    onClick={() => {
+                      const newInfections = [...(medicalData.infections || [])];
+                      newInfections.splice(index, 1);
+                      handleMedicalDataChange('infections', newInfections);
+                    }}
+                  >
+                    Entfernen
+                  </Button>
+                </Box>
+              ))}
+              <Button 
+                size="small" 
+                startIcon={<Add />}
+                onClick={() => {
+                  const newInfections = [...(medicalData.infections || []), { type: '', status: 'active' as const }];
+                  handleMedicalDataChange('infections', newInfections);
+                }}
+                sx={{ mb: 2 }}
+              >
+                Infektion hinzufügen
+              </Button>
             </Box>
 
             {/* Medizinische Notizen */}

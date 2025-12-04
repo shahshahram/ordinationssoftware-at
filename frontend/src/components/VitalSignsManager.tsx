@@ -44,7 +44,9 @@ import {
   MonitorWeight,
   Height,
   AccessTime,
-  Person
+  Person,
+  ShowChart,
+  Close
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -56,6 +58,7 @@ import {
 } from '../store/slices/vitalSignsSlice';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import VitalSignsChart from './VitalSignsChart';
 
 interface VitalSignsManagerProps {
   patientId: string;
@@ -68,6 +71,7 @@ const VitalSignsManager: React.FC<VitalSignsManagerProps> = ({ patientId, appoin
 
   const [openDialog, setOpenDialog] = useState(false);
   const [editingVitalSign, setEditingVitalSign] = useState<VitalSigns | null>(null);
+  const [chartDialogOpen, setChartDialogOpen] = useState(false);
   const [formData, setFormData] = useState<Partial<VitalSigns>>({
     patientId,
     appointmentId,
@@ -248,6 +252,33 @@ const VitalSignsManager: React.FC<VitalSignsManagerProps> = ({ patientId, appoin
     return '—';
   };
 
+  // Funktion zum Prüfen, ob ein Vitalwert außerhalb der Norm ist
+  const isVitalValueAbnormal = (type: string, value: number, unit?: string): boolean => {
+    switch (type) {
+      case 'bloodPressure_systolic':
+        return value >= 130; // Hypertonie
+      case 'bloodPressure_diastolic':
+        return value >= 90; // Hypertonie
+      case 'pulse':
+        return value < 60 || value > 100; // Bradykardie oder Tachykardie
+      case 'respiratoryRate':
+        return value < 12 || value > 20; // Zu niedrig oder zu hoch
+      case 'temperature':
+        const tempCelsius = unit === 'fahrenheit' ? (value - 32) * 5/9 : value;
+        return tempCelsius < 35 || tempCelsius >= 38; // Hypothermie oder Fieber
+      case 'oxygenSaturation':
+        return value < 95; // Hypoxie
+      case 'bloodGlucose':
+        // Normal nüchtern: 70-100 mg/dL, postprandial <140 mg/dL
+        // Wir prüfen auf nüchtern-Werte (konservativer Ansatz)
+        return value < 70 || value > 100;
+      case 'bmi':
+        return value < 18.5 || value >= 25; // Untergewicht oder Übergewicht
+      default:
+        return false;
+    }
+  };
+
   if (loading && vitalSigns.length === 0) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
@@ -260,13 +291,24 @@ const VitalSignsManager: React.FC<VitalSignsManagerProps> = ({ patientId, appoin
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h6">Vitalparameter</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => handleOpenDialog()}
-        >
-          Neue Vitalwerte erfassen
-        </Button>
+        <Stack direction="row" spacing={1}>
+          {vitalSigns.length > 0 && (
+            <Button
+              variant="outlined"
+              startIcon={<ShowChart />}
+              onClick={() => setChartDialogOpen(true)}
+            >
+              Verlauf anzeigen
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => handleOpenDialog()}
+          >
+            Neue Vitalwerte erfassen
+          </Button>
+        </Stack>
       </Box>
 
       {error && (
@@ -304,69 +346,147 @@ const VitalSignsManager: React.FC<VitalSignsManagerProps> = ({ patientId, appoin
               </TableRow>
             </TableHead>
             <TableBody>
-              {vitalSigns.map((vitalSign) => (
-                <TableRow key={vitalSign._id || vitalSign.id}>
-                  <TableCell>
-                    {vitalSign.recordedAt
-                      ? format(new Date(vitalSign.recordedAt), 'dd.MM.yyyy HH:mm', { locale: de })
-                      : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatBloodPressure(vitalSign.bloodPressure)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {vitalSign.pulse ? `${vitalSign.pulse} bpm` : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {vitalSign.respiratoryRate ? `${vitalSign.respiratoryRate} /min` : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatTemperature(vitalSign.temperature)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {vitalSign.oxygenSaturation ? `${vitalSign.oxygenSaturation}%` : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatBloodGlucose(vitalSign.bloodGlucose)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatWeight(vitalSign.weight)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatHeight(vitalSign.height)}
-                  </TableCell>
-                  <TableCell align="right">
-                    {vitalSign.bmi ? vitalSign.bmi.toFixed(1) : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    {formatPainScale(vitalSign.painScale)}
-                  </TableCell>
-                  <TableCell>
-                    {vitalSign.recordedBy
-                      ? `${vitalSign.recordedBy.firstName || ''} ${vitalSign.recordedBy.lastName || ''}`.trim() || '—'
-                      : '—'}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Tooltip title="Bearbeiten">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleOpenDialog(vitalSign)}
-                      >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Löschen">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleDelete(vitalSign._id || vitalSign.id || '')}
-                        color="error"
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {vitalSigns.map((vitalSign) => {
+                // Prüfe, welche Werte abnormal sind
+                const bpSystolicAbnormal = vitalSign.bloodPressure?.systolic 
+                  ? isVitalValueAbnormal('bloodPressure_systolic', vitalSign.bloodPressure.systolic)
+                  : false;
+                const bpDiastolicAbnormal = vitalSign.bloodPressure?.diastolic
+                  ? isVitalValueAbnormal('bloodPressure_diastolic', vitalSign.bloodPressure.diastolic)
+                  : false;
+                const bpAbnormal = bpSystolicAbnormal || bpDiastolicAbnormal;
+                const pulseAbnormal = vitalSign.pulse 
+                  ? isVitalValueAbnormal('pulse', vitalSign.pulse)
+                  : false;
+                const respAbnormal = vitalSign.respiratoryRate
+                  ? isVitalValueAbnormal('respiratoryRate', vitalSign.respiratoryRate)
+                  : false;
+                const tempAbnormal = vitalSign.temperature?.value
+                  ? isVitalValueAbnormal('temperature', vitalSign.temperature.value, vitalSign.temperature.unit)
+                  : false;
+                const spo2Abnormal = vitalSign.oxygenSaturation
+                  ? isVitalValueAbnormal('oxygenSaturation', vitalSign.oxygenSaturation)
+                  : false;
+                const bgAbnormal = vitalSign.bloodGlucose?.value
+                  ? isVitalValueAbnormal('bloodGlucose', vitalSign.bloodGlucose.value)
+                  : false;
+                const bmiAbnormal = vitalSign.bmi
+                  ? isVitalValueAbnormal('bmi', vitalSign.bmi)
+                  : false;
+
+                return (
+                  <TableRow key={vitalSign._id || vitalSign.id}>
+                    <TableCell>
+                      {vitalSign.recordedAt
+                        ? format(new Date(vitalSign.recordedAt), 'dd.MM.yyyy HH:mm', { locale: de })
+                        : '—'}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{
+                        bgcolor: bpAbnormal ? '#fff3cd' : 'transparent',
+                        color: bpAbnormal ? '#856404' : 'inherit',
+                        fontWeight: bpAbnormal ? 600 : 400
+                      }}
+                    >
+                      {formatBloodPressure(vitalSign.bloodPressure)}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{
+                        bgcolor: pulseAbnormal ? '#fff3cd' : 'transparent',
+                        color: pulseAbnormal ? '#856404' : 'inherit',
+                        fontWeight: pulseAbnormal ? 600 : 400
+                      }}
+                    >
+                      {vitalSign.pulse ? `${vitalSign.pulse} bpm` : '—'}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{
+                        bgcolor: respAbnormal ? '#fff3cd' : 'transparent',
+                        color: respAbnormal ? '#856404' : 'inherit',
+                        fontWeight: respAbnormal ? 600 : 400
+                      }}
+                    >
+                      {vitalSign.respiratoryRate ? `${vitalSign.respiratoryRate} /min` : '—'}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{
+                        bgcolor: tempAbnormal ? '#fff3cd' : 'transparent',
+                        color: tempAbnormal ? '#856404' : 'inherit',
+                        fontWeight: tempAbnormal ? 600 : 400
+                      }}
+                    >
+                      {formatTemperature(vitalSign.temperature)}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{
+                        bgcolor: spo2Abnormal ? '#fff3cd' : 'transparent',
+                        color: spo2Abnormal ? '#856404' : 'inherit',
+                        fontWeight: spo2Abnormal ? 600 : 400
+                      }}
+                    >
+                      {vitalSign.oxygenSaturation ? `${vitalSign.oxygenSaturation}%` : '—'}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{
+                        bgcolor: bgAbnormal ? '#fff3cd' : 'transparent',
+                        color: bgAbnormal ? '#856404' : 'inherit',
+                        fontWeight: bgAbnormal ? 600 : 400
+                      }}
+                    >
+                      {formatBloodGlucose(vitalSign.bloodGlucose)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatWeight(vitalSign.weight)}
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatHeight(vitalSign.height)}
+                    </TableCell>
+                    <TableCell 
+                      align="right"
+                      sx={{
+                        bgcolor: bmiAbnormal ? '#fff3cd' : 'transparent',
+                        color: bmiAbnormal ? '#856404' : 'inherit',
+                        fontWeight: bmiAbnormal ? 600 : 400
+                      }}
+                    >
+                      {vitalSign.bmi ? vitalSign.bmi.toFixed(1) : '—'}
+                    </TableCell>
+                    <TableCell align="right">
+                      {formatPainScale(vitalSign.painScale)}
+                    </TableCell>
+                    <TableCell>
+                      {vitalSign.recordedBy
+                        ? `${vitalSign.recordedBy.firstName || ''} ${vitalSign.recordedBy.lastName || ''}`.trim() || '—'
+                        : '—'}
+                    </TableCell>
+                    <TableCell align="right">
+                      <Tooltip title="Bearbeiten">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleOpenDialog(vitalSign)}
+                        >
+                          <EditIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Löschen">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleDelete(vitalSign._id || vitalSign.id || '')}
+                          color="error"
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
@@ -602,6 +722,37 @@ const VitalSignsManager: React.FC<VitalSignsManagerProps> = ({ patientId, appoin
           <Button onClick={handleSubmit} variant="contained" disabled={loading}>
             {loading ? <CircularProgress size={20} /> : editingVitalSign ? 'Aktualisieren' : 'Erfassen'}
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Vitalwerte-Chart Dialog */}
+      <Dialog
+        open={chartDialogOpen}
+        onClose={() => setChartDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+        PaperProps={{
+          sx: { height: '90vh' }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Vitalwerte-Verlauf</Typography>
+            <IconButton
+              edge="end"
+              color="inherit"
+              onClick={() => setChartDialogOpen(false)}
+              aria-label="close"
+            >
+              <Close />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers>
+          <VitalSignsChart vitalSigns={vitalSigns || []} patientId={patientId} />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setChartDialogOpen(false)}>Schließen</Button>
         </DialogActions>
       </Dialog>
     </Box>

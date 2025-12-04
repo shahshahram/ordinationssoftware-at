@@ -10,6 +10,42 @@ const StaffLocationAssignment = require('../models/StaffLocationAssignment');
 const Room = require('../models/Room');
 const Device = require('../models/Device');
 const AuditLog = require('../models/AuditLog');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const sharp = require('sharp');
+
+// Multer-Konfiguration für Logo-Uploads
+const logoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = './uploads/location-logos';
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const locationId = req.params.id || 'new';
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `location-${locationId}-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const logoUpload = multer({ 
+  storage: logoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB Limit für Logos
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp|svg/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Nur Bilddateien (JPEG, PNG, GIF, WebP, SVG) sind erlaubt!'));
+    }
+  }
+});
 
 // Alle Standorte abrufen
 router.get('/', auth, async (req, res) => {
@@ -333,6 +369,234 @@ router.delete('/closures/:closureId', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Löschen der Schließzeit'
+    });
+  }
+});
+
+// Logo für Standort hochladen (MUSS VOR /:id stehen!)
+router.post('/:id/logo', auth, (req, res, next) => {
+  logoUpload.single('logo')(req, res, (err) => {
+    if (err) {
+      console.error('Multer error:', err);
+      return res.status(400).json({
+        success: false,
+        message: err.message || 'Fehler beim Hochladen der Datei'
+      });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    console.log('Logo-Upload Request:', {
+      locationId: req.params.id,
+      hasFile: !!req.file,
+      fileInfo: req.file ? {
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        path: req.file.path
+      } : null,
+      userId: req.user?._id || req.user?.id
+    });
+
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Aktualisieren von Standorten'
+      });
+    }
+
+    if (!req.file) {
+      console.error('Keine Datei in req.file gefunden');
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Datei hochgeladen',
+        details: {
+          hasFile: false,
+          body: Object.keys(req.body || {}),
+          files: Object.keys(req.files || {})
+        }
+      });
+    }
+
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      // Lösche hochgeladene Datei, wenn Location nicht gefunden
+      if (req.file.path) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    // Altes Logo löschen, falls vorhanden
+    if (location.logo && location.logo.path) {
+      const oldLogoPath = path.join(__dirname, '..', location.logo.path);
+      if (fs.existsSync(oldLogoPath)) {
+        try {
+          fs.unlinkSync(oldLogoPath);
+        } catch (error) {
+          console.error('Fehler beim Löschen des alten Logos:', error);
+        }
+      }
+    }
+
+    // Bild-Dimensionen ermitteln (für SVG wird das übersprungen)
+    let imageWidth = null;
+    let imageHeight = null;
+    try {
+      if (req.file.mimetype !== 'image/svg+xml') {
+        const metadata = await sharp(req.file.path).metadata();
+        imageWidth = metadata.width;
+        imageHeight = metadata.height;
+      }
+    } catch (error) {
+      console.error('Fehler beim Ermitteln der Bild-Dimensionen:', error);
+    }
+
+    // Logo-Informationen speichern
+    location.logo = {
+      filename: req.file.filename,
+      originalName: req.file.originalname,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+      path: req.file.path.replace(/^\.\//, ''), // Entferne führenden ./
+      uploadedAt: new Date(),
+      width: imageWidth,
+      height: imageHeight
+    };
+
+    // Markiere logo als modified für MongoDB (wichtig für verschachtelte Objekte)
+    location.markModified('logo');
+    
+    await location.save();
+
+    // Audit-Log
+    await AuditLog.create({
+      userId: req.user._id || req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: 'locations.update.logo',
+      resource: 'Location',
+      resourceId: location._id,
+      description: `Logo für Standort ${location.name} hochgeladen`,
+      details: { filename: req.file.filename },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    res.json({
+      success: true,
+      data: location.logo,
+      message: 'Logo erfolgreich hochgeladen'
+    });
+  } catch (error) {
+    console.error('Error uploading logo:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Request file:', req.file);
+    console.error('Request params:', req.params);
+    // Lösche hochgeladene Datei bei Fehler
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Fehler beim Löschen der hochgeladenen Datei:', unlinkError);
+      }
+    }
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Hochladen des Logos',
+      error: error.message,
+      errorName: error.name,
+      errorStack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      details: {
+        hasFile: !!req.file,
+        filePath: req.file?.path,
+        locationId: req.params.id,
+        userId: req.user?._id || req.user?.id
+      }
+    });
+  }
+});
+
+// Logo für Standort löschen (MUSS VOR /:id stehen!)
+router.delete('/:id/logo', auth, async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Aktualisieren von Standorten'
+      });
+    }
+
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    if (!location.logo || !location.logo.path) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kein Logo vorhanden'
+      });
+    }
+
+    // Datei löschen
+    const logoPath = path.join(__dirname, '..', location.logo.path);
+    if (fs.existsSync(logoPath)) {
+      try {
+        fs.unlinkSync(logoPath);
+      } catch (error) {
+        console.error('Fehler beim Löschen der Logo-Datei:', error);
+      }
+    }
+
+    // Logo-Informationen aus Location entfernen
+    location.logo = undefined;
+    await location.save();
+
+    // Audit-Log
+    await AuditLog.create({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: 'locations.delete.logo',
+      resource: 'Location',
+      resourceId: location._id,
+      description: `Logo für Standort ${location.name} gelöscht`,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    res.json({
+      success: true,
+      message: 'Logo erfolgreich gelöscht'
+    });
+  } catch (error) {
+    console.error('Error deleting logo:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen des Logos'
     });
   }
 });
