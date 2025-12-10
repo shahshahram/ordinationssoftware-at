@@ -58,11 +58,11 @@ import {
   UnfoldLess
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { fetchAppointments } from '../store/slices/appointmentSlice';
+import { fetchAppointmentsByPatientId } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses } from '../store/slices/diagnosisSlice';
 import { fetchDocuments } from '../store/slices/documentSlice';
-import { fetchDekursEntries } from '../store/slices/dekursSlice';
-import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
+import { fetchDekursEntries, resetDekursState } from '../store/slices/dekursSlice';
+import { fetchVitalSigns, clearVitalSigns } from '../store/slices/vitalSignsSlice';
 import { fetchPatients } from '../store/slices/patientSlice';
 import api from '../utils/api';
 import { format } from 'date-fns';
@@ -524,27 +524,51 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   // Ref um die letzte bekannte Version von patientFromStore zu speichern (für Vergleich)
   const lastPatientFromStoreRef = useRef<any>(null);
   
+  // Memoize JSON-Stringified Werte für Performance
+  const patientDataHash = useMemo(() => {
+    if (!patientFromStore) return '';
+    return JSON.stringify({
+      infections: patientFromStore.infections || [],
+      allergies: patientFromStore.allergies || [],
+      currentMedications: patientFromStore.currentMedications || [],
+      preExistingConditions: patientFromStore.preExistingConditions || [],
+      medicalHistory: patientFromStore.medicalHistory || [],
+      previousSurgeries: patientFromStore.previousSurgeries || [],
+      vaccinations: patientFromStore.vaccinations || [],
+      bloodType: patientFromStore.bloodType,
+      height: patientFromStore.height,
+      weight: patientFromStore.weight,
+      bmi: patientFromStore.bmi,
+      smokingStatus: patientFromStore.smokingStatus,
+      hasPacemaker: patientFromStore.hasPacemaker,
+      hasDefibrillator: patientFromStore.hasDefibrillator,
+      implants: patientFromStore.implants || [],
+      isPregnant: patientFromStore.isPregnant
+    });
+  }, [
+    patientFromStore?.infections,
+    patientFromStore?.allergies,
+    patientFromStore?.currentMedications,
+    patientFromStore?.preExistingConditions,
+    patientFromStore?.medicalHistory,
+    patientFromStore?.previousSurgeries,
+    patientFromStore?.vaccinations,
+    patientFromStore?.bloodType,
+    patientFromStore?.height,
+    patientFromStore?.weight,
+    patientFromStore?.bmi,
+    patientFromStore?.smokingStatus,
+    patientFromStore?.hasPacemaker,
+    patientFromStore?.hasDefibrillator,
+    patientFromStore?.implants,
+    patientFromStore?.isPregnant
+  ]);
+  
   // Debug: Logge Änderungen von patientFromStore und prüfe auf Datenänderungen
   useEffect(() => {
     if (patientFromStore) {
-      const hasDataChanged = lastPatientFromStoreRef.current && (
-        JSON.stringify(patientFromStore.infections || []) !== JSON.stringify(lastPatientFromStoreRef.current.infections || []) ||
-        JSON.stringify(patientFromStore.allergies || []) !== JSON.stringify(lastPatientFromStoreRef.current.allergies || []) ||
-        JSON.stringify(patientFromStore.currentMedications || []) !== JSON.stringify(lastPatientFromStoreRef.current.currentMedications || []) ||
-        JSON.stringify(patientFromStore.preExistingConditions || []) !== JSON.stringify(lastPatientFromStoreRef.current.preExistingConditions || []) ||
-        JSON.stringify(patientFromStore.medicalHistory || []) !== JSON.stringify(lastPatientFromStoreRef.current.medicalHistory || []) ||
-        JSON.stringify(patientFromStore.previousSurgeries || []) !== JSON.stringify(lastPatientFromStoreRef.current.previousSurgeries || []) ||
-        JSON.stringify(patientFromStore.vaccinations || []) !== JSON.stringify(lastPatientFromStoreRef.current.vaccinations || []) ||
-        patientFromStore.bloodType !== lastPatientFromStoreRef.current.bloodType ||
-        patientFromStore.height !== lastPatientFromStoreRef.current.height ||
-        patientFromStore.weight !== lastPatientFromStoreRef.current.weight ||
-        patientFromStore.bmi !== lastPatientFromStoreRef.current.bmi ||
-        patientFromStore.smokingStatus !== lastPatientFromStoreRef.current.smokingStatus ||
-        patientFromStore.hasPacemaker !== lastPatientFromStoreRef.current.hasPacemaker ||
-        patientFromStore.hasDefibrillator !== lastPatientFromStoreRef.current.hasDefibrillator ||
-        JSON.stringify(patientFromStore.implants || []) !== JSON.stringify(lastPatientFromStoreRef.current.implants || []) ||
-        patientFromStore.isPregnant !== lastPatientFromStoreRef.current.isPregnant
-      );
+      const previousHash = lastPatientFromStoreRef.current?.dataHash || '';
+      const hasDataChanged = previousHash !== '' && previousHash !== patientDataHash;
       
       console.log('🔍 patientFromStore geändert:', {
         patientId: patientFromStore._id || patientFromStore.id,
@@ -555,9 +579,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       });
       
       // Speichere die aktuelle Version für den nächsten Vergleich
-      lastPatientFromStoreRef.current = { ...patientFromStore };
+      lastPatientFromStoreRef.current = { ...patientFromStore, dataHash: patientDataHash };
     }
-  }, [patientFromStore?.updatedAt, patientFromStore?._id]);
+  }, [patientDataHash, patientFromStore?._id]);
 
   // Ref to track if initial expansion has been done
   const initializedRef = useRef(false);
@@ -590,14 +614,34 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   // Reset initialization when patientId changes
   useEffect(() => {
     if (prevPatientIdRef.current !== patientId) {
+      console.log('🔄 Patient gewechselt:', { 
+        from: prevPatientIdRef.current, 
+        to: patientId 
+      });
+      
       initializedRef.current = false;
       prevPatientIdRef.current = patientId;
       prevDataHashRef.current = '';
       lastPatientUpdateRef.current = 0;
       lastEpaLoadTimeRef.current = Date.now();
       lastMedicalFieldsRef.current = null; // Reset medizinische Felder beim Patientenwechsel
+      
+      // WICHTIG: Setze alle State-Variablen zurück, damit keine alten Daten angezeigt werden
+      setEpaEntries([]);
+      setLaborResults([]);
+      setDicomStudies([]);
+      setPhotos([]);
+      setPatient(null);
+      setLoading(true);
+      setSearchTerm('');
+      setFilterType('all');
+      setExpandedRows(new Set());
+      
+      // WICHTIG: Setze Redux-Daten zurück, damit keine alten Daten im Store bleiben
+      dispatch(clearVitalSigns());
+      dispatch(resetDekursState());
     }
-  }, [patientId]);
+  }, [patientId, dispatch]);
   
   // Hilfsfunktion: Prüft, ob sich ein spezifisches medizinisches Feld geändert hat
   const hasFieldChanged = useCallback((fieldName: string, currentValue: any, previousValue: any): boolean => {
@@ -789,25 +833,50 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const [photos, setPhotos] = useState<any[]>([]);
   const [patient, setPatient] = useState<any>(null);
   const [vitalSignsChartOpen, setVitalSignsChartOpen] = useState(false);
+  const [visibleDatesCount, setVisibleDatesCount] = useState(10); // OPTIMIERT: Lazy Rendering für Datum-Karten
 
-  // Lade alle Daten
+  // Hilfsfunktion zum Extrahieren der Patient-ID aus einem Appointment
+  const getAppointmentPatientId = React.useCallback((apt: any): string | null => {
+    if (!apt) return null;
+    if (apt.patientId) return String(apt.patientId);
+    if (apt.patient && typeof apt.patient === 'string') return apt.patient;
+    if (apt.patient && typeof apt.patient === 'object' && apt.patient._id) return String(apt.patient._id);
+    if (apt.patient && typeof apt.patient === 'object' && apt.patient.id) return String(apt.patient.id);
+    return null;
+  }, []);
+
+  // Lade alle Daten - OPTIMIERT: Prüfe Redux Store zuerst, lade nur wenn nötig
   useEffect(() => {
     const loadData = async () => {
       if (!patientId) return;
 
       setLoading(true);
       try {
-        // Verwende Promise.allSettled statt Promise.all, damit einzelne Fehler nicht die gesamte Komponente zum Absturz bringen
-        await Promise.allSettled([
-          dispatch(fetchAppointments()).catch(() => {}),
-          dispatch(fetchPatientDiagnoses({ patientId })).catch(() => {}),
-          dispatch(fetchDocuments({ patientId })).catch(() => {}),
-          dispatch(fetchDekursEntries({ patientId, limit: 100 })).catch(() => {}),
-          dispatch(fetchVitalSigns(patientId)).catch(() => {}),
-          // Lade Patientendaten für Medikamente
+        // OPTIMIERT: Prüfe zuerst, ob Daten bereits im Redux Store sind
+        const hasAppointments = appointments && appointments.length > 0 && 
+          appointments.some((apt: any) => getAppointmentPatientId(apt) === patientId);
+        const hasDiagnoses = patientDiagnoses && patientDiagnoses.length > 0 && 
+          patientDiagnoses.some((diag: any) => diag.patientId === patientId || (diag.patient && (typeof diag.patient === 'string' ? diag.patient === patientId : diag.patient._id === patientId)));
+        const hasDocuments = documents && documents.length > 0 && 
+          documents.some((doc: any) => doc.patientId === patientId);
+        const hasDekurs = dekursEntries && dekursEntries.length > 0 && 
+          dekursEntries.some((entry: any) => entry.patientId === patientId);
+        const hasVitalSigns = vitalSigns && vitalSigns.length > 0 && 
+          vitalSigns.some((vs: any) => vs.patientId === patientId);
+
+        // PHASE 1: Kritische Daten sofort laden (nur wenn nicht bereits vorhanden)
+        const criticalPromises: Promise<any>[] = [];
+        
+        if (!hasAppointments) {
+          criticalPromises.push(dispatch(fetchAppointmentsByPatientId(patientId)).catch(() => {}));
+        }
+        if (!hasDiagnoses) {
+          criticalPromises.push(dispatch(fetchPatientDiagnoses({ patientId })).catch(() => {}));
+        }
+        
+        // Patientendaten immer laden (für medizinische Felder)
+        criticalPromises.push(
           api.get<any>(`/patients-extended/${patientId}`).then((response: any) => {
-            // Die API-Antwort hat die Struktur: { success: true, data: { ...patient... } }
-            // response.data ist das gesamte result Objekt, also response.data.data ist der Patient
             const apiResult = response.data || response;
             const patientData = (apiResult.success && apiResult.data) ? apiResult.data : (apiResult.data || apiResult);
             if (patientData) {
@@ -815,54 +884,79 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             }
           }).catch((error: any) => {
             console.warn('Fehler beim Laden der Patientendaten:', error);
-            // Fallback: Verwende Patient aus Redux Store, falls vorhanden
             if (patientFromStore) {
               setPatient(patientFromStore);
             } else {
               setPatient(null);
             }
-          }),
-          // Laborwerte
-          api.get<any>(`/labor/patient/${patientId}`).then((response: any) => {
+          })
+        );
+
+        const criticalData = await Promise.allSettled(criticalPromises);
+
+        // PHASE 2: Wichtige Daten (nur wenn nicht bereits vorhanden)
+        const importantPromises: Promise<any>[] = [];
+        
+        if (!hasDocuments) {
+          importantPromises.push(dispatch(fetchDocuments({ patientId })).catch(() => {}));
+        }
+        if (!hasDekurs) {
+          importantPromises.push(dispatch(fetchDekursEntries({ patientId, limit: 50 })).catch(() => {}));
+        }
+        if (!hasVitalSigns) {
+          importantPromises.push(dispatch(fetchVitalSigns(patientId)).catch(() => {}));
+        }
+        
+        const importantData = Promise.allSettled(importantPromises);
+
+        // PHASE 3: Optionale Daten (lazy load - können später geladen werden)
+        const optionalData = Promise.allSettled([
+          // Laborwerte - nur wenn noch nicht geladen
+          laborResults.length === 0 ? api.get<any>(`/labor/patient/${patientId}`).then((response: any) => {
             if (response.success) {
               const data = response.data;
               const laborData = Array.isArray(data) ? data : ((data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) ? data.data : []);
               setLaborResults(laborData);
             }
-          }).catch(() => setLaborResults([])),
-          // DICOM-Studien
-          api.get<any>(`/dicom/patient/${patientId}`).then((response: any) => {
+          }).catch(() => setLaborResults([])) : Promise.resolve(),
+          // DICOM-Studien - nur wenn noch nicht geladen
+          dicomStudies.length === 0 ? api.get<any>(`/dicom/patient/${patientId}`).then((response: any) => {
             if (response.success) {
               const data = response.data;
               const dicomData = Array.isArray(data) ? data : ((data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) ? data.data : []);
               setDicomStudies(dicomData);
             }
-          }).catch(() => setDicomStudies([])),
-          // Fotos - verwende den korrekten Endpoint
-          api.get<any>(`/patients-extended/${patientId}/photos`).then((response: any) => {
+          }).catch(() => setDicomStudies([])) : Promise.resolve(),
+          // Fotos - lazy load (nur wenn benötigt und noch nicht geladen)
+          photos.length === 0 ? api.get<any>(`/patients-extended/${patientId}/photos`).then((response: any) => {
             if (response.success) {
               const data = response.data;
               const photosData = Array.isArray(data) ? data : ((data && typeof data === 'object' && 'data' in data && Array.isArray(data.data)) ? data.data : []);
               setPhotos(photosData);
             }
           }).catch((error: any) => {
-            // Endpoint existiert möglicherweise nicht - das ist OK, setze einfach leeres Array
-            // Logge den Fehler nur, wenn es nicht ein 404 ist
             if (error?.response?.status !== 404 && error?.message !== 'Endpoint nicht gefunden') {
               console.warn('Fehler beim Laden der Fotos:', error);
             }
             setPhotos([]);
-          })
+          }) : Promise.resolve()
         ]);
+
+        // Warte auf kritische Daten, dann lade wichtige Daten
+        await criticalData;
+        setLoading(false); // UI kann jetzt angezeigt werden
+        
+        // Lade wichtige und optionale Daten im Hintergrund
+        await importantData;
+        await optionalData;
       } catch (error) {
         console.error('Fehler beim Laden der ePA-Daten:', error);
-      } finally {
         setLoading(false);
       }
     };
 
     loadData();
-  }, [patientId, dispatch]);
+  }, [patientId, dispatch, patientFromStore]);
 
   // Aktualisiere Patientendaten, wenn sich der Patient im Redux Store ändert
   useEffect(() => {
@@ -1015,6 +1109,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   ]);
 
   // Erstelle EPA-Einträge aus allen Datenquellen
+  // OPTIMIERT: Verwende requestIdleCallback für nicht-kritische Verarbeitung
   useEffect(() => {
     if (!patientId) {
       startTransition(() => {
@@ -1023,49 +1118,101 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       return;
     }
 
-    try {
-      const entries: EPAEntry[] = [];
+    // OPTIMIERT: Verarbeite Daten in kleinen Batches, um das UI nicht zu blockieren
+    const processEntries = () => {
+      try {
+        let entries: EPAEntry[] = [];
+        let processedCount = 0;
+        const totalToProcess = 
+          (appointments?.length || 0) + 
+          (dekursEntries?.length || 0) + 
+          (patientDiagnoses?.length || 0) + 
+          (documents?.length || 0) + 
+          (vitalSigns?.length || 0) + 
+          (laborResults?.length || 0) + 
+          (dicomStudies?.length || 0) + 
+          (photos?.length || 0);
+        
+        // Zeige initial leere Liste, damit UI sofort reagiert
+        startTransition(() => {
+          setEpaEntries([]);
+        });
+      
+      console.log('🔍 Starte EPA-Einträge-Erstellung:', {
+        patientId,
+        appointmentsCount: appointments?.length || 0,
+        appointments: appointments?.slice(0, 3).map((a: any) => ({ 
+          id: a._id, 
+          patientId: a.patientId || (a.patient && typeof a.patient === 'string' ? a.patient : (a.patient?._id || a.patient?.id || 'keine')),
+          title: a.title
+        })),
+        dekursEntriesCount: dekursEntries?.length || 0,
+        dekursEntries: dekursEntries?.slice(0, 3).map((d: any) => ({ 
+          id: d._id, 
+          patientId: d.patientId || (d.patient && typeof d.patient === 'string' ? d.patient : (d.patient?._id || d.patient?.id || 'keine'))
+        })),
+        patientDiagnosesCount: patientDiagnoses?.length || 0,
+        patientDiagnoses: patientDiagnoses?.slice(0, 3).map((d: any) => ({ 
+          id: d._id, 
+          patientId: d.patientId || (d.patient && typeof d.patient === 'string' ? d.patient : (d.patient?._id || d.patient?.id || 'keine'))
+        })),
+        documentsCount: documents?.length || 0,
+        vitalSignsCount: vitalSigns?.length || 0,
+        vitalSigns: vitalSigns?.slice(0, 3).map((v: any) => ({ 
+          id: v._id, 
+          patientId: v.patientId || (v.patient && typeof v.patient === 'string' ? v.patient : (v.patient?._id || v.patient?.id || 'keine'))
+        })),
+        laborResultsCount: laborResults?.length || 0,
+        dicomStudiesCount: dicomStudies?.length || 0,
+        photosCount: photos?.length || 0,
+        patient: patient ? 'vorhanden' : 'fehlt'
+      });
 
       // Termine
       try {
-        (appointments || []).forEach((apt: any) => {
-          // Prüfe verschiedene mögliche Strukturen für patientId
-          const aptPatientId = apt.patientId 
-            || (apt.patient && typeof apt.patient === 'string' ? apt.patient : null)
-            || (apt.patient && typeof apt.patient === 'object' ? apt.patient._id : null)
-            || (apt.patient && typeof apt.patient === 'object' ? apt.patient.id : null);
-          
-          const matches = aptPatientId && (
-            aptPatientId === patientId || 
-            String(aptPatientId) === String(patientId)
-          );
-          
-          if (matches) {
-            entries.push({
-              id: `appointment-${apt._id}`,
-              type: 'appointment',
-              date: new Date(apt.startTime || apt.date),
-              title: apt.title || apt.service?.name || apt.type || 'Termin',
-              description: apt.reason || apt.notes || apt.description,
-              status: apt.status,
-              doctor: apt.doctor ? (typeof apt.doctor === 'object' ? `${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : apt.doctor) : undefined,
-              metadata: {
-                ...apt,
-                // Stelle sicher, dass wichtige Felder verfügbar sind
-                startTime: apt.startTime,
-                endTime: apt.endTime,
-                duration: apt.duration || (apt.startTime && apt.endTime ? Math.round((new Date(apt.endTime).getTime() - new Date(apt.startTime).getTime()) / (1000 * 60)) : null),
-                reason: apt.reason,
-                notes: apt.notes,
-                type: apt.type,
-                bookingType: apt.bookingType,
-                priority: apt.priority,
-                roomName: apt.roomName || (apt.room && typeof apt.room === 'object' ? apt.room.name : null),
-                service: apt.service,
-                locationName: apt.locationName || (apt.locationId && typeof apt.locationId === 'object' ? apt.locationId.name : null)
-              }
-            });
+        // Filtere Termine nach patientId BEVOR wir sie verarbeiten (getAppointmentPatientId ist bereits oben definiert)
+        // Der Redux Store kann Termine von mehreren Patienten enthalten
+        const patientAppointments = (appointments || []).filter((apt: any) => {
+          const aptPatientId = getAppointmentPatientId(apt);
+          if (!aptPatientId) {
+            // Wenn keine patientId vorhanden ist, akzeptiere den Termin nicht
+            // (sollte eigentlich nicht vorkommen, aber sicherheitshalber)
+            return false;
           }
+          return aptPatientId === String(patientId);
+        });
+
+        console.log('📅 Verarbeite Termine:', { 
+          total: appointments?.length || 0,
+          filtered: patientAppointments.length,
+          patientId 
+        });
+
+        patientAppointments.forEach((apt: any) => {
+          entries.push({
+            id: `appointment-${apt._id}`,
+            type: 'appointment',
+            date: new Date(apt.startTime || apt.date),
+            title: apt.title || apt.service?.name || apt.type || 'Termin',
+            description: apt.reason || apt.notes || apt.description,
+            status: apt.status,
+            doctor: apt.doctor ? (typeof apt.doctor === 'object' ? `${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : apt.doctor) : undefined,
+            metadata: {
+              ...apt,
+              // Stelle sicher, dass wichtige Felder verfügbar sind
+              startTime: apt.startTime,
+              endTime: apt.endTime,
+              duration: apt.duration || (apt.startTime && apt.endTime ? Math.round((new Date(apt.endTime).getTime() - new Date(apt.startTime).getTime()) / (1000 * 60)) : null),
+              reason: apt.reason,
+              notes: apt.notes,
+              type: apt.type,
+              bookingType: apt.bookingType,
+              priority: apt.priority,
+              roomName: apt.roomName || (apt.room && typeof apt.room === 'object' ? apt.room.name : null),
+              service: apt.service,
+              locationName: apt.locationName || (apt.locationId && typeof apt.locationId === 'object' ? apt.locationId.name : null)
+            }
+          });
         });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Terminen:', error);
@@ -1073,7 +1220,30 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
       // Dekurs-Einträge
       try {
-        (dekursEntries || []).forEach((dekurs: any) => {
+        // Hilfsfunktion zum Extrahieren der patientId aus einem Dekurs-Eintrag
+        const getDekursPatientId = (dekurs: any): string | null => {
+          if (dekurs.patientId) return String(dekurs.patientId);
+          if (dekurs.patient && typeof dekurs.patient === 'string') return dekurs.patient;
+          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient._id) return String(dekurs.patient._id);
+          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient.id) return String(dekurs.patient.id);
+          return null;
+        };
+
+        // Filtere Dekurs-Einträge nach patientId BEVOR wir sie verarbeiten
+        const patientDekursEntries = (dekursEntries || []).filter((dekurs: any) => {
+          const dekursPatientId = getDekursPatientId(dekurs);
+          if (!dekursPatientId) return false; // Keine patientId = nicht zu diesem Patienten
+          return dekursPatientId === String(patientId);
+        });
+
+        console.log('📝 Verarbeite Dekurs-Einträge:', { 
+          total: dekursEntries?.length || 0,
+          filtered: patientDekursEntries.length,
+          patientId
+        });
+        
+        patientDekursEntries.forEach((dekurs: any) => {
+          
           entries.push({
             id: `dekurs-${dekurs._id}`,
             type: 'dekurs',
@@ -1122,13 +1292,42 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             });
           }
         });
+        
+        console.log('✅ Dekurs-Einträge verarbeitet:', { 
+          total: dekursEntries?.length || 0, 
+          filtered: patientDekursEntries.length,
+          added: patientDekursEntries.length
+        });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Dekurs-Einträgen:', error);
       }
 
       // Diagnosen
       try {
-        (patientDiagnoses || []).forEach((diag: any) => {
+        // Hilfsfunktion zum Extrahieren der patientId aus einer Diagnose
+        const getDiagnosisPatientId = (diag: any): string | null => {
+          if (diag.patientId) return String(diag.patientId);
+          if (diag.patient && typeof diag.patient === 'string') return diag.patient;
+          if (diag.patient && typeof diag.patient === 'object' && diag.patient._id) return String(diag.patient._id);
+          if (diag.patient && typeof diag.patient === 'object' && diag.patient.id) return String(diag.patient.id);
+          return null;
+        };
+
+        // Filtere Diagnosen nach patientId BEVOR wir sie verarbeiten
+        const patientDiagnosesFiltered = (patientDiagnoses || []).filter((diag: any) => {
+          const diagPatientId = getDiagnosisPatientId(diag);
+          if (!diagPatientId) return false; // Keine patientId = nicht zu diesem Patienten
+          return diagPatientId === String(patientId);
+        });
+
+        console.log('🔬 Verarbeite Diagnosen:', { 
+          total: patientDiagnoses?.length || 0,
+          filtered: patientDiagnosesFiltered.length,
+          patientId
+        });
+        
+        patientDiagnosesFiltered.forEach((diag: any) => {
+          
           entries.push({
             id: `diagnosis-${diag._id}`,
             type: 'diagnosis',
@@ -1139,81 +1338,55 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             metadata: diag
           });
         });
+        
+        console.log('✅ Diagnosen verarbeitet:', { 
+          total: patientDiagnoses?.length || 0, 
+          filtered: patientDiagnosesFiltered.length,
+          added: patientDiagnosesFiltered.length
+        });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Diagnosen:', error);
       }
 
-      // Medikamente - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.currentMedications && Array.isArray(patient.currentMedications)) {
-          // Prüfe, ob sich das Medikamente-Feld geändert hat
-          const shouldShowMedications = shouldShowMedicalField('currentMedications', patient.currentMedications, patient.updatedAt, patient);
-          
-          if (shouldShowMedications) {
-            patient.currentMedications.forEach((med: any, index: number) => {
-              // Medikament kann ein String oder ein Objekt sein
-              const medName = typeof med === 'string' ? med : (med.name || 'Unbekanntes Medikament');
-              const medDosage = typeof med === 'object' ? med.dosage : '';
-              const medFrequency = typeof med === 'object' ? med.frequency : '';
-              const medStartDate = typeof med === 'object' ? med.startDate : null;
-              const medPrescribedBy = typeof med === 'object' ? med.prescribedBy : '';
-              
-              // Bestimme das Datum für diesen Eintrag
-              const medDate = medStartDate ? new Date(medStartDate) : (patient.updatedAt ? new Date(patient.updatedAt) : null);
-            
-            // Erstelle Beschreibung aus Dosierung, Häufigkeit, etc.
-            const medDescription = [
-              medDosage && `Dosierung: ${medDosage}`,
-              medFrequency && `Häufigkeit: ${medFrequency}`,
-              medPrescribedBy && `Verschrieben von: ${medPrescribedBy}`
-            ].filter(Boolean).join(', ') || 'Medikament erfasst';
-            
-            entries.push({
-              id: `medication-${patientId}-${index}-${medDate ? medDate.getTime() : Date.now()}`,
-              type: 'medication',
-              date: medDate || new Date(),
-              title: medName,
-              description: medDescription,
-              status: 'aktiv',
-              metadata: {
-                ...(typeof med === 'object' ? med : { name: med }),
-                patientId: patientId
-              },
-              changeType: 'prescribed'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Medikamenten:', error);
-      }
+      // Medikamente - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
       // Dokumente
       try {
+        // Hilfsfunktion zum Extrahieren der patientId aus einem Dokument
+        const getDocumentPatientId = (doc: any): string | null => {
+          if (doc.patientId) return String(doc.patientId);
+          if (doc.patient && typeof doc.patient === 'string') return doc.patient;
+          if (doc.patient && typeof doc.patient === 'object' && doc.patient.id) return String(doc.patient.id);
+          if (doc.patient && typeof doc.patient === 'object' && doc.patient._id) return String(doc.patient._id);
+          return null;
+        };
+
         const docsArray = Array.isArray(documents) ? documents : ((documents as any)?.data || []);
-        docsArray.forEach((doc: any) => {
-          // Prüfe verschiedene mögliche Strukturen für patientId
-          const docPatientId = doc.patientId 
-            || (doc.patient && typeof doc.patient === 'string' ? doc.patient : null)
-            || (doc.patient && typeof doc.patient === 'object' ? doc.patient.id : null)
-            || (doc.patient && typeof doc.patient === 'object' ? doc.patient._id : null);
+        
+        // Filtere Dokumente nach patientId BEVOR wir sie verarbeiten
+        const patientDocuments = docsArray.filter((doc: any) => {
+          const docPatientId = getDocumentPatientId(doc);
+          if (!docPatientId) return false; // Keine patientId = nicht zu diesem Patienten
+          return docPatientId === String(patientId);
+        });
+
+        console.log('📄 Verarbeite Dokumente:', { 
+          total: docsArray.length,
+          filtered: patientDocuments.length,
+          patientId
+        });
+
+        patientDocuments.forEach((doc: any) => {
           
-          const matches = docPatientId && (
-            docPatientId === patientId || 
-            String(docPatientId) === String(patientId)
-          );
-          
-          if (matches) {
-            entries.push({
-              id: `document-${doc._id}`,
-              type: 'document',
-              date: new Date(doc.createdAt || doc.date || new Date()),
-              title: doc.title || doc.name || 'Dokument',
-              description: doc.description || doc.type,
-              status: doc.status,
-              metadata: doc
-            });
-          }
+          entries.push({
+            id: `document-${doc._id}`,
+            type: 'document',
+            date: new Date(doc.createdAt || doc.date || new Date()),
+            title: doc.title || doc.name || 'Dokument',
+            description: doc.description || doc.type,
+            status: doc.status,
+            metadata: doc
+          });
         });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Dokumenten:', error);
@@ -1269,494 +1442,58 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         console.error('Fehler beim Verarbeiten von Fotos:', error);
       }
 
-      // Allergien - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.allergies && Array.isArray(patient.allergies) && patient.allergies.length > 0) {
-          // Prüfe, ob sich das Allergien-Feld geändert hat
-          const shouldShowAllergies = shouldShowMedicalField('allergies', patient.allergies, patient.updatedAt, patient);
-          
-          if (shouldShowAllergies) {
-            patient.allergies.forEach((allergy: any, index: number) => {
-              // Unterstütze verschiedene Formate: String, Objekt mit name/description/substance
-              const allergyName = typeof allergy === 'string' 
-                ? allergy 
-                : (allergy.name || allergy.description || allergy.substance || allergy.type || 'Unbekannte Allergie');
-              const allergySeverity = typeof allergy === 'object' ? (allergy.severity || allergy.reaction) : '';
-              const allergyNotes = typeof allergy === 'object' ? allergy.notes : '';
-              
-              // Überspringe leere Allergien
-              if (!allergyName || allergyName.trim() === '' || allergyName === 'Unbekannte Allergie') {
-                return;
-              }
-              
-              // Verwende patient.updatedAt als Datum (Allergien haben kein individuelles Datum)
-              const allergyDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-            
-            entries.push({
-              id: `allergy-${patientId}-${index}-${allergyDate ? allergyDate.getTime() : Date.now()}`,
-              type: 'allergy',
-              date: allergyDate || new Date(),
-              title: allergyName,
-              description: [allergySeverity, allergyNotes].filter(Boolean).join(' - ') || 'Allergie erfasst',
-              status: 'aktiv',
-              metadata: {
-                ...(typeof allergy === 'object' ? allergy : { name: allergy }),
-                patientId: patientId
-              },
-              changeType: 'added'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Allergien:', error);
-      }
+      // Allergien - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Infektionen - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.infections && Array.isArray(patient.infections) && patient.infections.length > 0) {
-          // Prüfe, ob sich das Infektionen-Feld geändert hat
-          const shouldShowInfections = shouldShowMedicalField('infections', patient.infections, patient.updatedAt, patient);
-          
-          if (shouldShowInfections) {
-            patient.infections.forEach((infection: any, index: number) => {
-              if (!infection.type || !infection.type.trim()) return;
-              
-              const infectionType = infection.type;
-              const infectionLocation = infection.location || '';
-              const infectionStatus = infection.status || 'active';
-              // Verwende detectedDate wenn vorhanden, sonst patient.updatedAt
-              const infectionDate = infection.detectedDate 
-                ? new Date(infection.detectedDate) 
-                : (patient.updatedAt ? new Date(patient.updatedAt) : null);
-              const infectionNotes = infection.notes || '';
-            
-            // Bestimme Farbe basierend auf Infektionstyp
-            const isMRSA = infectionType.toUpperCase().includes('MRSA');
-            const isMRGN = infectionType.toUpperCase().includes('MRGN');
-            const isCritical = isMRSA || isMRGN;
-            
-            const description = [
-              infectionLocation && `Ort: ${infectionLocation}`,
-              `Status: ${infectionStatus === 'active' ? 'Aktiv' : infectionStatus === 'resolved' ? 'Abgeklungen' : 'Kolonisiert'}`,
-              infectionNotes
-            ].filter(Boolean).join(' - ') || 'Infektion erfasst';
-            
-            entries.push({
-              id: `infection-${patientId}-${index}-${infectionDate ? infectionDate.getTime() : Date.now()}`,
-              type: 'infection',
-              date: infectionDate || new Date(),
-              title: infectionType,
-              description: description,
-              status: isCritical ? 'kritisch' : 'erfasst',
-              metadata: {
-                ...infection,
-                isCritical,
-                patientId: patientId
-              },
-              changeType: 'added'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Infektionen:', error);
-      }
+      // Infektionen - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Schwangerschaft - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && (patient.isPregnant || patient.pregnancyWeek)) {
-          const pregnancyDate = patient.pregnancyWeekDate || patient.updatedAt || null;
-          const pregnancyDateObj = pregnancyDate ? new Date(pregnancyDate) : null;
-          
-          // Prüfe, ob sich das Schwangerschaft-Feld geändert hat
-          if (!shouldShowMedicalField('isPregnant', patient.isPregnant, pregnancyDateObj, patient)) {
-            return;
-          }
-          
-          const pregnancyWeek = patient.pregnancyWeek || '';
-          const isBreastfeeding = patient.isBreastfeeding || false;
-          
-          const description = [
-            pregnancyWeek && `${pregnancyWeek}. Woche`,
-            isBreastfeeding && 'Stillend'
-          ].filter(Boolean).join(' - ') || 'Schwangerschaft erfasst';
-          
-          entries.push({
-            id: `pregnancy-${patientId}-${pregnancyDateObj ? pregnancyDateObj.getTime() : Date.now()}`,
-            type: 'pregnancy',
-            date: pregnancyDateObj || new Date(),
-            title: 'Schwangerschaft',
-            description: description,
-            status: patient.isPregnant ? 'aktiv' : 'beendet',
-            metadata: {
-              isPregnant: patient.isPregnant,
-              pregnancyWeek: patient.pregnancyWeek,
-              isBreastfeeding: patient.isBreastfeeding,
-              patientId: patientId
-            },
-            changeType: 'added'
-          });
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Schwangerschaft:', error);
-      }
+      // Schwangerschaft - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Schrittmacher - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.hasPacemaker) {
-          const pacemakerDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-          
-          // Prüfe, ob sich das Schrittmacher-Feld geändert hat
-          if (!shouldShowMedicalField('hasPacemaker', patient.hasPacemaker, pacemakerDate, patient)) {
-            return;
-          }
-          
-          entries.push({
-            id: `pacemaker-${patientId}-${pacemakerDate ? pacemakerDate.getTime() : Date.now()}`,
-            type: 'pacemaker',
-            date: pacemakerDate || new Date(),
-            title: 'Schrittmacher',
-            description: patient.pacemakerNotes || 'Schrittmacher erfasst',
-            status: 'aktiv',
-            metadata: {
-              hasPacemaker: true,
-              pacemakerNotes: patient.pacemakerNotes,
-              patientId: patientId
-            },
-            changeType: 'added'
-          });
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Schrittmacher:', error);
-      }
+      // Schrittmacher - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Defibrillator - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.hasDefibrillator) {
-          const defibrillatorDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-          
-          // Prüfe, ob sich das Defibrillator-Feld geändert hat
-          if (!shouldShowMedicalField('hasDefibrillator', patient.hasDefibrillator, defibrillatorDate, patient)) {
-            return;
-          }
-          
-          entries.push({
-            id: `defibrillator-${patientId}-${defibrillatorDate ? defibrillatorDate.getTime() : Date.now()}`,
-            type: 'defibrillator',
-            date: defibrillatorDate || new Date(),
-            title: 'Defibrillator (ICD)',
-            description: patient.defibrillatorNotes || 'Defibrillator erfasst',
-            status: 'aktiv',
-            metadata: {
-              hasDefibrillator: true,
-              defibrillatorNotes: patient.defibrillatorNotes,
-              patientId: patientId
-            },
-            changeType: 'added'
-          });
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Defibrillator:', error);
-      }
+      // Defibrillator - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Implantate - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.implants && Array.isArray(patient.implants) && patient.implants.length > 0) {
-          // Prüfe, ob sich das Implantate-Feld geändert hat
-          const shouldShowImplants = shouldShowMedicalField('implants', patient.implants, patient.updatedAt, patient);
-          
-          if (shouldShowImplants) {
-            patient.implants.forEach((implant: any, index: number) => {
-              if (!implant || (!implant.type && !implant.name)) return;
-              
-              const implantType = implant.type || implant.name || 'Implantat';
-              // Verwende implant.date wenn vorhanden, sonst patient.updatedAt
-              const implantDate = implant.date 
-                ? new Date(implant.date) 
-                : (patient.updatedAt ? new Date(patient.updatedAt) : null);
-              const implantLocation = implant.location || '';
-              const implantNotes = implant.notes || '';
-            
-            const description = [
-              implantLocation && `Ort: ${implantLocation}`,
-              implantNotes
-            ].filter(Boolean).join(' - ') || 'Implantat erfasst';
-            
-            entries.push({
-              id: `implant-${patientId}-${index}-${implantDate ? implantDate.getTime() : Date.now()}`,
-              type: 'implant',
-              date: implantDate || new Date(),
-              title: implantType,
-              description: description,
-              status: 'aktiv',
-              metadata: {
-                ...implant,
-                patientId: patientId
-              },
-              changeType: 'added'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Implantaten:', error);
-      }
+      // Implantate - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Vorerkrankungen - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.preExistingConditions && Array.isArray(patient.preExistingConditions) && patient.preExistingConditions.length > 0) {
-          // Prüfe, ob sich das Vorerkrankungen-Feld geändert hat
-          const shouldShowConditions = shouldShowMedicalField('preExistingConditions', patient.preExistingConditions, patient.updatedAt, patient);
-          
-          if (shouldShowConditions) {
-            patient.preExistingConditions.forEach((condition: any, index: number) => {
-              if (!condition || (typeof condition === 'string' && condition.trim() === '')) return;
-              
-              const conditionName = typeof condition === 'string' ? condition : (condition.name || condition.description || 'Vorerkrankung');
-              const conditionDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-            
-            entries.push({
-              id: `preExistingCondition-${patientId}-${index}-${conditionDate ? conditionDate.getTime() : Date.now()}`,
-              type: 'preExistingCondition',
-              date: conditionDate || new Date(),
-              title: conditionName,
-              description: 'Vorerkrankung erfasst',
-              status: 'aktiv',
-              metadata: {
-                condition: typeof condition === 'string' ? condition : condition,
-                patientId: patientId
-              },
-              changeType: 'added'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Vorerkrankungen:', error);
-      }
+      // Vorerkrankungen - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Medizinische Vorgeschichte - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.medicalHistory && Array.isArray(patient.medicalHistory) && patient.medicalHistory.length > 0) {
-          // Prüfe, ob sich das Medizinische Vorgeschichte-Feld geändert hat
-          const shouldShowHistory = shouldShowMedicalField('medicalHistory', patient.medicalHistory, patient.updatedAt, patient);
-          
-          if (shouldShowHistory) {
-            patient.medicalHistory.forEach((history: any, index: number) => {
-              if (!history || (typeof history === 'string' && history.trim() === '')) return;
-              
-              const historyText = typeof history === 'string' ? history : (history.description || history.text || 'Medizinische Vorgeschichte');
-              const historyDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-            
-            entries.push({
-              id: `medicalHistory-${patientId}-${index}-${historyDate ? historyDate.getTime() : Date.now()}`,
-              type: 'medicalHistory',
-              date: historyDate || new Date(),
-              title: 'Medizinische Vorgeschichte',
-              description: historyText,
-              status: 'erfasst',
-              metadata: {
-                history: typeof history === 'string' ? history : history,
-                patientId: patientId
-              },
-              changeType: 'added'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von medizinischer Vorgeschichte:', error);
-      }
+      // Medizinische Vorgeschichte - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Vorherige Operationen - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.previousSurgeries && Array.isArray(patient.previousSurgeries) && patient.previousSurgeries.length > 0) {
-          // Prüfe, ob sich das Vorherige Operationen-Feld geändert hat
-          const shouldShowSurgeries = shouldShowMedicalField('previousSurgeries', patient.previousSurgeries, patient.updatedAt, patient);
-          
-          if (shouldShowSurgeries) {
-            patient.previousSurgeries.forEach((surgery: any, index: number) => {
-              if (!surgery) return;
-              
-              const surgeryProcedure = typeof surgery === 'string' ? surgery : (surgery.procedure || surgery.name || 'Operation');
-              const surgeryYear = typeof surgery === 'object' ? surgery.year : '';
-              const surgeryHospital = typeof surgery === 'object' ? surgery.hospital : '';
-              const surgerySurgeon = typeof surgery === 'object' ? surgery.surgeon : '';
-              const surgeryDate = typeof surgery === 'object' && surgery.date ? new Date(surgery.date) : (patient.updatedAt ? new Date(patient.updatedAt) : null);
-            
-            const description = [
-              surgeryYear && `Jahr: ${surgeryYear}`,
-              surgeryHospital && `Krankenhaus: ${surgeryHospital}`,
-              surgerySurgeon && `Chirurg: ${surgerySurgeon}`
-            ].filter(Boolean).join(' - ') || 'Operation erfasst';
-            
-            entries.push({
-              id: `surgery-${patientId}-${index}-${surgeryDate ? surgeryDate.getTime() : Date.now()}`,
-              type: 'surgery',
-              date: surgeryDate || new Date(),
-              title: surgeryProcedure,
-              description: description,
-              status: 'abgeschlossen',
-              metadata: {
-                ...(typeof surgery === 'object' ? surgery : { procedure: surgery }),
-                patientId: patientId
-              },
-              changeType: 'added'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von vorherigen Operationen:', error);
-      }
+      // Vorherige Operationen - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Impfungen - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.vaccinations && Array.isArray(patient.vaccinations) && patient.vaccinations.length > 0) {
-          // Prüfe, ob sich das Impfungen-Feld geändert hat
-          const shouldShowVaccinations = shouldShowMedicalField('vaccinations', patient.vaccinations, patient.updatedAt, patient);
-          
-          if (shouldShowVaccinations) {
-            patient.vaccinations.forEach((vaccination: any, index: number) => {
-              if (!vaccination) return;
-              
-              const vaccinationName = typeof vaccination === 'string' ? vaccination : (vaccination.name || 'Impfung');
-              const vaccinationDate = typeof vaccination === 'object' && vaccination.date ? new Date(vaccination.date) : (patient.updatedAt ? new Date(patient.updatedAt) : null);
-              const vaccinationNextDue = typeof vaccination === 'object' ? vaccination.nextDue : '';
-              const vaccinationNotes = typeof vaccination === 'object' ? vaccination.notes : '';
-            
-            const description = [
-              vaccinationNextDue && `Nächste fällig: ${vaccinationNextDue}`,
-              vaccinationNotes
-            ].filter(Boolean).join(' - ') || 'Impfung erfasst';
-            
-            entries.push({
-              id: `vaccination-${patientId}-${index}-${vaccinationDate ? vaccinationDate.getTime() : Date.now()}`,
-              type: 'vaccination',
-              date: vaccinationDate || new Date(),
-              title: vaccinationName,
-              description: description,
-              status: 'erfasst',
-              metadata: {
-                ...(typeof vaccination === 'object' ? vaccination : { name: vaccination }),
-                patientId: patientId
-              },
-              changeType: 'added'
-            });
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Impfungen:', error);
-      }
+      // Impfungen - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Blutgruppe - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.bloodType && patient.bloodType !== 'Unbekannt') {
-          const bloodTypeDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-          
-          // Prüfe, ob sich das Blutgruppe-Feld geändert hat
-          if (shouldShowMedicalField('bloodType', patient.bloodType, bloodTypeDate, patient)) {
-            entries.push({
-              id: `bloodType-${patientId}-${bloodTypeDate ? bloodTypeDate.getTime() : Date.now()}`,
-              type: 'bloodType',
-              date: bloodTypeDate || new Date(),
-              title: 'Blutgruppe',
-              description: `Blutgruppe: ${patient.bloodType}`,
-              status: 'erfasst',
-              metadata: {
-                bloodType: patient.bloodType,
-                patientId: patientId
-              },
-              changeType: 'modified'
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Blutgruppe:', error);
-      }
+      // Blutgruppe - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Größe/Gewicht/BMI - nur anzeigen wenn sich eines der Felder geändert hat
-      try {
-        if (patient && (patient.height || patient.weight || patient.bmi)) {
-          const anthropometryDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-          
-          // Prüfe, ob sich eines der Körpermaße-Felder geändert hat
-          const heightChanged = shouldShowMedicalField('height', patient.height, anthropometryDate, patient);
-          const weightChanged = shouldShowMedicalField('weight', patient.weight, anthropometryDate, patient);
-          const bmiChanged = shouldShowMedicalField('bmi', patient.bmi, anthropometryDate, patient);
-          
-          if (heightChanged || weightChanged || bmiChanged) {
-            const anthropometryParts: string[] = [];
-            if (patient.height) anthropometryParts.push(`Größe: ${patient.height} cm`);
-            if (patient.weight) anthropometryParts.push(`Gewicht: ${patient.weight} kg`);
-            if (patient.bmi) anthropometryParts.push(`BMI: ${patient.bmi}`);
-            
-            if (anthropometryParts.length > 0) {
-              entries.push({
-                id: `anthropometry-${patientId}-${anthropometryDate ? anthropometryDate.getTime() : Date.now()}`,
-                type: 'anthropometry',
-                date: anthropometryDate || new Date(),
-                title: 'Körpermaße',
-                description: anthropometryParts.join(', '),
-                status: 'erfasst',
-                metadata: {
-                  height: patient.height,
-                  weight: patient.weight,
-                  bmi: patient.bmi,
-                  patientId: patientId
-                },
-                changeType: 'modified'
-              });
-            }
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Körpermaßen:', error);
-      }
+      // Körpermaße (Größe/Gewicht/BMI) - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
-      // Raucherstatus - nur anzeigen wenn das Feld sich geändert hat
-      try {
-        if (patient && patient.smokingStatus && patient.smokingStatus !== 'non-smoker') {
-          const smokingDate = patient.updatedAt ? new Date(patient.updatedAt) : null;
-          
-          // Prüfe, ob sich das Raucherstatus-Feld geändert hat
-          if (shouldShowMedicalField('smokingStatus', patient.smokingStatus, smokingDate, patient)) {
-            const smokingParts: string[] = [];
-            const statusText = patient.smokingStatus === 'current-smoker' ? 'Raucher' : 
-                              patient.smokingStatus === 'former-smoker' ? 'Ehemaliger Raucher' : 
-                              'Nichtraucher';
-            smokingParts.push(`Status: ${statusText}`);
-            if (patient.cigarettesPerDay) smokingParts.push(`${patient.cigarettesPerDay} Zigaretten/Tag`);
-            if (patient.yearsOfSmoking) smokingParts.push(`${patient.yearsOfSmoking} Jahre`);
-            if (patient.quitSmokingDate) smokingParts.push(`Aufgehört: ${new Date(patient.quitSmokingDate).toLocaleDateString('de-DE')}`);
-            
-            entries.push({
-              id: `smokingStatus-${patientId}-${smokingDate ? smokingDate.getTime() : Date.now()}`,
-              type: 'smokingStatus',
-              date: smokingDate || new Date(),
-              title: 'Raucherstatus',
-              description: smokingParts.join(', '),
-              status: 'erfasst',
-              metadata: {
-                smokingStatus: patient.smokingStatus,
-                cigarettesPerDay: patient.cigarettesPerDay,
-                yearsOfSmoking: patient.yearsOfSmoking,
-                quitSmokingDate: patient.quitSmokingDate,
-                patientId: patientId
-              },
-              changeType: 'modified'
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Fehler beim Verarbeiten von Raucherstatus:', error);
-      }
+      // Raucherstatus - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
       // Vitalwerte
       try {
-        (vitalSigns || []).forEach((vital: any) => {
+        // Hilfsfunktion zum Extrahieren der patientId aus einem Vitalwert
+        const getVitalSignPatientId = (vital: any): string | null => {
+          if (vital.patientId) return String(vital.patientId);
+          if (vital.patient && typeof vital.patient === 'string') return vital.patient;
+          if (vital.patient && typeof vital.patient === 'object' && vital.patient._id) return String(vital.patient._id);
+          if (vital.patient && typeof vital.patient === 'object' && vital.patient.id) return String(vital.patient.id);
+          return null;
+        };
+
+        // Filtere Vitalwerte nach patientId BEVOR wir sie verarbeiten
+        const patientVitalSigns = (vitalSigns || []).filter((vital: any) => {
+          const vitalPatientId = getVitalSignPatientId(vital);
+          if (!vitalPatientId) return false; // Keine patientId = nicht zu diesem Patienten
+          return vitalPatientId === String(patientId);
+        });
+
+        console.log('💓 Verarbeite Vitalwerte:', { 
+          total: vitalSigns?.length || 0,
+          filtered: patientVitalSigns.length,
+          patientId
+        });
+        
+        patientVitalSigns.forEach((vital: any) => {
+          
           const vitalParts: Array<{ text: string; isAbnormal: boolean }> = [];
           let hasAbnormalValues = false;
           
@@ -1827,23 +1564,34 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             }
           });
         });
+        
+        console.log('✅ Vitalwerte verarbeitet:', { 
+          total: vitalSigns?.length || 0,
+          filtered: patientVitalSigns.length,
+          added: patientVitalSigns.length
+        });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Vitalwerten:', error);
       }
 
-      // Sortiere chronologisch (neueste zuerst)
-      entries.sort((a, b) => b.date.getTime() - a.date.getTime());
+      // OPTIMIERT: Sortiere und zeige Einträge in Batches, um UI nicht zu blockieren
+      const processAndDisplay = () => {
+        // Sortiere chronologisch (neueste zuerst) - nur wenn nötig
+        if (entries.length > 0) {
+          entries.sort((a, b) => b.date.getTime() - a.date.getTime());
+        }
 
-      // Erstelle einen Hash aus den Entry-IDs, um zu prüfen, ob sich etwas geändert hat
-      const newIds = entries.map(e => e.id).sort().join('|');
-      const newDataHash = `${entries.length}|${newIds}`;
-      
-      // Prüfe, ob sich die Daten tatsächlich geändert haben
-      if (prevDataHashRef.current === newDataHash) {
-        return; // Keine Änderung, überspringe State-Update
-      }
-      
-      prevDataHashRef.current = newDataHash;
+        // OPTIMIERT: Erstelle einen einfacheren Hash
+        const simpleHash = entries.length > 0 
+          ? `${entries.length}|${entries[0].id}|${entries[entries.length - 1].id}`
+          : '0';
+        
+        // Prüfe, ob sich die Daten geändert haben
+        if (prevDataHashRef.current === simpleHash) {
+          return; // Keine Änderung
+        }
+        
+        prevDataHashRef.current = simpleHash;
       
       // Aktualisiere lastPatientUpdateRef nach dem Erstellen der EPA-Einträge
       // WICHTIG: Setze lastPatientUpdateRef auf den aktuellen patientUpdatedAt Wert,
@@ -1863,20 +1611,18 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         });
       }
       
-      // Aktualisiere lastMedicalFieldsRef mit der aktuellen Version aller medizinischen Felder
-      // Dies ermöglicht es, beim nächsten Mal genau zu erkennen, welche Felder sich geändert haben
-      // WICHTIG: Initialisiere lastMedicalFieldsRef beim ersten Laden, damit wir beim nächsten Update
-      // erkennen können, welche Felder sich geändert haben
+      // OPTIMIERT: Aktualisiere lastMedicalFieldsRef nur mit Referenzen, nicht mit Deep Copies
+      // Das spart viel Zeit bei großen Arrays
       if (patient) {
         const wasFirstLoad = !lastMedicalFieldsRef.current;
         lastMedicalFieldsRef.current = {
-          infections: patient.infections ? JSON.parse(JSON.stringify(patient.infections)) : undefined,
-          allergies: patient.allergies ? JSON.parse(JSON.stringify(patient.allergies)) : undefined,
-          currentMedications: patient.currentMedications ? JSON.parse(JSON.stringify(patient.currentMedications)) : undefined,
-          preExistingConditions: patient.preExistingConditions ? JSON.parse(JSON.stringify(patient.preExistingConditions)) : undefined,
-          medicalHistory: patient.medicalHistory ? JSON.parse(JSON.stringify(patient.medicalHistory)) : undefined,
-          previousSurgeries: patient.previousSurgeries ? JSON.parse(JSON.stringify(patient.previousSurgeries)) : undefined,
-          vaccinations: patient.vaccinations ? JSON.parse(JSON.stringify(patient.vaccinations)) : undefined,
+          infections: patient.infections,
+          allergies: patient.allergies,
+          currentMedications: patient.currentMedications,
+          preExistingConditions: patient.preExistingConditions,
+          medicalHistory: patient.medicalHistory,
+          previousSurgeries: patient.previousSurgeries,
+          vaccinations: patient.vaccinations,
           bloodType: patient.bloodType,
           height: patient.height,
           weight: patient.weight,
@@ -1884,7 +1630,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           smokingStatus: patient.smokingStatus,
           hasPacemaker: patient.hasPacemaker,
           hasDefibrillator: patient.hasDefibrillator,
-          implants: patient.implants ? JSON.parse(JSON.stringify(patient.implants)) : undefined,
+          implants: patient.implants,
           isPregnant: patient.isPregnant
         };
         console.log('📝 Aktualisiere lastMedicalFieldsRef nach EPA-Erstellung', {
@@ -1893,18 +1639,143 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         });
       }
       
-      // Verwende startTransition für nicht-urgente State-Updates
-      startTransition(() => {
-        setEpaEntries(entries);
-      });
+        // OPTIMIERT: Zeige zunächst nur die ersten 5 Einträge für sofortiges Feedback
+        const initialBatchSize = 5;
+        const batchSize = 5;
+        const initialEntries = entries.slice(0, initialBatchSize);
+        const remainingEntries = entries.slice(initialBatchSize);
+        
+        // Zeige initiale Einträge sofort
+        startTransition(() => {
+          setEpaEntries(initialEntries);
+        });
+        
+        // Lade den Rest in sehr kleinen Batches mit langen Pausen
+        if (remainingEntries.length > 0) {
+          let currentIndex = 0;
+          
+          const loadNextBatch = () => {
+            if (currentIndex >= remainingEntries.length) {
+              // Finalisiere nach dem letzten Batch
+              if (patient && patient.updatedAt) {
+                lastPatientUpdateRef.current = new Date(patient.updatedAt).getTime();
+              }
+              if (patient) {
+                lastMedicalFieldsRef.current = {
+                  infections: patient.infections,
+                  allergies: patient.allergies,
+                  currentMedications: patient.currentMedications,
+                  preExistingConditions: patient.preExistingConditions,
+                  medicalHistory: patient.medicalHistory,
+                  previousSurgeries: patient.previousSurgeries,
+                  vaccinations: patient.vaccinations,
+                  bloodType: patient.bloodType,
+                  height: patient.height,
+                  weight: patient.weight,
+                  bmi: patient.bmi,
+                  smokingStatus: patient.smokingStatus,
+                  hasPacemaker: patient.hasPacemaker,
+                  hasDefibrillator: patient.hasDefibrillator,
+                  implants: patient.implants,
+                  isPregnant: patient.isPregnant
+                };
+              }
+              return;
+            }
+            
+            const batch = remainingEntries.slice(currentIndex, currentIndex + batchSize);
+            currentIndex += batchSize;
+            
+            startTransition(() => {
+              setEpaEntries(prevEntries => {
+                const combined = [...prevEntries, ...batch];
+                // Sortiere nach jedem Batch
+                return combined.sort((a, b) => b.date.getTime() - a.date.getTime());
+              });
+            });
+            
+            // Lade nächsten Batch mit sehr langer Verzögerung für flüssiges Scrollen
+            if (currentIndex < remainingEntries.length) {
+              if ('requestIdleCallback' in window) {
+                (window as any).requestIdleCallback(loadNextBatch, { timeout: 3000 });
+              } else {
+                setTimeout(loadNextBatch, 1000); // Sehr lange Verzögerung
+              }
+            } else {
+              loadNextBatch(); // Finalisiere
+            }
+          };
+          
+          // Starte das Laden des ersten Batches mit Verzögerung
+          if ('requestIdleCallback' in window) {
+            (window as any).requestIdleCallback(loadNextBatch, { timeout: 3000 });
+          } else {
+            setTimeout(loadNextBatch, 1000);
+          }
+        } else {
+          // Finalisiere wenn keine weiteren Einträge
+          if (patient && patient.updatedAt) {
+            lastPatientUpdateRef.current = new Date(patient.updatedAt).getTime();
+          }
+          if (patient) {
+            lastMedicalFieldsRef.current = {
+              infections: patient.infections,
+              allergies: patient.allergies,
+              currentMedications: patient.currentMedications,
+              preExistingConditions: patient.preExistingConditions,
+              medicalHistory: patient.medicalHistory,
+              previousSurgeries: patient.previousSurgeries,
+              vaccinations: patient.vaccinations,
+              bloodType: patient.bloodType,
+              height: patient.height,
+              weight: patient.weight,
+              bmi: patient.bmi,
+              smokingStatus: patient.smokingStatus,
+              hasPacemaker: patient.hasPacemaker,
+              hasDefibrillator: patient.hasDefibrillator,
+              implants: patient.implants,
+              isPregnant: patient.isPregnant
+            };
+          }
+        }
+      };
+      
+      // Starte Verarbeitung und Anzeige
+      processAndDisplay();
     } catch (error) {
-      console.error('Fehler beim Erstellen der EPA-Einträge:', error);
-      startTransition(() => {
-        setEpaEntries([]);
-      });
-    }
-  }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns, patient, shouldShowMedicalField]);
+        console.error('Fehler beim Erstellen der EPA-Einträge:', error);
+        startTransition(() => {
+          setEpaEntries([]);
+        });
+      }
+    };
 
+    // Verwende requestIdleCallback wenn verfügbar, sonst setTimeout mit kleiner Verzögerung
+    if ('requestIdleCallback' in window) {
+      const idleCallbackId = (window as any).requestIdleCallback(processEntries, { timeout: 1000 });
+      return () => {
+        if ('cancelIdleCallback' in window) {
+          (window as any).cancelIdleCallback(idleCallbackId);
+        }
+      };
+    } else {
+      // Fallback: Kleine Verzögerung, damit das UI nicht blockiert wird
+      const timeoutId = setTimeout(processEntries, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns, patient]);
+
+
+  // OPTIMIERT: Berechne Typ-Zählungen nur einmal mit useMemo
+  const typeCounts = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    (epaEntries || []).forEach(e => {
+      if (e?.type) {
+        counts[e.type] = (counts[e.type] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [epaEntries]);
 
   // Funktion zum rekursiven Durchsuchen aller Felder eines Objekts
   const searchInObject = (obj: any, searchTerm: string): boolean => {
@@ -2126,27 +1997,40 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     return { text: `${label}: ${value}${unit ? ` ${unit}` : ''}`, isAbnormal };
   };
 
-  // Gruppiere Einträge nach Datum und Typ (muss vor bedingtem Return sein)
+  // Gruppiere Einträge nach Datum - OPTIMIERT: Verwende Map und for-Schleife
   const groupedEntries = React.useMemo(() => {
     try {
-      const groups: Record<string, EPAEntry[]> = {};
-      if (!filteredEntries || !Array.isArray(filteredEntries)) {
-        return groups;
+      if (!filteredEntries || !Array.isArray(filteredEntries) || filteredEntries.length === 0) {
+        return {};
       }
-      filteredEntries.forEach(entry => {
+      
+      // OPTIMIERT: Verwende Map für bessere Performance bei vielen Einträgen
+      const groupsMap = new Map<string, EPAEntry[]>();
+      
+      // Verwende for-Schleife statt forEach für bessere Performance
+      for (let i = 0; i < filteredEntries.length; i++) {
+        const entry = filteredEntries[i];
+        if (!entry || !entry.date) {
+          continue;
+        }
+        
         try {
-          if (!entry || !entry.date) {
-            return;
-          }
           const dateKey = format(entry.date, 'dd.MM.yyyy', { locale: de });
-          if (!groups[dateKey]) {
-            groups[dateKey] = [];
+          if (!groupsMap.has(dateKey)) {
+            groupsMap.set(dateKey, []);
           }
-          groups[dateKey].push(entry);
+          groupsMap.get(dateKey)!.push(entry);
         } catch (error) {
           console.error('Fehler beim Gruppieren eines Eintrags:', error);
         }
+      }
+      
+      // Konvertiere Map zu Object
+      const groups: Record<string, EPAEntry[]> = {};
+      groupsMap.forEach((entries, dateKey) => {
+        groups[dateKey] = entries;
       });
+      
       return groups;
     } catch (error) {
       console.error('Fehler beim Gruppieren der Einträge:', error);
@@ -2154,54 +2038,72 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     }
   }, [filteredEntries]);
 
-  // Gruppiere Einträge desselben Typs am selben Tag
+  // Gruppiere Einträge desselben Typs am selben Tag - OPTIMIERT: Bessere Performance
   const groupEntriesByType = React.useMemo(() => {
     try {
       const result: Record<string, GroupedEPAEntry[]> = {};
+      const dateKeys = Object.keys(groupedEntries);
       
-      Object.keys(groupedEntries).forEach(dateKey => {
+      // Verwende for-Schleife statt forEach für bessere Performance
+      for (let i = 0; i < dateKeys.length; i++) {
+        const dateKey = dateKeys[i];
         try {
           const entries = groupedEntries[dateKey];
           if (!entries || !Array.isArray(entries)) {
-            return;
+            continue;
           }
           
-          const typeGroups: Record<string, EPAEntry[]> = {};
+          // OPTIMIERT: Verwende Map für bessere Performance
+          const typeGroupsMap = new Map<string, EPAEntry[]>();
           
           // Gruppiere nach Typ
-          entries.forEach(entry => {
+          for (let j = 0; j < entries.length; j++) {
+            const entry = entries[j];
             if (!entry || !entry.type) {
-              return;
+              continue;
             }
             const typeKey = entry.type;
-            if (!typeGroups[typeKey]) {
-              typeGroups[typeKey] = [];
+            if (!typeGroupsMap.has(typeKey)) {
+              typeGroupsMap.set(typeKey, []);
             }
-            typeGroups[typeKey].push(entry);
+            typeGroupsMap.get(typeKey)!.push(entry);
+          }
+          
+          // Konvertiere Map zu Object
+          const typeGroups: Record<string, EPAEntry[]> = {};
+          typeGroupsMap.forEach((entries, typeKey) => {
+            typeGroups[typeKey] = entries;
           });
           
-          // Erstelle GroupedEPAEntry für jeden Typ
+          // Erstelle GroupedEPAEntry für jeden Typ - OPTIMIERT: for-Schleife statt forEach
           const groupedEntriesForDate: GroupedEPAEntry[] = [];
-          Object.keys(typeGroups).forEach(typeKey => {
+          const typeKeys = Object.keys(typeGroups);
+          
+          for (let k = 0; k < typeKeys.length; k++) {
+            const typeKey = typeKeys[k];
             try {
               const typeEntries = typeGroups[typeKey];
               if (!typeEntries || typeEntries.length === 0) {
-                return;
+                continue;
               }
               
               const firstEntry = typeEntries[0];
               if (!firstEntry) {
-                return;
+                continue;
               }
               
               // Wenn mehr als 1 Eintrag, gruppiere sie
               if (typeEntries.length > 1) {
+                // OPTIMIERT: Verwende slice für Titel, um nicht alle zu verarbeiten
+                const titles = typeEntries.slice(0, 5).map(e => e?.title || '').filter(Boolean);
+                const titleSuffix = typeEntries.length > 5 ? `, ... (+${typeEntries.length - 5} weitere)` : '';
+                
                 groupedEntriesForDate.push({
                   id: `grouped-${dateKey}-${typeKey}`,
                   type: firstEntry.type as any,
                   date: firstEntry.date,
                   title: `${typeEntries.length} ${getTypeLabel(typeKey)}`,
-                  description: typeEntries.map(e => e?.title || '').filter(Boolean).join(', '),
+                  description: titles.join(', ') + titleSuffix,
                   status: firstEntry.status,
                   doctor: firstEntry.doctor,
                   count: typeEntries.length,
@@ -2228,12 +2130,12 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             } catch (error) {
               console.error('Fehler beim Erstellen eines GroupedEPAEntry:', error);
             }
-          });
+          }
           result[dateKey] = groupedEntriesForDate;
         } catch (error) {
           console.error(`Fehler beim Verarbeiten von Einträgen für Datum ${dateKey}:`, error);
         }
-      });
+      }
       
       return result;
     } catch (error) {
@@ -2353,6 +2255,34 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     }
   }, [loading, epaEntries.length]);
 
+  // OPTIMIERT: Lazy Loading für Datum-Karten beim Scrollen
+  useEffect(() => {
+    if (sortedDates.length <= visibleDatesCount) return;
+    
+    const handleScroll = () => {
+      const scrollPosition = window.innerHeight + window.scrollY;
+      const documentHeight = document.documentElement.scrollHeight;
+      
+      // Wenn nahe am Ende (500px vor dem Ende), lade weitere 10 Datum-Karten
+      if (scrollPosition >= documentHeight - 500 && visibleDatesCount < sortedDates.length) {
+        setVisibleDatesCount(prev => Math.min(prev + 10, sortedDates.length));
+      }
+    };
+    
+    // Debounce scroll events für bessere Performance
+    let timeoutId: NodeJS.Timeout;
+    const debouncedHandleScroll = () => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(handleScroll, 150);
+    };
+    
+    window.addEventListener('scroll', debouncedHandleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', debouncedHandleScroll);
+      clearTimeout(timeoutId);
+    };
+  }, [sortedDates.length, visibleDatesCount]);
+
 
   if (loading) {
     return (
@@ -2438,14 +2368,14 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         </Stack>
       </Paper>
 
-      {/* Gruppierte Darstellung nach Datum */}
+      {/* Gruppierte Darstellung nach Datum - OPTIMIERT: Lazy Rendering */}
       {sortedDates.length === 0 ? (
         <Paper sx={{ p: 3 }}>
           <Alert severity="info">Keine Einträge gefunden</Alert>
         </Paper>
       ) : (
         <Stack spacing={2}>
-          {sortedDates.map((dateKey) => {
+          {sortedDates.slice(0, visibleDatesCount).map((dateKey) => {
             try {
               const entries = (groupedEntries && groupedEntries[dateKey]) || [];
               const groupedEntriesForDate = (groupEntriesByType && groupEntriesByType[dateKey]) || [];
@@ -2472,10 +2402,18 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
               return null;
             }
           })}
+          {sortedDates.length > visibleDatesCount && (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress size={24} />
+              <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
+                Lade weitere Einträge...
+              </Typography>
+            </Box>
+          )}
         </Stack>
       )}
 
-      {/* Zusammenfassung */}
+      {/* Zusammenfassung - OPTIMIERT: Verwende useMemo für Zählungen */}
       <Paper sx={{ p: 2, mt: 2 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
           <Typography variant="subtitle2">
@@ -2494,28 +2432,28 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         </Box>
         <Stack direction="row" spacing={1} flexWrap="wrap">
           <Chip label={`Gesamt: ${(epaEntries || []).length}`} size="small" />
-          <Chip label={`Termine: ${(epaEntries || []).filter(e => e?.type === 'appointment').length}`} size="small" color="primary" />
-          <Chip label={`Dekurs: ${(epaEntries || []).filter(e => e?.type === 'dekurs').length}`} size="small" color="info" />
-          <Chip label={`Diagnosen: ${(epaEntries || []).filter(e => e?.type === 'diagnosis').length}`} size="small" color="error" />
-          <Chip label={`Medikation: ${(epaEntries || []).filter(e => e?.type === 'medication').length}`} size="small" color="warning" />
-          <Chip label={`Labor: ${(epaEntries || []).filter(e => e?.type === 'labor').length}`} size="small" color="success" />
-          <Chip label={`DICOM: ${(epaEntries || []).filter(e => e?.type === 'dicom').length}`} size="small" color="secondary" />
-          <Chip label={`Dokumente: ${(epaEntries || []).filter(e => e?.type === 'document').length}`} size="small" />
-          <Chip label={`Fotos: ${(epaEntries || []).filter(e => e?.type === 'photo').length}`} size="small" />
-          <Chip label={`Vitalwerte: ${(epaEntries || []).filter(e => e?.type === 'vital').length}`} size="small" color="warning" />
-          <Chip label={`Allergien: ${(epaEntries || []).filter(e => e?.type === 'allergy').length}`} size="small" color="error" />
-          <Chip label={`Infektionen: ${(epaEntries || []).filter(e => e?.type === 'infection').length}`} size="small" color="error" />
-          <Chip label={`Schwangerschaft: ${(epaEntries || []).filter(e => e?.type === 'pregnancy').length}`} size="small" color="info" />
-          <Chip label={`Schrittmacher: ${(epaEntries || []).filter(e => e?.type === 'pacemaker').length}`} size="small" color="secondary" />
-          <Chip label={`Defibrillator: ${(epaEntries || []).filter(e => e?.type === 'defibrillator').length}`} size="small" color="secondary" />
-          <Chip label={`Implantate: ${(epaEntries || []).filter(e => e?.type === 'implant').length}`} size="small" color="info" />
-          <Chip label={`Vorerkrankungen: ${(epaEntries || []).filter(e => e?.type === 'preExistingCondition').length}`} size="small" color="error" />
-          <Chip label={`Med. Vorgeschichte: ${(epaEntries || []).filter(e => e?.type === 'medicalHistory').length}`} size="small" color="info" />
-          <Chip label={`Operationen: ${(epaEntries || []).filter(e => e?.type === 'surgery').length}`} size="small" color="error" />
-          <Chip label={`Impfungen: ${(epaEntries || []).filter(e => e?.type === 'vaccination').length}`} size="small" color="success" />
-          <Chip label={`Blutgruppe: ${(epaEntries || []).filter(e => e?.type === 'bloodType').length}`} size="small" color="warning" />
-          <Chip label={`Körpermaße: ${(epaEntries || []).filter(e => e?.type === 'anthropometry').length}`} size="small" color="info" />
-          <Chip label={`Raucherstatus: ${(epaEntries || []).filter(e => e?.type === 'smokingStatus').length}`} size="small" color="warning" />
+          <Chip label={`Termine: ${typeCounts.appointment || 0}`} size="small" color="primary" />
+          <Chip label={`Dekurs: ${typeCounts.dekurs || 0}`} size="small" color="info" />
+          <Chip label={`Diagnosen: ${typeCounts.diagnosis || 0}`} size="small" color="error" />
+          <Chip label={`Medikation: ${typeCounts.medication || 0}`} size="small" color="warning" />
+          <Chip label={`Labor: ${typeCounts.labor || 0}`} size="small" color="success" />
+          <Chip label={`DICOM: ${typeCounts.dicom || 0}`} size="small" color="secondary" />
+          <Chip label={`Dokumente: ${typeCounts.document || 0}`} size="small" />
+          <Chip label={`Fotos: ${typeCounts.photo || 0}`} size="small" />
+          <Chip label={`Vitalwerte: ${typeCounts.vital || 0}`} size="small" color="warning" />
+          <Chip label={`Allergien: ${typeCounts.allergy || 0}`} size="small" color="error" />
+          <Chip label={`Infektionen: ${typeCounts.infection || 0}`} size="small" color="error" />
+          <Chip label={`Schwangerschaft: ${typeCounts.pregnancy || 0}`} size="small" color="info" />
+          <Chip label={`Schrittmacher: ${typeCounts.pacemaker || 0}`} size="small" color="secondary" />
+          <Chip label={`Defibrillator: ${typeCounts.defibrillator || 0}`} size="small" color="secondary" />
+          <Chip label={`Implantate: ${typeCounts.implant || 0}`} size="small" color="info" />
+          <Chip label={`Vorerkrankungen: ${typeCounts.preExistingCondition || 0}`} size="small" color="error" />
+          <Chip label={`Med. Vorgeschichte: ${typeCounts.medicalHistory || 0}`} size="small" color="info" />
+          <Chip label={`Operationen: ${typeCounts.surgery || 0}`} size="small" color="error" />
+          <Chip label={`Impfungen: ${typeCounts.vaccination || 0}`} size="small" color="success" />
+          <Chip label={`Blutgruppe: ${typeCounts.bloodType || 0}`} size="small" color="warning" />
+          <Chip label={`Körpermaße: ${typeCounts.anthropometry || 0}`} size="small" color="info" />
+          <Chip label={`Raucherstatus: ${typeCounts.smokingStatus || 0}`} size="small" color="warning" />
         </Stack>
       </Paper>
 

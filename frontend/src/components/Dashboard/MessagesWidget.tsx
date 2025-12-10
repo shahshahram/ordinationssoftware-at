@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
 import { 
   Box, 
   Typography, 
@@ -10,20 +9,16 @@ import {
   Badge, 
   useMediaQuery, 
   useTheme,
-  IconButton,
-  Tooltip,
   Chip
 } from '@mui/material';
 import { 
   Mail, 
   MailOutline, 
-  Send, 
-  PriorityHigh,
-  MoreVert
+  PriorityHigh
 } from '@mui/icons-material';
 import { DashboardWidget } from '../../store/slices/dashboardWidgetsSlice';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
-import { fetchMessages, fetchUnreadCount, markAsRead, markAllAsRead, InternalMessage } from '../../store/slices/internalMessagesSlice';
+import { fetchMessages, fetchUnreadCount, markAsRead, InternalMessage } from '../../store/slices/internalMessagesSlice';
 import { addNotification } from '../../store/slices/uiSlice';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -37,7 +32,6 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const dispatch = useAppDispatch();
-  const navigate = useNavigate();
   const { inbox, unreadCount, loading } = useAppSelector((state) => state.internalMessages);
   const { user } = useAppSelector((state) => state.auth);
 
@@ -94,15 +88,6 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
     }
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'urgent': return 'error';
-      case 'high': return 'warning';
-      case 'normal': return 'info';
-      case 'low': return 'default';
-      default: return 'default';
-    }
-  };
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1.5, sm: 2 } }}>

@@ -624,13 +624,18 @@ const DemoCalendar: React.FC = () => {
       service = services.find(s => s._id === serviceId);
     }
     
+    // Konvertiere doctor zu string
+    const doctorId = typeof apt.doctor === 'string' 
+      ? apt.doctor 
+      : (apt.doctor as any)?._id || '';
+    
     setFormData({
       patientId: patientId || '',
       patientName: patient ? `${patient.firstName} ${patient.lastName}` : apt.title || '',
       patientPhone: patient?.phone || '',
       patientEmail: patient?.email || '',
       patient: patient || patientId || undefined,
-      doctor: apt.doctor || '',
+      doctor: doctorId,
       date,
       time,
       duration: apt.duration || 30,

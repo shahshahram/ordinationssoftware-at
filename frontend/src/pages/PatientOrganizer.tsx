@@ -10,7 +10,6 @@ import {
   List, 
   ListItemButton, 
   ListItemText, 
-  Skeleton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -53,10 +52,7 @@ import {
   Bloodtype,
   Height,
   MonitorWeight,
-  Warning as Allergy,
   Warning,
-  CloudUpload,
-  Psychology,
   Vaccines,
   LocalPharmacy,
   QrCode,
@@ -74,7 +70,7 @@ import {
   Phone,
   BugReport
 } from '@mui/icons-material';
-import { useParams, Link as RouterLink, useNavigate, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, updatePatient, Patient } from '../store/slices/patientSlice';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
@@ -85,7 +81,6 @@ import { fetchDocumentTemplates } from '../store/slices/documentTemplateSlice';
 import { fetchLocations, Location } from '../store/slices/locationSlice';
 import { apiRequest } from '../utils/api';
 import PatientSidebar from '../components/PatientSidebar';
-import PatientTimeline from '../components/PatientTimeline';
 import DiagnosisManager from '../components/DiagnosisManager';
 import MedicationListInput, { convertMedicationsArrayToPatientFormat } from '../components/MedicationListInput';
 import CDADocumentViewer from '../components/CDADocumentViewer';
@@ -105,54 +100,10 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import MedicalDataHistory from '../components/MedicalDataHistory';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
 import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
-import { Article, Storage, Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, History, MonitorHeart } from '@mui/icons-material';
+import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, MonitorHeart } from '@mui/icons-material';
 import api from '../utils/api';
 import { Specialization } from '../types/ambulanzbefund';
 
-// Spezialisierungs-Labels
-const SPECIALIZATION_LABELS: Record<Specialization, string> = {
-  allgemein: 'Allgemeinmedizin',
-  hno: 'HNO',
-  interne: 'Innere Medizin',
-  chirurgie: 'Chirurgie',
-  dermatologie: 'Dermatologie',
-  gyn: 'Gynäkologie',
-  pädiatrie: 'Pädiatrie',
-  neurologie: 'Neurologie',
-  orthopädie: 'Orthopädie',
-  ophthalmologie: 'Ophthalmologie',
-  urologie: 'Urologie',
-  psychiatrie: 'Psychiatrie',
-  radiologie: 'Radiologie',
-  pathologie: 'Pathologie',
-};
-
-// Helper functions für Status-Anzeige
-const getStatusIcon = (status: string) => {
-  switch (status) {
-    case 'geplant': return <Schedule />;
-    case 'bestätigt': return <CheckCircle />;
-    case 'wartend': return <AccessTime />;
-    case 'in_behandlung': return <Info />;
-    case 'abgeschlossen': return <CheckCircle />;
-    case 'abgesagt': return <Cancel />;
-    case 'verschoben': return <Schedule />;
-    default: return <Schedule />;
-  }
-};
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'geplant': return 'info';
-    case 'bestätigt': return 'success';
-    case 'wartend': return 'warning';
-    case 'in_behandlung': return 'primary';
-    case 'abgeschlossen': return 'success';
-    case 'abgesagt': return 'error';
-    case 'verschoben': return 'info';
-    default: return 'default';
-  }
-};
 
 // TabPanel Komponente
 interface TabPanelProps {

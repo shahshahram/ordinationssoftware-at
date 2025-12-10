@@ -51,7 +51,6 @@ import ErrorBoundary from './components/ErrorBoundary';
 import PatientOrganizer from './pages/PatientOrganizer';
 import TemplateManagement from './pages/TemplateManagement';
 import DocumentTemplateAdmin from './pages/DocumentTemplateAdmin';
-import DekursVorlageAdmin from './pages/DekursVorlageAdmin';
 import AmbulanzbefundEditor from './pages/AmbulanzbefundEditor';
 import SuperAdminSetup from './pages/SuperAdminSetup';
 import PerformanceList from './components/PerformanceList';

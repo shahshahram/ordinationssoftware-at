@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -12,7 +12,7 @@ import {
   IconButton,
   Box
 } from '@mui/material';
-import { Add, Close } from '@mui/icons-material';
+import { Close } from '@mui/icons-material';
 import {
   People,
   CalendarToday,
@@ -22,7 +22,6 @@ import {
   Warning,
   CheckCircle,
   QrCode,
-  Tablet,
   BarChart,
   ShowChart,
   PieChart,
@@ -34,7 +33,6 @@ import {
   Assessment,
   EventNote,
   Medication,
-  NotificationsActive,
   Mail,
   Science
 } from '@mui/icons-material';

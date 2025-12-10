@@ -1529,7 +1529,7 @@ const Appointments: React.FC = () => {
           : appointment.room || { _id: 'unknown', name: 'Behandlungszimmer', number: '101' },
         };
       });
-      setAppointments(convertedAppointments);
+      setAppointments(convertedAppointments as any);
       
       // Füge wartende Termine automatisch zur Warteliste hinzu
       const waitingAppointments = convertedAppointments.filter(apt => apt.status === 'wartend');

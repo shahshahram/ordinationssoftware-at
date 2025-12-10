@@ -70,8 +70,8 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
   // Bereinige Items: Konvertiere alle Icons zu Strings, falls sie React-Elemente sind
-  const rawItems = data || widget.config?.items || [];
   const items = useMemo(() => {
+    const rawItems = data || widget.config?.items || [];
     return rawItems.map((item: any) => {
       // Wenn das Icon ein Objekt ist (React-Element oder serialisiertes Objekt), konvertiere es zu einem String
       if (item.icon && typeof item.icon === 'object') {
@@ -98,7 +98,7 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data }) => {
       // Wenn es bereits ein String ist, behalte es
       return item;
     });
-  }, [rawItems]);
+  }, [data, widget.config?.items]);
   
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);

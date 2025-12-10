@@ -307,12 +307,17 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
     const appointment = appointments.find(apt => apt._id === clickInfo.event.id);
     if (appointment) {
       setSelectedAppointment(appointment);
+      // Konvertiere patient zu string, falls es ein Objekt ist
+      const patientId = typeof appointment.patient === 'string' 
+        ? appointment.patient 
+        : (appointment.patient as any)?._id || '';
+      
       setAppointmentForm({
         title: appointment.title,
         type: appointment.type,
         startTime: appointment.startTime,
         endTime: appointment.endTime,
-        patient: appointment.patient,
+        patient: patientId,
         notes: (appointment as any).notes,
         status: appointment.status,
         resourceId: (appointment as any).resourceId

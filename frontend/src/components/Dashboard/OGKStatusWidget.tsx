@@ -7,7 +7,6 @@ import {
   Card,
   CardContent,
   Grid,
-  Chip,
   LinearProgress,
   IconButton,
   Tooltip,
@@ -15,8 +14,6 @@ import {
 } from '@mui/material';
 import {
   CheckCircle,
-  Pending,
-  Error,
   Refresh,
   GetApp
 } from '@mui/icons-material';

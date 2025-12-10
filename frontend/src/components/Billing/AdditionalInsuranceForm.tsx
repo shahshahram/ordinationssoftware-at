@@ -1,6 +1,6 @@
 // Zusatzversicherungen-Formular Komponente
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Box,
   Typography,
@@ -14,7 +14,7 @@ import {
   MenuItem,
   InputAdornment
 } from '@mui/material';
-import { ExpandMore, LocalHospital, HealthAndSafety, Visibility, MedicalServices, FlightTakeoff } from '@mui/icons-material';
+import { ExpandMore, LocalHospital, HealthAndSafety, Visibility, MedicalServices } from '@mui/icons-material';
 
 interface AdditionalInsurance {
   hospitalInsurance?: {

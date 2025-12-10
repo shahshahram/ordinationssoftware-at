@@ -256,12 +256,17 @@ interface NewEventState {
         
         const roomName = rooms.find((r: any) => r._id === appointment.room)?.name;
         
+        // Konvertiere doctor zu string für staffId
+        const staffIdString = typeof appointment.doctor === 'string' 
+          ? appointment.doctor 
+          : (appointment.doctor as any)?._id || '';
+        
         return {
           id: appointment._id,
           title: patientName,
           start: new Date(appointment.startTime),
           end: new Date(appointment.endTime),
-          staffId: appointment.doctor,
+          staffId: staffIdString,
           staffName: staffName,
           roomId: appointment.room,
           roomName: roomName,

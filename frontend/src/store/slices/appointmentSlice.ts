@@ -8,13 +8,13 @@ export interface Appointment {
   startTime: string;
   endTime: string;
   duration: number;
-  doctor: string;
+  doctor: string | { _id: string; firstName: string; lastName: string; email?: string };
   room?: string;
   devices?: string[];
   type: string;
   status: string;
   description?: string;
-  patient?: string;
+  patient?: string | { _id: string; firstName: string; lastName: string; [key: string]: any };
   bookingType: string;
   onlineBookingRef?: string;
   locationId?: string;
@@ -42,6 +42,18 @@ const initialState: AppointmentState = {
   statistics: null,
 };
 
+// Hilfsfunktion: Extrahiere Patient-ID aus Appointment
+const getPatientId = (apt: Appointment): string | null => {
+  if (!apt.patient) return null;
+  if (typeof apt.patient === 'string') {
+    return apt.patient;
+  }
+  if (typeof apt.patient === 'object' && apt.patient !== null && '_id' in apt.patient) {
+    return (apt.patient as { _id: string })._id;
+  }
+  return null;
+};
+
 // Async thunks
 export const fetchAppointments = createAsyncThunk<Appointment[], void>(
   'appointments/fetchAppointments',
@@ -51,6 +63,20 @@ export const fetchAppointments = createAsyncThunk<Appointment[], void>(
       return response.data.data;
     } catch (error: any) {
       console.error('appointmentSlice: fetchAppointments - API error:', error);
+      return rejectWithValue(error.response?.data?.message || 'Fehler beim Laden der Termine');
+    }
+  }
+);
+
+// Optimierte Funktion: Lade nur Termine für einen spezifischen Patienten
+export const fetchAppointmentsByPatientId = createAsyncThunk<Appointment[], string>(
+  'appointments/fetchAppointmentsByPatientId',
+  async (patientId, { rejectWithValue }) => {
+    try {
+      const response = await apiRequest.get<{ success: boolean; data: Appointment[]; pagination: any }>(`/appointments?patientId=${patientId}&limit=50`);
+      return response.data.data;
+    } catch (error: any) {
+      console.error('appointmentSlice: fetchAppointmentsByPatientId - API error:', error);
       return rejectWithValue(error.response?.data?.message || 'Fehler beim Laden der Termine');
     }
   }
@@ -190,6 +216,34 @@ const appointmentSlice = createSlice({
         state.statistics = action.payload;
       })
       .addCase(fetchAppointmentStatistics.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      
+      // Fetch appointments by patient ID
+      .addCase(fetchAppointmentsByPatientId.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchAppointmentsByPatientId.fulfilled, (state, action: PayloadAction<Appointment[]>) => {
+        state.loading = false;
+        // Füge nur neue Termine hinzu oder ersetze, wenn es patientenspezifisch ist
+        const patientAppointments = action.payload;
+        // Entferne alte Termine dieses Patienten und füge neue hinzu
+        const patientIds = new Set(
+          patientAppointments
+            .map(apt => getPatientId(apt))
+            .filter((id): id is string => id !== null)
+        );
+        state.appointments = [
+          ...state.appointments.filter(apt => {
+            const pid = getPatientId(apt);
+            return pid === null || !patientIds.has(pid);
+          }),
+          ...patientAppointments
+        ];
+      })
+      .addCase(fetchAppointmentsByPatientId.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       });
