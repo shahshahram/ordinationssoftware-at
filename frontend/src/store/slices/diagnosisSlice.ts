@@ -1,6 +1,15 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 
+// Dynamische API-URL basierend auf dem aktuellen Hostname
+const getApiBaseUrl = (): string => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  return `http://${hostname}:5001/api`;
+};
+
 export interface PatientDiagnosis {
   _id: string;
   patientId: string;
@@ -107,7 +116,7 @@ export const fetchPatientDiagnoses = createAsyncThunk(
       if (params.encounterId) queryParams.append('encounterId', params.encounterId);
       if (params.isPrimary !== undefined) queryParams.append('isPrimary', params.isPrimary.toString());
 
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+      const API_BASE_URL = getApiBaseUrl();
       const response = await axios.get(`${API_BASE_URL}/diagnoses/patient/${params.patientId}?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -123,7 +132,7 @@ export const fetchEncounterDiagnoses = createAsyncThunk(
   async (encounterId: string, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+      const API_BASE_URL = getApiBaseUrl();
       const response = await axios.get(`${API_BASE_URL}/diagnoses/encounter/${encounterId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -139,7 +148,7 @@ export const createDiagnosis = createAsyncThunk(
   async (diagnosisData: CreateDiagnosisData, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+      const API_BASE_URL = getApiBaseUrl();
       const response = await axios.post(`${API_BASE_URL}/diagnoses`, diagnosisData, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -155,7 +164,7 @@ export const updateDiagnosis = createAsyncThunk(
   async ({ id, data }: { id: string; data: UpdateDiagnosisData }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+      const API_BASE_URL = getApiBaseUrl();
       const response = await axios.put(`${API_BASE_URL}/diagnoses/${id}`, data, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -171,7 +180,7 @@ export const deleteDiagnosis = createAsyncThunk(
   async (id: string, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+      const API_BASE_URL = getApiBaseUrl();
       await axios.delete(`${API_BASE_URL}/diagnoses/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -187,7 +196,7 @@ export const linkDiagnosisToService = createAsyncThunk(
   async ({ id, serviceId, context }: { id: string; serviceId: string; context: 'billing' | 'medical' | 'reporting' }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(`http://localhost:5001/api/diagnoses/${id}/link-service`, {
+      const response = await axios.post(`${getApiBaseUrl()}/diagnoses/${id}/link-service`, {
         serviceId,
         context
       }, {
@@ -205,7 +214,7 @@ export const prepareDiagnosisExport = createAsyncThunk(
   async ({ id, target, payload }: { id: string; target: 'ELGA' | 'KASSE' | 'OTHER'; payload: any }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(`http://localhost:5001/api/diagnoses/${id}/export`, {
+      const response = await axios.post(`${getApiBaseUrl()}/diagnoses/${id}/export`, {
         target,
         payload
       }, {
@@ -223,7 +232,7 @@ export const fetchDiagnosisExports = createAsyncThunk(
   async (id: string, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`http://localhost:5001/api/diagnoses/${id}/exports`, {
+      const response = await axios.get(`${getApiBaseUrl()}/diagnoses/${id}/exports`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data;

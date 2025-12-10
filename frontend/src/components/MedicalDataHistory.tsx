@@ -58,6 +58,7 @@ interface MedicalDataHistoryEntry {
     preExistingConditions?: string[];
     medicalHistory?: string[];
     vaccinations?: any[];
+    infections?: any[];
     isPregnant?: boolean;
     pregnancyWeek?: number;
     isBreastfeeding?: boolean;
@@ -132,6 +133,7 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
       preExistingConditions: 'Vorerkrankungen',
       medicalHistory: 'Medizinische Vorgeschichte',
       vaccinations: 'Impfungen',
+      infections: 'Infektionen',
       isPregnant: 'Schwangerschaft',
       pregnancyWeek: 'Schwangerschaftswoche',
       isBreastfeeding: 'Stillen',
@@ -295,6 +297,74 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
                 )}
               </Box>
             ))}
+          </Box>
+        );
+      }
+
+      if (fieldName === 'infections') {
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+            {value.map((infection, idx) => {
+              // Wenn es ein String ist, einfach anzeigen
+              if (typeof infection === 'string') {
+                return (
+                  <Box key={idx} sx={{ p: 1, bgcolor: 'error.light', borderRadius: 0.5, border: '1px solid', borderColor: 'error.main' }}>
+                    <Typography variant="body2" fontWeight="medium">
+                      {infection}
+                    </Typography>
+                  </Box>
+                );
+              }
+              
+              // Wenn es ein Objekt ist, strukturiert anzeigen
+              // Laut Schema: { type, location?, status, detectedDate?, notes? }
+              const infectionType = infection.type;
+              const location = infection.location;
+              const status = infection.status || 'active';
+              const detectedDate = infection.detectedDate;
+              const notes = infection.notes;
+              
+              // Übersetze Status
+              const statusText = status === 'active' ? 'Aktiv' : 
+                                status === 'resolved' ? 'Behoben' : 
+                                status === 'colonized' ? 'Kolonisiert' : status;
+              
+              // Status-Farbe
+              const statusColor = status === 'active' ? 'error' : 
+                                 status === 'resolved' ? 'success' : 
+                                 'warning';
+              
+              return (
+                <Box key={idx} sx={{ p: 1.5, bgcolor: 'error.light', borderRadius: 0.5, border: '1px solid', borderColor: 'error.main' }}>
+                  <Typography variant="body2" fontWeight="bold" sx={{ mb: 0.5 }}>
+                    {infectionType || 'Unbekannte Infektion'}
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
+                    <Chip 
+                      label={statusText} 
+                      size="small" 
+                      color={statusColor as any}
+                      variant="outlined"
+                    />
+                    {location && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                        Ort: {location}
+                      </Typography>
+                    )}
+                    {detectedDate && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                        Erkannt: {formatDate(detectedDate)}
+                      </Typography>
+                    )}
+                  </Box>
+                  {notes && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      {notes}
+                    </Typography>
+                  )}
+                </Box>
+              );
+            })}
           </Box>
         );
       }
@@ -514,6 +584,47 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
             </Box>
           </Box>
         )}
+        {snapshot.infections && snapshot.infections.length > 0 && (
+          <Box>
+            <Typography variant="caption" color="text.secondary">Infektionen</Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mt: 0.5 }}>
+              {snapshot.infections.map((infection: any, idx: number) => {
+                if (typeof infection === 'string') {
+                  return (
+                    <Chip key={idx} label={infection} size="small" color="error" variant="outlined" />
+                  );
+                }
+                const status = infection.status || 'active';
+                const statusColor = status === 'active' ? 'error' : 
+                                   status === 'resolved' ? 'success' : 
+                                   'warning';
+                return (
+                  <Box key={idx} sx={{ p: 1, bgcolor: 'error.light', borderRadius: 0.5, border: '1px solid', borderColor: 'error.main' }}>
+                    <Typography variant="body2" fontWeight="medium">
+                      {infection.type || 'Unbekannte Infektion'}
+                    </Typography>
+                    {infection.location && (
+                      <Typography variant="caption" color="text.secondary">
+                        Ort: {infection.location}
+                      </Typography>
+                    )}
+                    {infection.status && (
+                      <Chip 
+                        label={infection.status === 'active' ? 'Aktiv' : 
+                               infection.status === 'resolved' ? 'Behoben' : 
+                               infection.status === 'colonized' ? 'Kolonisiert' : infection.status} 
+                        size="small" 
+                        color={statusColor as any}
+                        variant="outlined"
+                        sx={{ mt: 0.5 }}
+                      />
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
         {snapshot.notes && (
           <Box>
             <Typography variant="caption" color="text.secondary">Notizen</Typography>
@@ -573,10 +684,10 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
                   {selectedEntry.recordedBy?.firstName} {selectedEntry.recordedBy?.lastName}
                 </Typography>
               </Box>
-              {selectedEntry.changedFields && selectedEntry.changedFields.length > 0 && (
+              {selectedEntry.changedFields && selectedEntry.changedFields.length > 0 ? (
                 <Box>
                   <Typography variant="subtitle1" fontWeight="bold" sx={{ mb: 2 }}>
-                    Genaue Änderungen
+                    Geänderte Felder
                   </Typography>
                   <Stack spacing={2}>
                     {selectedEntry.changedFields.map((field, idx) => (
@@ -623,12 +734,11 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
                     ))}
                   </Stack>
                 </Box>
+              ) : (
+                <Alert severity="info">
+                  Keine spezifischen Änderungen erfasst. Dies ist ein vollständiger Snapshot der medizinischen Daten.
+                </Alert>
               )}
-              <Divider />
-              <Box>
-                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>Vollständiger Snapshot</Typography>
-                {renderSnapshotDetails(selectedEntry.snapshot)}
-              </Box>
               {selectedEntry.changeNotes && (
                 <Box>
                   <Typography variant="subtitle2" color="text.secondary">Notizen zur Änderung</Typography>

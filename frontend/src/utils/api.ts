@@ -1,4 +1,14 @@
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+// Dynamische API-URL basierend auf dem aktuellen Hostname
+const getApiBaseUrl = () => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  // Verwende den aktuellen Hostname statt localhost, damit es auch im Netzwerk funktioniert
+  const hostname = window.location.hostname;
+  return `http://${hostname}:5001/api`;
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 interface ApiResponse<T = any> {
   data: T;

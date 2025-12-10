@@ -102,6 +102,7 @@ import GinaBoxStatus from '../components/GinaBoxStatus';
 import PatientEPA from '../components/PatientEPA';
 import VitalSignsManager from '../components/VitalSignsManager';
 import ErrorBoundary from '../components/ErrorBoundary';
+import MedicalDataHistory from '../components/MedicalDataHistory';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
 import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
 import { Article, Storage, Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, History, MonitorHeart } from '@mui/icons-material';
@@ -169,8 +170,9 @@ const TabPanel: React.FC<TabPanelProps> = (props) => {
       id={`patient-tabpanel-${index}`}
       aria-labelledby={`patient-tab-${index}`}
       {...other}
+      style={{ display: value === index ? 'block' : 'none' }}
     >
-      {value === index && <Box sx={{ py: 2 }}>{children}</Box>}
+      <Box sx={{ py: 2 }}>{children}</Box>
     </div>
   );
 };
@@ -593,11 +595,12 @@ const PatientOrganizer: React.FC = () => {
     loadXdsDocuments();
   }, [patientId, locations]);
 
-  // Format dateOfBirth for HTML date input (YYYY-MM-DD)
-  const formatDateForInput = (dateString: string | undefined) => {
-    if (!dateString) return '';
+  // Format date for HTML date input (YYYY-MM-DD)
+  // Handles string, Date object, null, undefined - always returns string (empty or formatted)
+  const formatDateForInput = (dateValue: string | Date | null | undefined): string => {
+    if (!dateValue) return '';
     try {
-      const date = new Date(dateString);
+      const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
       if (isNaN(date.getTime())) return '';
       return date.toISOString().split('T')[0];
     } catch {
@@ -843,7 +846,11 @@ const PatientOrganizer: React.FC = () => {
       currentMedications: patient.currentMedications || [],
       preExistingConditions: patient.preExistingConditions || [],
       medicalHistory: patient.medicalHistory || [],
-      vaccinations: patient.vaccinations || [],
+      vaccinations: (patient.vaccinations || []).map(vacc => ({
+        ...vacc,
+        date: formatDateForInput(vacc.date),
+        nextDue: formatDateForInput(vacc.nextDue)
+      })),
       notes: patient.notes,
       // Schwangerschaft und Stillen (nur bei Frauen)
       isPregnant: patient.gender === 'f' || patient.gender === 'w' ? (patient.isPregnant || false) : false,
@@ -852,14 +859,20 @@ const PatientOrganizer: React.FC = () => {
       // Medizinische Implantate und Geräte
       hasPacemaker: patient.hasPacemaker || false,
       hasDefibrillator: patient.hasDefibrillator || false,
-      implants: patient.implants || [],
+      implants: (patient.implants || []).map(impl => ({
+        ...impl,
+        date: formatDateForInput(impl.date)
+      })),
       // Raucherstatus
       smokingStatus: patient.smokingStatus || 'non-smoker',
       cigarettesPerDay: patient.cigarettesPerDay || undefined,
       yearsOfSmoking: patient.yearsOfSmoking || undefined,
-      quitSmokingDate: patient.quitSmokingDate || undefined,
-      // Infektionen
-      infections: patient.infections || []
+      quitSmokingDate: formatDateForInput(patient.quitSmokingDate),
+      // Infektionen - Datum formatieren für date input
+      infections: (patient.infections || []).map(inf => ({
+        ...inf,
+        detectedDate: formatDateForInput(inf.detectedDate)
+      }))
     });
     setMedicalDialogOpen(true);
   };
@@ -1055,7 +1068,36 @@ const PatientOrganizer: React.FC = () => {
         );
       }
 
-      await dispatch(updatePatient({ id: patientId, patientData: updatedMedicalData })).unwrap();
+      // Leere Infektionen herausfiltern und Datum formatieren (nur Infektionen mit Typ behalten)
+      if (updatedMedicalData.infections) {
+        updatedMedicalData.infections = updatedMedicalData.infections
+          .filter(infection => 
+            infection && 
+            typeof infection === 'object' && 
+            infection.type && 
+            infection.type.trim() !== ''
+          )
+          .map(infection => ({
+            type: infection.type.trim(),
+            location: infection.location?.trim() || undefined,
+            detectedDate: infection.detectedDate && infection.detectedDate.trim() !== '' 
+              ? new Date(infection.detectedDate).toISOString() 
+              : undefined,
+            status: infection.status || 'active',
+            notes: infection.notes?.trim() || undefined
+          }));
+      }
+
+      console.log('🔍 Sending medical data update:', {
+        patientId,
+        infections: updatedMedicalData.infections,
+        allData: updatedMedicalData
+      });
+
+      const result = await dispatch(updatePatient({ id: patientId, patientData: updatedMedicalData })).unwrap();
+      
+      console.log('✅ Update result:', result);
+      console.log('✅ Update result infections:', result?.infections);
       
       setSnackbar({
         open: true,
@@ -1064,8 +1106,22 @@ const PatientOrganizer: React.FC = () => {
       });
       
       setMedicalDialogOpen(false);
-      // Patientenliste neu laden
-      dispatch(fetchPatients(1));
+      
+      // Patientenliste neu laden, um aktualisierte Daten zu erhalten
+      await dispatch(fetchPatients(1));
+      
+      // Zusätzlich: Lade den spezifischen Patient neu, falls er nicht auf Seite 1 ist
+      try {
+        const patientResponse: any = await apiRequest.get(`/patients-extended/${patientId}`);
+        if (patientResponse.success && patientResponse.data) {
+          const updatedPatient = patientResponse.data.data || patientResponse.data;
+          console.log('✅ Reloaded patient infections:', updatedPatient?.infections);
+          // Aktualisiere den Patient im Redux Store
+          dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
+        }
+      } catch (reloadError) {
+        console.warn('⚠️ Could not reload patient:', reloadError);
+      }
     } catch (error: any) {
       console.error('Fehler beim Aktualisieren der medizinischen Daten:', error);
       setSnackbar({
@@ -2369,6 +2425,13 @@ const PatientOrganizer: React.FC = () => {
                   )}
                 </Grid>
               </Grid>
+              
+              {/* Historie der medizinischen Daten */}
+              {patientId && (
+                <Box sx={{ mt: 3 }}>
+                  <MedicalDataHistory patientId={patientId} />
+                </Box>
+              )}
             </Paper>
           ) : (
             <Paper sx={{ p: 2 }}>
@@ -2886,7 +2949,7 @@ const PatientOrganizer: React.FC = () => {
               <TextField
                 label="Geburtsdatum *"
                 type="date"
-                value={editData.dateOfBirth || ''}
+                value={formatDateForInput(editData.dateOfBirth) || ''}
                 onChange={(e) => handleEditDataChange('dateOfBirth', e.target.value)}
                 InputLabelProps={{ shrink: true }}
                 required
@@ -3316,7 +3379,7 @@ const PatientOrganizer: React.FC = () => {
                   <TextField
                     label="Datum"
                     type="date"
-                    value={vaccination.date}
+                    value={formatDateForInput(vaccination.date) || ''}
                     onChange={(e) => handleVaccinationChange(index, 'date', e.target.value)}
                     size="small"
                     InputLabelProps={{ shrink: true }}
@@ -3325,7 +3388,7 @@ const PatientOrganizer: React.FC = () => {
                   <TextField
                     label="Nächste fällig"
                     type="date"
-                    value={vaccination.nextDue}
+                    value={formatDateForInput(vaccination.nextDue) || ''}
                     onChange={(e) => handleVaccinationChange(index, 'nextDue', e.target.value)}
                     size="small"
                     InputLabelProps={{ shrink: true }}
@@ -3437,7 +3500,7 @@ const PatientOrganizer: React.FC = () => {
                   <TextField
                     label="Datum"
                     type="date"
-                    value={implant.date || ''}
+                    value={formatDateForInput(implant.date) || ''}
                     onChange={(e) => handleImplantChange(index, 'date', e.target.value)}
                     size="small"
                     InputLabelProps={{ shrink: true }}
@@ -3507,7 +3570,7 @@ const PatientOrganizer: React.FC = () => {
                 <TextField
                   label="Aufgehört am"
                   type="date"
-                  value={medicalData.quitSmokingDate || ''}
+                  value={formatDateForInput(medicalData.quitSmokingDate) || ''}
                   onChange={(e) => handleMedicalDataChange('quitSmokingDate', e.target.value)}
                   sx={{ minWidth: 150, flex: 1 }}
                   InputLabelProps={{ shrink: true }}
@@ -3547,7 +3610,7 @@ const PatientOrganizer: React.FC = () => {
                   <TextField
                     label="Nachweisdatum"
                     type="date"
-                    value={infection.detectedDate || ''}
+                    value={formatDateForInput(infection.detectedDate) || ''}
                     onChange={(e) => {
                       const newInfections = [...(medicalData.infections || [])];
                       newInfections[index] = { ...infection, detectedDate: e.target.value };

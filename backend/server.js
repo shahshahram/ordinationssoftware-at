@@ -369,11 +369,16 @@ const serviceCatalogUpdateService = require('./services/serviceCatalogUpdateServ
 const tariffUpdateService = require('./services/tariffUpdateService');
 
 // Daily backup at 2 AM
-if (process.env.NODE_ENV === 'production') {
+// Backups laufen in Production und Development (kann über BACKUP_ENABLED deaktiviert werden)
+const backupEnabled = process.env.BACKUP_ENABLED !== 'false';
+if (backupEnabled) {
   cron.schedule(process.env.BACKUP_SCHEDULE || '0 2 * * *', () => {
     logger.info('Starte automatisches Backup...');
     backupService.createBackup();
   });
+  logger.info(`Automatische Backups aktiviert (Schedule: ${process.env.BACKUP_SCHEDULE || '0 2 * * *'})`);
+} else {
+  logger.info('Automatische Backups sind deaktiviert (BACKUP_ENABLED=false)');
 }
 
 // Automatische Erstattungsverarbeitung (täglich um 3 Uhr)

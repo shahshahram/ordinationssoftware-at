@@ -4,6 +4,16 @@ import { Box, Paper, Typography, Divider, CircularProgress, Alert, Stack, TextFi
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import axios from 'axios';
 
+// Dynamische API-URL basierend auf dem aktuellen Hostname (gleiche Logik wie in api.ts)
+const getApiBaseUrl = (): string => {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL;
+  }
+  // Verwende den aktuellen Hostname statt localhost, damit es auch im Netzwerk funktioniert
+  const hostname = window.location.hostname;
+  return `http://${hostname}:5001/api`;
+};
+
 const DiagnosisDetail: React.FC = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -34,7 +44,7 @@ const DiagnosisDetail: React.FC = () => {
         setLoading(true);
         setError(null);
         const token = localStorage.getItem('token');
-        const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+        const API_BASE_URL = getApiBaseUrl();
         const res = await axios.get(`${API_BASE_URL}/diagnoses/${id}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         });
@@ -136,7 +146,7 @@ const DiagnosisDetail: React.FC = () => {
                     try {
                       setSaving(true);
                       const token = localStorage.getItem('token');
-                      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+                      const API_BASE_URL = getApiBaseUrl();
                       const res = await axios.put(`${API_BASE_URL}/diagnoses/${data._id || id}`,
                         { status: edit.status, isPrimary: edit.isPrimary, notes: edit.notes },
                         { headers: token ? { Authorization: `Bearer ${token}` } : undefined }

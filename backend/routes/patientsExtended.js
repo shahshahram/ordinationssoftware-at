@@ -3,6 +3,7 @@ const router = express.Router();
 const PatientExtended = require('../models/PatientExtended');
 const PatientPhoto = require('../models/PatientPhoto');
 const DekursEntry = require('../models/DekursEntry');
+const MedicalDataHistory = require('../models/MedicalDataHistory');
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
@@ -617,7 +618,8 @@ router.put('/:id', [
   body('currentMedications').optional().isArray().withMessage('Medikamente müssen ein Array sein'),
   body('allergies').optional().isArray().withMessage('Allergien müssen ein Array sein'),
   body('medicalHistory').optional().isArray().withMessage('Medizinische Vorgeschichte muss ein Array sein'),
-  body('vaccinations').optional().isArray().withMessage('Impfungen müssen ein Array sein')
+  body('vaccinations').optional().isArray().withMessage('Impfungen müssen ein Array sein'),
+  body('infections').optional().isArray().withMessage('Infektionen müssen ein Array sein')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -657,11 +659,152 @@ router.put('/:id', [
                               hasInsurance !== 'Selbstzahler';
     const hasSocialSecurityNumber = req.body.socialSecurityNumber || patient.socialSecurityNumber;
 
+    console.log('🔍 Updating patient:', req.params.id);
+    console.log('📦 Request body infections:', JSON.stringify(req.body.infections, null, 2));
+    
+    // Verarbeite infections: Konvertiere detectedDate von ISO-String zu Date-Objekt
+    let processedInfections = req.body.infections;
+    if (processedInfections && Array.isArray(processedInfections)) {
+      processedInfections = processedInfections
+        .filter(infection => 
+          infection && 
+          typeof infection === 'object' && 
+          infection.type && 
+          infection.type.trim() !== ''
+        )
+        .map(infection => {
+          const processed = { ...infection };
+          // Konvertiere detectedDate von ISO-String zu Date, falls vorhanden
+          if (processed.detectedDate && typeof processed.detectedDate === 'string') {
+            try {
+              processed.detectedDate = new Date(processed.detectedDate);
+              // Prüfe ob das Datum gültig ist
+              if (isNaN(processed.detectedDate.getTime())) {
+                console.warn('⚠️ Ungültiges detectedDate:', infection.detectedDate);
+                processed.detectedDate = undefined;
+              }
+            } catch (dateError) {
+              console.warn('⚠️ Fehler beim Konvertieren von detectedDate:', dateError);
+              processed.detectedDate = undefined;
+            }
+          }
+          return processed;
+        });
+    }
+    
+    // Explizit infections setzen, auch wenn es ein leeres Array ist
+    const updateData = { ...req.body, updatedAt: new Date() };
+    if (req.body.infections !== undefined) {
+      updateData.infections = processedInfections || [];
+    }
+    
+    console.log('📤 Update data infections:', JSON.stringify(updateData.infections, null, 2));
+    
     const updatedPatient = await PatientExtended.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, updatedAt: new Date() },
+      updateData,
       { new: true, runValidators: true }
     );
+    
+    console.log('✅ Updated patient infections:', JSON.stringify(updatedPatient?.infections, null, 2));
+
+    // Erstelle Historie-Eintrag für medizinische Daten-Änderungen
+    try {
+      // Konvertiere Mongoose-Dokumente zu Plain Objects für korrekten Vergleich
+      const oldPatientData = patient.toObject ? patient.toObject() : patient;
+      const newPatientData = updatedPatient.toObject ? updatedPatient.toObject() : updatedPatient;
+      
+      // Definiere medizinische Datenfelder, die getrackt werden sollen
+      const medicalFields = [
+        'bloodType', 'height', 'weight', 'bmi', 'allergies', 'currentMedications',
+        'preExistingConditions', 'medicalHistory', 'vaccinations', 'infections',
+        'isPregnant', 'pregnancyWeek', 'isBreastfeeding', 'hasPacemaker',
+        'hasDefibrillator', 'implants', 'smokingStatus', 'cigarettesPerDay',
+        'yearsOfSmoking', 'quitSmokingDate'
+      ];
+
+      // Extrahiere alte und neue medizinische Daten
+      const oldMedicalData = {};
+      const newMedicalData = {};
+      const changedFields = [];
+
+      medicalFields.forEach(field => {
+        const oldValue = oldPatientData[field];
+        const newValue = newPatientData[field];
+        
+        // Normalisiere Werte für Vergleich
+        // Behandle undefined/null als gleich
+        const oldIsEmpty = oldValue === null || oldValue === undefined || 
+                          (Array.isArray(oldValue) && oldValue.length === 0) ||
+                          (typeof oldValue === 'string' && oldValue === '');
+        const newIsEmpty = newValue === null || newValue === undefined || 
+                          (Array.isArray(newValue) && newValue.length === 0) ||
+                          (typeof newValue === 'string' && newValue === '');
+        
+        // Wenn beide leer sind, hat sich nichts geändert
+        if (oldIsEmpty && newIsEmpty) {
+          return;
+        }
+        
+        // Normalisiere Werte für Vergleich (Arrays als JSON-String)
+        const oldValueStr = Array.isArray(oldValue) ? JSON.stringify(oldValue || []) : (oldValue ?? '');
+        const newValueStr = Array.isArray(newValue) ? JSON.stringify(newValue || []) : (newValue ?? '');
+        
+        // Prüfe auf tatsächliche Änderung
+        if (oldValueStr !== newValueStr) {
+          oldMedicalData[field] = oldValue;
+          newMedicalData[field] = newValue;
+          changedFields.push({
+            field: field,
+            oldValue: oldValue,
+            newValue: newValue
+          });
+        }
+      });
+
+      // Erstelle Historie-Eintrag nur wenn sich medizinische Daten geändert haben
+      if (changedFields.length > 0) {
+        console.log(`📝 Erstelle Historie-Eintrag für Patient ${patient._id}`);
+        console.log(`   Geänderte Felder:`, changedFields.map(f => f.field).join(', '));
+        
+        const historyEntry = new MedicalDataHistory({
+          patientId: patient._id,
+          recordedAt: new Date(),
+          recordedBy: req.user.id,
+          snapshot: {
+            bloodType: newPatientData.bloodType,
+            height: newPatientData.height,
+            weight: newPatientData.weight,
+            bmi: newPatientData.bmi,
+            allergies: newPatientData.allergies || [],
+            currentMedications: newPatientData.currentMedications || [],
+            preExistingConditions: newPatientData.preExistingConditions || [],
+            medicalHistory: newPatientData.medicalHistory || [],
+            vaccinations: newPatientData.vaccinations || [],
+            infections: newPatientData.infections || [],
+            isPregnant: newPatientData.isPregnant,
+            pregnancyWeek: newPatientData.pregnancyWeek,
+            isBreastfeeding: newPatientData.isBreastfeeding,
+            hasPacemaker: newPatientData.hasPacemaker,
+            hasDefibrillator: newPatientData.hasDefibrillator,
+            implants: newPatientData.implants || [],
+            smokingStatus: newPatientData.smokingStatus,
+            cigarettesPerDay: newPatientData.cigarettesPerDay,
+            yearsOfSmoking: newPatientData.yearsOfSmoking,
+            quitSmokingDate: newPatientData.quitSmokingDate
+          },
+          changedFields: changedFields
+        });
+
+        await historyEntry.save();
+        console.log(`✅ Historie-Eintrag erstellt für Patient ${patient._id}, ${changedFields.length} Felder geändert:`, changedFields.map(f => f.field));
+      } else {
+        console.log(`ℹ️ Keine medizinischen Daten-Änderungen für Patient ${patient._id}`);
+      }
+    } catch (historyError) {
+      // Fehler bei Historie-Erstellung soll das Update nicht verhindern
+      console.error('⚠️ Fehler beim Erstellen der Historie:', historyError);
+    }
 
     // Automatische e-card-Abfrage wenn Versicherung vorhanden/geändert wurde
     if (hasValidInsurance && hasSocialSecurityNumber && 
@@ -687,10 +830,31 @@ router.put('/:id', [
       message: 'Patient erfolgreich aktualisiert'
     });
   } catch (error) {
-    console.error('Error updating extended patient:', error);
+    console.error('❌ Error updating extended patient:', error);
+    console.error('   Error name:', error.name);
+    console.error('   Error message:', error.message);
+    console.error('   Error stack:', error.stack);
+    
+    // Prüfe, ob es sich um einen Validierungsfehler handelt
+    if (error.name === 'ValidationError') {
+      const validationErrors = Object.values(error.errors).map(err => ({
+        field: err.path,
+        message: err.message
+      }));
+      console.error('   Validation errors:', validationErrors);
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler beim Aktualisieren des Patienten',
+        errors: validationErrors,
+        details: error.errors
+      });
+    }
+    
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Aktualisieren des Patienten'
+      message: 'Fehler beim Aktualisieren des Patienten',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });

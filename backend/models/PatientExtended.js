@@ -501,6 +501,40 @@ const PatientExtendedSchema = new mongoose.Schema({
     }
   }],
 
+  // Infektionen
+  infections: [{
+    type: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Infektionstyp darf maximal 100 Zeichen haben']
+    },
+    detectedDate: {
+      type: Date,
+      validate: {
+        validator: function(value) {
+          if (!value) return true;
+          return value <= new Date();
+        },
+        message: 'Erkennungsdatum darf nicht in der Zukunft liegen'
+      }
+    },
+    location: {
+      type: String,
+      trim: true,
+      maxlength: [100, 'Infektionsort darf maximal 100 Zeichen haben']
+    },
+    status: {
+      type: String,
+      enum: ['active', 'resolved', 'colonized'],
+      default: 'active'
+    },
+    notes: {
+      type: String,
+      trim: true,
+      maxlength: [500, 'Infektions-Notizen dürfen maximal 500 Zeichen haben']
+    }
+  }],
+
   // Schwangerschaft (nur für Frauen)
   isPregnant: {
     type: Boolean,

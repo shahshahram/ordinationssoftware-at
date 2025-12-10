@@ -41,10 +41,12 @@ router.get('/patient/:patientId', auth, checkPermission('patients.read'), async 
     });
   } catch (error) {
     console.error('Error fetching medical data history:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Historie',
-      error: error.message
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Interner Serverfehler',
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -129,6 +131,8 @@ router.post('/', auth, checkPermission('patients.write'), async (req, res) => {
 });
 
 module.exports = router;
+
+
 
 
 
