@@ -425,10 +425,11 @@ const Dashboard: React.FC = () => {
       const sidebarOpen = sidebarElement && window.getComputedStyle(sidebarElement).display !== 'none';
       
       const sidebarWidth = (isMobile || !sidebarOpen) ? 0 : 240;
-      const padding = isMobile ? 16 : (isTablet ? 32 : 40);
+      const padding = isMobile ? 16 : (isTablet ? 24 : 40);
       const width = window.innerWidth - sidebarWidth - padding;
       
-      return Math.max(width, 320); // Minimum width
+      // Für sehr kleine Fenster: volle Breite nutzen
+      return Math.max(width, isMobile ? window.innerWidth - 32 : 320);
     };
 
     setContainerWidth(calculateWidth());
@@ -882,19 +883,19 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <Box>
+    <Box sx={{ px: { xs: 1, sm: 2, md: 3 }, pb: { xs: 1, sm: 2 } }}>
       <Box 
         display="flex" 
         justifyContent="space-between" 
         alignItems={{ xs: 'flex-start', sm: 'center' }}
         flexDirection={{ xs: 'column', sm: 'row' }}
-        gap={{ xs: 2, sm: 0 }}
-        mb={3}
+        gap={{ xs: 1, sm: 0 }}
+        mb={{ xs: 2, sm: 3 }}
       >
-        <Typography variant="h4" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
+        <Typography variant="h4" sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
           Dashboard
         </Typography>
-        <Box display="flex" gap={1} flexWrap="wrap">
+        <Box display="flex" gap={{ xs: 0.5, sm: 1 }} flexWrap="wrap">
           {!editMode ? (
             <>
               <Button
@@ -975,20 +976,21 @@ const Dashboard: React.FC = () => {
             width: '100%',
             minHeight: 'calc(100vh - 200px)',
             position: 'relative',
-            px: { xs: 1, sm: 2, md: 0 }
+            px: { xs: 0.5, sm: 1, md: 0 },
+            overflowX: 'hidden'
           }}
         >
           <GridLayout
             className="layout"
             layout={layout}
-            cols={12}
-            rowHeight={isMobile ? 60 : 80}
+            cols={isMobile ? 4 : (isTablet ? 8 : 12)}
+            rowHeight={isMobile ? 50 : (isTablet ? 70 : 80)}
             width={containerWidth}
             isDraggable={editMode && !isMobile}
             isResizable={editMode && !isMobile}
             onLayoutChange={handleLayoutChange}
-            margin={isMobile ? [8, 8] : [16, 16]}
-            containerPadding={isMobile ? [8, 8] : [16, 16]}
+            margin={isMobile ? [4, 4] : (isTablet ? [8, 8] : [16, 16])}
+            containerPadding={isMobile ? [4, 4] : (isTablet ? [8, 8] : [16, 16])}
             compactType={null}
             preventCollision={true}
             useCSSTransforms={true}

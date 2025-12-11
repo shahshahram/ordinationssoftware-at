@@ -32,7 +32,9 @@ import {
   CardContent,
   Grid,
   CircularProgress,
-  Badge
+  Badge,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import { 
   Add, 
@@ -114,14 +116,18 @@ interface TabPanelProps {
 
 const TabPanel: React.FC<TabPanelProps> = (props) => {
   const { children, value, index, ...other } = props;
+  
+  // OPTIMIERT: Nur rendern wenn Tab aktiv ist - verhindert unnötige Re-Renders und verbessert Scroll-Performance
+  if (value !== index) {
+    return null;
+  }
+  
   return (
     <div
       role="tabpanel"
-      hidden={value !== index}
       id={`patient-tabpanel-${index}`}
       aria-labelledby={`patient-tab-${index}`}
       {...other}
-      style={{ display: value === index ? 'block' : 'none' }}
     >
       <Box sx={{ py: 2 }}>{children}</Box>
     </div>
@@ -133,6 +139,9 @@ const PatientOrganizer: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { patients, loading: patientsLoading } = useAppSelector((s: any) => s.patients);
   const { appointments, loading: appointmentsLoading } = useAppSelector((s: any) => s.appointments);
   const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((s: any) => s.diagnoses);
@@ -158,8 +167,8 @@ const PatientOrganizer: React.FC = () => {
   const [ambulanzbefunde, setAmbulanzbefunde] = useState<any[]>([]);
   const [loadingAmbulanzbefunde, setLoadingAmbulanzbefunde] = useState(false);
   
-  // State für Tabs
-  const [activeTab, setActiveTab] = useState(0);
+  // State für Tabs - Standard ist Dekurs (Tab 1)
+  const [activeTab, setActiveTab] = useState(1);
   const [isNavigating, setIsNavigating] = useState(false); // Flag um Race Conditions zu vermeiden
   
   // State für Dekurs
@@ -306,10 +315,10 @@ const PatientOrganizer: React.FC = () => {
           });
         }
       } else {
-        // Wenn kein Tab-Parameter vorhanden, setze auf ePA (Tab 0)
+        // Wenn kein Tab-Parameter vorhanden, setze auf Dekurs (Tab 1)
         setActiveTab((currentTab) => {
-          if (currentTab !== 0) {
-            return 0;
+          if (currentTab !== 1) {
+            return 1;
           }
           return currentTab;
         });
@@ -1330,9 +1339,7 @@ const PatientOrganizer: React.FC = () => {
 
   const patientDocuments = React.useMemo(() => {
     const docs = Array.isArray(documents) ? documents : (documents?.data || []);
-    console.log('PatientOrganizer: Processing documents for patient', patientId, ':', docs);
     const filtered = (docs as PatientDocument[]).filter(d => d.patient?.id === patientId);
-    console.log('PatientOrganizer: Filtered documents for patient', patientId, ':', filtered);
     
     // Nur freigegebene XDS-Dokumente von eigener Organisation
     const finalizedXdsDocs = xdsDocuments.filter((doc: any) => {
@@ -1675,7 +1682,15 @@ const PatientOrganizer: React.FC = () => {
   };
 
   return (
-    <Box sx={{ position: 'relative', minHeight: '100vh' }}>
+    <Box sx={{ 
+      position: 'relative', 
+      minHeight: '100vh',
+      // CSS-Optimierungen für bessere Scroll-Performance
+      contain: 'layout style paint',
+      willChange: 'auto',
+      transform: 'translateZ(0)', // GPU-Beschleunigung
+      overflowX: 'hidden'
+    }}>
       {/* Floating Action Button für Sidebar */}
       <Fab
         color="primary"
@@ -1702,9 +1717,9 @@ const PatientOrganizer: React.FC = () => {
         }}
       />
 
-      <Box sx={{ p: 2 }}>
+      <Box sx={{ p: { xs: 1, sm: 2 } }}>
         {/* Kompakter Header */}
-        <Paper sx={{ p: 2, mb: 2, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+        <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: { xs: 1, sm: 2 }, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flex: 1, minWidth: 200 }}>
               {/* Patientenfoto */}
@@ -1718,8 +1733,8 @@ const PatientOrganizer: React.FC = () => {
                       return photoUrl;
                     })()}
                     sx={{
-                      width: 80,
-                      height: 80,
+                      width: { xs: 60, sm: 80 },
+                      height: { xs: 60, sm: 80 },
                       border: '3px solid',
                       borderColor: 'rgba(255, 255, 255, 0.3)',
                       bgcolor: 'rgba(255, 255, 255, 0.2)'
@@ -1780,13 +1795,13 @@ const PatientOrganizer: React.FC = () => {
                   )}
                 </Box>
               )}
-              <Box sx={{ flex: 1, minWidth: 200 }}>
-                <Typography variant="h5" fontWeight="bold">
+              <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 200 } }}>
+                <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight="bold">
                   {patient ? `${patient.firstName} ${patient.lastName}` : 'Patienten-Organizer'}
                 </Typography>
                 {patient && (
-                  <Box sx={{ display: 'flex', gap: 2, mt: 1, flexWrap: 'wrap' }}>
-                    <Typography variant="body2">
+                  <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, mt: 1, flexWrap: 'wrap' }}>
+                    <Typography variant={isMobile ? 'caption' : 'body2'} sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                       {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('de-DE') : '—'} • 
                       {patient.socialSecurityNumber ? ` SVNR: ${patient.socialSecurityNumber}` : ''} • 
                       {patient.gender || '—'}
@@ -1974,7 +1989,7 @@ const PatientOrganizer: React.FC = () => {
         </Paper>
 
         {/* Tab Navigation */}
-        <Paper sx={{ mb: 2 }}>
+        <Paper sx={{ mb: { xs: 1, sm: 2 } }}>
           <Tabs 
             value={activeTab} 
             onChange={(e, newValue) => {
@@ -1983,7 +1998,15 @@ const PatientOrganizer: React.FC = () => {
             }}
             variant="scrollable"
             scrollButtons="auto"
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
+            sx={{ 
+              borderBottom: 1, 
+              borderColor: 'divider',
+              '& .MuiTab-root': {
+                minWidth: { xs: 72, sm: 120 },
+                fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                padding: { xs: '6px 8px', sm: '12px 16px' }
+              }
+            }}
           >
             <Tab 
               label="ePA" 
@@ -2076,57 +2099,59 @@ const PatientOrganizer: React.FC = () => {
 
         {/* Tab Content */}
         <TabPanel value={activeTab} index={0}>
-          {/* ePA Tab - Elektronische Patientenkartei */}
-          <ErrorBoundary>
-            {patientId ? (
-              <PatientEPA 
-                patientId={patientId} 
-                onTabChange={(tabIndex: number) => {
-                  // Verwende zentrale Navigation-Funktion
-                  handleTabNavigation(tabIndex, true);
-                }}
-                onNavigate={(path: string) => {
-                  try {
-                    // Parse den Tab-Parameter aus dem Pfad
-                    let tabParam: string | null = null;
-                    const match = path.match(/[?&]tab=([^&]+)/);
-                    if (match) {
-                      tabParam = match[1];
-                    }
-                    
-                    // Bestimme Tab-Index aus Parameter
-                    if (tabParam) {
-                      const tabIndex = tabMapping[tabParam as keyof typeof tabMapping];
-                      if (tabIndex !== undefined) {
-                        // Verwende zentrale Navigation-Funktion für interne Tabs
-                        handleTabNavigation(tabIndex, true);
-                        return;
+          {/* ePA Tab - Elektronische Patientenkartei - Nur rendern wenn Tab aktiv ist */}
+          {activeTab === 0 ? (
+            <ErrorBoundary>
+              {patientId ? (
+                <PatientEPA 
+                  patientId={patientId} 
+                  onTabChange={(tabIndex: number) => {
+                    // Verwende zentrale Navigation-Funktion
+                    handleTabNavigation(tabIndex, true);
+                  }}
+                  onNavigate={(path: string) => {
+                    try {
+                      // Parse den Tab-Parameter aus dem Pfad
+                      let tabParam: string | null = null;
+                      const match = path.match(/[?&]tab=([^&]+)/);
+                      if (match) {
+                        tabParam = match[1];
                       }
+                      
+                      // Bestimme Tab-Index aus Parameter
+                      if (tabParam) {
+                        const tabIndex = tabMapping[tabParam as keyof typeof tabMapping];
+                        if (tabIndex !== undefined) {
+                          // Verwende zentrale Navigation-Funktion für interne Tabs
+                          handleTabNavigation(tabIndex, true);
+                          return;
+                        }
+                      }
+                      
+                      // Für externe Navigation (z.B. zu Dokumenten)
+                      if (path.startsWith('/documents/')) {
+                        navigate(path, { replace: false });
+                      } else if (path.includes(`/patients/${patientId}`)) {
+                        // Navigation innerhalb von PatientOrganizer
+                        navigate(path, { replace: true });
+                      } else {
+                        // Andere Navigation
+                        navigate(path, { replace: false });
+                      }
+                    } catch (error) {
+                      console.error('Fehler bei der Navigation:', error);
                     }
-                    
-                    // Für externe Navigation (z.B. zu Dokumenten)
-                    if (path.startsWith('/documents/')) {
-                      navigate(path, { replace: false });
-                    } else if (path.includes(`/patients/${patientId}`)) {
-                      // Navigation innerhalb von PatientOrganizer
-                      navigate(path, { replace: true });
-                    } else {
-                      // Andere Navigation
-                      navigate(path, { replace: false });
-                    }
-                  } catch (error) {
-                    console.error('Fehler bei der Navigation:', error);
-                  }
-                }}
-              />
-            ) : (
-              <Paper sx={{ p: 2 }}>
-                <Alert severity="warning">
-                  Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
-                </Alert>
-      </Paper>
-            )}
-          </ErrorBoundary>
+                  }}
+                />
+              ) : (
+                <Paper sx={{ p: 2 }}>
+                  <Alert severity="warning">
+                    Keine Patient-ID gefunden. Bitte wählen Sie einen Patienten aus.
+                  </Alert>
+                </Paper>
+              )}
+            </ErrorBoundary>
+          ) : null}
         </TabPanel>
 
         <TabPanel value={activeTab} index={1}>

@@ -29,7 +29,9 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import {
   CalendarToday,
@@ -141,7 +143,9 @@ const EPADateCard = memo(({
       variant="outlined"
       sx={{
         transition: 'none',
-        willChange: 'auto'
+        willChange: 'auto',
+        contain: 'layout style paint',
+        transform: 'translateZ(0)', // GPU-Beschleunigung
       }}
     >
       <CardContent sx={{ p: 0 }}>
@@ -172,12 +176,18 @@ const EPADateCard = memo(({
           </Box>
         </Box>
 
-        <Collapse in={isExpanded} timeout={0} unmountOnExit={false} sx={{ overflow: 'hidden' }}>
+        <Collapse in={isExpanded} timeout={0} unmountOnExit={false} sx={{ 
+          overflow: 'hidden',
+          willChange: 'auto',
+          contain: 'layout style paint'
+        }}>
           <Box 
             key={`epa-content-${dateKey}`}
             sx={{ 
               p: 2,
-              display: 'block'
+              display: 'block',
+              willChange: 'auto',
+              contain: 'layout style paint'
             }}
           >
             <Stack spacing={1.5}>
@@ -281,10 +291,12 @@ const EPADateCard = memo(({
                     sx={{
                       p: 1.5,
                       cursor: 'pointer',
+                      willChange: 'auto',
+                      contain: 'layout style paint',
                       '&:hover': { 
                         bgcolor: 'action.hover',
                         transform: 'translateX(4px)',
-                        transition: 'all 0.2s'
+                        transition: 'none' // Deaktiviere Transition für bessere Scroll-Performance
                       },
                       borderLeft: `4px solid`,
                       borderLeftColor: groupedEntry.type === 'appointment' ? 'primary.main' :
@@ -474,25 +486,38 @@ const EPADateCard = memo(({
     </Card>
   );
 }, (prevProps, nextProps) => {
-  // Custom comparison function für React.memo
-  // Prüfe alle relevanten Props
+  // Optimierte comparison function für React.memo
+  // Schnelle Prüfungen zuerst für bessere Performance
+  
+  // Prüfe einfache Props
   if (prevProps.dateKey !== nextProps.dateKey) return false;
   if (prevProps.isExpanded !== nextProps.isExpanded) return false;
   if (prevProps.patientId !== nextProps.patientId) return false;
+  
+  // Prüfe Längen (schnell)
   if (prevProps.entries.length !== nextProps.entries.length) return false;
   if (prevProps.groupedEntriesForDate.length !== nextProps.groupedEntriesForDate.length) return false;
   
-  // Prüfe, ob sich die Entry-IDs geändert haben
-  const prevEntryIds = prevProps.entries.map(e => e.id).sort().join(',');
-  const nextEntryIds = nextProps.entries.map(e => e.id).sort().join(',');
-  if (prevEntryIds !== nextEntryIds) return false;
+  // Nur wenn Längen gleich sind, prüfe IDs (teurer)
+  // Verwende Set für O(1) Lookup statt O(n) Array-Operationen
+  if (prevProps.entries.length > 0) {
+    const prevEntryIds = new Set(prevProps.entries.map(e => e.id));
+    const nextEntryIds = new Set(nextProps.entries.map(e => e.id));
+    if (prevEntryIds.size !== nextEntryIds.size) return false;
+    // Prüfe ob alle IDs in beiden Sets vorhanden sind
+    const allIdsMatch = Array.from(prevEntryIds).every(id => nextEntryIds.has(id));
+    if (!allIdsMatch) return false;
+  }
   
-  // Prüfe, ob sich die GroupedEntry-IDs geändert haben
-  const prevGroupedIds = prevProps.groupedEntriesForDate.map(e => e.id).sort().join(',');
-  const nextGroupedIds = nextProps.groupedEntriesForDate.map(e => e.id).sort().join(',');
-  if (prevGroupedIds !== nextGroupedIds) return false;
+  if (prevProps.groupedEntriesForDate.length > 0) {
+    const prevGroupedIds = new Set(prevProps.groupedEntriesForDate.map(e => e.id));
+    const nextGroupedIds = new Set(nextProps.groupedEntriesForDate.map(e => e.id));
+    if (prevGroupedIds.size !== nextGroupedIds.size) return false;
+    // Prüfe ob alle IDs in beiden Sets vorhanden sind
+    const allGroupedIdsMatch = Array.from(prevGroupedIds).every(id => nextGroupedIds.has(id));
+    if (!allGroupedIdsMatch) return false;
+  }
   
-  // Funktions-Referenzen werden ignoriert, da sie mit useCallback stabilisiert sind
   // Alle relevanten Props sind gleich, kein Re-Render nötig
   return true;
 });
@@ -501,6 +526,9 @@ EPADateCard.displayName = 'EPADateCard';
 
 const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabChange }) => {
   const dispatch = useAppDispatch();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { appointments, loading: appointmentsLoading } = useAppSelector((state) => state.appointments);
   const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((state) => state.diagnoses);
   const { documents, loading: documentsLoading } = useAppSelector((state) => state.documents);
@@ -636,6 +664,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       setSearchTerm('');
       setFilterType('all');
       setExpandedRows(new Set());
+      setVisibleDatesCount(20); // Reset auf initiale Anzahl
       
       // WICHTIG: Setze Redux-Daten zurück, damit keine alten Daten im Store bleiben
       dispatch(clearVitalSigns());
@@ -833,7 +862,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const [photos, setPhotos] = useState<any[]>([]);
   const [patient, setPatient] = useState<any>(null);
   const [vitalSignsChartOpen, setVitalSignsChartOpen] = useState(false);
-  const [visibleDatesCount, setVisibleDatesCount] = useState(10); // OPTIMIERT: Lazy Rendering für Datum-Karten
+  const [visibleDatesCount, setVisibleDatesCount] = useState(20); // Zeige initial 20 Datum-Karten für bessere UX
 
   // Hilfsfunktion zum Extrahieren der Patient-ID aus einem Appointment
   const getAppointmentPatientId = React.useCallback((apt: any): string | null => {
@@ -1118,55 +1147,25 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       return;
     }
 
-    // OPTIMIERT: Verarbeite Daten in kleinen Batches, um das UI nicht zu blockieren
+    // OPTIMIERT: Verarbeite alle Daten auf einmal, aber nur einmal
     const processEntries = () => {
       try {
         let entries: EPAEntry[] = [];
-        let processedCount = 0;
-        const totalToProcess = 
-          (appointments?.length || 0) + 
-          (dekursEntries?.length || 0) + 
-          (patientDiagnoses?.length || 0) + 
-          (documents?.length || 0) + 
-          (vitalSigns?.length || 0) + 
-          (laborResults?.length || 0) + 
-          (dicomStudies?.length || 0) + 
-          (photos?.length || 0);
-        
-        // Zeige initial leere Liste, damit UI sofort reagiert
-        startTransition(() => {
-          setEpaEntries([]);
-        });
       
-      console.log('🔍 Starte EPA-Einträge-Erstellung:', {
-        patientId,
-        appointmentsCount: appointments?.length || 0,
-        appointments: appointments?.slice(0, 3).map((a: any) => ({ 
-          id: a._id, 
-          patientId: a.patientId || (a.patient && typeof a.patient === 'string' ? a.patient : (a.patient?._id || a.patient?.id || 'keine')),
-          title: a.title
-        })),
-        dekursEntriesCount: dekursEntries?.length || 0,
-        dekursEntries: dekursEntries?.slice(0, 3).map((d: any) => ({ 
-          id: d._id, 
-          patientId: d.patientId || (d.patient && typeof d.patient === 'string' ? d.patient : (d.patient?._id || d.patient?.id || 'keine'))
-        })),
-        patientDiagnosesCount: patientDiagnoses?.length || 0,
-        patientDiagnoses: patientDiagnoses?.slice(0, 3).map((d: any) => ({ 
-          id: d._id, 
-          patientId: d.patientId || (d.patient && typeof d.patient === 'string' ? d.patient : (d.patient?._id || d.patient?.id || 'keine'))
-        })),
-        documentsCount: documents?.length || 0,
-        vitalSignsCount: vitalSigns?.length || 0,
-        vitalSigns: vitalSigns?.slice(0, 3).map((v: any) => ({ 
-          id: v._id, 
-          patientId: v.patientId || (v.patient && typeof v.patient === 'string' ? v.patient : (v.patient?._id || v.patient?.id || 'keine'))
-        })),
-        laborResultsCount: laborResults?.length || 0,
-        dicomStudiesCount: dicomStudies?.length || 0,
-        photosCount: photos?.length || 0,
-        patient: patient ? 'vorhanden' : 'fehlt'
-      });
+      // OPTIMIERT: Reduziere Logging für bessere Performance
+      // Nur loggen wenn viele Einträge vorhanden sind
+      const totalEntries = (appointments?.length || 0) + (dekursEntries?.length || 0) + (patientDiagnoses?.length || 0) + (documents?.length || 0) + (vitalSigns?.length || 0);
+      if (totalEntries > 50) {
+        console.log('🔍 Starte EPA-Einträge-Erstellung:', {
+          patientId,
+          totalEntries,
+          appointmentsCount: appointments?.length || 0,
+          dekursEntriesCount: dekursEntries?.length || 0,
+          patientDiagnosesCount: patientDiagnoses?.length || 0,
+          documentsCount: documents?.length || 0,
+          vitalSignsCount: vitalSigns?.length || 0
+        });
+      }
 
       // Termine
       try {
@@ -1182,12 +1181,16 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           return aptPatientId === String(patientId);
         });
 
-        console.log('📅 Verarbeite Termine:', { 
-          total: appointments?.length || 0,
-          filtered: patientAppointments.length,
-          patientId 
-        });
+        // OPTIMIERT: Reduziere Logging
+        if (patientAppointments.length > 20) {
+          console.log('📅 Verarbeite Termine:', { 
+            total: appointments?.length || 0,
+            filtered: patientAppointments.length,
+            patientId 
+          });
+        }
 
+        // Verarbeite alle Termine
         patientAppointments.forEach((apt: any) => {
           entries.push({
             id: `appointment-${apt._id}`,
@@ -1236,14 +1239,17 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           return dekursPatientId === String(patientId);
         });
 
-        console.log('📝 Verarbeite Dekurs-Einträge:', { 
-          total: dekursEntries?.length || 0,
-          filtered: patientDekursEntries.length,
-          patientId
-        });
+        // OPTIMIERT: Reduziere Logging
+        if (patientDekursEntries.length > 20) {
+          console.log('📝 Verarbeite Dekurs-Einträge:', { 
+            total: dekursEntries?.length || 0,
+            filtered: patientDekursEntries.length,
+            patientId
+          });
+        }
         
+        // Verarbeite alle Dekurs-Einträge
         patientDekursEntries.forEach((dekurs: any) => {
-          
           entries.push({
             id: `dekurs-${dekurs._id}`,
             type: 'dekurs',
@@ -1293,11 +1299,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           }
         });
         
-        console.log('✅ Dekurs-Einträge verarbeitet:', { 
-          total: dekursEntries?.length || 0, 
-          filtered: patientDekursEntries.length,
-          added: patientDekursEntries.length
-        });
+        // OPTIMIERT: Reduziere Logging
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Dekurs-Einträgen:', error);
       }
@@ -1320,14 +1322,17 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           return diagPatientId === String(patientId);
         });
 
-        console.log('🔬 Verarbeite Diagnosen:', { 
-          total: patientDiagnoses?.length || 0,
-          filtered: patientDiagnosesFiltered.length,
-          patientId
-        });
+        // OPTIMIERT: Reduziere Logging
+        if (patientDiagnosesFiltered.length > 20) {
+          console.log('🔬 Verarbeite Diagnosen:', { 
+            total: patientDiagnoses?.length || 0,
+            filtered: patientDiagnosesFiltered.length,
+            patientId
+          });
+        }
         
+        // Verarbeite alle Diagnosen
         patientDiagnosesFiltered.forEach((diag: any) => {
-          
           entries.push({
             id: `diagnosis-${diag._id}`,
             type: 'diagnosis',
@@ -1337,12 +1342,6 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             status: diag.statusGerman || diag.status,
             metadata: diag
           });
-        });
-        
-        console.log('✅ Diagnosen verarbeitet:', { 
-          total: patientDiagnoses?.length || 0, 
-          filtered: patientDiagnosesFiltered.length,
-          added: patientDiagnosesFiltered.length
         });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Diagnosen:', error);
@@ -1370,14 +1369,17 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           return docPatientId === String(patientId);
         });
 
-        console.log('📄 Verarbeite Dokumente:', { 
-          total: docsArray.length,
-          filtered: patientDocuments.length,
-          patientId
-        });
+        // OPTIMIERT: Reduziere Logging
+        if (patientDocuments.length > 20) {
+          console.log('📄 Verarbeite Dokumente:', { 
+            total: docsArray.length,
+            filtered: patientDocuments.length,
+            patientId
+          });
+        }
 
+        // Verarbeite alle Dokumente
         patientDocuments.forEach((doc: any) => {
-          
           entries.push({
             id: `document-${doc._id}`,
             type: 'document',
@@ -1486,12 +1488,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           return vitalPatientId === String(patientId);
         });
 
-        console.log('💓 Verarbeite Vitalwerte:', { 
-          total: vitalSigns?.length || 0,
-          filtered: patientVitalSigns.length,
-          patientId
-        });
-        
+        // Verarbeite alle Vitalwerte
         patientVitalSigns.forEach((vital: any) => {
           
           const vitalParts: Array<{ text: string; isAbnormal: boolean }> = [];
@@ -1564,57 +1561,34 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             }
           });
         });
-        
-        console.log('✅ Vitalwerte verarbeitet:', { 
-          total: vitalSigns?.length || 0,
-          filtered: patientVitalSigns.length,
-          added: patientVitalSigns.length
-        });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Vitalwerten:', error);
       }
 
-      // OPTIMIERT: Sortiere und zeige Einträge in Batches, um UI nicht zu blockieren
-      const processAndDisplay = () => {
-        // Sortiere chronologisch (neueste zuerst) - nur wenn nötig
-        if (entries.length > 0) {
-          entries.sort((a, b) => b.date.getTime() - a.date.getTime());
-        }
+      // Sortiere chronologisch (neueste zuerst)
+      if (entries.length > 0) {
+        entries.sort((a, b) => b.date.getTime() - a.date.getTime());
+      }
 
-        // OPTIMIERT: Erstelle einen einfacheren Hash
-        const simpleHash = entries.length > 0 
-          ? `${entries.length}|${entries[0].id}|${entries[entries.length - 1].id}`
-          : '0';
-        
-        // Prüfe, ob sich die Daten geändert haben
-        if (prevDataHashRef.current === simpleHash) {
-          return; // Keine Änderung
-        }
-        
-        prevDataHashRef.current = simpleHash;
+      // Erstelle einen einfacheren Hash für Change Detection
+      const simpleHash = entries.length > 0 
+        ? `${entries.length}|${entries[0].id}|${entries[entries.length - 1].id}`
+        : '0';
       
-      // Aktualisiere lastPatientUpdateRef nach dem Erstellen der EPA-Einträge
-      // WICHTIG: Setze lastPatientUpdateRef auf den aktuellen patientUpdatedAt Wert,
-      // damit beim nächsten Update erkannt wird, dass es ein neues Update ist
-      // Dies stellt sicher, dass die gleichen Einträge beim nächsten Render nicht wieder angezeigt werden
-      if (patient && patient.updatedAt) {
-        const patientUpdatedAt = new Date(patient.updatedAt).getTime();
-        // Aktualisiere lastPatientUpdateRef immer auf den aktuellen Wert, damit beim nächsten Update
-        // die Differenz korrekt erkannt wird
-        const previousValue = lastPatientUpdateRef.current;
-        lastPatientUpdateRef.current = patientUpdatedAt;
-        console.log('📝 Aktualisiere lastPatientUpdateRef nach EPA-Erstellung:', {
-          previous: previousValue === 0 ? '0' : new Date(previousValue).toISOString(),
-          new: new Date(lastPatientUpdateRef.current).toISOString(),
-          isFirstLoad: previousValue === 0,
-          isNewUpdate: previousValue > 0 && patientUpdatedAt > previousValue
-        });
+      // Prüfe, ob sich die Daten geändert haben
+      if (prevDataHashRef.current === simpleHash) {
+        return; // Keine Änderung
       }
       
-      // OPTIMIERT: Aktualisiere lastMedicalFieldsRef nur mit Referenzen, nicht mit Deep Copies
-      // Das spart viel Zeit bei großen Arrays
+      prevDataHashRef.current = simpleHash;
+    
+      // Aktualisiere lastPatientUpdateRef
+      if (patient && patient.updatedAt) {
+        lastPatientUpdateRef.current = new Date(patient.updatedAt).getTime();
+      }
+      
+      // Aktualisiere lastMedicalFieldsRef
       if (patient) {
-        const wasFirstLoad = !lastMedicalFieldsRef.current;
         lastMedicalFieldsRef.current = {
           infections: patient.infections,
           allergies: patient.allergies,
@@ -1633,115 +1607,10 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           implants: patient.implants,
           isPregnant: patient.isPregnant
         };
-        console.log('📝 Aktualisiere lastMedicalFieldsRef nach EPA-Erstellung', {
-          wasFirstLoad,
-          willTrackChanges: !wasFirstLoad
-        });
       }
       
-        // OPTIMIERT: Zeige zunächst nur die ersten 5 Einträge für sofortiges Feedback
-        const initialBatchSize = 5;
-        const batchSize = 5;
-        const initialEntries = entries.slice(0, initialBatchSize);
-        const remainingEntries = entries.slice(initialBatchSize);
-        
-        // Zeige initiale Einträge sofort
-        startTransition(() => {
-          setEpaEntries(initialEntries);
-        });
-        
-        // Lade den Rest in sehr kleinen Batches mit langen Pausen
-        if (remainingEntries.length > 0) {
-          let currentIndex = 0;
-          
-          const loadNextBatch = () => {
-            if (currentIndex >= remainingEntries.length) {
-              // Finalisiere nach dem letzten Batch
-              if (patient && patient.updatedAt) {
-                lastPatientUpdateRef.current = new Date(patient.updatedAt).getTime();
-              }
-              if (patient) {
-                lastMedicalFieldsRef.current = {
-                  infections: patient.infections,
-                  allergies: patient.allergies,
-                  currentMedications: patient.currentMedications,
-                  preExistingConditions: patient.preExistingConditions,
-                  medicalHistory: patient.medicalHistory,
-                  previousSurgeries: patient.previousSurgeries,
-                  vaccinations: patient.vaccinations,
-                  bloodType: patient.bloodType,
-                  height: patient.height,
-                  weight: patient.weight,
-                  bmi: patient.bmi,
-                  smokingStatus: patient.smokingStatus,
-                  hasPacemaker: patient.hasPacemaker,
-                  hasDefibrillator: patient.hasDefibrillator,
-                  implants: patient.implants,
-                  isPregnant: patient.isPregnant
-                };
-              }
-              return;
-            }
-            
-            const batch = remainingEntries.slice(currentIndex, currentIndex + batchSize);
-            currentIndex += batchSize;
-            
-            startTransition(() => {
-              setEpaEntries(prevEntries => {
-                const combined = [...prevEntries, ...batch];
-                // Sortiere nach jedem Batch
-                return combined.sort((a, b) => b.date.getTime() - a.date.getTime());
-              });
-            });
-            
-            // Lade nächsten Batch mit sehr langer Verzögerung für flüssiges Scrollen
-            if (currentIndex < remainingEntries.length) {
-              if ('requestIdleCallback' in window) {
-                (window as any).requestIdleCallback(loadNextBatch, { timeout: 3000 });
-              } else {
-                setTimeout(loadNextBatch, 1000); // Sehr lange Verzögerung
-              }
-            } else {
-              loadNextBatch(); // Finalisiere
-            }
-          };
-          
-          // Starte das Laden des ersten Batches mit Verzögerung
-          if ('requestIdleCallback' in window) {
-            (window as any).requestIdleCallback(loadNextBatch, { timeout: 3000 });
-          } else {
-            setTimeout(loadNextBatch, 1000);
-          }
-        } else {
-          // Finalisiere wenn keine weiteren Einträge
-          if (patient && patient.updatedAt) {
-            lastPatientUpdateRef.current = new Date(patient.updatedAt).getTime();
-          }
-          if (patient) {
-            lastMedicalFieldsRef.current = {
-              infections: patient.infections,
-              allergies: patient.allergies,
-              currentMedications: patient.currentMedications,
-              preExistingConditions: patient.preExistingConditions,
-              medicalHistory: patient.medicalHistory,
-              previousSurgeries: patient.previousSurgeries,
-              vaccinations: patient.vaccinations,
-              bloodType: patient.bloodType,
-              height: patient.height,
-              weight: patient.weight,
-              bmi: patient.bmi,
-              smokingStatus: patient.smokingStatus,
-              hasPacemaker: patient.hasPacemaker,
-              hasDefibrillator: patient.hasDefibrillator,
-              implants: patient.implants,
-              isPregnant: patient.isPregnant
-            };
-          }
-        }
-      };
-      
-      // Starte Verarbeitung und Anzeige
-      processAndDisplay();
+      // Setze alle Einträge auf einmal - kein startTransition, kein Batching
+      setEpaEntries(entries);
     } catch (error) {
         console.error('Fehler beim Erstellen der EPA-Einträge:', error);
         startTransition(() => {
@@ -1750,19 +1619,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       }
     };
 
-    // Verwende requestIdleCallback wenn verfügbar, sonst setTimeout mit kleiner Verzögerung
-    if ('requestIdleCallback' in window) {
-      const idleCallbackId = (window as any).requestIdleCallback(processEntries, { timeout: 1000 });
-      return () => {
-        if ('cancelIdleCallback' in window) {
-          (window as any).cancelIdleCallback(idleCallbackId);
-        }
-      };
-    } else {
-      // Fallback: Kleine Verzögerung, damit das UI nicht blockiert wird
-      const timeoutId = setTimeout(processEntries, 50);
-      return () => clearTimeout(timeoutId);
-    }
+    // Verarbeite sofort - keine Verzögerung
+    processEntries();
   }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns, patient]);
 
 
@@ -2004,12 +1862,15 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         return {};
       }
       
+      // Verarbeite alle Einträge
+      const entriesToProcess = filteredEntries;
+      
       // OPTIMIERT: Verwende Map für bessere Performance bei vielen Einträgen
       const groupsMap = new Map<string, EPAEntry[]>();
       
       // Verwende for-Schleife statt forEach für bessere Performance
-      for (let i = 0; i < filteredEntries.length; i++) {
-        const entry = filteredEntries[i];
+      for (let i = 0; i < entriesToProcess.length; i++) {
+        const entry = entriesToProcess[i];
         if (!entry || !entry.date) {
           continue;
         }
@@ -2021,7 +1882,10 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           }
           groupsMap.get(dateKey)!.push(entry);
         } catch (error) {
-          console.error('Fehler beim Gruppieren eines Eintrags:', error);
+          // Reduziere Error-Logging
+          if (i < 10) {
+            console.error('Fehler beim Gruppieren eines Eintrags:', error);
+          }
         }
       }
       
@@ -2030,6 +1894,18 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       groupsMap.forEach((entries, dateKey) => {
         groups[dateKey] = entries;
       });
+      
+      // Debug: Logge Anzahl der gruppierten Einträge
+      if (Object.keys(groups).length > 0) {
+        const totalGrouped = Object.values(groups).reduce((sum, entries) => sum + entries.length, 0);
+        console.log('📊 Gruppierung abgeschlossen:', {
+          totalEntries: filteredEntries.length,
+          totalGrouped: totalGrouped,
+          dateKeys: Object.keys(groups).length,
+          firstDate: Object.keys(groups)[0],
+          lastDate: Object.keys(groups)[Object.keys(groups).length - 1]
+        });
+      }
       
       return groups;
     } catch (error) {
@@ -2255,32 +2131,69 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     }
   }, [loading, epaEntries.length]);
 
-  // OPTIMIERT: Lazy Loading für Datum-Karten beim Scrollen
+  // Ref um zu verhindern, dass zu oft geladen wird
+  const isLoadingMoreRef = useRef(false);
+  
+  // Einfacher Scroll-Handler für Lazy Loading
   useEffect(() => {
     if (sortedDates.length <= visibleDatesCount) return;
     
+    let timeoutId: NodeJS.Timeout;
+    
     const handleScroll = () => {
-      const scrollPosition = window.innerHeight + window.scrollY;
-      const documentHeight = document.documentElement.scrollHeight;
+      // Verhindere mehrfaches Auslösen
+      if (isLoadingMoreRef.current) return;
       
-      // Wenn nahe am Ende (500px vor dem Ende), lade weitere 10 Datum-Karten
-      if (scrollPosition >= documentHeight - 500 && visibleDatesCount < sortedDates.length) {
-        setVisibleDatesCount(prev => Math.min(prev + 10, sortedDates.length));
+      const scrollY = window.scrollY || document.documentElement.scrollTop;
+      const documentHeight = document.documentElement.scrollHeight;
+      const windowHeight = window.innerHeight;
+      
+      // Prüfe ob nahe am Ende (aber nicht ganz oben oder ganz unten)
+      const distanceFromBottom = documentHeight - (scrollY + windowHeight);
+      const isNearBottom = distanceFromBottom < 500 && distanceFromBottom > 50;
+      
+      if (isNearBottom && visibleDatesCount < sortedDates.length) {
+        isLoadingMoreRef.current = true;
+        
+        // Verwende startTransition für nicht-blockierende Updates
+        startTransition(() => {
+          const newCount = Math.min(visibleDatesCount + 10, sortedDates.length);
+          setVisibleDatesCount(newCount);
+          
+          // Reset nach Verzögerung
+          setTimeout(() => {
+            isLoadingMoreRef.current = false;
+          }, 500);
+        });
       }
     };
     
-    // Debounce scroll events für bessere Performance
-    let timeoutId: NodeJS.Timeout;
+    // Debounced scroll handler
     const debouncedHandleScroll = () => {
       clearTimeout(timeoutId);
       timeoutId = setTimeout(handleScroll, 150);
     };
     
     window.addEventListener('scroll', debouncedHandleScroll, { passive: true });
+    
     return () => {
       window.removeEventListener('scroll', debouncedHandleScroll);
       clearTimeout(timeoutId);
+      isLoadingMoreRef.current = false;
     };
+  }, [sortedDates.length, visibleDatesCount]);
+  
+  // Funktion zum manuellen Laden weiterer Einträge
+  const handleLoadMore = useCallback(() => {
+    if (visibleDatesCount < sortedDates.length && !isLoadingMoreRef.current) {
+      isLoadingMoreRef.current = true;
+      startTransition(() => {
+        setVisibleDatesCount(prev => Math.min(prev + 10, sortedDates.length));
+        setTimeout(() => {
+          isLoadingMoreRef.current = false;
+        }, 500);
+      });
+    }
   }, [sortedDates.length, visibleDatesCount]);
 
 
@@ -2295,15 +2208,21 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   // Wrapper für den gesamten Render-Teil mit Fehlerbehandlung
   try {
     return (
-      <Box>
+      <Box
+        sx={{
+          willChange: 'auto',
+          contain: 'layout style paint',
+        }}
+      >
       {/* Filter und Suche */}
-      <Paper sx={{ p: 2, mb: 2 }}>
-        <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+      <Paper sx={{ p: { xs: 1, sm: 2 }, mb: { xs: 1, sm: 2 } }}>
+        <Stack direction={isMobile ? 'column' : 'row'} spacing={{ xs: 1, sm: 2 }} alignItems="center" flexWrap="wrap">
           <TextField
             placeholder="Suchen..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             size="small"
+            fullWidth={isMobile}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -2311,9 +2230,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                 </InputAdornment>
               )
             }}
-            sx={{ flex: 1, minWidth: 200 }}
+            sx={{ flex: isMobile ? 'none' : 1, minWidth: { xs: '100%', sm: 200 } }}
           />
-          <FormControl size="small" sx={{ minWidth: 200 }}>
+          <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 }, width: { xs: '100%', sm: 'auto' } }}>
             <InputLabel>Typ</InputLabel>
             <Select
               value={filterType}
@@ -2374,7 +2293,14 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           <Alert severity="info">Keine Einträge gefunden</Alert>
         </Paper>
       ) : (
-        <Stack spacing={2}>
+        <Stack 
+          spacing={2}
+          sx={{
+            willChange: 'auto',
+            contain: 'layout style paint',
+            transform: 'translateZ(0)', // GPU-Beschleunigung
+          }}
+        >
           {sortedDates.slice(0, visibleDatesCount).map((dateKey) => {
             try {
               const entries = (groupedEntries && groupedEntries[dateKey]) || [];
@@ -2403,11 +2329,27 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             }
           })}
           {sortedDates.length > visibleDatesCount && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-              <CircularProgress size={24} />
-              <Typography variant="body2" color="text.secondary" sx={{ ml: 2 }}>
-                Lade weitere Einträge...
+            <Box 
+              id="epa-load-more-sentinel"
+              sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                p: 2, 
+                gap: 2,
+                minHeight: '100px'
+              }}
+            >
+              <Typography variant="body2" color="text.secondary">
+                {visibleDatesCount} von {sortedDates.length} Datum-Karten angezeigt
               </Typography>
+              <Button
+                variant="outlined"
+                onClick={handleLoadMore}
+                disabled={visibleDatesCount >= sortedDates.length}
+              >
+                Weitere {Math.min(10, sortedDates.length - visibleDatesCount)} Datum-Karten laden
+              </Button>
             </Box>
           )}
         </Stack>
