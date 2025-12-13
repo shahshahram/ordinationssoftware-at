@@ -21,6 +21,7 @@ import dashboardWidgetsReducer from './slices/dashboardWidgetsSlice';
 import internalMessagesReducer from './slices/internalMessagesSlice';
 import tasksReducer from './slices/tasksSlice';
 import vitalSignsReducer from './slices/vitalSignsSlice';
+import contactReducer from './slices/contactSlice';
 
 export const store = configureStore({
   reducer: {
@@ -46,6 +47,7 @@ export const store = configureStore({
     internalMessages: internalMessagesReducer,
     tasks: tasksReducer,
     vitalSigns: vitalSignsReducer,
+    contacts: contactReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

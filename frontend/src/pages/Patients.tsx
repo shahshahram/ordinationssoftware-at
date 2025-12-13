@@ -3,6 +3,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, loadMorePatients, createPatient, updatePatient, clearError, Patient } from '../store/slices/patientSlice';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
 import { useNavigate } from 'react-router-dom';
+import api from '../utils/api';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { Person as PersonIcon } from '@mui/icons-material';
 import {
@@ -72,6 +73,9 @@ const Patients: React.FC = () => {
   const navigate = useNavigate();
   const { patients, loading, error, pagination } = useAppSelector((state) => state.patients);
   const { appointments } = useAppSelector((state) => state.appointments);
+  
+  // Cache für letzte Besuche
+  const [lastVisitCache, setLastVisitCache] = useState<{ [patientId: string]: Date }>({});
   
   // View and UI state
   const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
@@ -205,11 +209,136 @@ const Patients: React.FC = () => {
     return today.getMonth() === birthDate.getMonth() && today.getDate() === birthDate.getDate();
   };
 
-  const getLastVisitDate = (patient: Patient) => {
-    // Mock data - in real app, this would come from appointments
-    const daysAgo = Math.floor(Math.random() * 90);
-    return new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000);
-  };
+  const getLastVisitDate = useCallback((patient: Patient): Date => {
+    const patientId = patient._id || patient.id;
+    if (!patientId) {
+      // Fallback: Nutze createdAt oder ein altes Datum
+      return patient.createdAt ? new Date(patient.createdAt) : new Date(0);
+    }
+
+    // Prüfe Cache zuerst
+    if (lastVisitCache[patientId]) {
+      return lastVisitCache[patientId];
+    }
+
+    const visitDates: Date[] = [];
+
+    // 1. Letzter Termin (Appointment)
+    if (appointments && appointments.length > 0) {
+      const patientAppointments = appointments.filter((apt: Appointment) => {
+        const aptPatientId = typeof apt.patient === 'string' ? apt.patient : apt.patient?._id || apt.patient?.id;
+        return aptPatientId === patientId && apt.startTime;
+      });
+      
+      if (patientAppointments.length > 0) {
+        const lastAppointment = patientAppointments
+          .map(apt => new Date(apt.startTime))
+          .sort((a, b) => b.getTime() - a.getTime())[0];
+        visitDates.push(lastAppointment);
+      }
+    }
+
+    // 2. Lade Dekurs-Einträge, Dokumente und andere Daten asynchron
+    // (wird im useEffect geladen und gecached)
+    
+    // Wenn bereits ein Datum gefunden wurde, nutze es
+    if (visitDates.length > 0) {
+      const lastVisit = visitDates.sort((a, b) => b.getTime() - a.getTime())[0];
+      setLastVisitCache(prev => ({ ...prev, [patientId]: lastVisit }));
+      return lastVisit;
+    }
+
+    // Fallback: Nutze createdAt oder ein altes Datum
+    const fallbackDate = patient.createdAt ? new Date(patient.createdAt) : new Date(0);
+    setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
+    return fallbackDate;
+  }, [appointments, lastVisitCache]);
+
+  // Lade letzte Besuche für alle Patienten asynchron
+  useEffect(() => {
+    const loadLastVisits = async () => {
+      if (!patients || patients.length === 0) return;
+
+      const visitPromises = patients.map(async (patient) => {
+        const patientId = patient._id || patient.id;
+        if (!patientId) return;
+
+        // Prüfe ob bereits im Cache
+        if (lastVisitCache[patientId]) return;
+
+        try {
+          const visitDates: Date[] = [];
+
+          // 1. Termine (bereits in Redux)
+          if (appointments && appointments.length > 0) {
+            const patientAppointments = appointments.filter((apt: Appointment) => {
+              const aptPatientId = typeof apt.patient === 'string' ? apt.patient : apt.patient?._id || apt.patient?.id;
+              return aptPatientId === patientId && apt.startTime;
+            });
+            
+            if (patientAppointments.length > 0) {
+              const lastAppointment = patientAppointments
+                .map(apt => new Date(apt.startTime))
+                .sort((a, b) => b.getTime() - a.getTime())[0];
+              visitDates.push(lastAppointment);
+            }
+          }
+
+          // 2. Letzter Dekurs-Eintrag
+          try {
+            const dekursResponse: any = await api.get(`/dekurs/patient/${patientId}?limit=1`);
+            const dekursData = dekursResponse?.data || dekursResponse;
+            const dekursEntries = dekursData?.success ? dekursData.data : (Array.isArray(dekursData) ? dekursData : []);
+            if (dekursEntries && dekursEntries.length > 0 && dekursEntries[0].entryDate) {
+              visitDates.push(new Date(dekursEntries[0].entryDate));
+            }
+          } catch (dekursError) {
+            // Ignoriere Fehler
+          }
+
+          // 3. Letztes Dokument (Arztbrief oder Patientenbrief)
+          try {
+            const documentsResponse: any = await api.get(`/documents?patientId=${patientId}&limit=1`);
+            const documentsData = documentsResponse?.data || documentsResponse;
+            const documents = documentsData?.success ? documentsData.data : (Array.isArray(documentsData) ? documentsData : []);
+            if (documents && documents.length > 0) {
+              const lastDocument = documents
+                .filter((doc: any) => doc.type === 'arztbrief' || doc.type === 'patientenbrief' || doc.createdAt)
+                .map((doc: any) => new Date(doc.createdAt || doc.updatedAt))
+                .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0];
+              if (lastDocument) {
+                visitDates.push(lastDocument);
+              }
+            }
+          } catch (docError) {
+            // Ignoriere Fehler
+          }
+
+          // 4. Letzter Arztbesuch (aus PatientDataHistory oder MedicalDataHistory)
+          // Dies könnte später hinzugefügt werden, wenn die API verfügbar ist
+
+          // Bestimme das neueste Datum
+          if (visitDates.length > 0) {
+            const lastVisit = visitDates.sort((a, b) => b.getTime() - a.getTime())[0];
+            setLastVisitCache(prev => ({ ...prev, [patientId]: lastVisit }));
+          } else {
+            // Fallback: Nutze createdAt
+            const fallbackDate = patient.createdAt ? new Date(patient.createdAt) : new Date(0);
+            setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
+          }
+        } catch (error) {
+          // Bei Fehler: Nutze createdAt als Fallback
+          const fallbackDate = patient.createdAt ? new Date(patient.createdAt) : new Date(0);
+          setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
+        }
+      });
+
+      await Promise.allSettled(visitPromises);
+    };
+
+    loadLastVisits();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [patients, appointments]);
 
   const isOverdueRecall = useCallback((patient: Patient) => {
     // Check if patient has a lastCheckIn date and it's more than 30 days ago

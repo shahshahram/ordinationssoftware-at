@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Container, Snackbar, Alert } from '@mui/material';
+import { Box, Typography, Container, Snackbar, Alert, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, ListItem, ListItemText } from '@mui/material';
 import PatientAdmissionForm from '../components/PatientAdmissionForm';
 import { PatientAdmissionData } from '../types/PatientExtended';
 import api from '../utils/api';
@@ -19,6 +19,15 @@ const PatientAdmissionPage: React.FC = () => {
     open: false,
     message: '',
     severity: 'info'
+  });
+  const [validationDialog, setValidationDialog] = React.useState<{
+    open: boolean;
+    errors: Array<{ field: string; message: string; value?: any }>;
+    message: string;
+  }>({
+    open: false,
+    errors: [],
+    message: ''
   });
 
   const handleSave = async (data: PatientAdmissionData) => {
@@ -92,27 +101,7 @@ const PatientAdmissionPage: React.FC = () => {
           city: data.address?.city?.trim() || '',
           country: data.address?.country?.trim() || 'Österreich'
         },
-        // Medizinische Daten
-        bloodType: data.bloodType || 'Unbekannt',
-        height: data.height ? Number(data.height) : undefined,
-        weight: data.weight ? Number(data.weight) : undefined,
-        bmi: data.height && data.weight ? 
-          Number((Number(data.weight) / Math.pow(Number(data.height) / 100, 2)).toFixed(1)) : undefined,
-        isPregnant: data.gender === 'w' ? Boolean(data.isPregnant) : false,
-        pregnancyWeek: data.gender === 'w' && data.isPregnant ? 
-          Number(data.pregnancyWeek) : undefined,
-        isBreastfeeding: data.gender === 'w' ? Boolean(data.isBreastfeeding) : false,
-        hasPacemaker: Boolean(data.hasPacemaker),
-        hasDefibrillator: Boolean(data.hasDefibrillator),
-        implants: data.implants || [],
-        smokingStatus: data.smokingStatus || 'non-smoker',
-        cigarettesPerDay: data.cigarettesPerDay ? Number(data.cigarettesPerDay) : undefined,
-        yearsOfSmoking: data.yearsOfSmoking ? Number(data.yearsOfSmoking) : undefined,
-        quitSmokingDate: data.quitSmokingDate ? new Date(data.quitSmokingDate).toISOString() : undefined,
-        // Arrays für medizinische Daten
-        allergies: Array.isArray(data.allergies) ? data.allergies : [],
-        currentMedications: Array.isArray(data.currentMedications) ? data.currentMedications : [],
-        medicalHistory: Array.isArray(data.preExistingConditions) ? data.preExistingConditions : [],
+        // Medizinische Daten werden nicht bei der Aufnahme erfasst
         // Notfallkontakt
         emergencyContact: data.emergencyContact ? {
           name: data.emergencyContact.name || '',
@@ -138,11 +127,6 @@ const PatientAdmissionPage: React.FC = () => {
 
       console.log('Prepared patient data for API:', patientData);
       console.log('User ID being used:', userId);
-      console.log('Medical data being sent:');
-      console.log('- Allergies:', patientData.allergies);
-      console.log('- Current Medications:', patientData.currentMedications);
-      console.log('- Medical History:', patientData.medicalHistory);
-      console.log('- Implants:', patientData.implants);
       console.log('- Smoking Status:', patientData.smokingStatus);
       console.log('- Cigarettes Per Day:', patientData.cigarettesPerDay);
       console.log('- Years of Smoking:', patientData.yearsOfSmoking);
@@ -238,15 +222,63 @@ const PatientAdmissionPage: React.FC = () => {
       if (error?.response?.status === 400) {
         const errorData = error.response.data;
         const validationErrors = errorData?.errors || [];
+        const details = errorData?.details;
         
-        let errorMessage = 'Validierungsfehler:\n';
-        validationErrors.forEach((err: any) => {
-          errorMessage += `• ${err.msg}\n`;
+        // Sammle alle Fehler in einem Array
+        const allErrors: Array<{ field: string; message: string; value?: any }> = [];
+        
+        // Füge Details-Fehler hinzu, falls vorhanden (diese haben bereits die übersetzten Feldnamen)
+        if (details?.validationErrors && details.validationErrors.length > 0) {
+          details.validationErrors.forEach((err: any) => {
+            allErrors.push({
+              field: err.friendlyFieldName || err.field || 'Unbekanntes Feld',
+              message: err.message || 'Ungültiger Wert',
+              value: err.value !== undefined && err.value !== null ? String(err.value) : undefined
+            });
+          });
+        }
+        
+        // Falls keine Details vorhanden sind, versuche aus errors Array zu extrahieren
+        if (allErrors.length === 0 && validationErrors.length > 0) {
+          // Feldnamen-Übersetzungen
+          const fieldTranslations: { [key: string]: string } = {
+            'firstName': 'Vorname',
+            'lastName': 'Nachname',
+            'dateOfBirth': 'Geburtsdatum',
+            'gender': 'Geschlecht',
+            'socialSecurityNumber': 'Sozialversicherungsnummer',
+            'insuranceProvider': 'Versicherungsanstalt',
+            'phone': 'Telefonnummer',
+            'address.street': 'Straße',
+            'address.zipCode': 'PLZ',
+            'address.city': 'Ort',
+            'address.postalCode': 'PLZ',
+            'dataProtectionConsent': 'Datenschutz-Einverständnis'
+          };
+          
+          validationErrors.forEach((err: any) => {
+            const fieldName = err.param || err.path || 'Unbekanntes Feld';
+            const friendlyFieldName = fieldTranslations[fieldName] || fieldName;
+            const msg = err.msg || err.message || 'Ungültiger Wert';
+            allErrors.push({
+              field: friendlyFieldName,
+              message: msg,
+              value: err.value !== undefined && err.value !== null ? String(err.value) : undefined
+            });
+          });
+        }
+        
+        // Zeige Dialog mit detaillierten Fehlern
+        setValidationDialog({
+          open: true,
+          errors: allErrors,
+          message: errorData?.message || 'Validierungsfehler beim Erstellen des Patienten'
         });
         
+        // Zeige auch eine kurze Snackbar-Nachricht
         setSnackbar({
           open: true,
-          message: errorMessage,
+          message: `Validierungsfehler: ${allErrors.length} Fehler gefunden. Bitte Details prüfen.`,
           severity: 'error'
         });
       }
@@ -280,6 +312,10 @@ const PatientAdmissionPage: React.FC = () => {
     setSnackbar(prev => ({ ...prev, open: false }));
   };
 
+  const handleCloseValidationDialog = () => {
+    setValidationDialog(prev => ({ ...prev, open: false }));
+  };
+
   return (
     <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ mb: 4 }}>
@@ -310,6 +346,58 @@ const PatientAdmissionPage: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Validierungsfehler-Dialog */}
+      <Dialog 
+        open={validationDialog.open} 
+        onClose={handleCloseValidationDialog}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Validierungsfehler
+        </DialogTitle>
+        <DialogContent>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {validationDialog.message}
+          </Alert>
+          {validationDialog.errors.length > 0 && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', mt: 2 }}>
+                Fehlerdetails:
+              </Typography>
+              <List dense>
+                {validationDialog.errors.map((error, index) => (
+                  <ListItem key={index}>
+                    <ListItemText
+                      primary={
+                        <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                          {error.field}
+                        </Typography>
+                      }
+                      secondary={
+                        <Typography variant="body2" color="error">
+                          {error.message}
+                          {error.value !== undefined && error.value !== null && error.value !== '' && (
+                            <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                              Wert: {String(error.value)}
+                            </Typography>
+                          )}
+                        </Typography>
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseValidationDialog} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

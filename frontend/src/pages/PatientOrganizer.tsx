@@ -167,6 +167,10 @@ const PatientOrganizer: React.FC = () => {
   const [ambulanzbefunde, setAmbulanzbefunde] = useState<any[]>([]);
   const [loadingAmbulanzbefunde, setLoadingAmbulanzbefunde] = useState(false);
   
+  // State für MedicalDataHistory (um frühere Schwangerschaften zu prüfen)
+  const [medicalDataHistory, setMedicalDataHistory] = useState<any[]>([]);
+  const [hasPreviousPregnancy, setHasPreviousPregnancy] = useState(false);
+  
   // State für Tabs - Standard ist Dekurs (Tab 1)
   const [activeTab, setActiveTab] = useState(1);
   const [isNavigating, setIsNavigating] = useState(false); // Flag um Race Conditions zu vermeiden
@@ -448,6 +452,49 @@ const PatientOrganizer: React.FC = () => {
     };
     
     loadDataForBadges();
+    
+    // Lade MedicalDataHistory, um frühere Schwangerschaften zu prüfen
+    const loadMedicalDataHistory = async () => {
+      if (!patientId) return;
+      try {
+        const response: any = await api.get(`/medical-data-history/patient/${patientId}?limit=100`);
+        console.log('🔍 MedicalDataHistory API Response:', response);
+        
+        const historyData = response?.data || response;
+        const history = historyData?.success ? historyData.data : (Array.isArray(historyData) ? historyData : []);
+        setMedicalDataHistory(history);
+        
+        // Prüfe, ob es frühere Schwangerschaften gibt
+        const hadPregnancy = history.some((entry: any) => {
+          const hasPregnantInSnapshot = entry.snapshot?.isPregnant === true;
+          const hasPregnancyWeekInSnapshot = entry.snapshot?.pregnancyWeek && entry.snapshot.pregnancyWeek > 0;
+          const hasPregnancyInChangedFields = entry.changedFields && entry.changedFields.some((field: any) => 
+            (field.field === 'isPregnant' && field.oldValue === false && field.newValue === true) ||
+            (field.field === 'pregnancyWeek' && field.newValue && field.newValue > 0)
+          );
+          
+          return hasPregnantInSnapshot || hasPregnancyWeekInSnapshot || hasPregnancyInChangedFields;
+        });
+        
+        console.log('🔍 MedicalDataHistory geladen:', {
+          historyLength: history.length,
+          hadPregnancy,
+          sampleEntry: history[0],
+          allEntries: history.map((e: any) => ({
+            isPregnant: e.snapshot?.isPregnant,
+            pregnancyWeek: e.snapshot?.pregnancyWeek,
+            changedFields: e.changedFields
+          }))
+        });
+        setHasPreviousPregnancy(hadPregnancy);
+      } catch (error) {
+        console.error('❌ Fehler beim Laden der MedicalDataHistory:', error);
+        setMedicalDataHistory([]);
+        setHasPreviousPregnancy(false);
+      }
+    };
+    
+    loadMedicalDataHistory();
   }, [dispatch, patientId]);
 
   // Lade Ambulanzbefunde für den Patienten
@@ -1830,6 +1877,19 @@ const PatientOrganizer: React.FC = () => {
                         }}
                       />
                     )}
+                    {patient.isPregnant && (patient.gender === 'w' || patient.gender === 'f') && (
+                      <Chip 
+                        icon={<PregnantWoman />}
+                        label={patient.pregnancyWeek ? `Schwanger (${patient.pregnancyWeek}. Woche)` : 'Schwanger'} 
+                        size="small" 
+                        color="secondary"
+                        sx={{ 
+                          bgcolor: 'rgba(156, 39, 176, 0.3)', 
+                          color: 'inherit',
+                          fontWeight: 600
+                        }}
+                      />
+                    )}
                     {patient.infections && patient.infections.length > 0 && patient.infections.some(inf => inf.status === 'active') && (
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                         {patient.infections.filter(inf => inf.status === 'active').map((infection, index) => {
@@ -1923,6 +1983,65 @@ const PatientOrganizer: React.FC = () => {
             </Box>
           </Box>
         </Paper>
+
+        {/* Meldung für frühere Schwangerschaft */}
+        {(() => {
+          const isFemale = patient && (patient.gender === 'w' || patient.gender === 'f');
+          const notPregnant = patient && !patient.isPregnant;
+          // Prüfe, ob pregnancyWeek vorhanden ist (auch wenn isPregnant false ist)
+          const hasPregnancyWeek = patient && patient.pregnancyWeek && patient.pregnancyWeek > 0;
+          const shouldShow = isFemale && notPregnant && (hasPregnancyWeek || hasPreviousPregnancy);
+          
+          console.log('🔍 Schwangerschafts-Alert Prüfung:', {
+            isFemale,
+            notPregnant,
+            hasPregnancyWeek,
+            hasPreviousPregnancy,
+            shouldShow,
+            patientGender: patient?.gender,
+            patientIsPregnant: patient?.isPregnant,
+            patientPregnancyWeek: patient?.pregnancyWeek
+          });
+          
+          if (shouldShow) {
+            return (
+              <Alert 
+                severity="info" 
+                icon={<PregnantWoman />}
+                sx={{ mb: 2 }}
+                action={
+                  <Button 
+                    size="small" 
+                    variant="outlined"
+                    onClick={() => {
+                      // Navigiere zu den Medizinischen Daten, um den Schwangerschaftsstatus zu aktualisieren
+                      setActiveTab(2); // Medizinisch Tab
+                      setSnackbar({
+                        open: true,
+                        message: 'Bitte aktualisieren Sie den Schwangerschaftsstatus in den Medizinischen Daten.',
+                        severity: 'info'
+                      });
+                    }}
+                  >
+                    Status prüfen
+                  </Button>
+                }
+              >
+                <Typography variant="body2" fontWeight="bold" gutterBottom>
+                  Schwangerschaftsstatus prüfen
+                </Typography>
+                <Typography variant="body2">
+                  {patient.pregnancyWeek 
+                    ? `Die Patientin war zuvor schwanger (Schwangerschaftswoche: ${patient.pregnancyWeek}).`
+                    : 'Die Patientin war zuvor schwanger (laut Historie).'
+                  }
+                  {' '}Bitte prüfen Sie den aktuellen Schwangerschaftsstatus bei diesem Besuch.
+                </Typography>
+              </Alert>
+            );
+          }
+          return null;
+        })()}
 
         {/* Quick Actions */}
         <Paper sx={{ p: 1.5, mb: 2 }}>

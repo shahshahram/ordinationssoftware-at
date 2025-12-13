@@ -69,6 +69,7 @@ const menuItems = [
       { text: 'Patientenaufnahme', icon: <PersonAdd />, path: '/patient-admission' },
       { text: 'Self-Check-In', icon: <Login />, path: '/self-checkin' },
       { text: 'Demo & Test', icon: <Search />, path: '/patient-admission-demo' },
+      { text: 'Adressbuch', icon: <Person />, path: '/address-book' },
     ]
   },
   { 

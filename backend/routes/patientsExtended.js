@@ -4,6 +4,7 @@ const PatientExtended = require('../models/PatientExtended');
 const PatientPhoto = require('../models/PatientPhoto');
 const DekursEntry = require('../models/DekursEntry');
 const MedicalDataHistory = require('../models/MedicalDataHistory');
+const Contact = require('../models/Contact');
 const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
@@ -433,12 +434,49 @@ router.post('/', [
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.log('Validation errors:', errors.array());
-      console.log('Request body:', req.body);
+      console.log('Validation errors:', JSON.stringify(errors.array(), null, 2));
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      
+      // Erstelle detaillierte Fehlermeldungen mit Feldnamen
+      const errorDetails = errors.array().map(err => {
+        // Extrahiere Feldname - express-validator verwendet 'param' für den Feldnamen
+        let fieldName = err.param || err.path || 'Unbekanntes Feld';
+        
+        // Übersetze Feldnamen zu benutzerfreundlichen Namen
+        const fieldTranslations = {
+          'firstName': 'Vorname',
+          'lastName': 'Nachname',
+          'dateOfBirth': 'Geburtsdatum',
+          'gender': 'Geschlecht',
+          'socialSecurityNumber': 'Sozialversicherungsnummer',
+          'insuranceProvider': 'Versicherungsanstalt',
+          'phone': 'Telefonnummer',
+          'address.street': 'Straße',
+          'address.zipCode': 'PLZ',
+          'address.city': 'Ort',
+          'dataProtectionConsent': 'Datenschutz-Einverständnis'
+        };
+        
+        const friendlyFieldName = fieldTranslations[fieldName] || fieldName;
+        
+        return {
+          field: fieldName,
+          friendlyFieldName: friendlyFieldName,
+          message: err.msg || 'Ungültiger Wert',
+          value: err.value !== undefined ? err.value : null,
+          location: err.location || 'body'
+        };
+      });
+      
+      const errorMessages = errorDetails.map(err => `${err.friendlyFieldName}: ${err.message}`).join(', ');
+      
       return res.status(400).json({
         success: false,
-        message: 'Validierungsfehler',
-        errors: errors.array()
+        message: `Validierungsfehler beim Erstellen des Patienten: ${errorMessages}`,
+        errors: errors.array(),
+        details: {
+          validationErrors: errorDetails
+        }
       });
     }
 
@@ -559,6 +597,44 @@ router.post('/', [
         console.warn('⚠️ Automatische e-card-Validierung fehlgeschlagen beim Erstellen:', ecardError.message);
         // Fehler wird ignoriert, Patient wird trotzdem erstellt
       }
+    }
+
+    // Automatisch Kontakt aus Patient erstellen
+    try {
+      const existingContact = await Contact.findOne({ 
+        type: 'patient', 
+        patientId: patient._id 
+      });
+
+      if (!existingContact) {
+        const contactData = {
+          type: 'patient',
+          patientId: patient._id,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          phone: patient.phone || '',
+          mobile: patient.phone || '',
+          email: patient.email || '',
+          address: {
+            street: patient.address?.street || '',
+            city: patient.address?.city || '',
+            postalCode: patient.address?.postalCode || patient.address?.zipCode || '',
+            country: patient.address?.country || 'Österreich',
+          },
+          categories: ['Patient'],
+          isActive: true,
+          isFavorite: false,
+          createdBy: req.user.id,
+          lastModifiedBy: req.user.id,
+        };
+
+        const contact = new Contact(contactData);
+        await contact.save();
+        console.log('✅ Kontakt automatisch aus Patient erstellt:', contact._id);
+      }
+    } catch (contactError) {
+      console.warn('⚠️ Fehler beim automatischen Erstellen des Kontakts:', contactError.message);
+      // Fehler wird ignoriert, Patient wird trotzdem erstellt
     }
 
     res.status(201).json({

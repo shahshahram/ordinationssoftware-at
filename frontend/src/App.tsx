@@ -67,6 +67,7 @@ import Checkin from './pages/Checkin';
 import InternalMessages from './pages/InternalMessages';
 import Reimbursements from './pages/Reimbursements';
 import Absences from './pages/Absences';
+import AddressBook from './pages/AddressBook';
 import WorkShifts from './pages/WorkShifts';
 import ClinicHours from './pages/ClinicHours';
 import Availability from './pages/Availability';
@@ -226,6 +227,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['patients.read']}>
                             <PatientsHints />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/address-book" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <AddressBook />
                           </ProtectedRoute>
                         } 
                       />

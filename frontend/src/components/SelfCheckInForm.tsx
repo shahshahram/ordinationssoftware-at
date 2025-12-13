@@ -32,10 +32,8 @@ import {
 import { PatientAdmissionData } from '../types/PatientExtended';
 import { 
   INSURANCE_PROVIDERS, 
-  BLOOD_TYPES, 
   REFERRAL_SOURCES
 } from '../types/PatientExtended';
-import MedicationListInput, { convertMedicationsArrayToPatientFormat } from './MedicationListInput';
 
 interface SelfCheckInFormProps {
   onComplete: (data: PatientAdmissionData) => void;
@@ -99,7 +97,6 @@ const SelfCheckInForm: React.FC<SelfCheckInFormProps> = ({
   const steps = [
     'Persönliche Daten',
     'Kontakt & Adresse',
-    'Medizinische Informationen',
     'Besuchsgrund',
     'Einverständniserklärungen',
     'Bestätigung',
@@ -158,13 +155,11 @@ const SelfCheckInForm: React.FC<SelfCheckInFormProps> = ({
           formData.address?.zipCode &&
           formData.address?.city
         );
-      case 2: // Medizinische Informationen
-        return true; // Optional
-      case 3: // Besuchsgrund
+      case 2: // Besuchsgrund
         return !!(formData.visitReason);
-      case 4: // Einverständniserklärungen
+      case 3: // Einverständniserklärungen
         return !!(formData.dataProtectionConsent);
-      case 5: // Bestätigung
+      case 4: // Bestätigung
         return true;
       default:
         return false;
@@ -335,341 +330,6 @@ const SelfCheckInForm: React.FC<SelfCheckInFormProps> = ({
         return (
           <Box>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <MedicalServices color="primary" />
-              Medizinische Informationen (optional)
-            </Typography>
-            <Alert severity="info" sx={{ mb: 3 }}>
-              Diese Informationen helfen uns bei der besseren medizinischen Versorgung. 
-              Sie können diese Felder auch leer lassen.
-            </Alert>
-
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {/* Blutgruppe und BMI */}
-              <Box sx={{ 
-                display: 'grid', 
-                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' },
-                gap: 3 
-              }}>
-                <FormControl fullWidth>
-                  <InputLabel>Blutgruppe</InputLabel>
-                  <Select
-                    value={formData.bloodType || 'Unbekannt'}
-                    onChange={(e) => handleInputChange('bloodType', e.target.value)}
-                  >
-                    {BLOOD_TYPES.map((type) => (
-                      <MenuItem key={type} value={type}>
-                        {type}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                <TextField
-                  fullWidth
-                  label="Größe (cm)"
-                  type="number"
-                  value={formData.height || ''}
-                  onChange={(e) => handleInputChange('height', e.target.value)}
-                />
-
-                <TextField
-                  fullWidth
-                  label="Gewicht (kg)"
-                  type="number"
-                  value={formData.weight || ''}
-                  onChange={(e) => handleInputChange('weight', e.target.value)}
-                />
-              </Box>
-
-              {/* Schwangerschaft (nur für Frauen) */}
-              {formData.gender === 'w' && (
-                <Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Schwangerschaft
-                  </Typography>
-                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={formData.isPregnant || false}
-                          onChange={(e) => handleInputChange('isPregnant', e.target.checked)}
-                        />
-                      }
-                      label="Schwanger"
-                    />
-                    {formData.isPregnant && (
-                      <TextField
-                        fullWidth
-                        label="Schwangerschaftswoche"
-                        type="number"
-                        value={formData.pregnancyWeek || ''}
-                        onChange={(e) => handleInputChange('pregnancyWeek', e.target.value)}
-                        inputProps={{ min: 1, max: 42 }}
-                        sx={{ maxWidth: 200 }}
-                      />
-                    )}
-                    <FormControlLabel
-                      control={
-                        <Checkbox
-                          checked={formData.isBreastfeeding || false}
-                          onChange={(e) => handleInputChange('isBreastfeeding', e.target.checked)}
-                        />
-                      }
-                      label="Stillen"
-                    />
-                  </Box>
-                </Box>
-              )}
-
-              {/* Medizinische Implantate */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Medizinische Implantate
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={formData.hasPacemaker || false}
-                        onChange={(e) => handleInputChange('hasPacemaker', e.target.checked)}
-                      />
-                    }
-                    label="Schrittmacher"
-                  />
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={formData.hasDefibrillator || false}
-                        onChange={(e) => handleInputChange('hasDefibrillator', e.target.checked)}
-                      />
-                    }
-                    label="Defibrillator"
-                  />
-                </Box>
-              </Box>
-
-              {/* Raucherstatus */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Raucherstatus
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                  <FormControl fullWidth sx={{ maxWidth: 200 }}>
-                    <InputLabel>Raucherstatus</InputLabel>
-                    <Select
-                      value={formData.smokingStatus || 'non-smoker'}
-                      onChange={(e) => handleInputChange('smokingStatus', e.target.value)}
-                    >
-                      <MenuItem value="non-smoker">Nichtraucher</MenuItem>
-                      <MenuItem value="former-smoker">Ehemaliger Raucher</MenuItem>
-                      <MenuItem value="current-smoker">Aktiver Raucher</MenuItem>
-                    </Select>
-                  </FormControl>
-                  {formData.smokingStatus === 'current-smoker' && (
-                    <TextField
-                      fullWidth
-                      label="Zigaretten pro Tag"
-                      type="number"
-                      value={formData.cigarettesPerDay || ''}
-                      onChange={(e) => handleInputChange('cigarettesPerDay', e.target.value)}
-                      sx={{ maxWidth: 200 }}
-                    />
-                  )}
-                  {formData.smokingStatus !== 'non-smoker' && (
-                    <TextField
-                      fullWidth
-                      label="Rauchejahre"
-                      type="number"
-                      value={formData.yearsOfSmoking || ''}
-                      onChange={(e) => handleInputChange('yearsOfSmoking', e.target.value)}
-                      sx={{ maxWidth: 200 }}
-                    />
-                  )}
-                  {formData.smokingStatus === 'former-smoker' && (
-                    <TextField
-                      fullWidth
-                      label="Aufhördatum"
-                      type="date"
-                      value={formData.quitSmokingDate || ''}
-                      onChange={(e) => handleInputChange('quitSmokingDate', e.target.value)}
-                      InputLabelProps={{ shrink: true }}
-                      sx={{ maxWidth: 200 }}
-                    />
-                  )}
-                </Box>
-              </Box>
-
-              {/* Allergien */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Allergien
-                </Typography>
-                <TextField
-                  fullWidth
-                  label="Allergien"
-                  placeholder="Allergien eingeben (kommagetrennt, z.B. Pollen, Nüsse, Milch)"
-                  value={Array.isArray(formData.allergies) ? formData.allergies.join(', ') : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    const allergies = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-                    handleArrayChange('allergies', allergies);
-                  }}
-                  multiline
-                  rows={2}
-                />
-                {Array.isArray(formData.allergies) && formData.allergies.length > 0 && (
-                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {formData.allergies.map((allergy, index) => (
-                      <Chip
-                        key={index}
-                        label={typeof allergy === 'string' ? allergy : allergy.description || 'Unknown'}
-                        variant="outlined"
-                        size="small"
-                        onDelete={() => {
-                          const currentAllergies: any[] = Array.isArray(formData.allergies) ? formData.allergies : [];
-                          const newAllergies = currentAllergies.filter((_: any, i: number) => i !== index);
-                          handleArrayChange('allergies', newAllergies);
-                        }}
-                      />
-                    ))}
-                  </Box>
-                )}
-              </Box>
-
-              {/* Aktuelle Medikamente */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Aktuelle Medikamente
-                </Typography>
-                <MedicationListInput
-                  value={Array.isArray(formData.currentMedications) ? formData.currentMedications : []}
-                  onChange={(medications) => {
-                    const converted = convertMedicationsArrayToPatientFormat(medications);
-                    handleArrayChange('currentMedications', converted);
-                  }}
-                  label="Medikament hinzufügen"
-                  helperText="Suchen Sie nach Medikamenten aus dem Katalog oder geben Sie den Namen ein"
-                />
-              </Box>
-
-              {/* Vorerkrankungen */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Vorerkrankungen
-                </Typography>
-                <TextField
-                  fullWidth
-                  label="Vorerkrankungen"
-                  placeholder="Vorerkrankungen eingeben (kommagetrennt, z.B. Diabetes, Bluthochdruck, Asthma)"
-                  value={Array.isArray(formData.preExistingConditions) ? formData.preExistingConditions.join(', ') : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    const conditions = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-                    handleArrayChange('preExistingConditions', conditions);
-                  }}
-                  multiline
-                  rows={2}
-                />
-                {Array.isArray(formData.preExistingConditions) && formData.preExistingConditions.length > 0 && (
-                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {formData.preExistingConditions.map((condition, index) => (
-                      <Chip
-                        key={index}
-                        label={condition}
-                        variant="outlined"
-                        size="small"
-                        onDelete={() => {
-                          const currentConditions: any[] = Array.isArray(formData.preExistingConditions) ? formData.preExistingConditions : [];
-                          const newConditions = currentConditions.filter((_: any, i: number) => i !== index);
-                          handleArrayChange('preExistingConditions', newConditions);
-                        }}
-                      />
-                    ))}
-                  </Box>
-                )}
-              </Box>
-
-              {/* Medizinische Vorgeschichte */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Medizinische Vorgeschichte
-                </Typography>
-                <TextField
-                  fullWidth
-                  label="Medizinische Vorgeschichte"
-                  placeholder="Medizinische Vorgeschichte eingeben (kommagetrennt, z.B. Herzinfarkt 2019, Schlaganfall 2020)"
-                  value={Array.isArray(formData.medicalHistory) ? formData.medicalHistory.join(', ') : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    const history = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-                    handleArrayChange('medicalHistory', history);
-                  }}
-                  multiline
-                  rows={2}
-                />
-                {Array.isArray(formData.medicalHistory) && formData.medicalHistory.length > 0 && (
-                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {formData.medicalHistory.map((history, index) => (
-                      <Chip
-                        key={index}
-                        label={String(history)}
-                        variant="outlined"
-                        size="small"
-                        onDelete={() => {
-                          const currentHistory: any[] = Array.isArray(formData.medicalHistory) ? formData.medicalHistory : [];
-                          const newHistory = currentHistory.filter((_: any, i: number) => i !== index);
-                          handleArrayChange('medicalHistory', newHistory);
-                        }}
-                      />
-                    ))}
-                  </Box>
-                )}
-              </Box>
-
-              {/* Vorherige Operationen */}
-              <Box>
-                <Typography variant="subtitle2" gutterBottom>
-                  Vorherige Operationen
-                </Typography>
-                <TextField
-                  fullWidth
-                  label="Vorherige Operationen"
-                  placeholder="Operationen eingeben (kommagetrennt, z.B. Blinddarm-OP 2020, Knie-OP 2019)"
-                  value={Array.isArray(formData.previousSurgeries) ? formData.previousSurgeries.join(', ') : ''}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    const surgeries = value.split(',').map(item => item.trim()).filter(item => item.length > 0);
-                    handleArrayChange('previousSurgeries', surgeries);
-                  }}
-                  multiline
-                  rows={2}
-                />
-                {Array.isArray(formData.previousSurgeries) && formData.previousSurgeries.length > 0 && (
-                  <Box sx={{ mt: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                    {formData.previousSurgeries.map((surgery, index) => (
-                      <Chip
-                        key={index}
-                        label={typeof surgery === 'string' ? surgery : surgery.procedure || 'Unknown'}
-                        variant="outlined"
-                        size="small"
-                        onDelete={() => {
-                          const currentSurgeries: any[] = Array.isArray(formData.previousSurgeries) ? formData.previousSurgeries : [];
-                          const newSurgeries = currentSurgeries.filter((_: any, i: number) => i !== index);
-                          handleArrayChange('previousSurgeries', newSurgeries);
-                        }}
-                      />
-                    ))}
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          </Box>
-        );
-
-      case 3:
-        return (
-          <Box>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Schedule color="primary" />
               Besuchsgrund
             </Typography>
@@ -702,7 +362,7 @@ const SelfCheckInForm: React.FC<SelfCheckInFormProps> = ({
           </Box>
         );
 
-      case 4:
+      case 3:
         return (
           <Box>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -767,7 +427,7 @@ const SelfCheckInForm: React.FC<SelfCheckInFormProps> = ({
           </Box>
         );
 
-      case 5:
+      case 4:
         return (
           <Box>
             <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
