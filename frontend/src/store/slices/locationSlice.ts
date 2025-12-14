@@ -85,8 +85,23 @@ export interface Location {
   xdsRegistry?: XdsRegistryConfig;
   owner?: LocationOwner;
   logo?: LocationLogo | null;
+  letterheadTemplates?: Record<string, 'template1' | 'template2' | 'template3' | 'custom'>; // Mapping von Dokumenttyp zu Vorlage
+  letterTemplates?: LetterTemplate[]; // Briefvorlagen (Text-Vorlagen)
   createdAt: string;
   updatedAt: string;
+}
+
+export interface LetterTemplate {
+  _id?: string;
+  name: string;
+  type: 'greeting' | 'closing' | 'custom' | 'anrede';
+  documentType: 'arztbrief' | 'patientenbrief' | 'rezept' | 'ueberweisung' | 'attest' | 'befund' | 'all';
+  content: string;
+  placeholders?: string[];
+  description?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface LocationHours {
@@ -448,6 +463,10 @@ const locationSlice = createSlice({
         const index = state.locations.findIndex(loc => loc._id === action.payload._id);
         if (index !== -1) {
           state.locations[index] = action.payload;
+        }
+        // Aktualisiere currentLocation, falls es die aktualisierte Location ist
+        if (state.currentLocation && state.currentLocation._id === action.payload._id) {
+          state.currentLocation = action.payload;
         }
       })
       .addCase(updateLocation.rejected, (state, action) => {

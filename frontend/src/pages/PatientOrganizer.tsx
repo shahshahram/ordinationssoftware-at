@@ -75,6 +75,8 @@ import {
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, updatePatient, Patient } from '../store/slices/patientSlice';
+import { differenceInWeeks, addWeeks, parseISO, format } from 'date-fns';
+import { de } from 'date-fns/locale';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import { fetchDocuments, Document as PatientDocument, createDocument } from '../store/slices/documentSlice';
@@ -90,6 +92,7 @@ import PatientVisitHistory from '../components/PatientVisitHistory';
 import DekursHistory from '../components/DekursHistory';
 import DekursDialog from '../components/DekursDialog';
 import DekursQuickEntry from '../components/DekursQuickEntry';
+import PatientenbriefDialog from '../components/PatientenbriefDialog';
 import PatientPhotoGallery from '../components/PatientPhotoGallery';
 import LaborResults from '../components/LaborResults';
 import DicomUpload from '../components/DicomUpload';
@@ -148,7 +151,7 @@ const PatientOrganizer: React.FC = () => {
   const { documents, loading: documentsLoading } = useAppSelector((s: any) => s.documents);
   const { entries: dekursEntries } = useAppSelector((s: any) => s.dekurs);
   const { vitalSigns } = useAppSelector((s: any) => s.vitalSigns);
-  const { locations } = useAppSelector((s: any) => s.locations);
+  const { locations, currentLocation } = useAppSelector((s: any) => s.locations);
   const { user } = useAppSelector((s: any) => s.auth);
   const { templates: documentTemplates } = useAppSelector((s: any) => s.documentTemplates);
   
@@ -170,6 +173,15 @@ const PatientOrganizer: React.FC = () => {
   // State für MedicalDataHistory (um frühere Schwangerschaften zu prüfen)
   const [medicalDataHistory, setMedicalDataHistory] = useState<any[]>([]);
   const [hasPreviousPregnancy, setHasPreviousPregnancy] = useState(false);
+  const [pregnancyAlertInfo, setPregnancyAlertInfo] = useState<{
+    shouldShow: boolean;
+    alertType: 'overdue' | 'week40' | 'week42' | 'previous' | null;
+    message: string;
+    severity: 'warning' | 'info';
+    expectedDueDate?: Date;
+    currentWeek?: number;
+    weeksSinceRecorded?: number;
+  } | null>(null);
   
   // State für Tabs - Standard ist Dekurs (Tab 1)
   const [activeTab, setActiveTab] = useState(1);
@@ -181,6 +193,16 @@ const PatientOrganizer: React.FC = () => {
   
   // State für DICOM
   const [dicomUploadOpen, setDicomUploadOpen] = useState(false);
+
+  // State für Patienten-/Arztbrief Dialog
+  const [letterDialogOpen, setLetterDialogOpen] = useState(false);
+  const [patientenbriefDialogOpen, setPatientenbriefDialogOpen] = useState(false);
+  const [documentTypeDialogOpen, setDocumentTypeDialogOpen] = useState(false);
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
+  const [dekursSelectionDialogOpen, setDekursSelectionDialogOpen] = useState(false);
+  const [selectedDocumentType, setSelectedDocumentType] = useState<'patientenbrief' | 'arztbrief' | null>(null);
+  const [selectedSource, setSelectedSource] = useState<'leer' | 'dekurs' | null>(null);
+  const [selectedDekursForLetter, setSelectedDekursForLetter] = useState<any>(null);
 
   // Get patientId from URL params or query params
   const patientId = React.useMemo(() => {
@@ -458,7 +480,6 @@ const PatientOrganizer: React.FC = () => {
       if (!patientId) return;
       try {
         const response: any = await api.get(`/medical-data-history/patient/${patientId}?limit=100`);
-        console.log('🔍 MedicalDataHistory API Response:', response);
         
         const historyData = response?.data || response;
         const history = historyData?.success ? historyData.data : (Array.isArray(historyData) ? historyData : []);
@@ -476,16 +497,6 @@ const PatientOrganizer: React.FC = () => {
           return hasPregnantInSnapshot || hasPregnancyWeekInSnapshot || hasPregnancyInChangedFields;
         });
         
-        console.log('🔍 MedicalDataHistory geladen:', {
-          historyLength: history.length,
-          hadPregnancy,
-          sampleEntry: history[0],
-          allEntries: history.map((e: any) => ({
-            isPregnant: e.snapshot?.isPregnant,
-            pregnancyWeek: e.snapshot?.pregnancyWeek,
-            changedFields: e.changedFields
-          }))
-        });
         setHasPreviousPregnancy(hadPregnancy);
       } catch (error) {
         console.error('❌ Fehler beim Laden der MedicalDataHistory:', error);
@@ -496,6 +507,179 @@ const PatientOrganizer: React.FC = () => {
     
     loadMedicalDataHistory();
   }, [dispatch, patientId]);
+
+  // Funktion zur Berechnung des Schwangerschafts-Alerts
+  const calculatePregnancyAlert = React.useCallback((
+    patient: Patient | null,
+    history: any[]
+  ): {
+    shouldShow: boolean;
+    alertType: 'overdue' | 'week40' | 'week42' | 'previous' | null;
+    message: string;
+    severity: 'warning' | 'info';
+    expectedDueDate?: Date;
+    currentWeek?: number;
+    weeksSinceRecorded?: number;
+  } | null => {
+    if (!patient) return null;
+
+    // 1. Altersprüfung: Kein Alert für Patientinnen ab 50 Jahren
+    const calculateAge = (dateOfBirth: string | Date | undefined): number => {
+      if (!dateOfBirth) return 0;
+      const birthDate = typeof dateOfBirth === 'string' ? parseISO(dateOfBirth) : dateOfBirth;
+      const today = new Date();
+      let age = today.getFullYear() - birthDate.getFullYear();
+      const monthDiff = today.getMonth() - birthDate.getMonth();
+      if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+        age--;
+      }
+      return age;
+    };
+
+    const patientAge = calculateAge(patient.dateOfBirth);
+    if (patientAge >= 50) {
+      return null; // Kein Alert für Patientinnen ab 50 Jahren
+    }
+
+    // 2. Prüfung ob Patientin weiblich
+    const isFemale = patient.gender === 'w' || patient.gender === 'f';
+    if (!isFemale) return null;
+
+    const today = new Date();
+    const isPregnant = patient.isPregnant === true;
+    const pregnancyWeek = patient.pregnancyWeek;
+    const pregnancyDueDate = patient.pregnancyDueDate ? 
+      (typeof patient.pregnancyDueDate === 'string' ? parseISO(patient.pregnancyDueDate) : patient.pregnancyDueDate) : 
+      null;
+
+    // Szenario 1: Patientin ist aktuell schwanger
+    if (isPregnant && pregnancyWeek && pregnancyWeek > 0) {
+      // Berechne erwartetes Entbindungsdatum
+      let expectedDueDate: Date | null = null;
+      
+      if (pregnancyDueDate) {
+        expectedDueDate = pregnancyDueDate;
+      } else if (history.length > 0) {
+        // Finde ersten Eintrag mit pregnancyWeek
+        const firstPregnancyEntry = history
+          .filter((e: any) => e.snapshot?.pregnancyWeek && e.snapshot.pregnancyWeek > 0)
+          .sort((a: any, b: any) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime())[0];
+        
+        if (firstPregnancyEntry) {
+          const recordedDate = typeof firstPregnancyEntry.recordedAt === 'string' ? 
+            parseISO(firstPregnancyEntry.recordedAt) : 
+            new Date(firstPregnancyEntry.recordedAt);
+          const recordedWeek = firstPregnancyEntry.snapshot?.pregnancyWeek || pregnancyWeek;
+          // Berechne erwartetes Entbindungsdatum: Erfassungsdatum + (40 - erfassteWoche) Wochen
+          expectedDueDate = addWeeks(recordedDate, 40 - recordedWeek);
+        }
+      }
+
+      // Prüfe zuerst, ob Entbindungsdatum überschritten ist (auch wenn Woche < 40)
+      if (expectedDueDate && today > expectedDueDate) {
+        const dueDateStr = format(expectedDueDate, 'dd.MM.yyyy', { locale: de });
+        const weeksOverdue = differenceInWeeks(today, expectedDueDate);
+        return {
+          shouldShow: true,
+          alertType: 'overdue',
+          message: `Patientin ist in der ${pregnancyWeek}. Schwangerschaftswoche. Erwartetes Entbindungsdatum (${dueDateStr}) ist vor ${weeksOverdue} Woche${weeksOverdue > 1 ? 'n' : ''} überschritten. Bitte Status prüfen.`,
+          severity: 'warning',
+          currentWeek: pregnancyWeek,
+          expectedDueDate: expectedDueDate
+        };
+      }
+
+      // Alert Typ 1: Schwangerschaftswoche >= 40
+      if (pregnancyWeek >= 40) {
+        const dueDateStr = expectedDueDate ? format(expectedDueDate, 'dd.MM.yyyy', { locale: de }) : 'unbekannt';
+
+        if (pregnancyWeek > 42) {
+          return {
+            shouldShow: true,
+            alertType: 'week42',
+            message: `Patientin ist in der ${pregnancyWeek}. Schwangerschaftswoche. Dies übersteigt die normale Schwangerschaftsdauer von 40-42 Wochen. Bitte Status prüfen.`,
+            severity: 'warning',
+            currentWeek: pregnancyWeek,
+            expectedDueDate: expectedDueDate || undefined
+          };
+        } else {
+          return {
+            shouldShow: true,
+            alertType: 'week40',
+            message: `Patientin ist in der ${pregnancyWeek}. Schwangerschaftswoche. Erwartetes Entbindungsdatum: ${dueDateStr}. Bitte Status prüfen.`,
+            severity: 'warning',
+            currentWeek: pregnancyWeek,
+            expectedDueDate: expectedDueDate || undefined
+          };
+        }
+      }
+    }
+
+    // Szenario 2: Patientin war schwanger (isPregnant === false aber pregnancyWeek vorhanden)
+    if (!isPregnant && pregnancyWeek && pregnancyWeek > 0) {
+      // Finde letzten Eintrag mit pregnancyWeek in der Historie
+      const lastPregnancyEntry = history
+        .filter((e: any) => 
+          (e.snapshot?.pregnancyWeek && e.snapshot.pregnancyWeek > 0) ||
+          (e.changedFields && e.changedFields.some((field: any) => 
+            field.field === 'pregnancyWeek' && field.newValue && field.newValue > 0
+          ))
+        )
+        .sort((a: any, b: any) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())[0];
+
+      if (lastPregnancyEntry) {
+        const recordedDate = typeof lastPregnancyEntry.recordedAt === 'string' ? 
+          parseISO(lastPregnancyEntry.recordedAt) : 
+          new Date(lastPregnancyEntry.recordedAt);
+        const recordedWeek = lastPregnancyEntry.snapshot?.pregnancyWeek || 
+          (lastPregnancyEntry.changedFields?.find((f: any) => f.field === 'pregnancyWeek')?.newValue) ||
+          pregnancyWeek;
+        
+        const weeksSinceRecorded = differenceInWeeks(today, recordedDate);
+        const expectedDueDate = addWeeks(recordedDate, 40 - recordedWeek);
+        const isOverdue = today > expectedDueDate;
+
+        if (isOverdue || weeksSinceRecorded >= 40) {
+          return {
+            shouldShow: true,
+            alertType: 'previous',
+            message: `Patientin war zuvor schwanger (Schwangerschaftswoche: ${recordedWeek}, erfasst am ${format(recordedDate, 'dd.MM.yyyy', { locale: de })}). Erwartetes Entbindungsdatum (${format(expectedDueDate, 'dd.MM.yyyy', { locale: de })}) ist ${isOverdue ? 'überschritten' : 'erreicht'}. Bitte aktuellen Status prüfen.`,
+            severity: 'warning',
+            weeksSinceRecorded,
+            expectedDueDate
+          };
+        } else {
+          return {
+            shouldShow: true,
+            alertType: 'previous',
+            message: `Patientin war zuvor schwanger (Schwangerschaftswoche: ${recordedWeek}). Bitte aktuellen Status prüfen.`,
+            severity: 'info',
+            weeksSinceRecorded,
+            expectedDueDate
+          };
+        }
+      } else {
+        // Keine Historie, aber pregnancyWeek vorhanden
+        return {
+          shouldShow: true,
+          alertType: 'previous',
+          message: `Patientin war zuvor schwanger (Schwangerschaftswoche: ${pregnancyWeek}). Bitte aktuellen Status prüfen.`,
+          severity: 'info',
+          currentWeek: pregnancyWeek
+        };
+      }
+    }
+
+    return null;
+  }, []);
+
+  // Berechne Schwangerschafts-Alert wenn Patient oder History sich ändert
+  React.useEffect(() => {
+    if (patient && medicalDataHistory) {
+      const alertInfo = calculatePregnancyAlert(patient, medicalDataHistory);
+      setPregnancyAlertInfo(alertInfo);
+    }
+  }, [patient, medicalDataHistory, calculatePregnancyAlert]);
 
   // Lade Ambulanzbefunde für den Patienten
   React.useEffect(() => {
@@ -1595,6 +1779,72 @@ const PatientOrganizer: React.FC = () => {
     }
   };
 
+  // Handler für Patienten-/Arztbrief erstellen
+  const handleCreateLetter = () => {
+    if (!patient) return;
+    setLetterDialogOpen(true);
+  };
+
+  // Handler für Patienten-/Arztbrief auswählen und erstellen
+  const handleCreateLetterType = async (letterType: 'arztbrief' | 'patientenbrief') => {
+    if (!patient || !user) return;
+    
+    setIsCreatingDocument(true);
+    setLetterDialogOpen(false);
+
+    try {
+      const letterTypeName = letterType === 'arztbrief' ? 'Arztbrief' : 'Patientenbrief';
+      const documentTitle = `${letterTypeName} für ${patient.firstName} ${patient.lastName}`;
+      
+      // Erstelle Dokumentdaten
+      // Für Patientenbrief verwenden wir 'sonstiges', da 'patientenbrief' nicht im Backend enum ist
+      const documentData = {
+        type: letterType === 'arztbrief' ? 'arztbrief' as const : 'sonstiges' as const,
+        title: documentTitle,
+        content: {
+          text: `${letterTypeName} für ${patient.firstName} ${patient.lastName}\n\nDatum: ${new Date().toLocaleDateString('de-DE')}\n\n`,
+          html: `<h1>${letterTypeName}</h1><p><strong>Patient:</strong> ${patient.firstName} ${patient.lastName}</p><p><strong>Datum:</strong> ${new Date().toLocaleDateString('de-DE')}</p>`
+        },
+        patient: {
+          id: patient._id || patient.id || '',
+          name: `${patient.firstName} ${patient.lastName}`,
+          dateOfBirth: patient.dateOfBirth || '',
+          socialSecurityNumber: patient.socialSecurityNumber
+        },
+        doctor: {
+          id: user._id || user.id || '',
+          name: user.name || `${user.firstName} ${user.lastName}`,
+          title: user.title,
+          specialization: user.specialization
+        },
+        status: 'draft' as const,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      await dispatch(createDocument(documentData));
+      
+      // Dokumente neu laden
+      dispatch(fetchDocuments({ patientId: patientId }));
+      
+      // Snackbar anzeigen
+      setSnackbar({
+        open: true,
+        message: `${letterTypeName} erfolgreich erstellt.`,
+        severity: 'success'
+      });
+    } catch (error) {
+      console.error('Fehler beim Erstellen des Briefs:', error);
+      setSnackbar({
+        open: true,
+        message: 'Fehler beim Erstellen des Briefs.',
+        severity: 'error'
+      });
+    } finally {
+      setIsCreatingDocument(false);
+    }
+  };
+
   // Handler für Dokument aus Vorlage erstellen
   const handleCreateFromTemplate = async (letterType: string) => {
     if (!patient || !user) return;
@@ -1984,64 +2234,51 @@ const PatientOrganizer: React.FC = () => {
           </Box>
         </Paper>
 
-        {/* Meldung für frühere Schwangerschaft */}
-        {(() => {
-          const isFemale = patient && (patient.gender === 'w' || patient.gender === 'f');
-          const notPregnant = patient && !patient.isPregnant;
-          // Prüfe, ob pregnancyWeek vorhanden ist (auch wenn isPregnant false ist)
-          const hasPregnancyWeek = patient && patient.pregnancyWeek && patient.pregnancyWeek > 0;
-          const shouldShow = isFemale && notPregnant && (hasPregnancyWeek || hasPreviousPregnancy);
-          
-          console.log('🔍 Schwangerschafts-Alert Prüfung:', {
-            isFemale,
-            notPregnant,
-            hasPregnancyWeek,
-            hasPreviousPregnancy,
-            shouldShow,
-            patientGender: patient?.gender,
-            patientIsPregnant: patient?.isPregnant,
-            patientPregnancyWeek: patient?.pregnancyWeek
-          });
-          
-          if (shouldShow) {
-            return (
-              <Alert 
-                severity="info" 
-                icon={<PregnantWoman />}
-                sx={{ mb: 2 }}
-                action={
-                  <Button 
-                    size="small" 
-                    variant="outlined"
-                    onClick={() => {
-                      // Navigiere zu den Medizinischen Daten, um den Schwangerschaftsstatus zu aktualisieren
-                      setActiveTab(2); // Medizinisch Tab
-                      setSnackbar({
-                        open: true,
-                        message: 'Bitte aktualisieren Sie den Schwangerschaftsstatus in den Medizinischen Daten.',
-                        severity: 'info'
-                      });
-                    }}
-                  >
-                    Status prüfen
-                  </Button>
-                }
+        {/* Erweiterte Schwangerschafts-Alert-Meldung */}
+        {pregnancyAlertInfo && pregnancyAlertInfo.shouldShow && (
+          <Alert 
+            severity={pregnancyAlertInfo.severity}
+            icon={<PregnantWoman />}
+            sx={{ mb: 2 }}
+            action={
+              <Button 
+                size="small" 
+                variant="outlined"
+                onClick={() => {
+                  // Navigiere zu den Medizinischen Daten, um den Schwangerschaftsstatus zu aktualisieren
+                  setActiveTab(2); // Medizinisch Tab
+                  setSnackbar({
+                    open: true,
+                    message: 'Bitte aktualisieren Sie den Schwangerschaftsstatus in den Medizinischen Daten.',
+                    severity: 'info'
+                  });
+                }}
               >
-                <Typography variant="body2" fontWeight="bold" gutterBottom>
-                  Schwangerschaftsstatus prüfen
-                </Typography>
-                <Typography variant="body2">
-                  {patient.pregnancyWeek 
-                    ? `Die Patientin war zuvor schwanger (Schwangerschaftswoche: ${patient.pregnancyWeek}).`
-                    : 'Die Patientin war zuvor schwanger (laut Historie).'
-                  }
-                  {' '}Bitte prüfen Sie den aktuellen Schwangerschaftsstatus bei diesem Besuch.
-                </Typography>
-              </Alert>
-            );
-          }
-          return null;
-        })()}
+                Status prüfen
+              </Button>
+            }
+          >
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              {pregnancyAlertInfo.alertType === 'week42' && '⚠️ Schwangerschaftswoche übersteigt 42 Wochen'}
+              {pregnancyAlertInfo.alertType === 'overdue' && '⚠️ Entbindungsdatum überschritten'}
+              {pregnancyAlertInfo.alertType === 'week40' && '⚠️ Schwangerschaftswoche 40 erreicht'}
+              {pregnancyAlertInfo.alertType === 'previous' && 'Schwangerschaftsstatus prüfen'}
+            </Typography>
+            <Typography variant="body2">
+              {pregnancyAlertInfo.message}
+            </Typography>
+            {pregnancyAlertInfo.expectedDueDate && (
+              <Typography variant="caption" display="block" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                Erwartetes Entbindungsdatum: {format(pregnancyAlertInfo.expectedDueDate, 'dd.MM.yyyy', { locale: de })}
+              </Typography>
+            )}
+            {pregnancyAlertInfo.currentWeek && (
+              <Typography variant="caption" display="block" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                Aktuelle Schwangerschaftswoche: {pregnancyAlertInfo.currentWeek}
+              </Typography>
+            )}
+          </Alert>
+        )}
 
         {/* Quick Actions */}
         <Paper sx={{ p: 1.5, mb: 2 }}>
@@ -2064,6 +2301,25 @@ const PatientOrganizer: React.FC = () => {
               }}
             >
               Dekurs
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Description />}
+              onClick={() => {
+                if (!patient) return;
+                setDocumentTypeDialogOpen(true);
+              }}
+              disabled={!patient || isCreatingDocument}
+              sx={{
+                bgcolor: '#E3F2FD',
+                color: 'text.primary',
+                '&:hover': {
+                  bgcolor: '#90CAF9'
+                }
+              }}
+            >
+              Patienten-/Arztbrief
             </Button>
             <Button
               variant="outlined"
@@ -4021,6 +4277,254 @@ const PatientOrganizer: React.FC = () => {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Patienten-/Arztbrief Dialog */}
+      <Dialog
+        open={letterDialogOpen}
+        onClose={() => setLetterDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Typography variant="h6">
+            Brief erstellen
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Wählen Sie den Typ des Briefs, den Sie erstellen möchten:
+          </Typography>
+          <Stack spacing={2}>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              startIcon={<Description />}
+              onClick={() => handleCreateLetterType('arztbrief')}
+              disabled={isCreatingDocument}
+              sx={{
+                py: 2,
+                justifyContent: 'flex-start'
+              }}
+            >
+              <Box sx={{ textAlign: 'left' }}>
+                <Typography variant="body1" fontWeight="bold">
+                  Arztbrief
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Medizinischer Bericht für andere Ärzte oder Einrichtungen
+                </Typography>
+              </Box>
+            </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              startIcon={<Description />}
+              onClick={() => {
+                setLetterDialogOpen(false);
+                setDocumentTypeDialogOpen(true);
+              }}
+              disabled={isCreatingDocument}
+              sx={{
+                py: 2,
+                justifyContent: 'flex-start'
+              }}
+            >
+              <Box sx={{ textAlign: 'left' }}>
+                <Typography variant="body1" fontWeight="bold">
+                  Patientenbrief
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Informationsschreiben für den Patienten
+                </Typography>
+              </Box>
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setLetterDialogOpen(false)} disabled={isCreatingDocument}>
+            Abbrechen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dokumenttyp-Auswahl Dialog (Patientenbrief oder Arztbrief) */}
+      <Dialog open={documentTypeDialogOpen} onClose={() => setDocumentTypeDialogOpen(false)}>
+        <DialogTitle>Brieftyp auswählen</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1, minWidth: 300 }}>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              onClick={() => {
+                setSelectedDocumentType('patientenbrief');
+                setDocumentTypeDialogOpen(false);
+                setSourceDialogOpen(true);
+              }}
+            >
+              Patientenbrief
+            </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              onClick={() => {
+                setSelectedDocumentType('arztbrief');
+                setDocumentTypeDialogOpen(false);
+                setSourceDialogOpen(true);
+              }}
+            >
+              Arztbrief
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDocumentTypeDialogOpen(false)}>Abbrechen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Quelle-Auswahl Dialog (Leer oder aus Dekurs) */}
+      <Dialog open={sourceDialogOpen} onClose={() => {
+        setSourceDialogOpen(false);
+        setSelectedDocumentType(null);
+        setSelectedSource(null);
+      }}>
+        <DialogTitle>Quelle auswählen</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1, minWidth: 300 }}>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              onClick={() => {
+                setSelectedSource('leer');
+                setSourceDialogOpen(false);
+                setPatientenbriefDialogOpen(true);
+              }}
+            >
+              Leer
+            </Button>
+            <Button
+              variant="outlined"
+              fullWidth
+              size="large"
+              onClick={() => {
+                setSelectedSource('dekurs');
+                setSourceDialogOpen(false);
+                setDekursSelectionDialogOpen(true);
+              }}
+            >
+              Aus Dekurs
+            </Button>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setSourceDialogOpen(false);
+            setSelectedDocumentType(null);
+            setSelectedSource(null);
+          }}>Abbrechen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dekurs-Auswahl Dialog */}
+      <Dialog 
+        open={dekursSelectionDialogOpen} 
+        onClose={() => {
+          setDekursSelectionDialogOpen(false);
+          setSelectedDekursForLetter(null);
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Dekurs-Eintrag auswählen</DialogTitle>
+        <DialogContent>
+          {dekursEntries && dekursEntries.length > 0 ? (
+            <Stack spacing={1} sx={{ mt: 2, maxHeight: 400, overflow: 'auto' }}>
+              {dekursEntries.map((entry: any, index: number) => (
+                <Paper
+                  key={entry._id || index}
+                  sx={{
+                    p: 2,
+                    cursor: 'pointer',
+                    '&:hover': { bgcolor: 'action.hover' },
+                    border: selectedDekursForLetter?._id === entry._id ? '2px solid' : '1px solid #e0e0e0',
+                    borderColor: selectedDekursForLetter?._id === entry._id ? 'primary.main' : '#e0e0e0'
+                  }}
+                  onClick={() => setSelectedDekursForLetter(entry)}
+                >
+                  <Typography variant="subtitle1" fontWeight="bold">
+                    {entry.entryDate ? new Date(entry.entryDate).toLocaleDateString('de-DE') : 'Kein Datum'}
+                  </Typography>
+                  {entry.visitReason && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      Grund: {entry.visitReason}
+                    </Typography>
+                  )}
+                  {entry.clinicalObservations && (
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      {entry.clinicalObservations.substring(0, 100)}...
+                    </Typography>
+                  )}
+                </Paper>
+              ))}
+            </Stack>
+          ) : (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              Keine Dekurs-Einträge verfügbar.
+            </Alert>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setDekursSelectionDialogOpen(false);
+            setSelectedDekursForLetter(null);
+          }}>Abbrechen</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (selectedDekursForLetter) {
+                setDekursSelectionDialogOpen(false);
+                setPatientenbriefDialogOpen(true);
+              }
+            }}
+            disabled={!selectedDekursForLetter}
+          >
+            Weiter
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Patientenbrief Dialog */}
+      <PatientenbriefDialog
+        open={patientenbriefDialogOpen}
+        onClose={() => {
+          setPatientenbriefDialogOpen(false);
+          setSelectedDocumentType(null);
+          setSelectedSource(null);
+          setSelectedDekursForLetter(null);
+        }}
+        patient={patient || null}
+        location={currentLocation || null}
+        documentType={selectedDocumentType || 'patientenbrief'}
+        source={selectedSource || 'leer'}
+        selectedDekursEntry={selectedDekursForLetter}
+        onSaveSuccess={() => {
+          // Navigiere zum Dokumenten-Tab (Tab 7) nach erfolgreichem Speichern
+          setActiveTab(7);
+          handleTabNavigation(7, true);
+          setSnackbar({
+            open: true,
+            message: `${selectedDocumentType === 'arztbrief' ? 'Arztbrief' : 'Patientenbrief'} erfolgreich erstellt. Sie finden ihn im Tab "Dokumente".`,
+            severity: 'success'
+          });
+          setSelectedDocumentType(null);
+          setSelectedSource(null);
+          setSelectedDekursForLetter(null);
+        }}
+      />
 
       {/* Hinweis-Details Dialog */}
       <Dialog

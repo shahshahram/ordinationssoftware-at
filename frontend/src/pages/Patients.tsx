@@ -244,13 +244,19 @@ const Patients: React.FC = () => {
     // Wenn bereits ein Datum gefunden wurde, nutze es
     if (visitDates.length > 0) {
       const lastVisit = visitDates.sort((a, b) => b.getTime() - a.getTime())[0];
-      setLastVisitCache(prev => ({ ...prev, [patientId]: lastVisit }));
+      // Cache asynchron aktualisieren, nicht während des Renders
+      setTimeout(() => {
+        setLastVisitCache(prev => ({ ...prev, [patientId]: lastVisit }));
+      }, 0);
       return lastVisit;
     }
 
     // Fallback: Nutze createdAt oder ein altes Datum
     const fallbackDate = patient.createdAt ? new Date(patient.createdAt) : new Date(0);
-    setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
+    // Cache asynchron aktualisieren, nicht während des Renders
+    setTimeout(() => {
+      setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
+    }, 0);
     return fallbackDate;
   }, [appointments, lastVisitCache]);
 

@@ -47,6 +47,32 @@ const DocumentSchema = new mongoose.Schema({
     specialization: { type: String }
   },
   
+  // Empfänger des Dokuments
+  recipient: {
+    type: {
+      type: String,
+      enum: ['patient', 'doctor', 'organization', 'contact', null],
+      default: null
+    },
+    contactId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Contact',
+      default: null
+    },
+    name: { type: String, trim: true },
+    title: { type: String, trim: true },
+    organization: { type: String, trim: true },
+    address: {
+      street: { type: String, trim: true },
+      postalCode: { type: String, trim: true },
+      city: { type: String, trim: true },
+      country: { type: String, trim: true, default: 'Österreich' }
+    },
+    phone: { type: String, trim: true },
+    email: { type: String, trim: true },
+    fax: { type: String, trim: true }
+  },
+  
   // Dokumentinhalt
   content: {
     text: { type: String },

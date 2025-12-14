@@ -140,6 +140,60 @@ const locationSchema = new mongoose.Schema({
     }
   },
   
+  // Briefkopf-Vorlagen pro Dokumenttyp
+  letterheadTemplates: {
+    type: Map,
+    of: {
+      type: String,
+      enum: ['template1', 'template2', 'template3', 'custom'],
+      default: 'template1'
+    },
+    default: new Map()
+  },
+  
+  // Briefvorlagen (Text-Vorlagen für Briefe)
+  letterTemplates: [{
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    type: {
+      type: String,
+      enum: ['greeting', 'closing', 'custom', 'anrede'],
+      default: 'custom'
+    },
+    documentType: {
+      type: String,
+      enum: ['arztbrief', 'patientenbrief', 'rezept', 'ueberweisung', 'attest', 'befund', 'all'],
+      default: 'all'
+    },
+    content: {
+      type: String,
+      required: true
+    },
+    placeholders: [{
+      type: String,
+      trim: true
+    }],
+    description: {
+      type: String,
+      trim: true
+    },
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    },
+    updatedAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
+  
   // Praxistyp für Abrechnung
   practiceType: {
     type: String,

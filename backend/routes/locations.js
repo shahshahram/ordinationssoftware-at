@@ -601,6 +601,258 @@ router.delete('/:id/logo', auth, async (req, res) => {
   }
 });
 
+// ============================================
+// Briefvorlagen (Letter Templates) Routes
+// MÜSSEN VOR /:id stehen, damit sie korrekt gematcht werden!
+// ============================================
+
+// GET /api/locations/:id/letter-templates - Alle Briefvorlagen eines Standorts abrufen
+router.get('/:id/letter-templates', auth, async (req, res) => {
+  try {
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    res.json({
+      success: true,
+      templates: location.letterTemplates || []
+    });
+  } catch (error) {
+    console.error('Error fetching letter templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Briefvorlagen'
+    });
+  }
+});
+
+// POST /api/locations/:id/letter-templates - Neue Briefvorlage erstellen
+router.post('/:id/letter-templates', [
+  auth,
+  body('name').notEmpty().withMessage('Name ist erforderlich'),
+  body('content').notEmpty().withMessage('Inhalt ist erforderlich')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    const newTemplate = {
+      name: req.body.name,
+      type: req.body.type || 'custom',
+      documentType: req.body.documentType || 'all',
+      content: req.body.content,
+      placeholders: req.body.placeholders || [],
+      description: req.body.description || '',
+      isActive: req.body.isActive !== undefined ? req.body.isActive : true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    if (!location.letterTemplates) {
+      location.letterTemplates = [];
+    }
+    location.letterTemplates.push(newTemplate);
+    location.markModified('letterTemplates');
+    await location.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Briefvorlage erfolgreich erstellt',
+      template: newTemplate
+    });
+  } catch (error) {
+    console.error('Error creating letter template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen der Briefvorlage'
+    });
+  }
+});
+
+// PUT /api/locations/:id/letter-templates/:templateIndex - Briefvorlage aktualisieren
+router.put('/:id/letter-templates/:templateIndex', [
+  auth,
+  body('name').notEmpty().withMessage('Name ist erforderlich'),
+  body('content').notEmpty().withMessage('Inhalt ist erforderlich')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    const templateIndex = parseInt(req.params.templateIndex);
+    if (!location.letterTemplates || templateIndex < 0 || templateIndex >= location.letterTemplates.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Briefvorlage nicht gefunden'
+      });
+    }
+
+    location.letterTemplates[templateIndex] = {
+      ...location.letterTemplates[templateIndex].toObject(),
+      name: req.body.name,
+      type: req.body.type || location.letterTemplates[templateIndex].type,
+      documentType: req.body.documentType || location.letterTemplates[templateIndex].documentType,
+      content: req.body.content,
+      placeholders: req.body.placeholders || [],
+      description: req.body.description || '',
+      isActive: req.body.isActive !== undefined ? req.body.isActive : location.letterTemplates[templateIndex].isActive,
+      updatedAt: new Date()
+    };
+
+    location.markModified('letterTemplates');
+    await location.save();
+
+    res.json({
+      success: true,
+      message: 'Briefvorlage erfolgreich aktualisiert',
+      template: location.letterTemplates[templateIndex]
+    });
+  } catch (error) {
+    console.error('Error updating letter template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der Briefvorlage'
+    });
+  }
+});
+
+// DELETE /api/locations/:id/letter-templates/:templateIndex - Briefvorlage löschen
+router.delete('/:id/letter-templates/:templateIndex', auth, async (req, res) => {
+  try {
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    const templateIndex = parseInt(req.params.templateIndex);
+    if (!location.letterTemplates || templateIndex < 0 || templateIndex >= location.letterTemplates.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Briefvorlage nicht gefunden'
+      });
+    }
+
+    location.letterTemplates.splice(templateIndex, 1);
+    location.markModified('letterTemplates');
+    await location.save();
+
+    res.json({
+      success: true,
+      message: 'Briefvorlage erfolgreich gelöscht'
+    });
+  } catch (error) {
+    console.error('Error deleting letter template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen der Briefvorlage'
+    });
+  }
+});
+
+// POST /api/locations/:id/letter-templates/import - Briefvorlagen von anderem Standort importieren
+router.post('/:id/letter-templates/import', [
+  auth,
+  body('sourceLocationId').notEmpty().withMessage('Quell-Standort-ID ist erforderlich'),
+  body('templateIndices').isArray().withMessage('templateIndices muss ein Array sein')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const targetLocation = await Location.findById(req.params.id);
+    const sourceLocation = await Location.findById(req.body.sourceLocationId);
+
+    if (!targetLocation || !sourceLocation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    if (!sourceLocation.letterTemplates || sourceLocation.letterTemplates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Quell-Standort hat keine Briefvorlagen'
+      });
+    }
+
+    const templateIndices = req.body.templateIndices || [];
+    const importedTemplates = [];
+
+    if (!targetLocation.letterTemplates) {
+      targetLocation.letterTemplates = [];
+    }
+
+    templateIndices.forEach(index => {
+      if (sourceLocation.letterTemplates[index]) {
+        const template = sourceLocation.letterTemplates[index].toObject();
+        // Entferne _id und timestamps für neuen Import
+        delete template._id;
+        template.createdAt = new Date();
+        template.updatedAt = new Date();
+        targetLocation.letterTemplates.push(template);
+        importedTemplates.push(template);
+      }
+    });
+
+    targetLocation.markModified('letterTemplates');
+    await targetLocation.save();
+
+    res.json({
+      success: true,
+      message: `${importedTemplates.length} Briefvorlage(n) erfolgreich importiert`,
+      templates: importedTemplates
+    });
+  } catch (error) {
+    console.error('Error importing letter templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Importieren der Briefvorlagen'
+    });
+  }
+});
+
 // Einzelnen Standort abrufen
 router.get('/:id', auth, async (req, res) => {
   try {
@@ -1436,6 +1688,258 @@ router.post('/bulk-update', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler bei der Bulk-Operation'
+    });
+  }
+});
+
+// ============================================
+// Briefvorlagen (Letter Templates) Routes
+// MÜSSEN VOR /:id stehen, damit sie korrekt gematcht werden!
+// ============================================
+
+// GET /api/locations/:id/letter-templates - Alle Briefvorlagen eines Standorts abrufen
+router.get('/:id/letter-templates', auth, async (req, res) => {
+  try {
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    res.json({
+      success: true,
+      templates: location.letterTemplates || []
+    });
+  } catch (error) {
+    console.error('Error fetching letter templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Briefvorlagen'
+    });
+  }
+});
+
+// POST /api/locations/:id/letter-templates - Neue Briefvorlage erstellen
+router.post('/:id/letter-templates', [
+  auth,
+  body('name').notEmpty().withMessage('Name ist erforderlich'),
+  body('content').notEmpty().withMessage('Inhalt ist erforderlich')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    const newTemplate = {
+      name: req.body.name,
+      type: req.body.type || 'custom',
+      documentType: req.body.documentType || 'all',
+      content: req.body.content,
+      placeholders: req.body.placeholders || [],
+      description: req.body.description || '',
+      isActive: req.body.isActive !== undefined ? req.body.isActive : true,
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    if (!location.letterTemplates) {
+      location.letterTemplates = [];
+    }
+    location.letterTemplates.push(newTemplate);
+    location.markModified('letterTemplates');
+    await location.save();
+
+    res.status(201).json({
+      success: true,
+      message: 'Briefvorlage erfolgreich erstellt',
+      template: newTemplate
+    });
+  } catch (error) {
+    console.error('Error creating letter template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen der Briefvorlage'
+    });
+  }
+});
+
+// PUT /api/locations/:id/letter-templates/:templateIndex - Briefvorlage aktualisieren
+router.put('/:id/letter-templates/:templateIndex', [
+  auth,
+  body('name').notEmpty().withMessage('Name ist erforderlich'),
+  body('content').notEmpty().withMessage('Inhalt ist erforderlich')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    const templateIndex = parseInt(req.params.templateIndex);
+    if (!location.letterTemplates || templateIndex < 0 || templateIndex >= location.letterTemplates.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Briefvorlage nicht gefunden'
+      });
+    }
+
+    location.letterTemplates[templateIndex] = {
+      ...location.letterTemplates[templateIndex].toObject(),
+      name: req.body.name,
+      type: req.body.type || location.letterTemplates[templateIndex].type,
+      documentType: req.body.documentType || location.letterTemplates[templateIndex].documentType,
+      content: req.body.content,
+      placeholders: req.body.placeholders || [],
+      description: req.body.description || '',
+      isActive: req.body.isActive !== undefined ? req.body.isActive : location.letterTemplates[templateIndex].isActive,
+      updatedAt: new Date()
+    };
+
+    location.markModified('letterTemplates');
+    await location.save();
+
+    res.json({
+      success: true,
+      message: 'Briefvorlage erfolgreich aktualisiert',
+      template: location.letterTemplates[templateIndex]
+    });
+  } catch (error) {
+    console.error('Error updating letter template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Aktualisieren der Briefvorlage'
+    });
+  }
+});
+
+// DELETE /api/locations/:id/letter-templates/:templateIndex - Briefvorlage löschen
+router.delete('/:id/letter-templates/:templateIndex', auth, async (req, res) => {
+  try {
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    const templateIndex = parseInt(req.params.templateIndex);
+    if (!location.letterTemplates || templateIndex < 0 || templateIndex >= location.letterTemplates.length) {
+      return res.status(404).json({
+        success: false,
+        message: 'Briefvorlage nicht gefunden'
+      });
+    }
+
+    location.letterTemplates.splice(templateIndex, 1);
+    location.markModified('letterTemplates');
+    await location.save();
+
+    res.json({
+      success: true,
+      message: 'Briefvorlage erfolgreich gelöscht'
+    });
+  } catch (error) {
+    console.error('Error deleting letter template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen der Briefvorlage'
+    });
+  }
+});
+
+// POST /api/locations/:id/letter-templates/import - Briefvorlagen von anderem Standort importieren
+router.post('/:id/letter-templates/import', [
+  auth,
+  body('sourceLocationId').notEmpty().withMessage('Quell-Standort-ID ist erforderlich'),
+  body('templateIndices').isArray().withMessage('templateIndices muss ein Array sein')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const targetLocation = await Location.findById(req.params.id);
+    const sourceLocation = await Location.findById(req.body.sourceLocationId);
+
+    if (!targetLocation || !sourceLocation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    if (!sourceLocation.letterTemplates || sourceLocation.letterTemplates.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Quell-Standort hat keine Briefvorlagen'
+      });
+    }
+
+    const templateIndices = req.body.templateIndices || [];
+    const importedTemplates = [];
+
+    if (!targetLocation.letterTemplates) {
+      targetLocation.letterTemplates = [];
+    }
+
+    templateIndices.forEach(index => {
+      if (sourceLocation.letterTemplates[index]) {
+        const template = sourceLocation.letterTemplates[index].toObject();
+        // Entferne _id und timestamps für neuen Import
+        delete template._id;
+        template.createdAt = new Date();
+        template.updatedAt = new Date();
+        targetLocation.letterTemplates.push(template);
+        importedTemplates.push(template);
+      }
+    });
+
+    targetLocation.markModified('letterTemplates');
+    await targetLocation.save();
+
+    res.json({
+      success: true,
+      message: `${importedTemplates.length} Briefvorlage(n) erfolgreich importiert`,
+      templates: importedTemplates
+    });
+  } catch (error) {
+    console.error('Error importing letter templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Importieren der Briefvorlagen'
     });
   }
 });

@@ -30,6 +30,22 @@ export interface Document {
     title?: string;
     specialization?: string;
   };
+  recipient?: {
+    type: 'patient' | 'doctor' | 'organization' | 'contact' | null;
+    contactId?: string;
+    name?: string;
+    title?: string;
+    organization?: string;
+    address?: {
+      street?: string;
+      postalCode?: string;
+      city?: string;
+      country?: string;
+    };
+    phone?: string;
+    email?: string;
+    fax?: string;
+  };
   content: {
     text: string;
     html?: string;

@@ -62,6 +62,7 @@ export interface Patient {
   // Schwangerschaft (nur für Frauen)
   isPregnant?: boolean;
   pregnancyWeek?: number;
+  pregnancyDueDate?: string | Date;
   isBreastfeeding?: boolean;
   
   // Medizinische Implantate und Geräte
