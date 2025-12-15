@@ -74,19 +74,19 @@ const QueueWidget: React.FC<QueueWidgetProps> = ({ widget, data }) => {
                 <ListItemText
                   primary={item.patient}
                   secondary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                    <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
                       <AccessTime sx={{ fontSize: 14 }} />
-                      <Typography variant="caption">{item.time}</Typography>
+                      <Typography component="span" variant="caption">{item.time}</Typography>
                       {item.type && (
                         <>
-                          <Typography variant="caption"> • </Typography>
-                          <Typography variant="caption">{item.type}</Typography>
+                          <Typography component="span" variant="caption"> • </Typography>
+                          <Typography component="span" variant="caption">{item.type}</Typography>
                         </>
                       )}
                       {item.waitingTime && (
                         <>
-                          <Typography variant="caption"> • </Typography>
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography component="span" variant="caption"> • </Typography>
+                          <Typography component="span" variant="caption" color="text.secondary">
                             {item.waitingTime} Min
                           </Typography>
                         </>

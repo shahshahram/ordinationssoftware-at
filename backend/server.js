@@ -82,6 +82,7 @@ const ginaBoxRoutes = require('./routes/gina-box');
 const medicalSpecialtiesRoutes = require('./routes/medicalSpecialties');
 const dekursVorlagenRoutes = require('./routes/dekursVorlagen');
 const contactsRoutes = require('./routes/contacts');
+const waitingListRoutes = require('./routes/waitingList');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -321,6 +322,7 @@ app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/gina-box', ginaBoxRoutes);
   app.use('/api/medical-specialties', medicalSpecialtiesRoutes);
   app.use('/api/contacts', contactsRoutes);
+  app.use('/api/waiting-list', waitingListRoutes);
   
   // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)
   if (USE_MODULE_MANAGER) {

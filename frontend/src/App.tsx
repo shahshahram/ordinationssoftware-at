@@ -74,6 +74,7 @@ import Availability from './pages/Availability';
 import ServiceCategories from './pages/ServiceCategories';
 import ECardValidation from './pages/ECardValidation';
 import IntegrationStatus from './pages/IntegrationStatus';
+import WaitingList from './pages/WaitingList';
 
 // Theme
 const theme = createTheme({
@@ -236,7 +237,15 @@ const AppContent: React.FC = () => {
                           <ProtectedRoute requiredPermissions={['patients.read']}>
                             <AddressBook />
                           </ProtectedRoute>
-                        } 
+                        }
+                      />
+                      <Route 
+                        path="/waiting-list" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <WaitingList />
+                          </ProtectedRoute>
+                        }
                       />
                       <Route 
                         path="/appointments" 

@@ -49,6 +49,7 @@ import {
   Schedule,
   CreditCard,
   AccessTime,
+  PendingActions,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -82,6 +83,7 @@ const menuItems = [
       { text: 'Demo-Kalender', icon: <CalendarToday />, path: '/demo-calendar' },
       { text: 'Dienst-Kalender', icon: <CalendarMonth />, path: '/enhanced-calendar' },
       { text: 'Verfügbarkeiten', icon: <Schedule />, path: '/availability' },
+      { text: 'Warteliste', icon: <PendingActions />, path: '/waiting-list' },
     ]
   },
       { 

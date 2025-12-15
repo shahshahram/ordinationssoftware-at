@@ -70,6 +70,7 @@ import { fetchPatients, Patient } from '../store/slices/patientSlice';
 import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import { fetchRooms } from '../store/slices/roomSlice';
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
+import { fetchWaitingListCount } from '../store/slices/waitingListSlice';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import DiagnosisManager from '../components/DiagnosisManager';
 import CreateTaskDialog from '../components/Tasks/CreateTaskDialog';
@@ -178,6 +179,7 @@ const DemoCalendar: React.FC = () => {
   const { staffProfiles } = useAppSelector((state) => state.staff);
   const { rooms } = useAppSelector((state) => state.rooms);
   const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
+  const { count: waitingListCount } = useAppSelector((state) => state.waitingList);
 
   // Local State
   const [currentDate, setCurrentDate] = useState(() => startOfWeek(new Date(), { locale: de, weekStartsOn: 1 }));
@@ -230,6 +232,7 @@ const DemoCalendar: React.FC = () => {
     dispatch(fetchPatients(1));
     dispatch(fetchStaffProfiles());
     dispatch(fetchRooms());
+    dispatch(fetchWaitingListCount({ status: 'waiting' }));
     
     // Load services
     const loadServices = async () => {
@@ -308,6 +311,18 @@ const DemoCalendar: React.FC = () => {
       setSelectedLocations([currentLocation._id]);
     }
   }, [currentLocation]);
+
+  // Update waiting list count when selected locations change
+  useEffect(() => {
+    if (selectedLocations.length > 0) {
+      dispatch(fetchWaitingListCount({ 
+        status: 'waiting',
+        locationId: selectedLocations.length === 1 ? selectedLocations[0] : undefined
+      }));
+    } else {
+      dispatch(fetchWaitingListCount({ status: 'waiting' }));
+    }
+  }, [selectedLocations, dispatch]);
 
   // Patient lookup map
   const patientMap = useMemo(() => {
@@ -475,9 +490,9 @@ const DemoCalendar: React.FC = () => {
 
   const timeSlots = useMemo(() => {
     const slots = [];
-    for (let hour = 8; hour <= 18; hour++) {
+    for (let hour = 6; hour <= 21; hour++) {
       slots.push(`${hour}:00`);
-      if (hour < 18) {
+      if (hour < 21) {
         slots.push(`${hour}:30`);
       }
     }
@@ -532,8 +547,8 @@ const DemoCalendar: React.FC = () => {
     const endMinutes = end.getHours() * 60 + end.getMinutes();
     const duration = endMinutes - startMinutes;
     
-    // Basis: 8:00 = 0, jede halbe Stunde = 40px
-    const top = ((startMinutes - 480) / 30) * 40; // 480 = 8:00 in Minuten
+    // Basis: 6:00 = 0, jede halbe Stunde = 40px
+    const top = ((startMinutes - 360) / 30) * 40; // 360 = 6:00 in Minuten
     const height = Math.max((duration / 30) * 40, 40); // Minimum 40px
     
     return { top, height };
@@ -968,11 +983,22 @@ const DemoCalendar: React.FC = () => {
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Favorite sx={{ color: '#e91e63' }} />
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
             Kalender
           </Typography>
-          <Chip label="Warteliste 0" size="small" sx={{ bgcolor: '#f5f5f5' }} />
+          <Chip 
+            label={`Warteliste ${waitingListCount || 0}`} 
+            size="small" 
+            sx={{ 
+              bgcolor: '#f44336',
+              color: 'white',
+              cursor: 'pointer',
+              '&:hover': {
+                bgcolor: '#d32f2f',
+              }
+            }}
+            onClick={() => navigate('/waiting-list')}
+          />
         </Box>
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'center', maxWidth: 400 }}>
@@ -1062,11 +1088,54 @@ const DemoCalendar: React.FC = () => {
           borderBottom: '1px solid #e0e0e0',
         }}
       >
-        <Typography variant="h6" sx={{ fontWeight: 500 }}>
-          {viewMode === 'month' && format(currentDate, 'MMMM yyyy', { locale: de })}
-          {viewMode === 'week' && `KW ${format(currentDate, 'w', { locale: de })} ${format(currentDate, 'yyyy', { locale: de })}`}
-          {viewMode === 'day' && format(currentDate, 'dd. MMMM yyyy', { locale: de })}
-        </Typography>
+        {viewMode === 'month' ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FormControl size="small" sx={{ minWidth: 150 }}>
+              <Select
+                value={currentDate.getMonth()}
+                onChange={(e) => {
+                  const newMonth = e.target.value as number;
+                  const newDate = new Date(currentDate);
+                  newDate.setMonth(newMonth);
+                  setCurrentDate(newDate);
+                }}
+                sx={{ fontWeight: 500 }}
+              >
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((month) => (
+                  <MenuItem key={month} value={month}>
+                    {format(new Date(2000, month, 1), 'MMMM', { locale: de })}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl size="small" sx={{ minWidth: 100 }}>
+              <Select
+                value={currentDate.getFullYear()}
+                onChange={(e) => {
+                  const newYear = e.target.value as number;
+                  const newDate = new Date(currentDate);
+                  newDate.setFullYear(newYear);
+                  setCurrentDate(newDate);
+                }}
+                sx={{ fontWeight: 500 }}
+              >
+                {Array.from({ length: 10 }, (_, i) => {
+                  const year = new Date().getFullYear() - 5 + i;
+                  return (
+                    <MenuItem key={year} value={year}>
+                      {year}
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          </Box>
+        ) : (
+          <Typography variant="h6" sx={{ fontWeight: 500 }}>
+            {viewMode === 'week' && `KW ${format(currentDate, 'w', { locale: de })} ${format(currentDate, 'yyyy', { locale: de })}`}
+            {viewMode === 'day' && format(currentDate, 'dd. MMMM yyyy', { locale: de })}
+          </Typography>
+        )}
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Button
