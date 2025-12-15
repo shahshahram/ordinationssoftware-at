@@ -290,27 +290,20 @@ const DemoCalendar: React.FC = () => {
     }
   }, [locations, selectedLocation]);
 
-  // Initialize selected locations with current location or all locations (only once on mount)
+  // Initialize selected locations - start with no locations selected
+  // User must explicitly select locations to filter appointments
   const hasInitializedLocations = useRef(false);
   useEffect(() => {
     if (locations.length > 0 && !hasInitializedLocations.current) {
-      // Wenn ein aktueller Standort gesetzt ist, nur diesen auswählen
-      if (currentLocation) {
-        setSelectedLocations([currentLocation._id]);
-      } else {
-        // Sonst alle Standorte auswählen
-        setSelectedLocations(locations.map(loc => loc._id));
-      }
+      // Start with no locations selected - show all appointments by default
+      // User can then select specific locations to filter
+      setSelectedLocations([]);
       hasInitializedLocations.current = true;
     }
-  }, [locations, currentLocation]);
+  }, [locations]);
 
-  // Update selectedLocations when currentLocation changes
-  useEffect(() => {
-    if (currentLocation && !selectedLocations.includes(currentLocation._id)) {
-      setSelectedLocations([currentLocation._id]);
-    }
-  }, [currentLocation]);
+  // Note: Removed auto-selection of currentLocation to allow user control
+  // User must explicitly select locations via checkboxes
 
   // Update waiting list count when selected locations change
   useEffect(() => {
@@ -351,23 +344,59 @@ const DemoCalendar: React.FC = () => {
       // Filter by selected locations
       // If locations are selected, only show appointments from those locations
       // If no locations are selected, show all appointments
-      // Appointments without locationId are always shown (they don't belong to a specific location)
       if (selectedLocations.length > 0) {
-        // Convert locationId to string for comparison
-        const aptLocationId = apt.locationId ? String(apt.locationId) : null;
+        // Extract locationId - can be direct property, nested in location object, or via room
+        let aptLocationId: string | null = null;
         
-        // If appointment has no locationId, always show it (it doesn't belong to a specific location)
-        if (!aptLocationId) {
-          // Appointments without locationId are always visible
-          // They pass this filter and continue to other filters (search, etc.)
-          return true;
+        // 1. Try direct locationId property
+        if (apt.locationId) {
+          aptLocationId = typeof apt.locationId === 'string' ? apt.locationId : String(apt.locationId);
+        } 
+        // 2. Try nested location object
+        else if ((apt as any).location) {
+          const location = (apt as any).location;
+          aptLocationId = typeof location === 'string' 
+            ? location 
+            : (location?._id ? String(location._id) : null);
+        }
+        // 3. Try to get location from room
+        else if (apt.room) {
+          const roomId = typeof apt.room === 'string' ? apt.room : (apt.room as any)?._id;
+          if (roomId) {
+            const room = rooms.find(r => (r._id === roomId || r._id === String(roomId)));
+            if (room && room.location) {
+              const roomLocation = typeof room.location === 'string' 
+                ? room.location 
+                : (room.location as any)?._id;
+              if (roomLocation) {
+                aptLocationId = String(roomLocation);
+              }
+            }
+          }
         }
         
-        // If appointment has a locationId, it must be in selectedLocations
-        // Check if the locationId is in selectedLocations (convert to strings for comparison)
-        const isLocationSelected = selectedLocations.some(selectedId => 
-          String(selectedId) === aptLocationId
-        );
+        // Debug logging
+        if (process.env.NODE_ENV === 'development') {
+          console.log('DemoCalendar - Location Filter:', {
+            appointmentId: apt._id,
+            aptLocationId,
+            selectedLocations,
+            hasLocationId: !!aptLocationId,
+            locationIdMatch: aptLocationId ? selectedLocations.some(id => String(id) === String(aptLocationId)) : false
+          });
+        }
+        
+        // If appointment has no locationId, hide it when locations are selected
+        if (!aptLocationId) {
+          return false; // Hide appointments without locationId when locations are selected
+        }
+        
+        // Check if the locationId matches any selected location
+        const isLocationSelected = selectedLocations.some(selectedId => {
+          const selectedIdStr = String(selectedId);
+          const aptLocationIdStr = String(aptLocationId);
+          return selectedIdStr === aptLocationIdStr;
+        });
         
         if (!isLocationSelected) {
           return false; // Hide appointment if location is not selected
@@ -469,7 +498,7 @@ const DemoCalendar: React.FC = () => {
     });
     
     return mapped.filter((apt): apt is CalendarAppointment => apt !== null);
-  }, [appointments, selectedLocations, searchQuery, patientMap, locationMap, services, openSearchDialog]);
+  }, [appointments, selectedLocations, searchQuery, patientMap, locationMap, services, rooms, openSearchDialog]);
 
   // Berechne angezeigte Tage basierend auf viewMode
   const displayedDays = useMemo(() => {
@@ -614,7 +643,15 @@ const DemoCalendar: React.FC = () => {
       }
     }
     
-    const patientId = typeof apt.patient === 'string' ? apt.patient : (apt.patient as any)?._id || '';
+    // Safely extract patientId - handle null/undefined cases
+    let patientId = '';
+    if (apt.patient) {
+      if (typeof apt.patient === 'string') {
+        patientId = apt.patient;
+      } else if (typeof apt.patient === 'object' && apt.patient !== null) {
+        patientId = (apt.patient as any)?._id || '';
+      }
+    }
     const patient = patientId ? patientMap.get(patientId) : null;
     
     // Extract service information
@@ -639,10 +676,15 @@ const DemoCalendar: React.FC = () => {
       service = services.find(s => s._id === serviceId);
     }
     
-    // Konvertiere doctor zu string
-    const doctorId = typeof apt.doctor === 'string' 
-      ? apt.doctor 
-      : (apt.doctor as any)?._id || '';
+    // Konvertiere doctor zu string - handle null/undefined cases
+    let doctorId = '';
+    if (apt.doctor) {
+      if (typeof apt.doctor === 'string') {
+        doctorId = apt.doctor;
+      } else if (typeof apt.doctor === 'object' && apt.doctor !== null) {
+        doctorId = (apt.doctor as any)?._id || '';
+      }
+    }
     
     setFormData({
       patientId: patientId || '',

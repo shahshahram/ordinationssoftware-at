@@ -3,8 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const PatientDataHistory = require('../models/PatientDataHistory');
-const Patient = require('../models/Patient');
-const PatientExtended = require('../models/PatientExtended');
+const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
 
 // GET /api/patient-data-history/patient/:patientId - Alle Historie-Einträge eines Patienten abrufen
 router.get('/patient/:patientId', auth, checkPermission('patients.read'), async (req, res) => {
@@ -12,11 +11,8 @@ router.get('/patient/:patientId', auth, checkPermission('patients.read'), async 
     const { patientId } = req.params;
     const { limit = 100, sort = 'desc' } = req.query;
     
-    // Prüfe ob Patient existiert (in beiden Models)
-    let patient = await Patient.findById(patientId);
-    if (!patient) {
-      patient = await PatientExtended.findById(patientId);
-    }
+    // Prüfe ob Patient existiert (Produktivsystem: PatientExtended)
+    const patient = await PatientExtended.findById(patientId);
     if (!patient) {
       return res.status(404).json({
         success: false,
@@ -83,11 +79,8 @@ router.post('/', auth, checkPermission('patients.write'), async (req, res) => {
   try {
     const { patientId, appointmentId, recordedAt, snapshot, changedFields, changeNotes } = req.body;
     
-    // Prüfe ob Patient existiert (in beiden Models)
-    let patient = await Patient.findById(patientId);
-    if (!patient) {
-      patient = await PatientExtended.findById(patientId);
-    }
+    // Prüfe ob Patient existiert (Produktivsystem: PatientExtended)
+    const patient = await PatientExtended.findById(patientId);
     if (!patient) {
       return res.status(404).json({
         success: false,

@@ -52,7 +52,7 @@ interface Performance {
     email?: string;
     socialSecurityNumber?: string;
     insuranceProvider?: string;
-  };
+  } | null;
   doctorId: {
     _id: string;
     firstName: string;
@@ -94,6 +94,8 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
     message: '',
     severity: 'info'
   });
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   // Berechnung der Route und Anzeige
   // Berücksichtigt Mischformen: tariffType > contractType > patient insurance
@@ -118,7 +120,7 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
           
         case 'privat':
           // Privatleistung - prüfe ob Patient Versicherung hat
-          return performance.patientId.insuranceProvider && 
+          return performance.patientId?.insuranceProvider && 
                  performance.patientId.insuranceProvider !== 'Privatversicherung' && 
                  performance.patientId.insuranceProvider !== 'Selbstzahler'
             ? 'PATIENT+INSURANCE' 
@@ -135,13 +137,13 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
       case 'wahlarzt':
         return 'PATIENT+KASSE_REFUND';
       case 'privat':
-        return performance.patientId.insuranceProvider && 
+        return performance.patientId?.insuranceProvider && 
                performance.patientId.insuranceProvider !== 'Privatversicherung' && 
                performance.patientId.insuranceProvider !== 'Selbstzahler'
           ? 'PATIENT+INSURANCE' 
           : 'PATIENT';
       default:
-        return performance.patientId.insuranceProvider && 
+        return performance.patientId?.insuranceProvider && 
                performance.patientId.insuranceProvider !== 'Privatversicherung' && 
                performance.patientId.insuranceProvider !== 'Selbstzahler'
           ? 'PATIENT+INSURANCE' 
@@ -218,7 +220,7 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
           },
           body: JSON.stringify({
             options: {
-              insuranceClaim: !!performance.patientId.insuranceProvider,
+              insuranceClaim: !!performance.patientId?.insuranceProvider,
               locationId: performance.appointmentId?.locationId || null
             }
           })
@@ -236,6 +238,12 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
         message: `✅ ${result.message}`,
         severity: 'success'
       });
+
+      // Job-ID speichern für Status-Polling
+      if (result.data?.jobId) {
+        setJobId(result.data.jobId);
+        startPolling(result.data.jobId);
+      }
 
       // Status-Update an Parent-Komponente
       if (onStatusChange) {
@@ -258,16 +266,38 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
     }
   };
 
-  // Job-Status abfragen
-  const handleCheckStatus = async () => {
-    if (!performance.billingData?.invoiceNumber) return;
-    
-    setLoading(true);
-    
+  // Polling starten für Job-Status
+  const startPolling = (jobIdToPoll: string) => {
+    // Stoppe vorheriges Polling falls vorhanden
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    // Prüfe Status sofort
+    checkJobStatus(jobIdToPoll);
+
+    // Dann alle 3 Sekunden prüfen
+    const interval = setInterval(() => {
+      checkJobStatus(jobIdToPoll);
+    }, 3000);
+
+    setPollingInterval(interval);
+
+    // Stoppe Polling nach 5 Minuten (maximale Wartezeit)
+    setTimeout(() => {
+      if (interval) {
+        clearInterval(interval);
+        setPollingInterval(null);
+      }
+    }, 5 * 60 * 1000);
+  };
+
+  // Job-Status prüfen
+  const checkJobStatus = async (jobIdToCheck: string) => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/jobs/${performance.billingData.invoiceNumber}/status`,
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/jobs/${jobIdToCheck}/status`,
         {
           headers: {
             'x-auth-token': token || ''
@@ -277,13 +307,62 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
 
       const result = await response.json();
       
-      if (result.success) {
-        setSnackbar({
-          open: true,
-          message: `Status: ${result.data.job.status}`,
-          severity: 'info'
-        });
+      if (result.success && result.data) {
+        const jobStatus = result.data.job?.status;
+        const job = result.data.job;
+
+        // Wenn Job fertig ist (erfolgreich oder fehlgeschlagen), Polling stoppen
+        if (jobStatus === 'SENT' || jobStatus === 'ACCEPTED' || jobStatus === 'REJECTED' || jobStatus === 'FAILED') {
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            setPollingInterval(null);
+          }
+          setJobId(null);
+
+          // Benachrichtigung anzeigen
+          if (jobStatus === 'SENT' || jobStatus === 'ACCEPTED') {
+            setSnackbar({
+              open: true,
+              message: `✅ Abrechnung erfolgreich verarbeitet${jobStatus === 'ACCEPTED' ? ' und von der Kasse akzeptiert' : ''}`,
+              severity: 'success'
+            });
+            
+            // Performance-Status aktualisieren
+            if (onStatusChange) {
+              onStatusChange(jobStatus === 'ACCEPTED' ? 'accepted' : 'sent');
+            }
+          } else if (jobStatus === 'REJECTED' || jobStatus === 'FAILED') {
+            const errorMessage = job?.lastError || job?.response?.error || 'Unbekannter Fehler';
+            setSnackbar({
+              open: true,
+              message: `❌ Abrechnung ${jobStatus === 'REJECTED' ? 'von der Kasse abgelehnt' : 'fehlgeschlagen'}: ${errorMessage}`,
+              severity: 'error'
+            });
+            
+            // Performance-Status aktualisieren
+            if (onStatusChange) {
+              onStatusChange(jobStatus === 'REJECTED' ? 'rejected' : 'failed');
+            }
+          }
+        }
       }
+    } catch (error: any) {
+      console.error('Fehler beim Prüfen des Job-Status:', error);
+      // Fehler nicht anzeigen, da Polling im Hintergrund läuft
+    }
+  };
+
+  // Job-Status manuell abfragen
+  const handleCheckStatus = async () => {
+    if (!jobId && !performance.billingData?.invoiceNumber) return;
+    
+    const idToCheck = jobId || performance.billingData?.invoiceNumber;
+    if (!idToCheck) return;
+    
+    setLoading(true);
+    
+    try {
+      await checkJobStatus(idToCheck);
     } catch (error: any) {
       setSnackbar({
         open: true,
@@ -335,7 +414,15 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
                 <strong>Selbstbehalt:</strong> {copayAmount.toFixed(2)} €
               </Typography>
               <Typography variant="body2">
-                <strong>Patient:</strong> {performance.patientId.firstName} {performance.patientId.lastName}
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
               </Typography>
             </Box>
           </Box>
@@ -361,7 +448,15 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
                 <strong>Patient zahlt:</strong> {patientAmount.toFixed(2)} €
               </Typography>
               <Typography variant="body2">
-                <strong>Patient:</strong> {performance.patientId.firstName} {performance.patientId.lastName}
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
               </Typography>
             </Box>
           </Box>
@@ -381,10 +476,18 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
                 <strong>Betrag:</strong> {performance.totalPrice.toFixed(2)} €
               </Typography>
               <Typography variant="body2">
-                <strong>Versicherung:</strong> {performance.patientId.insuranceProvider}
+                <strong>Versicherung:</strong> {performance.patientId?.insuranceProvider || 'Nicht angegeben'}
               </Typography>
               <Typography variant="body2">
-                <strong>Patient:</strong> {performance.patientId.firstName} {performance.patientId.lastName}
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
               </Typography>
             </Box>
           </Box>
@@ -404,7 +507,15 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
                 <strong>Betrag:</strong> {performance.totalPrice.toFixed(2)} €
               </Typography>
               <Typography variant="body2">
-                <strong>Patient:</strong> {performance.patientId.firstName} {performance.patientId.lastName}
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
               </Typography>
             </Box>
           </Box>
@@ -415,38 +526,52 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
     }
   };
 
-  // Button ist deaktiviert wenn bereits abgerechnet
-  const isDisabled = performance.status !== 'recorded' || loading;
+  // Button ist deaktiviert wenn bereits abgerechnet oder kein Patient zugeordnet
+  const isDisabled = performance.status !== 'recorded' || loading || !performance.patientId;
+  
+  // Tooltip-Text basierend auf dem Grund für die Deaktivierung
+  const getDisabledTooltip = () => {
+    if (loading) return 'Wird verarbeitet...';
+    if (!performance.patientId) return 'Leistung hat keinen zugeordneten Patienten';
+    if (performance.status !== 'recorded') return `Leistung bereits abgerechnet (Status: ${performance.status})`;
+    return getButtonLabel();
+  };
 
   return (
     <>
       {compact ? (
-        <Tooltip title={getButtonLabel()}>
-          <IconButton
-            onClick={handleConfirmClick}
-            disabled={isDisabled}
-            color={getButtonColor() as any}
-            size="small"
-          >
-            {loading ? (
-              <CircularProgress size={20} />
-            ) : (
-              <ReceiptIcon />
-            )}
-          </IconButton>
+        <Tooltip title={getDisabledTooltip()}>
+          <span>
+            <IconButton
+              onClick={handleConfirmClick}
+              disabled={isDisabled}
+              color={getButtonColor() as any}
+              size="small"
+            >
+              {loading ? (
+                <CircularProgress size={20} />
+              ) : (
+                <ReceiptIcon />
+              )}
+            </IconButton>
+          </span>
         </Tooltip>
       ) : (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Button
-            variant="contained"
-            color={getButtonColor() as any}
-            startIcon={loading ? <CircularProgress size={20} /> : <ReceiptIcon />}
-            onClick={handleConfirmClick}
-            disabled={isDisabled}
-            fullWidth={!compact}
-          >
-            {getButtonLabel()}
-          </Button>
+          <Tooltip title={isDisabled ? getDisabledTooltip() : ''}>
+            <span>
+              <Button
+                variant="contained"
+                color={getButtonColor() as any}
+                startIcon={loading ? <CircularProgress size={20} /> : <ReceiptIcon />}
+                onClick={handleConfirmClick}
+                disabled={isDisabled}
+                fullWidth={!compact}
+              >
+                {getButtonLabel()}
+              </Button>
+            </span>
+          </Tooltip>
           
           {performance.status !== 'recorded' && (
             <>
@@ -502,11 +627,6 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
         <DialogContent>
           {getConfirmationContent()}
           
-          <Alert severity="info" sx={{ mt: 2 }}>
-            <Typography variant="body2">
-              <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet und Sie erhalten eine Benachrichtigung über das Ergebnis.
-            </Typography>
-          </Alert>
         </DialogContent>
         
         <DialogActions>

@@ -16,7 +16,9 @@ import {
   Typography,
   Chip,
   Autocomplete,
-  Alert
+  Alert,
+  FormControlLabel,
+  Checkbox
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchPatients } from '../store/slices/patientSlice';
@@ -27,17 +29,29 @@ interface PerformanceFormProps {
   onClose: () => void;
   onSave: (data: any) => void;
   performance?: any;
+  patientDiagnoses?: Array<{
+    _id?: string;
+    icd10Code: string;
+    display?: string;
+    status?: string;
+    isPrimary?: boolean;
+  }>;
 }
 
 const PerformanceForm: React.FC<PerformanceFormProps> = ({
   open,
   onClose,
   onSave,
-  performance
+  performance,
+  patientDiagnoses = []
 }) => {
   const dispatch = useDispatch();
   const { patients } = useSelector((state: any) => state.patients);
   const { appointments } = useSelector((state: any) => state.appointments);
+  const { user } = useSelector((state: any) => state.auth);
+  
+  // Systemeinstellung für automatische Abrechnung
+  const systemAutoBillingEnabled = user?.profile?.preferences?.autoBillingEnabled || false;
   
   // Form State
   const [formData, setFormData] = useState({
@@ -51,7 +65,8 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
     tariffType: 'privat',
     notes: '',
     diagnosisCodes: [] as string[],
-    medicationCodes: [] as string[]
+    medicationCodes: [] as string[],
+    autoBill: false // Checkbox: Automatisch abrechnen
   });
   
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -75,7 +90,11 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
   useEffect(() => {
     if (performance) {
       setFormData({
-        patientId: performance.patientId._id || '',
+        patientId: performance.patientId 
+          ? (typeof performance.patientId === 'string' 
+              ? performance.patientId 
+              : (performance.patientId._id || ''))
+          : '',
         appointmentId: performance.appointmentId?._id || '',
         serviceCode: performance.serviceCode || '',
         serviceDescription: performance.serviceDescription || '',
@@ -87,7 +106,8 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
         tariffType: performance.tariffType || 'privat',
         notes: performance.notes || '',
         diagnosisCodes: performance.diagnosisCodes || [],
-        medicationCodes: performance.medicationCodes || []
+        medicationCodes: performance.medicationCodes || [],
+        autoBill: false // Beim Bearbeiten immer false (nur für neue Leistungen)
       });
     } else {
       setFormData({
@@ -101,17 +121,18 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
         tariffType: 'privat',
         notes: '',
         diagnosisCodes: [],
-        medicationCodes: []
+        medicationCodes: [],
+        autoBill: systemAutoBillingEnabled ? true : false // Systemeinstellung hat Priorität: wenn aktiviert, Checkbox automatisch aktivieren
       });
     }
     setErrors({});
-  }, [performance, open]);
+  }, [performance, open, systemAutoBillingEnabled]);
 
   // Patienten und Termine laden
   useEffect(() => {
     if (open) {
-      // dispatch(fetchPatients({}));
-      // dispatch(fetchAppointments({}));
+      dispatch(fetchPatients(1));
+      dispatch(fetchAppointments());
     }
   }, [open, dispatch]);
 
@@ -201,15 +222,51 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
     setLoading(true);
     
     try {
-      // Gesamtpreis berechnen
-      const totalPrice = formData.unitPrice * formData.quantity;
+      // Gesamtpreis berechnen und sicherstellen, dass alle numerischen Werte als Zahlen gesendet werden
+      const unitPrice = parseFloat(formData.unitPrice) || 0;
+      const quantity = parseInt(formData.quantity) || 1;
+      const totalPrice = unitPrice * quantity;
       
-      const performanceData = {
-        ...formData,
+      // Validate patientId
+      if (!formData.patientId || formData.patientId.trim() === '') {
+        setErrors({ patientId: 'Patient ist erforderlich' });
+        setLoading(false);
+        return;
+      }
+
+      // Validate that selected patient exists in the loaded patients list
+      const patientExists = patients?.some((p: any) => p._id === formData.patientId);
+      if (!patientExists) {
+        setErrors({ 
+          patientId: 'Der ausgewählte Patient existiert nicht mehr. Bitte wählen Sie einen anderen Patienten aus der Liste oder aktualisieren Sie die Liste.' 
+        });
+        setLoading(false);
+        return;
+      }
+
+      const performanceData: any = {
+        patientId: formData.patientId,
+        serviceCode: formData.serviceCode,
+        serviceDescription: formData.serviceDescription,
+        serviceDatetime: new Date(formData.serviceDatetime).toISOString(),
+        unitPrice,
+        quantity,
         totalPrice,
-        serviceDatetime: new Date(formData.serviceDatetime).toISOString()
+        tariffType: formData.tariffType,
+        notes: formData.notes || undefined,
+        diagnosisCodes: formData.diagnosisCodes && formData.diagnosisCodes.length > 0 ? formData.diagnosisCodes : undefined,
+        medicationCodes: formData.medicationCodes && formData.medicationCodes.length > 0 ? formData.medicationCodes : undefined,
+        autoBill: systemAutoBillingEnabled ? true : formData.autoBill // Systemeinstellung hat Priorität
       };
       
+      // Nur appointmentId hinzufügen, wenn es nicht leer ist
+      if (formData.appointmentId) {
+        performanceData.appointmentId = formData.appointmentId;
+      }
+      
+      console.log('Sending performance data:', performanceData);
+      console.log('FormData patientId:', formData.patientId);
+      console.log('FormData patientId type:', typeof formData.patientId);
       await onSave(performanceData);
       
     } catch (error) {
@@ -238,26 +295,59 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
           <Grid container spacing={3}>
             {/* Patient */}
             <Grid size={{ xs: 12, sm: 6 }}>
-              <FormControl fullWidth error={!!errors.patientId}>
-                <InputLabel>Patient *</InputLabel>
-                <Select
-                  value={formData.patientId}
-                  label="Patient *"
-                  onChange={(e) => handleFieldChange('patientId', e.target.value)}
-                >
-                  {patients.map((patient: any) => (
-                    <MenuItem key={patient._id} value={patient._id}>
-                      {patient.firstName} {patient.lastName}
-                      {patient.email && ` (${patient.email})`}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {errors.patientId && (
-                  <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>
-                    {errors.patientId}
-                  </Typography>
+              <Autocomplete
+                options={patients || []}
+                getOptionLabel={(option: any) => 
+                  option ? `${option.firstName || ''} ${option.lastName || ''}`.trim() || 'Unbekannter Patient' : ''
+                }
+                isOptionEqualToValue={(option: any, value: any) => 
+                  option?._id === value?._id
+                }
+                value={patients.find((p: any) => p._id === formData.patientId) || null}
+                onChange={(_, newValue: any) => {
+                  console.log('Patient selected:', newValue);
+                  console.log('Patient _id:', newValue?._id);
+                  const patientId = newValue?._id || '';
+                  console.log('Setting patientId to:', patientId);
+                  handleFieldChange('patientId', patientId);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Patient *"
+                    error={!!errors.patientId}
+                    helperText={errors.patientId}
+                    placeholder="Patient suchen..."
+                  />
                 )}
-              </FormControl>
+                renderOption={(props, option: any) => {
+                  const { key, ...restProps } = props;
+                  return (
+                    <Box component="li" key={option._id || key} {...restProps}>
+                      <Box>
+                        <Typography variant="body2" fontWeight="medium">
+                          {option.firstName} {option.lastName}
+                        </Typography>
+                        {option.email && (
+                          <Typography variant="caption" color="textSecondary">
+                            {option.email}
+                          </Typography>
+                        )}
+                      </Box>
+                    </Box>
+                  );
+                }}
+                filterOptions={(options: any[], { inputValue }) => {
+                  if (!inputValue) return options;
+                  const searchTerm = inputValue.toLowerCase();
+                  return options.filter((patient: any) => 
+                    `${patient.firstName || ''} ${patient.lastName || ''}`.toLowerCase().includes(searchTerm) ||
+                    (patient.email && patient.email.toLowerCase().includes(searchTerm))
+                  );
+                }}
+                noOptionsText="Keine Patienten gefunden"
+                loadingText="Lade Patienten..."
+              />
             </Grid>
             
             {/* Termin */}
@@ -265,7 +355,9 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
               <FormControl fullWidth>
                 <InputLabel>Termin (optional)</InputLabel>
                 <Select
-                  value={formData.appointmentId}
+                  value={formData.appointmentId && appointments.some((apt: any) => apt._id === formData.appointmentId) 
+                    ? formData.appointmentId 
+                    : ''}
                   label="Termin (optional)"
                   onChange={(e) => handleAppointmentSelect(e.target.value)}
                 >
@@ -396,13 +488,62 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
             
             {/* Diagnose-Codes */}
             <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                fullWidth
-                label="Diagnose-Codes (kommagetrennt)"
-                value={formData.diagnosisCodes.join(', ')}
-                onChange={(e) => handleFieldChange('diagnosisCodes', e.target.value.split(',').map(code => code.trim()).filter(code => code))}
-                placeholder="z.B. E10.1, I10"
-                helperText="ICD-10 Codes durch Komma trennen"
+              <Autocomplete
+                multiple
+                options={patientDiagnoses
+                  .filter((diag: any) => diag.status === 'active' || !diag.status)
+                  .map((diag: any) => ({
+                    code: diag.code || diag.icd10Code || '',
+                    display: diag.display || diag.code || diag.icd10Code || '',
+                    label: `${diag.code || diag.icd10Code || ''} - ${diag.display || ''}`.trim()
+                  }))
+                  .filter((diag: any) => diag.code)}
+                getOptionLabel={(option: any) => option.label || option.code || ''}
+                isOptionEqualToValue={(option: any, value: any) => option.code === value.code}
+                value={formData.diagnosisCodes.map((code: string) => {
+                  const diag = patientDiagnoses.find((d: any) => (d.code || d.icd10Code) === code);
+                  if (diag) {
+                    return {
+                      code: diag.code || diag.icd10Code || '',
+                      display: diag.display || '',
+                      label: `${diag.code || diag.icd10Code || ''} - ${diag.display || ''}`.trim()
+                    };
+                  }
+                  return { code, display: '', label: code };
+                })}
+                onChange={(_, newValue: any[]) => {
+                  handleFieldChange('diagnosisCodes', newValue.map((v: any) => v.code || v).filter((c: string) => c));
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Diagnose-Codes"
+                    placeholder="Diagnosen auswählen oder manuell eingeben"
+                    helperText={patientDiagnoses.length > 0 
+                      ? `${patientDiagnoses.filter((d: any) => d.status === 'active' || !d.status).length} aktive Diagnosen verfügbar`
+                      : "ICD-10 Codes durch Komma trennen"}
+                  />
+                )}
+                renderTags={(value: any[], getTagProps) =>
+                  value.map((option: any, index: number) => (
+                    <Chip
+                      {...getTagProps({ index })}
+                      key={option.code || option}
+                      label={option.label || option.code || option}
+                      size="small"
+                    />
+                  ))
+                }
+                freeSolo
+                filterOptions={(options: any[], { inputValue }) => {
+                  if (!inputValue) return options;
+                  const searchTerm = inputValue.toLowerCase();
+                  return options.filter((option: any) =>
+                    (option.code || '').toLowerCase().includes(searchTerm) ||
+                    (option.display || '').toLowerCase().includes(searchTerm) ||
+                    (option.label || '').toLowerCase().includes(searchTerm)
+                  );
+                }}
               />
             </Grid>
             
@@ -418,6 +559,42 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
                 placeholder="Zusätzliche Informationen zur Leistung..."
               />
             </Grid>
+            
+            {/* Automatische Abrechnung - Checkbox (nur wenn Systemeinstellung nicht aktiviert) */}
+            {!systemAutoBillingEnabled && (
+              <Grid size={{ xs: 12 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={formData.autoBill}
+                      onChange={(e) => handleFieldChange('autoBill', e.target.checked)}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" fontWeight="medium">
+                        Automatisch abrechnen
+                      </Typography>
+                      <Typography variant="caption" color="textSecondary">
+                        Die Leistung wird nach dem Speichern automatisch abgerechnet
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </Grid>
+            )}
+            
+            {/* Info wenn Systemeinstellung aktiviert ist */}
+            {systemAutoBillingEnabled && (
+              <Grid size={{ xs: 12 }}>
+                <Alert severity="info">
+                  <Typography variant="body2">
+                    <strong>Automatische Abrechnung aktiviert:</strong> Die Leistung wird nach dem Speichern automatisch abgerechnet.
+                  </Typography>
+                </Alert>
+              </Grid>
+            )}
             
             {/* Tariftyp-Info */}
             <Grid size={{ xs: 12 }}>

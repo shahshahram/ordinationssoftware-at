@@ -50,6 +50,9 @@ import {
   CreditCard,
   AccessTime,
   PendingActions,
+  Cloud,
+  Image,
+  Science,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -109,16 +112,34 @@ const menuItems = [
       { text: 'XDS Dokumente', icon: <Storage />, path: '/xds-documents' },
     ]
   },
-  { 
-    text: 'ELGA', 
-    icon: <HealthAndSafety />, 
-    path: '/elga',
-    subItems: [
-      { text: 'ELGA Übersicht', icon: <HealthAndSafety />, path: '/elga' },
-      { text: 'Valuesets', icon: <CategoryIcon />, path: '/elga-valuesets' },
-      { text: 'E-Card Validierung', icon: <CreditCard />, path: '/ecard-validation' },
-    ]
-  },
+      { 
+        text: 'ELGA', 
+        icon: <HealthAndSafety />, 
+        path: '/elga',
+        subItems: [
+          { text: 'ELGA Übersicht', icon: <HealthAndSafety />, path: '/elga' },
+          { text: 'Valuesets', icon: <CategoryIcon />, path: '/elga-valuesets' },
+          { text: 'E-Card Validierung', icon: <CreditCard />, path: '/ecard-validation' },
+        ]
+      },
+      { 
+        text: 'DICOM & PACS', 
+        icon: <Image />, 
+        path: '/dicom-providers',
+        subItems: [
+          { text: 'DICOM-Provider', icon: <Cloud />, path: '/dicom-providers' },
+          { text: 'Teststrecke', icon: <Build />, path: '/dicom-test' },
+        ]
+      },
+      { 
+        text: 'Labor & Schnittstellen', 
+        icon: <Science />, 
+        path: '/labor-providers',
+        subItems: [
+          { text: 'Labor-Provider', icon: <Science />, path: '/labor-providers' },
+          { text: 'Teststrecke', icon: <Build />, path: '/labor-test' },
+        ]
+      },
   { text: 'Interne Nachrichten', icon: <Mail />, path: '/internal-messages' },
   { 
     text: 'Einstellungen', 

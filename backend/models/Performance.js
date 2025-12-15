@@ -4,7 +4,7 @@ const PerformanceSchema = new mongoose.Schema({
   // Grunddaten
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient',
+    ref: 'PatientExtended', // Geändert von 'Patient' zu 'PatientExtended' für Konsistenz mit Frontend
     required: true,
     index: true
   },

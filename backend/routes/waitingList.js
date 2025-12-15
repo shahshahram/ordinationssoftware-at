@@ -3,8 +3,7 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const WaitingList = require('../models/WaitingList');
-const Patient = require('../models/Patient');
-const PatientExtended = require('../models/PatientExtended');
+const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 
@@ -160,11 +159,8 @@ router.post('/',
       
       const { patient, service, doctor, location, reason, priority, status, preferredDate, notes, contactMethod } = req.body;
       
-      // Prüfe ob Patient existiert
-      let patientExists = await Patient.findById(patient);
-      if (!patientExists) {
-        patientExists = await PatientExtended.findById(patient);
-      }
+      // Prüfe ob Patient existiert (Produktivsystem: PatientExtended)
+      const patientExists = await PatientExtended.findById(patient);
       if (!patientExists) {
         return res.status(404).json({
           success: false,

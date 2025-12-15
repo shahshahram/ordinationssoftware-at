@@ -69,7 +69,8 @@ const UserSchema = new mongoose.Schema({
       language: { type: String, default: 'de' },
       timezone: { type: String, default: 'Europe/Vienna' },
       dateFormat: { type: String, default: 'DD.MM.YYYY' },
-      timeFormat: { type: String, default: '24h' }
+      timeFormat: { type: String, default: '24h' },
+      autoBillingEnabled: { type: Boolean, default: false } // Systemeinstellung: Automatische Abrechnung
     },
     onlineBookingEnabled: { type: Boolean, default: false },
     onlineBookingSettings: {

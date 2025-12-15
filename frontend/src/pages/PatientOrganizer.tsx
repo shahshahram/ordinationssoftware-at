@@ -70,7 +70,8 @@ import {
   CreditCard,
   Email,
   Phone,
-  BugReport
+  BugReport,
+  CloudDownload as CloudDownloadIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -97,6 +98,7 @@ import PatientPhotoGallery from '../components/PatientPhotoGallery';
 import LaborResults from '../components/LaborResults';
 import DicomUpload from '../components/DicomUpload';
 import DicomStudiesList from '../components/DicomStudiesList';
+import DicomRetrieveDialog from '../components/DicomRetrieveDialog';
 import ECardValidation from '../components/ECardValidation';
 import GinaBoxStatus from '../components/GinaBoxStatus';
 import PatientEPA from '../components/PatientEPA';
@@ -105,9 +107,10 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import MedicalDataHistory from '../components/MedicalDataHistory';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
 import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
-import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, MonitorHeart } from '@mui/icons-material';
+import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, MonitorHeart, Receipt } from '@mui/icons-material';
 import api from '../utils/api';
 import { Specialization } from '../types/ambulanzbefund';
+import PerformanceForm from '../components/PerformanceForm';
 
 
 // TabPanel Komponente
@@ -193,6 +196,10 @@ const PatientOrganizer: React.FC = () => {
   
   // State für DICOM
   const [dicomUploadOpen, setDicomUploadOpen] = useState(false);
+  const [dicomRetrieveOpen, setDicomRetrieveOpen] = useState(false);
+
+  // State für Leistungsabrechnung
+  const [performanceDialogOpen, setPerformanceDialogOpen] = useState(false);
 
   // State für Patienten-/Arztbrief Dialog
   const [letterDialogOpen, setLetterDialogOpen] = useState(false);
@@ -2360,6 +2367,25 @@ const PatientOrganizer: React.FC = () => {
             >
               Validieren
             </Button>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<Receipt />}
+              onClick={() => {
+                if (!patient) return;
+                setPerformanceDialogOpen(true);
+              }}
+              disabled={!patient}
+              sx={{
+                bgcolor: '#4CAF50',
+                color: 'white',
+                '&:hover': {
+                  bgcolor: '#45a049'
+                }
+              }}
+            >
+              Leistungsabrechnung
+            </Button>
           </Stack>
         </Paper>
 
@@ -2855,13 +2881,22 @@ const PatientOrganizer: React.FC = () => {
               <Paper sx={{ p: 2 }}>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <Typography variant="h6">DICOM-Studien</Typography>
-                  <Button
-                    variant="contained"
-                    startIcon={<Add />}
-                    onClick={() => setDicomUploadOpen(true)}
-                  >
-                    DICOM hochladen
-                  </Button>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<CloudDownloadIcon />}
+                      onClick={() => setDicomRetrieveOpen(true)}
+                    >
+                      Von PACS abrufen
+                    </Button>
+                    <Button
+                      variant="contained"
+                      startIcon={<Add />}
+                      onClick={() => setDicomUploadOpen(true)}
+                    >
+                      DICOM hochladen
+                    </Button>
+                  </Box>
               </Box>
                 <Divider sx={{ mb: 2 }} />
                 <DicomStudiesList patientId={patientId} />
@@ -4136,19 +4171,33 @@ const PatientOrganizer: React.FC = () => {
 
       {/* DICOM Upload Dialog */}
       {patientId && (
-        <DicomUpload
-          open={dicomUploadOpen}
-          onClose={() => setDicomUploadOpen(false)}
-          patientId={patientId}
-          onUploadSuccess={() => {
-            setDicomUploadOpen(false);
-            setSnackbar({
-              open: true,
-              message: 'DICOM-Dateien erfolgreich hochgeladen',
-              severity: 'success'
-            });
-          }}
-        />
+        <>
+          <DicomUpload
+            open={dicomUploadOpen}
+            onClose={() => setDicomUploadOpen(false)}
+            patientId={patientId}
+            onUploadSuccess={() => {
+              setDicomUploadOpen(false);
+              // Reload DICOM studies
+              if (patientId) {
+                // Trigger reload of DicomStudiesList
+                window.dispatchEvent(new Event('dicom-studies-reload'));
+              }
+            }}
+          />
+          <DicomRetrieveDialog
+            open={dicomRetrieveOpen}
+            onClose={() => setDicomRetrieveOpen(false)}
+            patientId={patientId}
+            onRetrieveSuccess={() => {
+              setDicomRetrieveOpen(false);
+              // Reload DICOM studies
+              if (patientId) {
+                window.dispatchEvent(new Event('dicom-studies-reload'));
+              }
+            }}
+          />
+        </>
       )}
 
       {/* Snackbar für Benachrichtigungen */}
@@ -4576,6 +4625,48 @@ const PatientOrganizer: React.FC = () => {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Leistungsabrechnung Dialog */}
+      <PerformanceForm
+        open={performanceDialogOpen}
+        onClose={() => setPerformanceDialogOpen(false)}
+        onSave={async (performanceData: any) => {
+          try {
+            const token = localStorage.getItem('token');
+            const response = await fetch(
+              `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/performances`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'x-auth-token': token || ''
+                },
+                body: JSON.stringify(performanceData)
+              }
+            );
+
+            const result = await response.json();
+            if (response.ok && result.success) {
+              // Erfolgreich gespeichert
+              setPerformanceDialogOpen(false);
+              // Optional: Erfolgsmeldung anzeigen
+            } else {
+              throw new Error(result.message || 'Fehler beim Speichern der Leistung');
+            }
+          } catch (error: any) {
+            console.error('Fehler beim Speichern der Leistung:', error);
+            alert(error.message || 'Fehler beim Speichern der Leistung');
+          }
+        }}
+        performance={patient ? {
+          patientId: patient._id || patient.id,
+          diagnosisCodes: (patientDiagnoses?.data || patientDiagnoses || [])
+            .filter((diag: PatientDiagnosis) => diag.status === 'active')
+            .map((diag: PatientDiagnosis) => diag.code)
+            .filter((code: string) => code)
+        } : undefined}
+        patientDiagnoses={patientDiagnoses?.data || patientDiagnoses || []}
+      />
       </Box>
     </Box>
   );

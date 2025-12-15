@@ -4,7 +4,7 @@ const PatientDataHistorySchema = new mongoose.Schema({
   // Verknüpfung zum Patienten
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient',
+    ref: 'PatientExtended', // Geändert zu PatientExtended für Produktivsystem
     required: true,
     index: true
   },

@@ -5,7 +5,7 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const ServiceBooking = require('../models/ServiceBooking');
 const ServiceCatalog = require('../models/ServiceCatalog');
-const Patient = require('../models/Patient');
+const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
 const Location = require('../models/Location');
 const StaffProfile = require('../models/StaffProfile');
 const AuditLog = require('../models/AuditLog');
@@ -155,8 +155,8 @@ router.post('/', [
       });
     }
 
-    // Patient prüfen
-    const patient = await Patient.findById(patient_id);
+    // Patient prüfen (Produktivsystem: PatientExtended)
+    const patient = await PatientExtended.findById(patient_id);
     if (!patient) {
       return res.status(400).json({
         success: false,

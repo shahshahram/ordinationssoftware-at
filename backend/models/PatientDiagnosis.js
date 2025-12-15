@@ -5,7 +5,7 @@ const PatientDiagnosisSchema = new mongoose.Schema({
   // Patient-Referenz
   patientId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'Patient', 
+    ref: 'PatientExtended', // Geändert zu PatientExtended für Produktivsystem
     required: true,
     index: true
   },

@@ -75,6 +75,10 @@ import ServiceCategories from './pages/ServiceCategories';
 import ECardValidation from './pages/ECardValidation';
 import IntegrationStatus from './pages/IntegrationStatus';
 import WaitingList from './pages/WaitingList';
+import DicomProviderManagement from './pages/DicomProviderManagement';
+import DicomTestPage from './pages/DicomTestPage';
+import LaborProviderManagement from './pages/LaborProviderManagement';
+import LaborTestPage from './pages/LaborTestPage';
 
 // Theme
 const theme = createTheme({
@@ -587,6 +591,38 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['settings.read']}>
                             <IntegrationStatus />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/dicom-providers" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <DicomProviderManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/dicom-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <DicomTestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/labor-providers" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <LaborProviderManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/labor-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <LaborTestPage />
                           </ProtectedRoute>
                         } 
                       />

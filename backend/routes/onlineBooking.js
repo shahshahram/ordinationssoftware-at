@@ -1,7 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const OnlineBooking = require('../models/OnlineBooking');
-const Patient = require('../models/Patient');
+const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
 const WeeklySchedule = require('../models/WeeklySchedule');
@@ -303,8 +303,8 @@ router.post('/book', [
       });
     }
 
-    // Prüfe ob Patient bereits existiert
-    let existingPatient = await Patient.findOne({
+    // Prüfe ob Patient bereits existiert (Produktivsystem: PatientExtended)
+    let existingPatient = await PatientExtended.findOne({
       email: patient.email,
       firstName: patient.firstName,
       lastName: patient.lastName

@@ -52,7 +52,7 @@ const slotReservationRoutes = require('./routes/slotReservation');
 const documentTemplateRoutes = require('./routes/documentTemplates');
 const xdsRoutes = require('./routes/xds');
 const pdfGenerationRoutes = require('./routes/pdfGeneration');
-// const oneClickBillingRoutes = require('./routes/oneClickBilling'); // Temporär deaktiviert
+const oneClickBillingRoutes = require('./routes/oneClickBilling');
 const patientsExtendedRoutes = require('./routes/patientsExtended');
 const medicationCatalogRoutes = require('./routes/medicationCatalog');
 const rbacRoutes = require('./routes/rbac');
@@ -70,6 +70,7 @@ const patientDataHistoryRoutes = require('./routes/patientDataHistory');
 const laborRoutes = require('./routes/labor');
 const tasksRoutes = require('./routes/tasks');
 const dicomRoutes = require('./routes/dicom');
+const dicomProviderRoutes = require('./routes/dicomProvider');
 const reimbursementsRoutes = require('./routes/reimbursements');
 const ogkBillingRoutes = require('./routes/ogk-billing');
 const insuranceBillingRoutes = require('./routes/insurance-billing');
@@ -292,7 +293,7 @@ function registerStaticRoutes(app) {
   app.use('/api/document-templates', documentTemplateRoutes);
   app.use('/api/xds', xdsRoutes);
   app.use('/api/pdf', pdfGenerationRoutes);
-  // app.use('/api/billing', oneClickBillingRoutes); // Temporär deaktiviert
+  app.use('/api/billing', oneClickBillingRoutes);
   app.use('/api/patients-extended', patientsExtendedRoutes);
   app.use('/api/rbac', rbacRoutes);
   app.use('/api/rbac/discovery', rbacDiscoveryRoutes);
@@ -311,6 +312,7 @@ app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/labor', laborRoutes);
   app.use('/api/tasks', tasksRoutes);
   app.use('/api/dicom', dicomRoutes);
+  app.use('/api/dicom-providers', dicomProviderRoutes);
   app.use('/api/reimbursements', reimbursementsRoutes);
   app.use('/api/ogk-billing', ogkBillingRoutes);
   app.use('/api/insurance-billing', insuranceBillingRoutes);

@@ -66,7 +66,7 @@ interface Performance {
     email?: string;
     socialSecurityNumber?: string;
     insuranceProvider?: string;
-  };
+  } | null;
   doctorId: {
     _id: string;
     firstName: string;
@@ -156,6 +156,12 @@ const PerformanceList: React.FC = () => {
         throw new Error(result.message || 'Leistungen konnten nicht geladen werden');
       }
 
+      // Debug: Log first performance to check patientId
+      if (result.data && result.data.length > 0) {
+        console.log('First performance from API:', result.data[0]);
+        console.log('First performance patientId:', result.data[0].patientId);
+      }
+
       setPerformances(result.data || []);
       if (result.pagination) {
         setPagination(result.pagination);
@@ -197,7 +203,9 @@ const PerformanceList: React.FC = () => {
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.message || 'Leistung konnte nicht gespeichert werden');
+        console.error('Backend error response:', result);
+        console.error('Request body:', performanceData);
+        throw new Error(result.message || result.error || 'Leistung konnte nicht gespeichert werden');
       }
 
       // Liste aktualisieren
@@ -465,9 +473,11 @@ const PerformanceList: React.FC = () => {
                     <PersonIcon fontSize="small" color="action" />
                     <Box>
                       <Typography variant="body2" fontWeight="medium">
-                        {performance.patientId.firstName} {performance.patientId.lastName}
+                        {performance.patientId 
+                          ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                          : 'Unbekannter Patient'}
                       </Typography>
-                      {performance.patientId.email && (
+                      {performance.patientId?.email && (
                         <Typography variant="caption" color="textSecondary">
                           {performance.patientId.email}
                         </Typography>
@@ -594,7 +604,9 @@ const PerformanceList: React.FC = () => {
         <DialogContent>
           <Typography>
             Möchten Sie die Leistung "{performanceToDelete?.serviceDescription}" 
-            für {performanceToDelete?.patientId.firstName} {performanceToDelete?.patientId.lastName} 
+            {performanceToDelete?.patientId 
+              ? `für ${performanceToDelete.patientId.firstName} ${performanceToDelete.patientId.lastName}`
+              : ''} 
             wirklich löschen?
           </Typography>
         </DialogContent>

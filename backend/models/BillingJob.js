@@ -16,7 +16,7 @@ const BillingJobSchema = new mongoose.Schema({
   },
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient',
+    ref: 'PatientExtended', // Geändert zu PatientExtended für Produktivsystem
     required: true,
     index: true
   },

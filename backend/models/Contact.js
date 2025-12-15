@@ -12,7 +12,7 @@ const ContactSchema = new mongoose.Schema({
   // Verknüpfung zu einem Patienten (optional, nur wenn type === 'patient')
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Patient',
+    ref: 'PatientExtended', // Geändert zu PatientExtended für Produktivsystem
     index: true,
     sparse: true // Index nur wenn Feld vorhanden ist
   },

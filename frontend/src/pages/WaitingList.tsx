@@ -105,10 +105,45 @@ const WaitingList: React.FC = () => {
   const handleOpenDialog = (mode: 'add' | 'edit', entry?: WaitingListEntry) => {
     if (mode === 'edit' && entry) {
       setSelectedEntry(entry);
-      const patientId = typeof entry.patient === 'object' ? entry.patient._id : entry.patient;
-      const serviceId = entry.service && typeof entry.service === 'object' ? entry.service._id : entry.service || '';
-      const doctorId = entry.doctor && typeof entry.doctor === 'object' ? entry.doctor._id : entry.doctor || '';
-      const locationId = entry.location && typeof entry.location === 'object' ? entry.location._id : entry.location || '';
+      // Safely extract patientId - handle null/undefined cases
+      let patientId = '';
+      if (entry.patient) {
+        if (typeof entry.patient === 'string') {
+          patientId = entry.patient;
+        } else if (typeof entry.patient === 'object' && entry.patient !== null) {
+          patientId = entry.patient._id || '';
+        }
+      }
+      
+      // Safely extract serviceId
+      let serviceId = '';
+      if (entry.service) {
+        if (typeof entry.service === 'string') {
+          serviceId = entry.service;
+        } else if (typeof entry.service === 'object' && entry.service !== null) {
+          serviceId = entry.service._id || '';
+        }
+      }
+      
+      // Safely extract doctorId
+      let doctorId = '';
+      if (entry.doctor) {
+        if (typeof entry.doctor === 'string') {
+          doctorId = entry.doctor;
+        } else if (typeof entry.doctor === 'object' && entry.doctor !== null) {
+          doctorId = entry.doctor._id || '';
+        }
+      }
+      
+      // Safely extract locationId
+      let locationId = '';
+      if (entry.location) {
+        if (typeof entry.location === 'string') {
+          locationId = entry.location;
+        } else if (typeof entry.location === 'object' && entry.location !== null) {
+          locationId = entry.location._id || '';
+        }
+      }
       
       setFormData({
         patient: patientId || '',

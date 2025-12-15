@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Contact = require('../models/Contact');
-const Patient = require('../models/PatientExtended');
+const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
 const auth = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 
@@ -163,7 +163,7 @@ router.post(
           });
         }
 
-        const patient = await Patient.findById(patientId);
+        const patient = await PatientExtended.findById(patientId);
         if (!patient) {
           return res.status(404).json({
             success: false,
@@ -243,7 +243,7 @@ router.put(
       // Validiere patientId wenn type === 'patient'
       if (type === 'patient' || (contact.type === 'patient' && patientId)) {
         if (patientId) {
-          const patient = await Patient.findById(patientId);
+          const patient = await PatientExtended.findById(patientId);
           if (!patient) {
             return res.status(404).json({
               success: false,
@@ -338,7 +338,7 @@ router.get('/patients/list', auth, async (req, res) => {
       ];
     }
 
-    const patients = await Patient.find(query)
+    const patients = await PatientExtended.find(query)
       .select('_id firstName lastName email phone address dateOfBirth')
       .sort({ lastName: 1, firstName: 1 })
       .limit(100);
@@ -398,10 +398,8 @@ router.get('/categories/list', auth, async (req, res) => {
  */
 router.post('/import-patients', auth, async (req, res) => {
   try {
-    const Patient = require('../models/PatientExtended');
-    
-    // Finde alle Patienten
-    const patients = await Patient.find({})
+    // Finde alle Patienten (Produktivsystem: PatientExtended)
+    const patients = await PatientExtended.find({})
       .select('_id firstName lastName phone email address dateOfBirth')
       .lean();
 

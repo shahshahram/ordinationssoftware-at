@@ -1,9 +1,12 @@
 const Performance = require('../models/Performance');
 const BillingJob = require('../models/BillingJob');
 const BillingAudit = require('../models/BillingAudit');
+const Invoice = require('../models/Invoice');
 const User = require('../models/User');
-const Patient = require('../models/Patient');
+const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
+const Patient = require('../models/Patient'); // Fallback für Migration
 const ServiceCatalog = require('../models/ServiceCatalog');
+const InternalMessage = require('../models/InternalMessage');
 
 class BillingService {
   constructor() {
@@ -86,6 +89,14 @@ class BillingService {
       throw new Error('Leistung nicht gefunden');
     }
     
+    if (!performance.patientId) {
+      throw new Error('Leistung hat keinen zugeordneten Patienten');
+    }
+    
+    if (!performance.doctorId) {
+      throw new Error('Leistung hat keinen zugeordneten Arzt');
+    }
+    
     if (performance.status !== 'recorded') {
       throw new Error(`Leistung bereits abgerechnet (Status: ${performance.status})`);
     }
@@ -97,7 +108,16 @@ class BillingService {
    * Arztdaten laden
    */
   async loadDoctorData(doctorId) {
-    const doctor = await User.findById(doctorId);
+    // Wenn doctorId bereits ein Objekt ist (populated), extrahiere die ID
+    const id = (doctorId && typeof doctorId === 'object' && doctorId._id) 
+      ? doctorId._id 
+      : doctorId;
+    
+    if (!id) {
+      throw new Error('Arzt-ID fehlt');
+    }
+    
+    const doctor = await User.findById(id);
     if (!doctor) {
       throw new Error('Arzt nicht gefunden');
     }
@@ -108,9 +128,29 @@ class BillingService {
    * Patientendaten laden
    */
   async loadPatientData(patientId) {
-    const patient = await Patient.findById(patientId);
+    // Wenn patientId bereits ein Objekt ist (populated), extrahiere die ID
+    const id = (patientId && typeof patientId === 'object' && patientId._id) 
+      ? patientId._id 
+      : patientId;
+    
+    if (!id) {
+      throw new Error('Patient-ID fehlt');
+    }
+    
+    // Zuerst in PatientExtended suchen (Produktivsystem-Standard)
+    let patient = await PatientExtended.findById(id);
+    
+    // Fallback: Wenn nicht gefunden, in alter Patient Collection suchen (Migration)
     if (!patient) {
-      throw new Error('Patient nicht gefunden');
+      console.warn(`⚠️ Patient ${id} nicht in PatientExtended gefunden, suche in alter Patient Collection...`);
+      patient = await Patient.findById(id);
+      if (patient) {
+        console.warn(`⚠️ WARNING: Patient ${id} existiert nur in alter Patient Collection. Bitte migrieren!`);
+      }
+    }
+    
+    if (!patient) {
+      throw new Error(`Patient nicht gefunden (ID: ${id})`);
     }
     return patient;
   }
@@ -138,18 +178,70 @@ class BillingService {
       switch (performance.tariffType) {
         case 'kassa':
           // Kassenleistung - prüfe ob Arzt Kassenarzt ist oder Location Kassenpraxis
+          console.log('🔍 Kassenleistung - Prüfe Bedingungen:');
+          console.log('  - Doctor contractType:', doctor.contractType);
+          console.log('  - Performance appointmentId:', performance.appointmentId);
+          console.log('  - Options locationId:', options.locationId);
+          
           if (doctor.contractType === 'kassenarzt') {
+            console.log('✅ Arzt ist Kassenarzt - Route: KASSE');
             return 'KASSE';
           }
-          // Wenn Location Kassenpraxis ist, auch erlauben
-          if (options.locationId) {
-            const location = await Location.findById(options.locationId);
-            if (location && location.practiceType === 'kassenpraxis') {
-              return 'KASSE';
+          
+          // Location aus Appointment laden, falls vorhanden
+          let location = null;
+          if (performance.appointmentId) {
+            let appointment = null;
+            if (performance.appointmentId && typeof performance.appointmentId === 'object' && performance.appointmentId.locationId) {
+              // Bereits populated
+              appointment = performance.appointmentId;
+              console.log('  - Appointment bereits populated, locationId:', appointment.locationId);
+            } else if (performance.appointmentId && typeof performance.appointmentId === 'object' && performance.appointmentId._id) {
+              // ObjectId als Objekt
+              appointment = await Appointment.findById(performance.appointmentId._id || performance.appointmentId).select('locationId');
+              console.log('  - Appointment aus DB geladen, locationId:', appointment?.locationId);
+            } else if (performance.appointmentId) {
+              // String/ObjectId
+              appointment = await Appointment.findById(performance.appointmentId).select('locationId');
+              console.log('  - Appointment aus DB geladen (String/ObjectId), locationId:', appointment?.locationId);
             }
+            
+            if (appointment && appointment.locationId) {
+              location = await Location.findById(appointment.locationId);
+              console.log('  - Location gefunden:', location ? { _id: location._id, name: location.name, practiceType: location.practiceType } : 'NICHT GEFUNDEN');
+            } else {
+              console.log('  - Kein Appointment oder keine locationId im Appointment');
+            }
+          } else {
+            console.log('  - Performance hat kein appointmentId');
           }
-          // Fallback: Kann nicht als Kasse abgerechnet werden
-          throw new Error('Kassenleistung kann nur von Kassenarzt oder in Kassenpraxis abgerechnet werden');
+          
+          // Location aus options laden (falls direkt übergeben)
+          if (!location && options.locationId) {
+            location = await Location.findById(options.locationId);
+            console.log('  - Location aus options geladen:', location ? { _id: location._id, name: location.name, practiceType: location.practiceType } : 'NICHT GEFUNDEN');
+          }
+          
+          // Wenn Location Kassenpraxis ist, auch erlauben
+          if (location && location.practiceType === 'kassenpraxis') {
+            console.log('✅ Location ist Kassenpraxis - Route: KASSE');
+            return 'KASSE';
+          }
+          
+          // Fallback: Wenn Kasse nicht möglich, automatisch auf Wahlarzt umschalten
+          // (statt Fehler zu werfen, da der Arzt explizit "kassa" gewählt hat, aber die Bedingungen nicht erfüllt sind)
+          const errorDetails = {
+            doctorContractType: doctor.contractType || 'nicht gesetzt',
+            hasAppointment: !!performance.appointmentId,
+            locationFound: !!location,
+            locationPracticeType: location?.practiceType || 'nicht gefunden',
+            optionsLocationId: options.locationId || 'nicht übergeben'
+          };
+          console.warn('⚠️ Kassenleistung kann nicht als Kasse abgerechnet werden, wechsle zu Wahlarzt:', errorDetails);
+          console.warn('  - Arzt-Vertragstyp:', errorDetails.doctorContractType);
+          console.warn('  - Location-Praxistyp:', errorDetails.locationPracticeType);
+          console.warn('  - Route geändert: KASSE -> PATIENT+KASSE_REFUND');
+          return 'PATIENT+KASSE_REFUND';
           
         case 'wahl':
           // Wahlarzt-Leistung - immer erlaubt
@@ -483,6 +575,9 @@ class BillingService {
         processingTime: Date.now() - startTime
       });
 
+      // Benachrichtigung an Arzt senden
+      await this.notifyJobCompleted(job, response, 'success');
+
     } catch (error) {
       console.error(`Billing-Job ${jobId} fehlgeschlagen:`, error);
       
@@ -495,6 +590,84 @@ class BillingService {
         },
         processingTime: Date.now() - startTime
       });
+
+      // Benachrichtigung an Arzt senden
+      await this.notifyJobCompleted(job, { error: error.message }, 'failed');
+    }
+  }
+
+  /**
+   * Benachrichtigt den Arzt über Job-Abschluss
+   */
+  async notifyJobCompleted(job, response, status) {
+    try {
+      const performance = await Performance.findById(job.performanceId)
+        .populate('patientId', 'firstName lastName');
+      
+      if (!performance) {
+        console.error('Performance nicht gefunden für Job:', job._id);
+        return;
+      }
+
+      const patientName = performance.patientId 
+        ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+        : 'Unbekannter Patient';
+
+      const serviceDescription = performance.serviceDescription || 'Unbekannte Leistung';
+      const totalPrice = performance.totalPrice || 0;
+
+      // System-User als Absender finden
+      const systemUser = await User.findOne({ 
+        role: { $in: ['admin', 'super_admin'] },
+        isActive: true 
+      }).select('_id');
+
+      const senderId = systemUser?._id || job.createdBy;
+
+      let subject, message, priority;
+
+      if (status === 'success') {
+        subject = `✅ Abrechnung erfolgreich: ${serviceDescription}`;
+        message = `Die Abrechnung wurde erfolgreich verarbeitet:\n\n` +
+          `Leistung: ${serviceDescription}\n` +
+          `Patient: ${patientName}\n` +
+          `Betrag: ${totalPrice.toFixed(2)} €\n` +
+          `Route: ${job.target}\n` +
+          (response.externalRef ? `Referenz: ${response.externalRef}\n` : '') +
+          `\nDie Leistung wurde an die ${job.target === 'KASSE' ? 'Krankenkasse' : 'Versicherung'} übermittelt.`;
+        priority = 'normal';
+      } else {
+        subject = `❌ Abrechnung fehlgeschlagen: ${serviceDescription}`;
+        message = `Die Abrechnung konnte nicht verarbeitet werden:\n\n` +
+          `Leistung: ${serviceDescription}\n` +
+          `Patient: ${patientName}\n` +
+          `Betrag: ${totalPrice.toFixed(2)} €\n` +
+          `Route: ${job.target}\n` +
+          `Fehler: ${response.error || 'Unbekannter Fehler'}\n\n` +
+          `Bitte prüfen Sie die Leistung und versuchen Sie es erneut.`;
+        priority = 'high';
+      }
+
+      const notification = new InternalMessage({
+        senderId: senderId,
+        recipientId: job.createdBy,
+        subject: subject,
+        message: message,
+        priority: priority,
+        status: 'sent',
+        patientId: job.patientId,
+        relatedResource: {
+          type: 'BillingJob',
+          id: job._id
+        }
+      });
+
+      await notification.save();
+      console.log(`✅ Billing-Benachrichtigung an Arzt gesendet (Job: ${job._id}, Status: ${status})`);
+
+    } catch (error) {
+      console.error('Fehler beim Senden der Billing-Benachrichtigung:', error);
+      // Fehler nicht weiterwerfen, da dies nicht kritisch ist
     }
   }
 
@@ -569,9 +742,110 @@ class BillingService {
    * Rechnung erstellen
    */
   async createInvoice(payload) {
-    // Hier würde der bestehende Invoice-Service verwendet
-    const invoiceService = require('./invoiceService');
-    return await invoiceService.createInvoiceFromPerformance(payload);
+    const { performance, doctor, patient, route } = payload;
+    
+    // Billing-Type basierend auf Route bestimmen
+    let billingType = 'privat';
+    if (route === 'KASSE') {
+      billingType = 'kassenarzt';
+    } else if (route === 'PATIENT+KASSE_REFUND') {
+      billingType = 'wahlarzt';
+    } else if (route === 'PATIENT+INSURANCE') {
+      billingType = 'privat'; // Privat mit Versicherung
+    } else {
+      billingType = 'privat';
+    }
+    
+    // Invoice-Daten zusammenstellen
+    const invoiceData = {
+      invoiceDate: new Date(),
+      dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 Tage Fälligkeit
+      doctor: {
+        name: doctor.name || `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim(),
+        title: doctor.title,
+        specialization: doctor.specialization,
+        address: doctor.address || {
+          street: '',
+          city: '',
+          postalCode: '',
+          country: 'Österreich'
+        },
+        taxNumber: doctor.taxNumber,
+        chamberNumber: doctor.chamberNumber
+      },
+      patient: {
+        id: patient.id,
+        name: patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
+        address: patient.address || {
+          street: '',
+          city: '',
+          postalCode: '',
+          country: 'Österreich'
+        },
+        insuranceNumber: patient.insuranceNumber,
+        insuranceProvider: patient.insuranceProvider
+      },
+      billingType,
+      services: [{
+        date: performance.serviceDatetime ? new Date(performance.serviceDatetime) : new Date(),
+        serviceCode: performance.serviceCode,
+        description: performance.serviceDescription,
+        quantity: performance.quantity || 1,
+        unitPrice: performance.unitPrice,
+        totalPrice: performance.totalPrice
+      }],
+      subtotal: performance.totalPrice,
+      taxRate: 0, // 0% für medizinische Leistungen in Österreich
+      taxAmount: 0,
+      totalAmount: performance.totalPrice,
+      status: 'sent', // Rechnung wird direkt als "gesendet" markiert
+      createdBy: doctor.id // Arzt als Ersteller
+    };
+    
+    // Route-spezifische Daten hinzufügen
+    if (route === 'KASSE' && payload.kassaData) {
+      invoiceData.ogkBilling = {
+        xmlExported: false,
+        billingPeriod: this.getBillingPeriod(),
+        status: 'pending'
+      };
+      // Copay-Betrag für Kassenleistungen
+      if (payload.kassaData.copayAmount) {
+        invoiceData.services[0].copay = payload.kassaData.copayAmount;
+      }
+    } else if (route === 'PATIENT+KASSE_REFUND' && payload.wahlarztData) {
+      invoiceData.privateBilling = {
+        honorNote: false,
+        reimbursementAmount: payload.wahlarztData.refundAmount || 0,
+        patientAmount: payload.wahlarztData.patientAmount || performance.totalPrice
+      };
+    }
+    
+    // Diagnosen hinzufügen, falls vorhanden
+    if (payload.diagnoses && Array.isArray(payload.diagnoses)) {
+      invoiceData.diagnoses = payload.diagnoses.map((diag: any) => ({
+        code: diag.code || diag.icd10Code,
+        display: diag.display || diag.description || '',
+        isPrimary: diag.isPrimary || false,
+        date: diag.date ? new Date(diag.date) : new Date()
+      }));
+    }
+    
+    // Invoice erstellen
+    const invoice = new Invoice(invoiceData);
+    await invoice.save();
+    
+    return invoice;
+  }
+  
+  /**
+   * Billing-Period für ÖGK-Abrechnungen generieren
+   */
+  getBillingPeriod() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
   }
 
   /**

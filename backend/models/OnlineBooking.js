@@ -11,7 +11,7 @@ const OnlineBookingSchema = new mongoose.Schema({
   
   // Patient (kann anonym sein)
   patient: {
-    id: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient' }, // Optional, falls Patient bereits existiert
+    id: { type: mongoose.Schema.Types.ObjectId, ref: 'PatientExtended' }, // Optional, Produktivsystem: PatientExtended
     firstName: { type: String, required: true },
     lastName: { type: String, required: true },
     email: { type: String, required: true },

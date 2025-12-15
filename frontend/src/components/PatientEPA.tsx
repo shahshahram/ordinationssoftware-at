@@ -828,12 +828,12 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         // entryDate ist spezifisch für dieses Feld - verwende normale Zeitspanne (1 Stunde)
         const shouldShow = hoursSinceEntry < 1;
         console.log(`✅ shouldShowMedicalField [${fieldName}]: Feld geändert, spezifisches entryDate, prüfe Eintragsdatum:`, {
-          entryDate: new Date(entryDate).toISOString(),
-          hoursSinceEntry: hoursSinceEntry.toFixed(2),
-          shouldShow
-        });
-        return shouldShow;
-      }
+        entryDate: new Date(entryDate).toISOString(),
+        hoursSinceEntry: hoursSinceEntry.toFixed(2),
+        shouldShow
+      });
+      return shouldShow;
+    }
     }
     
     // Kein explizites Eintragsdatum vorhanden - verwende patient.updatedAt als Fallback
@@ -1192,30 +1192,30 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
         // Verarbeite alle Termine
         patientAppointments.forEach((apt: any) => {
-          entries.push({
-            id: `appointment-${apt._id}`,
-            type: 'appointment',
-            date: new Date(apt.startTime || apt.date),
-            title: apt.title || apt.service?.name || apt.type || 'Termin',
-            description: apt.reason || apt.notes || apt.description,
-            status: apt.status,
-            doctor: apt.doctor ? (typeof apt.doctor === 'object' ? `${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : apt.doctor) : undefined,
-            metadata: {
-              ...apt,
-              // Stelle sicher, dass wichtige Felder verfügbar sind
-              startTime: apt.startTime,
-              endTime: apt.endTime,
-              duration: apt.duration || (apt.startTime && apt.endTime ? Math.round((new Date(apt.endTime).getTime() - new Date(apt.startTime).getTime()) / (1000 * 60)) : null),
-              reason: apt.reason,
-              notes: apt.notes,
-              type: apt.type,
-              bookingType: apt.bookingType,
-              priority: apt.priority,
-              roomName: apt.roomName || (apt.room && typeof apt.room === 'object' ? apt.room.name : null),
-              service: apt.service,
-              locationName: apt.locationName || (apt.locationId && typeof apt.locationId === 'object' ? apt.locationId.name : null)
-            }
-          });
+            entries.push({
+              id: `appointment-${apt._id}`,
+              type: 'appointment',
+              date: new Date(apt.startTime || apt.date),
+              title: apt.title || apt.service?.name || apt.type || 'Termin',
+              description: apt.reason || apt.notes || apt.description,
+              status: apt.status,
+              doctor: apt.doctor ? (typeof apt.doctor === 'object' ? `${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : apt.doctor) : undefined,
+              metadata: {
+                ...apt,
+                // Stelle sicher, dass wichtige Felder verfügbar sind
+                startTime: apt.startTime,
+                endTime: apt.endTime,
+                duration: apt.duration || (apt.startTime && apt.endTime ? Math.round((new Date(apt.endTime).getTime() - new Date(apt.startTime).getTime()) / (1000 * 60)) : null),
+                reason: apt.reason,
+                notes: apt.notes,
+                type: apt.type,
+                bookingType: apt.bookingType,
+                priority: apt.priority,
+                roomName: apt.roomName || (apt.room && typeof apt.room === 'object' ? apt.room.name : null),
+                service: apt.service,
+                locationName: apt.locationName || (apt.locationId && typeof apt.locationId === 'object' ? apt.locationId.name : null)
+              }
+            });
         });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Terminen:', error);
@@ -1380,15 +1380,15 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
         // Verarbeite alle Dokumente
         patientDocuments.forEach((doc: any) => {
-          entries.push({
-            id: `document-${doc._id}`,
-            type: 'document',
-            date: new Date(doc.createdAt || doc.date || new Date()),
-            title: doc.title || doc.name || 'Dokument',
-            description: doc.description || doc.type,
-            status: doc.status,
-            metadata: doc
-          });
+            entries.push({
+              id: `document-${doc._id}`,
+              type: 'document',
+              date: new Date(doc.createdAt || doc.date || new Date()),
+              title: doc.title || doc.name || 'Dokument',
+              description: doc.description || doc.type,
+              status: doc.status,
+              metadata: doc
+            });
         });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Dokumenten:', error);
@@ -1567,7 +1567,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
       // Sortiere chronologisch (neueste zuerst)
       if (entries.length > 0) {
-        entries.sort((a, b) => b.date.getTime() - a.date.getTime());
+      entries.sort((a, b) => b.date.getTime() - a.date.getTime());
       }
 
       // Erstelle einen einfacheren Hash für Change Detection
@@ -1581,7 +1581,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       }
       
       prevDataHashRef.current = simpleHash;
-    
+      
       // Aktualisiere lastPatientUpdateRef
       if (patient && patient.updatedAt) {
         lastPatientUpdateRef.current = new Date(patient.updatedAt).getTime();
@@ -1610,13 +1610,13 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       }
       
       // Setze alle Einträge auf einmal - kein startTransition, kein Batching
-      setEpaEntries(entries);
+        setEpaEntries(entries);
     } catch (error) {
-        console.error('Fehler beim Erstellen der EPA-Einträge:', error);
-        startTransition(() => {
-          setEpaEntries([]);
-        });
-      }
+      console.error('Fehler beim Erstellen der EPA-Einträge:', error);
+      startTransition(() => {
+        setEpaEntries([]);
+      });
+    }
     };
 
     // Verarbeite sofort - keine Verzögerung
@@ -1871,9 +1871,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       // Verwende for-Schleife statt forEach für bessere Performance
       for (let i = 0; i < entriesToProcess.length; i++) {
         const entry = entriesToProcess[i];
-        if (!entry || !entry.date) {
+          if (!entry || !entry.date) {
           continue;
-        }
+          }
         
         try {
           const dateKey = format(entry.date, 'dd.MM.yyyy', { locale: de });
@@ -1884,8 +1884,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         } catch (error) {
           // Reduziere Error-Logging
           if (i < 10) {
-            console.error('Fehler beim Gruppieren eines Eintrags:', error);
-          }
+          console.error('Fehler beim Gruppieren eines Eintrags:', error);
+        }
         }
       }
       

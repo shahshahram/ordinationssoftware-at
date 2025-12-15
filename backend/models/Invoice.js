@@ -23,7 +23,7 @@ const InvoiceSchema = new mongoose.Schema({
   
   // Patient
   patient: {
-    id: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient', required: true },
+    id: { type: mongoose.Schema.Types.ObjectId, ref: 'PatientExtended', required: true }, // Geändert zu PatientExtended für Produktivsystem
     name: { type: String, required: true },
     address: {
       street: { type: String, required: true },

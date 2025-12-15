@@ -1350,5 +1350,286 @@ async function notifyMedizinerAboutDicomStudy(dicomStudy) {
   }
 }
 
+/**
+ * @route   POST /api/dicom/query
+ * @desc    Studien von externem PACS/RIS abfragen (QIDO-RS)
+ * @access  Private (patients.read)
+ */
+router.post('/query', auth, checkPermission('patients.read'), async (req, res) => {
+  try {
+    const { providerId, patientId, patientName, studyDateFrom, studyDateTo, modality } = req.body;
+    
+    if (!providerId) {
+      return res.status(400).json({
+        success: false,
+        message: 'providerId ist erforderlich'
+      });
+    }
+
+    const DicomProvider = require('../models/DicomProvider');
+    const provider = await DicomProvider.findById(providerId);
+    
+    if (!provider) {
+      return res.status(404).json({
+        success: false,
+        message: 'DICOM-Provider nicht gefunden'
+      });
+    }
+
+    if (provider.integration.protocol !== 'dicomweb') {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider unterstützt kein DICOMweb-Protokoll'
+      });
+    }
+
+    const axios = require('axios');
+    const baseUrl = provider.integration.dicomweb.baseUrl;
+    const qidoEndpoint = provider.integration.dicomweb.qidoEndpoint || '/dicomweb/studies';
+    const qidoUrl = `${baseUrl}${qidoEndpoint}`;
+
+    // Baue Query-Parameter für QIDO-RS
+    const queryParams = {};
+    if (patientId) queryParams.PatientID = patientId;
+    if (patientName) queryParams.PatientName = patientName;
+    if (studyDateFrom) queryParams.StudyDate = studyDateFrom;
+    if (studyDateTo && queryParams.StudyDate) {
+      queryParams.StudyDate = `${queryParams.StudyDate}-${studyDateTo}`;
+    } else if (studyDateTo) {
+      queryParams.StudyDate = `-${studyDateTo}`;
+    }
+    if (modality) queryParams.Modality = modality;
+
+    // Baue Authentifizierungs-Header
+    const headers = {
+      'Accept': 'application/dicom+json',
+      'Content-Type': 'application/json'
+    };
+
+    if (provider.integration.dicomweb.authType === 'basic') {
+      const username = provider.integration.dicomweb.username || '';
+      const password = provider.integration.dicomweb.password || '';
+      const auth = Buffer.from(`${username}:${password}`).toString('base64');
+      headers['Authorization'] = `Basic ${auth}`;
+    } else if (provider.integration.dicomweb.authType === 'bearer') {
+      headers['Authorization'] = `Bearer ${provider.integration.dicomweb.apiKey || ''}`;
+    } else if (provider.integration.dicomweb.authType === 'oauth2') {
+      // OAuth2 würde hier implementiert werden
+      headers['Authorization'] = `Bearer ${provider.integration.dicomweb.apiKey || ''}`;
+    }
+
+    // Führe QIDO-RS Query aus
+    const response = await axios.get(qidoUrl, {
+      params: queryParams,
+      headers,
+      timeout: 30000
+    });
+
+    res.json({
+      success: true,
+      data: response.data,
+      count: Array.isArray(response.data) ? response.data.length : 0
+    });
+
+  } catch (error) {
+    console.error('Fehler bei QIDO-RS Query:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abfragen der Studien',
+      error: error.response?.data || error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/dicom/retrieve
+ * @desc    DICOM-Studie von externem PACS abrufen (WADO-RS) und lokal speichern
+ * @access  Private (patients.write)
+ */
+router.post('/retrieve', auth, checkPermission('patients.write'), async (req, res) => {
+  try {
+    const { providerId, studyInstanceUID, patientId } = req.body;
+    
+    if (!providerId || !studyInstanceUID || !patientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'providerId, studyInstanceUID und patientId sind erforderlich'
+      });
+    }
+
+    const DicomProvider = require('../models/DicomProvider');
+    const PatientExtended = require('../models/PatientExtended');
+    const provider = await DicomProvider.findById(providerId);
+    
+    if (!provider) {
+      return res.status(404).json({
+        success: false,
+        message: 'DICOM-Provider nicht gefunden'
+      });
+    }
+
+    if (provider.integration.protocol !== 'dicomweb') {
+      return res.status(400).json({
+        success: false,
+        message: 'Provider unterstützt kein DICOMweb-Protokoll'
+      });
+    }
+
+    // Prüfe ob Patient existiert
+    const patient = await PatientExtended.findById(patientId);
+    if (!patient) {
+      return res.status(404).json({
+        success: false,
+        message: 'Patient nicht gefunden'
+      });
+    }
+
+    const axios = require('axios');
+    const baseUrl = provider.integration.dicomweb.baseUrl;
+    const wadoEndpoint = provider.integration.dicomweb.wadoEndpoint || '/dicomweb/wado';
+    
+    // Baue Authentifizierungs-Header
+    const headers = {
+      'Accept': 'application/dicom',
+      'Content-Type': 'application/json'
+    };
+
+    if (provider.integration.dicomweb.authType === 'basic') {
+      const username = provider.integration.dicomweb.username || '';
+      const password = provider.integration.dicomweb.password || '';
+      const auth = Buffer.from(`${username}:${password}`).toString('base64');
+      headers['Authorization'] = `Basic ${auth}`;
+    } else if (provider.integration.dicomweb.authType === 'bearer') {
+      headers['Authorization'] = `Bearer ${provider.integration.dicomweb.apiKey || ''}`;
+    }
+
+    // 1. Hole Study-Metadaten (QIDO-RS)
+    const qidoEndpoint = provider.integration.dicomweb.qidoEndpoint || '/dicomweb/studies';
+    const qidoUrl = `${baseUrl}${qidoEndpoint}/${studyInstanceUID}`;
+    
+    let studyMetadata;
+    try {
+      const qidoResponse = await axios.get(qidoUrl, {
+        headers: { ...headers, 'Accept': 'application/dicom+json' },
+        timeout: 30000
+      });
+      studyMetadata = Array.isArray(qidoResponse.data) ? qidoResponse.data[0] : qidoResponse.data;
+    } catch (qidoError) {
+      console.error('Fehler beim Abrufen der Study-Metadaten:', qidoError);
+      // Fortfahren ohne Metadaten
+    }
+
+    // 2. Hole Series-Liste
+    const seriesUrl = `${baseUrl}${qidoEndpoint}/${studyInstanceUID}/series`;
+    let seriesList = [];
+    try {
+      const seriesResponse = await axios.get(seriesUrl, {
+        headers: { ...headers, 'Accept': 'application/dicom+json' },
+        timeout: 30000
+      });
+      seriesList = Array.isArray(seriesResponse.data) ? seriesResponse.data : [];
+    } catch (seriesError) {
+      console.error('Fehler beim Abrufen der Series-Liste:', seriesError);
+    }
+
+    // 3. Hole Instances für jede Series
+    const savedStudies = [];
+    for (const series of seriesList) {
+      const seriesInstanceUID = series['0020000E']?.Value?.[0] || series.SeriesInstanceUID;
+      if (!seriesInstanceUID) continue;
+
+      const instancesUrl = `${baseUrl}${qidoEndpoint}/${studyInstanceUID}/series/${seriesInstanceUID}/instances`;
+      let instances = [];
+      try {
+        const instancesResponse = await axios.get(instancesUrl, {
+          headers: { ...headers, 'Accept': 'application/dicom+json' },
+          timeout: 30000
+        });
+        instances = Array.isArray(instancesResponse.data) ? instancesResponse.data : [];
+      } catch (instancesError) {
+        console.error('Fehler beim Abrufen der Instances:', instancesError);
+        continue;
+      }
+
+      // 4. Lade jede Instance (WADO-RS)
+      for (const instance of instances) {
+        const sopInstanceUID = instance['00080018']?.Value?.[0] || instance.SOPInstanceUID;
+        if (!sopInstanceUID) continue;
+
+        const wadoUrl = `${baseUrl}${wadoEndpoint}/${studyInstanceUID}/series/${seriesInstanceUID}/instances/${sopInstanceUID}`;
+        
+        try {
+          const wadoResponse = await axios.get(wadoUrl, {
+            headers: { ...headers, 'Accept': 'application/dicom' },
+            responseType: 'arraybuffer',
+            timeout: 60000
+          });
+
+          // Speichere DICOM-Datei lokal
+          const dicomBuffer = Buffer.from(wadoResponse.data);
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+          const filename = `dicom-${uniqueSuffix}.dcm`;
+          const uploadPath = path.join(__dirname, '..', 'uploads', 'dicom');
+          if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+          }
+          const filePath = path.join(uploadPath, filename);
+          fs.writeFileSync(filePath, dicomBuffer);
+
+          // Parse DICOM-Datei
+          const dataSet = dicomParser.parseDicom(dicomBuffer);
+          const studyInstanceUIDFromFile = getDicomTag(dataSet, '0020000D', '');
+          const seriesInstanceUIDFromFile = getDicomTag(dataSet, '0020000E', '');
+          const sopInstanceUIDFromFile = getDicomTag(dataSet, '00080018', '');
+
+          // Erstelle DicomStudy-Eintrag
+          const dicomStudy = new DicomStudy({
+            patientId,
+            studyInstanceUID: studyInstanceUIDFromFile || studyInstanceUID,
+            seriesInstanceUID: seriesInstanceUIDFromFile || seriesInstanceUID,
+            sopInstanceUID: sopInstanceUIDFromFile || sopInstanceUID,
+            filePath,
+            fileName: filename,
+            fileSize: dicomBuffer.length,
+            patientName: getDicomTag(dataSet, '00100010', ''),
+            patientId: getDicomTag(dataSet, '00100020', ''),
+            studyDate: getDicomTag(dataSet, '00080020', ''),
+            studyTime: getDicomTag(dataSet, '00080030', ''),
+            studyDescription: getDicomTag(dataSet, '00081030', ''),
+            modality: getDicomTag(dataSet, '00080060', ''),
+            seriesDescription: getDicomTag(dataSet, '0008103E', ''),
+            seriesNumber: getDicomTagAsNumber(dataSet, '00200011', null),
+            instanceNumber: getDicomTagAsNumber(dataSet, '00200013', null),
+            uploadedBy: req.user.id,
+            source: 'external_pacs',
+            providerId: providerId
+          });
+
+          await dicomStudy.save();
+          savedStudies.push(dicomStudy);
+        } catch (wadoError) {
+          console.error(`Fehler beim Abrufen der Instance ${sopInstanceUID}:`, wadoError);
+          continue;
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${savedStudies.length} DICOM-Studien erfolgreich abgerufen`,
+      data: savedStudies,
+      count: savedStudies.length
+    });
+
+  } catch (error) {
+    console.error('Fehler beim Abrufen der DICOM-Studie:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der DICOM-Studie',
+      error: error.response?.data || error.message
+    });
+  }
+});
+
 module.exports = router;
 

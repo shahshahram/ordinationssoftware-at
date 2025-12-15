@@ -60,10 +60,30 @@ interface DicomProvider {
     website?: string;
   };
   integration: {
-    protocol: 'rest' | 'fhir' | 'hl7-cda' | 'dicom-sr' | 'email' | 'ftp' | 'sftp';
+    protocol: 'rest' | 'dicomweb' | 'dicom-cstore' | 'fhir' | 'hl7-cda' | 'dicom-sr' | 'email' | 'ftp' | 'sftp' | 'manual';
     rest?: {
+      webhookUrl?: string;
       apiKey?: string;
+      apiSecret?: string;
       authType?: 'none' | 'api-key' | 'bearer' | 'basic' | 'oauth2';
+    };
+    dicomweb?: {
+      baseUrl?: string;
+      qidoEndpoint?: string;
+      wadoEndpoint?: string;
+      stowEndpoint?: string;
+      authType?: 'none' | 'basic' | 'bearer' | 'oauth2';
+      apiKey?: string;
+      clientId?: string;
+      clientSecret?: string;
+      username?: string;
+      password?: string;
+    };
+    dicomCStore?: {
+      aeTitle?: string;
+      host?: string;
+      port?: number;
+      timeout?: number;
     };
   };
   mapping: {
@@ -116,9 +136,28 @@ const DicomProviderManagement: React.FC = () => {
       website: string;
     };
     integration: {
-      protocol: 'rest' | 'fhir' | 'hl7-cda' | 'dicom-sr' | 'email' | 'ftp' | 'sftp';
+      protocol: 'rest' | 'dicomweb' | 'dicom-cstore' | 'fhir' | 'hl7-cda' | 'dicom-sr' | 'email' | 'ftp' | 'sftp' | 'manual';
       rest: {
+        webhookUrl: string;
         authType: 'none' | 'api-key' | 'bearer' | 'basic' | 'oauth2';
+      };
+      dicomweb: {
+        baseUrl: string;
+        qidoEndpoint: string;
+        wadoEndpoint: string;
+        stowEndpoint: string;
+        authType: 'none' | 'basic' | 'bearer' | 'oauth2';
+        apiKey: string;
+        clientId: string;
+        clientSecret: string;
+        username: string;
+        password: string;
+      };
+      dicomCStore: {
+        aeTitle: string;
+        host: string;
+        port: number;
+        timeout: number;
       };
     };
     mapping: {
@@ -154,7 +193,26 @@ const DicomProviderManagement: React.FC = () => {
     integration: {
       protocol: 'rest',
       rest: {
+        webhookUrl: '',
         authType: 'api-key',
+      },
+      dicomweb: {
+        baseUrl: '',
+        qidoEndpoint: '/dicomweb/studies',
+        wadoEndpoint: '/dicomweb/wado',
+        stowEndpoint: '/dicomweb/stow',
+        authType: 'none',
+        apiKey: '',
+        clientId: '',
+        clientSecret: '',
+        username: '',
+        password: '',
+      },
+      dicomCStore: {
+        aeTitle: '',
+        host: '',
+        port: 104,
+        timeout: 30000,
       },
     },
     mapping: {
@@ -212,9 +270,28 @@ const DicomProviderManagement: React.FC = () => {
           website: provider.contact?.website || '',
         },
         integration: {
-          protocol: (provider.integration.protocol || 'rest') as 'rest',
+          protocol: (provider.integration.protocol || 'rest') as any,
           rest: {
+            webhookUrl: provider.integration.rest?.webhookUrl || '',
             authType: (provider.integration.rest?.authType || 'api-key') as 'api-key',
+          },
+          dicomweb: {
+            baseUrl: provider.integration.dicomweb?.baseUrl || '',
+            qidoEndpoint: provider.integration.dicomweb?.qidoEndpoint || '/dicomweb/studies',
+            wadoEndpoint: provider.integration.dicomweb?.wadoEndpoint || '/dicomweb/wado',
+            stowEndpoint: provider.integration.dicomweb?.stowEndpoint || '/dicomweb/stow',
+            authType: (provider.integration.dicomweb?.authType || 'none') as any,
+            apiKey: provider.integration.dicomweb?.apiKey || '',
+            clientId: provider.integration.dicomweb?.clientId || '',
+            clientSecret: provider.integration.dicomweb?.clientSecret || '',
+            username: provider.integration.dicomweb?.username || '',
+            password: provider.integration.dicomweb?.password || '',
+          },
+          dicomCStore: {
+            aeTitle: provider.integration.dicomCStore?.aeTitle || '',
+            host: provider.integration.dicomCStore?.host || '',
+            port: provider.integration.dicomCStore?.port || 104,
+            timeout: provider.integration.dicomCStore?.timeout || 30000,
           },
         },
         mapping: {
@@ -253,7 +330,26 @@ const DicomProviderManagement: React.FC = () => {
         integration: {
           protocol: 'rest',
           rest: {
+            webhookUrl: '',
             authType: 'api-key',
+          },
+          dicomweb: {
+            baseUrl: '',
+            qidoEndpoint: '/dicomweb/studies',
+            wadoEndpoint: '/dicomweb/wado',
+            stowEndpoint: '/dicomweb/stow',
+            authType: 'none',
+            apiKey: '',
+            clientId: '',
+            clientSecret: '',
+            username: '',
+            password: '',
+          },
+          dicomCStore: {
+            aeTitle: '',
+            host: '',
+            port: 104,
+            timeout: 30000,
           },
         },
         mapping: {
@@ -513,6 +609,304 @@ const DicomProviderManagement: React.FC = () => {
                 </Select>
               </FormControl>
               </Box>
+              <Box sx={{ flex: '1 1 calc(50% - 8px)', minWidth: '250px' }}>
+              <FormControl fullWidth>
+                <InputLabel>Protokoll</InputLabel>
+                <Select
+                  value={formData.integration.protocol}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      integration: { ...formData.integration, protocol: e.target.value as any },
+                    })
+                  }
+                >
+                  <MenuItem value="rest">REST (Webhook)</MenuItem>
+                  <MenuItem value="dicomweb">DICOMweb (QIDO/WADO/STOW)</MenuItem>
+                  <MenuItem value="dicom-cstore">DICOM C-STORE</MenuItem>
+                  <MenuItem value="manual">Manuell</MenuItem>
+                </Select>
+              </FormControl>
+              </Box>
+            </Box>
+            
+            {/* REST Konfiguration */}
+            {formData.integration.protocol === 'rest' && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="subtitle2">REST Webhook Konfiguration</Typography>
+                <TextField
+                  fullWidth
+                  label="Webhook URL"
+                  value={formData.integration.rest.webhookUrl}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      integration: {
+                        ...formData.integration,
+                        rest: { ...formData.integration.rest, webhookUrl: e.target.value },
+                      },
+                    })
+                  }
+                  helperText="URL für eingehende DICOM-Dateien (wird automatisch generiert)"
+                  disabled
+                />
+                <FormControl fullWidth>
+                  <InputLabel>Authentifizierung</InputLabel>
+                  <Select
+                    value={formData.integration.rest.authType}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          rest: { ...formData.integration.rest, authType: e.target.value as any },
+                        },
+                      })
+                    }
+                  >
+                    <MenuItem value="none">Keine</MenuItem>
+                    <MenuItem value="api-key">API-Key</MenuItem>
+                    <MenuItem value="bearer">Bearer Token</MenuItem>
+                    <MenuItem value="basic">Basic Auth</MenuItem>
+                    <MenuItem value="oauth2">OAuth2</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+            )}
+
+            {/* DICOMweb Konfiguration */}
+            {formData.integration.protocol === 'dicomweb' && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="subtitle2">DICOMweb Konfiguration (für aktive Abfrage von PACS/RIS)</Typography>
+                <TextField
+                  fullWidth
+                  label="Base URL"
+                  value={formData.integration.dicomweb.baseUrl}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      integration: {
+                        ...formData.integration,
+                        dicomweb: { ...formData.integration.dicomweb, baseUrl: e.target.value },
+                      },
+                    })
+                  }
+                  placeholder="https://pacs.example.com"
+                  required
+                />
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    fullWidth
+                    label="QIDO Endpoint"
+                    value={formData.integration.dicomweb.qidoEndpoint}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomweb: { ...formData.integration.dicomweb, qidoEndpoint: e.target.value },
+                        },
+                      })
+                    }
+                    placeholder="/dicomweb/studies"
+                  />
+                  <TextField
+                    fullWidth
+                    label="WADO Endpoint"
+                    value={formData.integration.dicomweb.wadoEndpoint}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomweb: { ...formData.integration.dicomweb, wadoEndpoint: e.target.value },
+                        },
+                      })
+                    }
+                    placeholder="/dicomweb/wado"
+                  />
+                </Box>
+                <FormControl fullWidth>
+                  <InputLabel>Authentifizierung</InputLabel>
+                  <Select
+                    value={formData.integration.dicomweb.authType}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomweb: { ...formData.integration.dicomweb, authType: e.target.value as any },
+                        },
+                      })
+                    }
+                  >
+                    <MenuItem value="none">Keine</MenuItem>
+                    <MenuItem value="basic">Basic Auth</MenuItem>
+                    <MenuItem value="bearer">Bearer Token</MenuItem>
+                    <MenuItem value="oauth2">OAuth2</MenuItem>
+                  </Select>
+                </FormControl>
+                {formData.integration.dicomweb.authType === 'basic' && (
+                  <Box sx={{ display: 'flex', gap: 2 }}>
+                    <TextField
+                      fullWidth
+                      label="Benutzername"
+                      value={formData.integration.dicomweb.username}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          integration: {
+                            ...formData.integration,
+                            dicomweb: { ...formData.integration.dicomweb, username: e.target.value },
+                          },
+                        })
+                      }
+                    />
+                    <TextField
+                      fullWidth
+                      label="Passwort"
+                      type="password"
+                      value={formData.integration.dicomweb.password}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          integration: {
+                            ...formData.integration,
+                            dicomweb: { ...formData.integration.dicomweb, password: e.target.value },
+                          },
+                        })
+                      }
+                    />
+                  </Box>
+                )}
+                {formData.integration.dicomweb.authType === 'bearer' && (
+                  <TextField
+                    fullWidth
+                    label="API-Key / Bearer Token"
+                    type="password"
+                    value={formData.integration.dicomweb.apiKey}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomweb: { ...formData.integration.dicomweb, apiKey: e.target.value },
+                        },
+                      })
+                    }
+                  />
+                )}
+                {formData.integration.dicomweb.authType === 'oauth2' && (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <TextField
+                      fullWidth
+                      label="Client ID"
+                      value={formData.integration.dicomweb.clientId}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          integration: {
+                            ...formData.integration,
+                            dicomweb: { ...formData.integration.dicomweb, clientId: e.target.value },
+                          },
+                        })
+                      }
+                    />
+                    <TextField
+                      fullWidth
+                      label="Client Secret"
+                      type="password"
+                      value={formData.integration.dicomweb.clientSecret}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          integration: {
+                            ...formData.integration,
+                            dicomweb: { ...formData.integration.dicomweb, clientSecret: e.target.value },
+                          },
+                        })
+                      }
+                    />
+                  </Box>
+                )}
+              </Box>
+            )}
+
+            {/* DICOM C-STORE Konfiguration */}
+            {formData.integration.protocol === 'dicom-cstore' && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="subtitle2">DICOM C-STORE Konfiguration (für direkte DICOM-Verbindung)</Typography>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    fullWidth
+                    label="AE Title"
+                    value={formData.integration.dicomCStore.aeTitle}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomCStore: { ...formData.integration.dicomCStore, aeTitle: e.target.value },
+                        },
+                      })
+                    }
+                    placeholder="PACS_SERVER"
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Host"
+                    value={formData.integration.dicomCStore.host}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomCStore: { ...formData.integration.dicomCStore, host: e.target.value },
+                        },
+                      })
+                    }
+                    placeholder="pacs.example.com"
+                    required
+                  />
+                </Box>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <TextField
+                    fullWidth
+                    label="Port"
+                    type="number"
+                    value={formData.integration.dicomCStore.port}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomCStore: { ...formData.integration.dicomCStore, port: parseInt(e.target.value) || 104 },
+                        },
+                      })
+                    }
+                    required
+                  />
+                  <TextField
+                    fullWidth
+                    label="Timeout (ms)"
+                    type="number"
+                    value={formData.integration.dicomCStore.timeout}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        integration: {
+                          ...formData.integration,
+                          dicomCStore: { ...formData.integration.dicomCStore, timeout: parseInt(e.target.value) || 30000 },
+                        },
+                      })
+                    }
+                  />
+                </Box>
+              </Box>
+            )}
+
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <Box sx={{ flex: '1 1 calc(50% - 8px)', minWidth: '250px' }}>
               <FormControl fullWidth>
                 <InputLabel>Patienten-Matching</InputLabel>

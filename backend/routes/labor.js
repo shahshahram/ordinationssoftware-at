@@ -7,6 +7,7 @@ const LaborProvider = require('../models/LaborProvider');
 const LaborMapping = require('../models/LaborMapping');
 const laborParserService = require('../services/laborParserService');
 const laborMappingService = require('../services/laborMappingService');
+const laborValidatorService = require('../services/laborValidatorService');
 const InternalMessage = require('../models/InternalMessage');
 const User = require('../models/User');
 
@@ -49,6 +50,22 @@ router.post('/receive', async (req, res) => {
           success: false,
           message: `Unbekanntes Format: ${format}`
         });
+    }
+
+    // Validiere das geparste Ergebnis
+    const validation = laborValidatorService.validateLaborResult(parsedResult);
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler beim Laborergebnis',
+        errors: validation.errors,
+        warnings: validation.warnings
+      });
+    }
+
+    // Wenn Warnungen vorhanden sind, logge sie (aber blockiere nicht)
+    if (validation.warnings && validation.warnings.length > 0) {
+      console.warn('Labor-Validierung Warnungen:', validation.warnings);
     }
 
     // LaborResult speichern
@@ -163,8 +180,7 @@ router.get('/recent', auth, async (req, res) => {
     // Limit nach Sortierung anwenden
     const limitedResults = results.slice(0, limitNum);
     
-    // Lade Patientendaten manuell (unterstützt sowohl Patient als auch PatientExtended)
-    const Patient = require('../models/Patient');
+    // Lade Patientendaten manuell (Produktivsystem: PatientExtended)
     const PatientExtended = require('../models/PatientExtended');
     
     // Formatiere die Daten für das Dashboard
@@ -172,16 +188,13 @@ router.get('/recent', auth, async (req, res) => {
       const resultsArray = Array.isArray(result.results) ? result.results : [];
       const criticalCount = resultsArray.filter(r => r && r.isCritical === true).length;
       
-      // Versuche Patient zu finden (erst PatientExtended, dann Patient)
+      // Lade Patient aus PatientExtended (Produktivsystem-Standard)
       let patient = null;
       const patientId = result.patientId;
       
       if (patientId) {
         try {
           patient = await PatientExtended.findById(patientId).select('firstName lastName dateOfBirth').lean();
-          if (!patient) {
-            patient = await Patient.findById(patientId).select('firstName lastName dateOfBirth').lean();
-          }
         } catch (err) {
           console.error('Error loading patient for labor result:', err);
         }
@@ -639,6 +652,17 @@ router.post('/manual', auth, checkPermission('patients.write'), async (req, res)
       });
     }
 
+    // Erweiterte Validierung der Laborwerte
+    const validation = laborValidatorService.validateResults(results);
+    if (!validation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler bei Laborwerten',
+        errors: validation.errors,
+        warnings: validation.warnings
+      });
+    }
+
     // Standard-Provider für manuelle Eingabe finden oder erstellen
     let provider;
     if (providerId) {
@@ -779,7 +803,8 @@ router.post('/manual', auth, checkPermission('patients.write'), async (req, res)
       }
     });
     
-    const laborResult = new LaborResult({
+    // Erstelle LaborResult-Objekt für finale Validierung
+    const laborResultData = {
       patientId,
       providerId: provider._id,
       externalId: `MANUAL-${Date.now()}`,
@@ -787,7 +812,7 @@ router.post('/manual', auth, checkPermission('patients.write'), async (req, res)
       collectionDate: combinedCollectionDate,
       analysisDate: combinedResultDate,
       resultDate: combinedResultDate,
-      receivedAt: now, // Explizit aktuelle Systemzeit verwenden
+      receivedAt: now,
       status: 'final',
       results: processedResults,
       interpretation: interpretation || (hasCriticalValues ? 'Kritische Werte vorhanden' : undefined),
@@ -800,7 +825,25 @@ router.post('/manual', auth, checkPermission('patients.write'), async (req, res)
       },
       processingStatus: 'validated',
       hasCriticalValues
-    });
+    };
+
+    // Finale Validierung des gesamten LaborResult-Objekts
+    const finalValidation = laborValidatorService.validateLaborResult(laborResultData);
+    if (!finalValidation.isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler beim Laborergebnis',
+        errors: finalValidation.errors,
+        warnings: finalValidation.warnings
+      });
+    }
+
+    // Wenn Warnungen vorhanden sind, logge sie (aber blockiere nicht)
+    if (finalValidation.warnings && finalValidation.warnings.length > 0) {
+      console.warn('Labor-Validierung Warnungen:', finalValidation.warnings);
+    }
+
+    const laborResult = new LaborResult(laborResultData);
 
     // Debug: Prüfe receivedAt vor dem Speichern
     console.log('🔍 Before save - laborResult.receivedAt:', {
@@ -1084,8 +1127,7 @@ async function notifyMedizinerAboutLaborResults(laborResult, sourceType = 'Impor
       return;
     }
 
-    // Lade Patientendaten
-    const Patient = require('../models/Patient');
+    // Lade Patientendaten (Produktivsystem: PatientExtended)
     const PatientExtended = require('../models/PatientExtended');
     let patient = null;
     const patientId = laborResult.patientId;
@@ -1093,9 +1135,6 @@ async function notifyMedizinerAboutLaborResults(laborResult, sourceType = 'Impor
     if (patientId) {
       try {
         patient = await PatientExtended.findById(patientId).select('firstName lastName').lean();
-        if (!patient) {
-          patient = await Patient.findById(patientId).select('firstName lastName').lean();
-        }
       } catch (err) {
         console.error('Error loading patient for notification:', err);
       }

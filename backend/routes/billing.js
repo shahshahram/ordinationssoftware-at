@@ -1,10 +1,14 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const Invoice = require('../models/Invoice');
 const Performance = require('../models/Performance');
 const ServiceCatalog = require('../models/ServiceCatalog');
 const Patient = require('../models/Patient');
+const PatientExtended = require('../models/PatientExtended');
+const User = require('../models/User');
 const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 const billingCalculator = require('../utils/billing-calculator');
 const rksvo = require('../utils/rksvo');
 const ogkXMLGenerator = require('../utils/ogk-xml-generator');
@@ -731,23 +735,44 @@ router.get('/turnusabrechnung', auth, async (req, res) => {
         $lte: new Date(endDate)
       },
       status: { $in: ['sent', 'paid'] }
-    }).populate('patient.id');
+    }).populate('patient.id', 'firstName lastName email socialSecurityNumber dateOfBirth address');
     
-    const totals = ogkXMLGenerator.calculateTotals(invoices);
+    // Normalisiere Patientendaten: Wenn patient.id populated ist, kopiere die Daten nach patient
+    const normalizedInvoices = invoices.map(invoice => {
+      const invoiceObj = invoice.toObject ? invoice.toObject() : invoice;
+      if (invoiceObj.patient?.id && typeof invoiceObj.patient.id === 'object') {
+        // Patient wurde populated, kopiere die Daten
+        const populatedPatient = invoiceObj.patient.id;
+        invoiceObj.patient = {
+          ...invoiceObj.patient,
+          name: `${populatedPatient.firstName || ''} ${populatedPatient.lastName || ''}`.trim(),
+          socialSecurityNumber: populatedPatient.socialSecurityNumber || invoiceObj.patient.socialSecurityNumber,
+          dateOfBirth: populatedPatient.dateOfBirth || invoiceObj.patient.dateOfBirth,
+          address: populatedPatient.address || invoiceObj.patient.address,
+          email: populatedPatient.email || invoiceObj.patient.email
+        };
+      }
+      return invoiceObj;
+    });
+    
+    const totals = ogkXMLGenerator.calculateTotals(normalizedInvoices);
     
     res.json({
       success: true,
       data: {
-        invoices: invoices,
+        invoices: normalizedInvoices,
         totals: totals,
-        count: invoices.length
+        count: normalizedInvoices.length
       }
     });
   } catch (error) {
     console.error('Turnusabrechnung-Fehler:', error);
+    console.error('Turnusabrechnung-Fehler Stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Fehler bei Turnusabrechnung'
+      message: 'Fehler bei Turnusabrechnung',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -783,9 +808,21 @@ router.get('/performances', auth, async (req, res) => {
     }
 
     let query = Performance.find(filter)
-      .populate('patientId', 'firstName lastName')
-      .populate('doctorId', 'firstName lastName')
-      .populate('appointmentId', 'title startTime endTime')
+      .populate({
+        path: 'patientId',
+        select: 'firstName lastName email',
+        options: { lean: false }
+      })
+      .populate({
+        path: 'doctorId',
+        select: 'firstName lastName',
+        options: { lean: false }
+      })
+      .populate({
+        path: 'appointmentId',
+        select: 'title startTime endTime',
+        options: { lean: false }
+      })
       .sort({ serviceDatetime: -1 });
 
     // Filter by patient name if provided
@@ -804,6 +841,36 @@ router.get('/performances', auth, async (req, res) => {
       .skip((page - 1) * limit);
 
     const total = await Performance.countDocuments(filter);
+
+    // Debug: Log first performance to check patientId population
+    if (performances.length > 0) {
+      console.log('First performance patientId (populated):', performances[0].patientId);
+      console.log('First performance patientId type:', typeof performances[0].patientId);
+      
+      // Load raw performance from DB to check if patientId is actually stored
+      const rawPerformance = await Performance.findById(performances[0]._id);
+      console.log('Raw first performance from DB - patientId:', rawPerformance?.patientId);
+      console.log('Raw first performance from DB - patientId type:', typeof rawPerformance?.patientId);
+      console.log('Raw first performance from DB - patientId toString:', rawPerformance?.patientId?.toString());
+      console.log('Raw first performance from DB - patientId instanceof ObjectId:', rawPerformance?.patientId instanceof mongoose.Types.ObjectId);
+      
+      // Check if patient exists (Produktivsystem: PatientExtended)
+      if (rawPerformance?.patientId) {
+        const patient = await PatientExtended.findById(rawPerformance.patientId);
+        console.log('Patient exists in PatientExtended DB:', !!patient);
+        console.log('Patient data (PatientExtended):', patient ? { _id: patient._id, firstName: patient.firstName, lastName: patient.lastName } : 'NOT FOUND');
+        
+        // Fallback: Check old Patient collection for debugging
+        if (!patient) {
+          const oldPatient = await Patient.findById(rawPerformance.patientId);
+          console.log('Patient exists in old Patient collection:', !!oldPatient);
+          if (oldPatient) {
+            console.log('⚠️ WARNING: Patient exists in old Patient collection but not in PatientExtended!');
+            console.log('Old Patient data:', { _id: oldPatient._id, firstName: oldPatient.firstName, lastName: oldPatient.lastName });
+          }
+        }
+      }
+    }
 
     res.json({
       success: true,
@@ -863,7 +930,7 @@ router.post('/performances', auth, [
   body('unitPrice').isNumeric().withMessage('Einzelpreis muss eine Zahl sein'),
   body('quantity').optional().isInt({ min: 1 }).withMessage('Anzahl muss mindestens 1 sein'),
   body('tariffType').isIn(['kassa', 'wahl', 'privat']).withMessage('Ungültiger Tariftyp'),
-  body('serviceDatetime').optional().isISO8601().withMessage('Ungültiges Datum/Zeit'),
+  body('serviceDatetime').notEmpty().withMessage('Datum/Zeit ist erforderlich'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -877,30 +944,145 @@ router.post('/performances', auth, [
 
     const performanceData = {
       ...req.body,
-      doctorId: req.user.id,
-      createdBy: req.user.id
+      doctorId: req.user._id,
+      createdBy: req.user._id
     };
+
+    // Debug: Log incoming patientId
+    console.log('Incoming patientId from request:', req.body.patientId);
+    console.log('Incoming patientId type:', typeof req.body.patientId);
+    console.log('Incoming patientId value:', JSON.stringify(req.body.patientId));
+
+    // Validate and convert patientId to ObjectId
+    if (!performanceData.patientId || performanceData.patientId === '' || performanceData.patientId === null) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient-ID ist erforderlich'
+      });
+    }
+
+    // Convert patientId to ObjectId if it's a string
+    if (typeof performanceData.patientId === 'string') {
+      if (performanceData.patientId.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          message: 'Patient-ID darf nicht leer sein'
+        });
+      }
+      try {
+        performanceData.patientId = new mongoose.Types.ObjectId(performanceData.patientId);
+      } catch (error) {
+        console.error('Error converting patientId to ObjectId:', error);
+        return res.status(400).json({
+          success: false,
+          message: 'Ungültige Patient-ID'
+        });
+      }
+    }
+
+    // Validate that patient exists in PatientExtended collection (Produktivsystem-Standard)
+    const patientExists = await PatientExtended.findById(performanceData.patientId);
+    
+    if (!patientExists) {
+      console.error('Patient not found in PatientExtended collection for ID:', performanceData.patientId);
+      return res.status(400).json({
+        success: false,
+        message: 'Patient nicht gefunden. Bitte wählen Sie einen gültigen Patienten.',
+        patientId: performanceData.patientId.toString()
+      });
+    }
+
+    // Debug: Log patientId before saving
+    console.log('Performance data patientId:', performanceData.patientId);
+    console.log('Performance data patientId type:', typeof performanceData.patientId);
+
+    // Convert appointmentId to ObjectId if it's a string and not empty
+    if (performanceData.appointmentId && typeof performanceData.appointmentId === 'string' && performanceData.appointmentId.trim() !== '') {
+      performanceData.appointmentId = new mongoose.Types.ObjectId(performanceData.appointmentId);
+    } else if (!performanceData.appointmentId || performanceData.appointmentId === '') {
+      delete performanceData.appointmentId;
+    }
+
+    // Convert serviceDatetime to Date if it's a string
+    if (performanceData.serviceDatetime && typeof performanceData.serviceDatetime === 'string') {
+      performanceData.serviceDatetime = new Date(performanceData.serviceDatetime);
+    }
 
     // Calculate total price if not provided
     if (!performanceData.totalPrice) {
       performanceData.totalPrice = performanceData.unitPrice * (performanceData.quantity || 1);
     }
 
+    // Debug: Log final performanceData before creating model
+    console.log('Final performanceData before creating model:', JSON.stringify(performanceData, null, 2));
+    console.log('Final performanceData.patientId:', performanceData.patientId);
+    console.log('Final performanceData.patientId type:', typeof performanceData.patientId);
+    console.log('Final performanceData.patientId instanceof ObjectId:', performanceData.patientId instanceof mongoose.Types.ObjectId);
+
     const performance = new Performance(performanceData);
+    
+    // Debug: Log performance before saving
+    console.log('Performance before save - patientId:', performance.patientId);
+    console.log('Performance before save - patientId type:', typeof performance.patientId);
+    
     await performance.save();
-    await performance.populate('patientId', 'firstName lastName');
+    
+    // Debug: Log performance after saving
+    console.log('Performance after save - patientId:', performance.patientId);
+    console.log('Performance after save - patientId type:', typeof performance.patientId);
+    await performance.populate('patientId', 'firstName lastName email');
+    await performance.populate('doctorId', 'firstName lastName');
+    if (performance.appointmentId) {
+      await performance.populate('appointmentId', 'locationId');
+    }
+
+    // Debug: Log created performance
+    console.log('Created performance patientId:', performance.patientId);
+    console.log('Created performance patientId type:', typeof performance.patientId);
+
+    // Debug: Load performance directly from DB without populate to check if patientId is saved
+    const performanceRaw = await Performance.findById(performance._id);
+    console.log('Raw performance from DB after create - patientId:', performanceRaw?.patientId);
+    console.log('Raw performance from DB after create - patientId type:', typeof performanceRaw?.patientId);
+    console.log('Raw performance from DB after create - patientId toString:', performanceRaw?.patientId?.toString());
+
+    // Automatische Abrechnung prüfen
+    // Priorität: Systemeinstellung (User.profile.preferences.autoBillingEnabled) > Checkbox (req.body.autoBill)
+    const user = await User.findById(req.user._id).select('profile.preferences.autoBillingEnabled');
+    const systemAutoBillingEnabled = user?.profile?.preferences?.autoBillingEnabled || false;
+    const checkboxAutoBill = req.body.autoBill === true || req.body.autoBill === 'true';
+    const shouldAutoBill = systemAutoBillingEnabled || checkboxAutoBill;
+
+    if (shouldAutoBill) {
+      try {
+        console.log(`🔄 Automatische Abrechnung gestartet für Performance ${performance._id} (System: ${systemAutoBillingEnabled}, Checkbox: ${checkboxAutoBill})`);
+        const billingService = require('../services/billingService');
+        const billingResult = await billingService.oneClickBill(performance._id, req.user, {
+          locationId: performance.appointmentId?.locationId || null
+        });
+        console.log(`✅ Automatische Abrechnung erfolgreich gestartet: Job ${billingResult.jobId}`);
+      } catch (billingError) {
+        console.error('⚠️ Fehler bei automatischer Abrechnung:', billingError);
+        // Fehler nicht an Client weitergeben, da Performance bereits erstellt wurde
+        // Die Abrechnung kann später manuell gestartet werden
+      }
+    }
 
     res.status(201).json({
       success: true,
       message: 'Leistung erfolgreich erstellt',
-      data: performance
+      data: performance,
+      autoBillingStarted: shouldAutoBill
     });
   } catch (error) {
     console.error('Performance creation error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Request body:', req.body);
     res.status(500).json({
       success: false,
       message: 'Fehler beim Erstellen der Leistung',
-      error: error.message
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -910,16 +1092,67 @@ router.post('/performances', auth, [
 // @access  Private
 router.put('/performances/:id', auth, async (req, res) => {
   try {
+    const updateData = { ...req.body };
+    
+    // Convert patientId to ObjectId if it's a string
+    if (updateData.patientId) {
+      if (typeof updateData.patientId === 'string' && updateData.patientId.trim() !== '') {
+        try {
+          updateData.patientId = new mongoose.Types.ObjectId(updateData.patientId);
+        } catch (error) {
+          return res.status(400).json({
+            success: false,
+            message: 'Ungültige Patient-ID'
+          });
+        }
+      } else if (updateData.patientId === '' || updateData.patientId === null) {
+        // Don't update patientId if it's empty or null (keep existing value)
+        delete updateData.patientId;
+      }
+    }
+
+    // Validate that patient exists in PatientExtended collection (Produktivsystem-Standard)
+    if (updateData.patientId) {
+      const patientExists = await PatientExtended.findById(updateData.patientId);
+      if (!patientExists) {
+        console.error('Patient not found in PatientExtended collection for ID:', updateData.patientId);
+        return res.status(400).json({
+          success: false,
+          message: 'Patient nicht gefunden. Bitte wählen Sie einen gültigen Patienten.'
+        });
+      }
+    }
+
+    // Convert appointmentId to ObjectId if it's a string and not empty
+    if (updateData.appointmentId && typeof updateData.appointmentId === 'string' && updateData.appointmentId.trim() !== '') {
+      updateData.appointmentId = new mongoose.Types.ObjectId(updateData.appointmentId);
+    } else if (updateData.appointmentId === '' || updateData.appointmentId === null) {
+      updateData.appointmentId = null;
+    }
+
+    // Convert serviceDatetime to Date if it's a string
+    if (updateData.serviceDatetime && typeof updateData.serviceDatetime === 'string') {
+      updateData.serviceDatetime = new Date(updateData.serviceDatetime);
+    }
+
+    // Debug: Log update data
+    console.log('Update performance data patientId:', updateData.patientId);
+    console.log('Update performance data patientId type:', typeof updateData.patientId);
+
+    // Debug: Log final updateData before updating
+    console.log('Final updateData before update:', JSON.stringify(updateData, null, 2));
+    console.log('Final updateData.patientId:', updateData.patientId);
+
     const performance = await Performance.findByIdAndUpdate(
       req.params.id,
       { 
-        ...req.body, 
-        lastModifiedBy: req.user.id,
+        ...updateData, 
+        lastModifiedBy: req.user._id,
         updatedAt: new Date()
       },
       { new: true, runValidators: true }
     )
-      .populate('patientId', 'firstName lastName')
+      .populate('patientId', 'firstName lastName email')
       .populate('doctorId', 'firstName lastName');
 
     if (!performance) {
@@ -928,6 +1161,16 @@ router.put('/performances/:id', auth, async (req, res) => {
         message: 'Leistung nicht gefunden'
       });
     }
+
+    // Debug: Log updated performance
+    console.log('Updated performance patientId:', performance.patientId);
+    console.log('Updated performance patientId type:', typeof performance.patientId);
+    console.log('Updated performance patientId instanceof ObjectId:', performance.patientId instanceof mongoose.Types.ObjectId);
+
+    // Debug: Load performance directly from DB without populate to check if patientId is saved
+    const performanceRaw = await Performance.findById(req.params.id);
+    console.log('Raw performance from DB - patientId:', performanceRaw?.patientId);
+    console.log('Raw performance from DB - patientId type:', typeof performanceRaw?.patientId);
 
     res.json({
       success: true,
@@ -967,6 +1210,77 @@ router.delete('/performances/:id', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Löschen der Leistung',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET /api/billing/performances/validate-references
+// @desc    Find performances with invalid patient references
+// @access  Private
+router.get('/performances/validate-references', auth, checkPermission('patients.read'), async (req, res) => {
+  try {
+    const performances = await Performance.find({ patientId: { $ne: null } }).select('_id patientId');
+    const invalidPerformances = [];
+
+    for (const performance of performances) {
+      // Prüfe PatientExtended (Produktivsystem-Standard)
+      const patient = await PatientExtended.findById(performance.patientId);
+      if (!patient) {
+        invalidPerformances.push({
+          performanceId: performance._id,
+          patientId: performance.patientId
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      total: performances.length,
+      invalid: invalidPerformances.length,
+      invalidPerformances
+    });
+  } catch (error) {
+    console.error('Error validating references:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Validieren der Referenzen',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/performances/cleanup-invalid-references
+// @desc    Clean up performances with invalid patient references (set patientId to null)
+// @access  Private
+router.post('/performances/cleanup-invalid-references', auth, checkPermission('patients.write'), async (req, res) => {
+  try {
+    const performances = await Performance.find({ patientId: { $ne: null } }).select('_id patientId');
+    let cleanedCount = 0;
+
+    for (const performance of performances) {
+      // Prüfe PatientExtended (Produktivsystem-Standard)
+      const patient = await PatientExtended.findById(performance.patientId);
+      if (!patient) {
+        await Performance.findByIdAndUpdate(performance._id, { 
+          patientId: null,
+          lastModifiedBy: req.user._id,
+          updatedAt: new Date()
+        });
+        cleanedCount++;
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `${cleanedCount} Leistungen mit ungültigen Patient-Referenzen bereinigt`,
+      cleanedCount
+    });
+  } catch (error) {
+    console.error('Error cleaning up invalid references:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Bereinigen der Referenzen',
       error: error.message
     });
   }

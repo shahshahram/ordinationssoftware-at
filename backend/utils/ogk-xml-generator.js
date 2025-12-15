@@ -185,6 +185,37 @@ class OGKXMLGenerator {
     
     return xml;
   }
+
+  /**
+   * Berechnet Gesamtsummen für Turnusabrechnung
+   * @param {Array} invoices - Array von Invoice-Objekten
+   * @returns {Object} Objekt mit totalAmount, totalCopay, totalInsuranceAmount, totalServices, count
+   */
+  calculateTotals(invoices) {
+    if (!invoices || !Array.isArray(invoices)) {
+      return {
+        totalAmount: 0,
+        totalCopay: 0,
+        totalInsuranceAmount: 0,
+        totalServices: 0,
+        count: 0
+      };
+    }
+
+    const totalAmount = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
+    const totalCopay = invoices.reduce((sum, inv) => 
+      sum + (inv.services?.reduce((s, svc) => s + (svc.copay || 0), 0) || 0), 0);
+    const totalInsuranceAmount = totalAmount - totalCopay;
+    const totalServices = invoices.reduce((sum, inv) => sum + (inv.services?.length || 0), 0);
+
+    return {
+      totalAmount,
+      totalCopay,
+      totalInsuranceAmount,
+      totalServices,
+      count: invoices.length
+    };
+  }
 }
 
 module.exports = new OGKXMLGenerator();

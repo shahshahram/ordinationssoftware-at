@@ -355,7 +355,8 @@ router.put('/profile', auth, [
   body('profile.specialization').optional().trim(),
   body('profile.phone').optional().trim(),
   body('preferences.language').optional().isIn(['de', 'en']),
-  body('preferences.theme').optional().isIn(['light', 'dark'])
+  body('preferences.theme').optional().isIn(['light', 'dark']),
+  body('profile.preferences.autoBillingEnabled').optional().isBoolean()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -379,8 +380,18 @@ router.put('/profile', auth, [
     const allowedFields = ['firstName', 'lastName', 'profile', 'preferences'];
     allowedFields.forEach(field => {
       if (req.body[field] !== undefined) {
-        if (field === 'profile' || field === 'preferences') {
-          user[field] = { ...user[field], ...req.body[field] };
+        if (field === 'profile') {
+          // Deep merge für profile (inkl. preferences)
+          user.profile = {
+            ...user.profile,
+            ...req.body.profile,
+            preferences: {
+              ...user.profile?.preferences,
+              ...req.body.profile?.preferences
+            }
+          };
+        } else if (field === 'preferences') {
+          user.preferences = { ...user.preferences, ...req.body.preferences };
         } else {
           user[field] = req.body[field];
         }
