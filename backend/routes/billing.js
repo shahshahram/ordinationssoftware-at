@@ -842,33 +842,12 @@ router.get('/performances', auth, async (req, res) => {
 
     const total = await Performance.countDocuments(filter);
 
-    // Debug: Log first performance to check patientId population
-    if (performances.length > 0) {
-      console.log('First performance patientId (populated):', performances[0].patientId);
-      console.log('First performance patientId type:', typeof performances[0].patientId);
-      
-      // Load raw performance from DB to check if patientId is actually stored
-      const rawPerformance = await Performance.findById(performances[0]._id);
-      console.log('Raw first performance from DB - patientId:', rawPerformance?.patientId);
-      console.log('Raw first performance from DB - patientId type:', typeof rawPerformance?.patientId);
-      console.log('Raw first performance from DB - patientId toString:', rawPerformance?.patientId?.toString());
-      console.log('Raw first performance from DB - patientId instanceof ObjectId:', rawPerformance?.patientId instanceof mongoose.Types.ObjectId);
-      
-      // Check if patient exists (Produktivsystem: PatientExtended)
-      if (rawPerformance?.patientId) {
-        const patient = await PatientExtended.findById(rawPerformance.patientId);
-        console.log('Patient exists in PatientExtended DB:', !!patient);
-        console.log('Patient data (PatientExtended):', patient ? { _id: patient._id, firstName: patient.firstName, lastName: patient.lastName } : 'NOT FOUND');
-        
-        // Fallback: Check old Patient collection for debugging
-        if (!patient) {
-          const oldPatient = await Patient.findById(rawPerformance.patientId);
-          console.log('Patient exists in old Patient collection:', !!oldPatient);
-          if (oldPatient) {
-            console.log('⚠️ WARNING: Patient exists in old Patient collection but not in PatientExtended!');
-            console.log('Old Patient data:', { _id: oldPatient._id, firstName: oldPatient.firstName, lastName: oldPatient.lastName });
-          }
-        }
+    // Debug: Nur bei Fehlern loggen (reduzierte Logs)
+    if (performances.length > 0 && process.env.NODE_ENV === 'development') {
+      const firstPerf = performances[0];
+      // Nur loggen wenn patientId fehlt oder null ist
+      if (!firstPerf.patientId) {
+        console.warn('⚠️ Performance ohne patientId gefunden:', firstPerf._id);
       }
     }
 
@@ -1282,6 +1261,386 @@ router.post('/performances/cleanup-invalid-references', auth, checkPermission('p
       success: false,
       message: 'Fehler beim Bereinigen der Referenzen',
       error: error.message
+    });
+  }
+});
+
+// ============================================
+// KASSA TESTST RECKE ROUTES
+// ============================================
+
+const kassenConnector = require('../services/connectors/kassenConnector');
+
+/**
+ * @route   POST /api/billing/kassa/test-connection
+ * @desc    Teste Verbindung zur Kassen-API
+ * @access  Private (settings.read)
+ */
+router.post('/kassa/test-connection', auth, checkPermission('settings.read'), async (req, res) => {
+  try {
+    const { baseUrl, apiKey } = req.body;
+    
+    // Temporär API-URL und Key setzen für Test
+    const originalBaseUrl = kassenConnector.baseUrl;
+    const originalApiKey = kassenConnector.apiKey;
+    
+    if (baseUrl) kassenConnector.baseUrl = baseUrl;
+    if (apiKey) kassenConnector.apiKey = apiKey;
+    
+    const result = await kassenConnector.testConnection();
+    
+    // Originalwerte wiederherstellen
+    kassenConnector.baseUrl = originalBaseUrl;
+    kassenConnector.apiKey = originalApiKey;
+    
+    res.json({
+      success: result.success,
+      message: result.success ? 'Verbindungstest erfolgreich' : 'Verbindungstest fehlgeschlagen',
+      data: result
+    });
+  } catch (error) {
+    console.error('Kassa-Verbindungstest Fehler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Verbindungstest fehlgeschlagen',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/billing/kassa/send
+ * @desc    Sende Test-Kassenabrechnung
+ * @access  Private (billing.write)
+ */
+router.post('/kassa/send', auth, checkPermission('billing.write'), async (req, res) => {
+  try {
+    const { performanceId, patientId, serviceCode, serviceDescription, totalPrice, tariffType } = req.body;
+    
+    // Performance laden, falls vorhanden
+    let performance = null;
+    if (performanceId) {
+      performance = await Performance.findById(performanceId).populate('patientId doctorId');
+    }
+    
+    // Patient laden
+    const patient = await PatientExtended.findById(patientId);
+    if (!patient) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient nicht gefunden'
+      });
+    }
+    
+    // Doctor laden (vom aktuellen User)
+    const doctor = await User.findById(req.user._id).select('+profile');
+    if (!doctor) {
+      return res.status(400).json({
+        success: false,
+        message: 'Arzt nicht gefunden'
+      });
+    }
+    
+    // Payload erstellen
+    const payload = {
+      performance: {
+        id: performance?._id || null,
+        serviceCode: performance?.serviceCode || serviceCode,
+        serviceDescription: performance?.serviceDescription || serviceDescription,
+        serviceDatetime: performance?.serviceDatetime || new Date(),
+        unitPrice: performance?.unitPrice || totalPrice,
+        quantity: performance?.quantity || 1,
+        totalPrice: performance?.totalPrice || totalPrice,
+        tariffType: performance?.tariffType || tariffType
+      },
+      doctor: {
+        id: doctor._id,
+        name: `${doctor.firstName} ${doctor.lastName}`,
+        contractType: doctor.profile?.contractType || 'wahlarzt',
+        specialization: doctor.profile?.specialization || '',
+        taxNumber: doctor.taxNumber || '',
+        chamberNumber: doctor.chamberNumber || ''
+      },
+      patient: {
+        id: patient._id,
+        name: `${patient.firstName} ${patient.lastName}`,
+        email: patient.email,
+        socialSecurityNumber: patient.socialSecurityNumber,
+        insuranceProvider: patient.insuranceProvider,
+        address: patient.address
+      },
+      route: tariffType === 'kassa' ? 'KASSE' : 'PATIENT+KASSE_REFUND',
+      timestamp: new Date()
+    };
+    
+    // Idempotency-Key generieren
+    const idempotencyKey = `test_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Prüfe ob Patient eine Sozialversicherungsnummer hat (für e-Card-Validierung)
+    if (!patient.socialSecurityNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient hat keine Sozialversicherungsnummer. Diese ist für Kassenabrechnungen erforderlich.',
+        error: 'Sozialversicherungsnummer fehlt'
+      });
+    }
+    
+    // Kassenabrechnung senden
+    try {
+      const result = await kassenConnector.send(payload, idempotencyKey);
+      
+      res.json({
+        success: result.success,
+        message: result.success ? 'Kassenabrechnung erfolgreich gesendet' : 'Kassenabrechnung fehlgeschlagen',
+        data: result
+      });
+    } catch (kassaError) {
+      // Wenn die Kassen-API nicht verfügbar ist, simuliere eine erfolgreiche Antwort für Testzwecke
+      if (kassaError.message.includes('nicht verfügbar') || kassaError.message.includes('ECONNREFUSED') || !kassenConnector.apiKey) {
+        console.warn('⚠️ Kassen-API nicht verfügbar, simuliere Test-Antwort:', kassaError.message);
+        res.json({
+          success: true,
+          message: 'Kassenabrechnung erfolgreich gesendet (simuliert - Kassen-API nicht konfiguriert)',
+          data: {
+            kassaRef: `TEST-${idempotencyKey}`,
+            status: 'ACCEPTED',
+            message: 'Test-Abrechnung erfolgreich verarbeitet',
+            processingTime: 100,
+            simulated: true,
+            warning: 'Kassen-API ist nicht konfiguriert. Dies ist eine simulierte Antwort für Testzwecke.'
+          }
+        });
+      } else {
+        throw kassaError;
+      }
+    }
+  } catch (error) {
+    console.error('Kassa-Send Fehler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Kassenabrechnung fehlgeschlagen',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * @route   POST /api/billing/kassa/refund
+ * @desc    Stelle Rückerstattungsantrag
+ * @access  Private (billing.write)
+ */
+router.post('/kassa/refund', auth, checkPermission('billing.write'), async (req, res) => {
+  try {
+    const { performanceId, patientId, refundAmount, reason } = req.body;
+    
+    // Validierung
+    if (!performanceId || !patientId || !refundAmount) {
+      return res.status(400).json({
+        success: false,
+        message: 'Leistung, Patient und Rückerstattungsbetrag sind erforderlich'
+      });
+    }
+    
+    // Performance laden
+    const performance = await Performance.findById(performanceId).populate('patientId doctorId');
+    if (!performance) {
+      return res.status(400).json({
+        success: false,
+        message: 'Leistung nicht gefunden'
+      });
+    }
+    
+    // Patient laden
+    const patient = await PatientExtended.findById(patientId);
+    if (!patient) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient nicht gefunden'
+      });
+    }
+    
+    // Doctor laden
+    const doctor = await User.findById(req.user._id).select('+profile');
+    if (!doctor) {
+      return res.status(400).json({
+        success: false,
+        message: 'Arzt nicht gefunden'
+      });
+    }
+    
+    // Payload erstellen
+    const payload = {
+      performance: {
+        id: performance._id,
+        serviceCode: performance.serviceCode,
+        serviceDescription: performance.serviceDescription,
+        serviceDatetime: performance.serviceDatetime,
+        unitPrice: performance.unitPrice,
+        quantity: performance.quantity,
+        totalPrice: performance.totalPrice,
+        tariffType: performance.tariffType
+      },
+      doctor: {
+        id: doctor._id,
+        name: `${doctor.firstName} ${doctor.lastName}`,
+        contractType: doctor.profile?.contractType || 'wahlarzt',
+        specialization: doctor.profile?.specialization || '',
+        taxNumber: doctor.taxNumber || '',
+        chamberNumber: doctor.chamberNumber || ''
+      },
+      patient: {
+        id: patient._id,
+        name: `${patient.firstName} ${patient.lastName}`,
+        email: patient.email,
+        socialSecurityNumber: patient.socialSecurityNumber,
+        insuranceProvider: patient.insuranceProvider,
+        address: patient.address
+      },
+      wahlarztData: {
+        totalPrice: performance.totalPrice,
+        refundAmount: parseFloat(refundAmount),
+        copayAmount: 0,
+        patientAmount: performance.totalPrice - parseFloat(refundAmount),
+        billingType: 'wahlarzt',
+        requiresRefundRequest: true
+      },
+      route: 'PATIENT+KASSE_REFUND',
+      timestamp: new Date()
+    };
+    
+    // Prüfe ob Patient eine Sozialversicherungsnummer hat (für e-Card-Validierung)
+    if (!patient.socialSecurityNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'Patient hat keine Sozialversicherungsnummer. Diese ist für Rückerstattungsanträge erforderlich.',
+        error: 'Sozialversicherungsnummer fehlt'
+      });
+    }
+    
+    // Idempotency-Key generieren
+    const idempotencyKey = `test_refund_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // Rückerstattungsantrag stellen
+    try {
+      const result = await kassenConnector.submitRefundRequest(payload, idempotencyKey);
+      
+      res.json({
+        success: result.success,
+        message: result.success ? 'Rückerstattungsantrag erfolgreich gestellt' : 'Rückerstattungsantrag fehlgeschlagen',
+        data: result
+      });
+    } catch (kassaError) {
+      // Wenn die Kassen-API nicht verfügbar ist, simuliere eine erfolgreiche Antwort für Testzwecke
+      if (kassaError.message.includes('nicht verfügbar') || 
+          kassaError.message.includes('ECONNREFUSED') || 
+          kassaError.message.includes('nicht konfiguriert') ||
+          !kassenConnector.apiKey) {
+        console.warn('⚠️ Kassen-API nicht verfügbar, simuliere Test-Rückerstattungsantrag:', kassaError.message);
+        res.json({
+          success: true,
+          message: 'Rückerstattungsantrag erfolgreich gestellt (simuliert - Kassen-API nicht konfiguriert)',
+          data: {
+            success: true,
+            refundRef: `TEST-REFUND-${idempotencyKey}`,
+            status: 'PENDING',
+            refundAmount: parseFloat(refundAmount),
+            processingTime: 100,
+            simulated: true,
+            warning: 'Kassen-API ist nicht konfiguriert. Dies ist eine simulierte Antwort für Testzwecke.'
+          }
+        });
+      } else {
+        throw kassaError;
+      }
+    }
+  } catch (error) {
+    console.error('Kassa-Refund Fehler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Rückerstattungsantrag fehlgeschlagen',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+/**
+ * @route   GET /api/billing/kassa/list
+ * @desc    Rufe Abrechnungsliste ab
+ * @access  Private (billing.read)
+ */
+router.get('/kassa/list', auth, checkPermission('billing.read'), async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Start- und Enddatum erforderlich'
+      });
+    }
+    
+    // Abrechnungsliste abrufen
+    try {
+      const result = await kassenConnector.getBillingList(new Date(startDate), new Date(endDate));
+      
+      res.json({
+        success: result.success,
+        message: result.success ? 'Abrechnungsliste erfolgreich abgerufen' : 'Abrechnungsliste konnte nicht abgerufen werden',
+        data: result
+      });
+    } catch (kassaError) {
+      // Wenn die Kassen-API nicht verfügbar ist, simuliere eine Test-Antwort
+      if (kassaError.message.includes('nicht verfügbar') || 
+          kassaError.message.includes('ECONNREFUSED') || 
+          kassaError.message.includes('nicht konfiguriert') ||
+          !kassenConnector.apiKey) {
+        console.warn('⚠️ Kassen-API nicht verfügbar, simuliere Test-Abrechnungsliste:', kassaError.message);
+        
+        // Lade Rechnungen aus der Datenbank als Simulation
+        const Invoice = require('../models/Invoice');
+        const invoices = await Invoice.find({
+          billingType: 'kassenarzt',
+          invoiceDate: {
+            $gte: new Date(startDate),
+            $lte: new Date(endDate)
+          }
+        })
+        .populate('patient.id', 'firstName lastName')
+        .sort({ invoiceDate: -1 })
+        .limit(10);
+        
+        res.json({
+          success: true,
+          message: 'Abrechnungsliste erfolgreich abgerufen (simuliert - Kassen-API nicht konfiguriert)',
+          data: {
+            invoices: invoices.map(inv => ({
+              invoiceNumber: inv.invoiceNumber,
+              invoiceDate: inv.invoiceDate,
+              patient: {
+                name: inv.patient?.id ? 
+                  `${inv.patient.id.firstName} ${inv.patient.id.lastName}` : 
+                  inv.patient?.name || 'Unbekannt'
+              },
+              totalAmount: inv.totalAmount,
+              status: inv.status
+            })),
+            simulated: true,
+            warning: 'Kassen-API ist nicht konfiguriert. Dies sind lokale Rechnungen aus der Datenbank.'
+          }
+        });
+      } else {
+        throw kassaError;
+      }
+    }
+  } catch (error) {
+    console.error('Kassa-List Fehler:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Abrechnungsliste konnte nicht abgerufen werden',
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });

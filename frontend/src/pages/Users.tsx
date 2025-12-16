@@ -44,6 +44,7 @@ import {
   Edit,
   Delete,
   Visibility,
+  VisibilityOff,
   Person,
   AdminPanelSettings,
   LocalHospital,
@@ -91,6 +92,7 @@ const Users: React.FC = () => {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMode, setDialogMode] = useState<'add' | 'edit' | 'view'>('add');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [snackbar, setSnackbar] = useState({ 
     open: false, 
     message: '', 
@@ -150,6 +152,7 @@ const Users: React.FC = () => {
   };
 
   const handleAddNew = () => {
+    // Formular komplett zurücksetzen
     setFormData({
       email: '',
       password: '',
@@ -157,6 +160,7 @@ const Users: React.FC = () => {
       lastName: '',
       role: 'assistent',
       isActive: true,
+      color_hex: '#10B981',
       profile: {
         title: '',
         specialization: '',
@@ -164,6 +168,10 @@ const Users: React.FC = () => {
       }
     });
     setDialogMode('add');
+    // Passwort-Sichtbarkeit zurücksetzen
+    setShowPassword(false);
+    // Suchfeld zurücksetzen, damit keine Filterung stattfindet
+    setSearchTerm('');
     setOpenDialog(true);
   };
 
@@ -271,6 +279,25 @@ const Users: React.FC = () => {
 
   const handleSave = async () => {
     try {
+      // Client-side validation
+      if (!formData.email || !formData.firstName || !formData.lastName || !formData.role) {
+        setSnackbar({ 
+          open: true, 
+          message: 'Bitte füllen Sie alle Pflichtfelder aus', 
+          severity: 'error' 
+        });
+        return;
+      }
+
+      if (dialogMode === 'add' && (!formData.password || formData.password.length < 6)) {
+        setSnackbar({ 
+          open: true, 
+          message: 'Das Passwort muss mindestens 6 Zeichen lang sein', 
+          severity: 'error' 
+        });
+        return;
+      }
+
       const token = localStorage.getItem('token');
       const url = dialogMode === 'add' 
         ? 'http://localhost:5001/api/users'
@@ -285,11 +312,34 @@ const Users: React.FC = () => {
         lastName: formData.lastName,
         role: formData.role,
         isActive: formData.isActive,
-        color_hex: formData.color_hex
+        color_hex: formData.color_hex,
+        profile: {
+          title: formData.profile?.title || '',
+          specialization: formData.profile?.specialization || '',
+          phone: formData.profile?.phone || ''
+        }
       };
 
       // Only include password for new users or if password is provided for edits
-      if (dialogMode === 'add' || (dialogMode === 'edit' && formData.password)) {
+      if (dialogMode === 'add') {
+        if (!formData.password || formData.password.length < 6) {
+          setSnackbar({ 
+            open: true, 
+            message: 'Das Passwort muss mindestens 6 Zeichen lang sein', 
+            severity: 'error' 
+          });
+          return;
+        }
+        userData.password = formData.password;
+      } else if (dialogMode === 'edit' && formData.password && formData.password.length > 0) {
+        if (formData.password.length < 6) {
+          setSnackbar({ 
+            open: true, 
+            message: 'Das Passwort muss mindestens 6 Zeichen lang sein', 
+            severity: 'error' 
+          });
+          return;
+        }
         userData.password = formData.password;
       }
 
@@ -312,16 +362,26 @@ const Users: React.FC = () => {
         setOpenDialog(false);
         loadUsers();
       } else {
+        // Zeige detaillierte Fehlermeldungen an
+        let errorMessage = data.message || 'Fehler beim Speichern';
+        if (data.errors && Array.isArray(data.errors) && data.errors.length > 0) {
+          const errorDetails = data.errors.map((err: any) => {
+            if (err.msg) return err.msg;
+            if (typeof err === 'string') return err;
+            return JSON.stringify(err);
+          }).join(', ');
+          errorMessage = `${errorMessage}: ${errorDetails}`;
+        }
         setSnackbar({ 
           open: true, 
-          message: data.message || 'Fehler beim Speichern', 
+          message: errorMessage, 
           severity: 'error' 
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       setSnackbar({ 
         open: true, 
-        message: 'Fehler beim Speichern', 
+        message: `Fehler beim Speichern: ${error.message || 'Unbekannter Fehler'}`, 
         severity: 'error' 
       });
     }
@@ -600,7 +660,19 @@ const Users: React.FC = () => {
         </MenuItem>
       </Menu>
 
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth
+      <Dialog 
+        open={openDialog} 
+        onClose={() => {
+          setOpenDialog(false);
+          // Passwort-Sichtbarkeit zurücksetzen
+          setShowPassword(false);
+          // Suchfeld zurücksetzen beim Schließen des Dialogs (nur im add-Modus)
+          if (dialogMode === 'add') {
+            setSearchTerm('');
+          }
+        }} 
+        maxWidth="md" 
+        fullWidth
         PaperProps={{
           sx: {
             borderRadius: 3,
@@ -642,6 +714,7 @@ const Users: React.FC = () => {
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
+                key={`email-${dialogMode}-${openDialog}`}
                 fullWidth
                 label="E-Mail"
                 type="email"
@@ -649,27 +722,55 @@ const Users: React.FC = () => {
                 onChange={(e) => handleFormChange('email', e.target.value)}
                 disabled={dialogMode === 'view'}
                 required
+                autoComplete="off"
+                inputProps={{
+                  autoComplete: 'off',
+                  'data-form-type': 'other',
+                  'data-lpignore': 'true'
+                }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
               <TextField
+                key={`password-${dialogMode}-${openDialog}`}
                 fullWidth
                 label="Passwort"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={formData.password || ''}
                 onChange={(e) => handleFormChange('password', e.target.value)}
                 disabled={dialogMode === 'view'}
                 required={dialogMode === 'add'}
                 helperText={dialogMode === 'edit' ? 'Leer lassen, um das Passwort nicht zu ändern' : ''}
+                autoComplete="new-password"
+                inputProps={{
+                  autoComplete: 'new-password',
+                  'data-lpignore': 'true'
+                }}
+                InputProps={{
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        aria-label="Passwort anzeigen/verbergen"
+                        onClick={() => setShowPassword(!showPassword)}
+                        onMouseDown={(e) => e.preventDefault()}
+                        edge="end"
+                        disabled={dialogMode === 'view'}
+                      >
+                        {showPassword ? <VisibilityOff /> : <Visibility />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }}
               />
             </Grid>
             <Grid size={{ xs: 12, sm: 6 }}>
-              <FormControl fullWidth disabled={dialogMode === 'view'}>
+              <FormControl fullWidth disabled={dialogMode === 'view'} required>
                 <InputLabel>Rolle</InputLabel>
                 <Select
                   value={formData.role || ''}
                   onChange={(e) => handleFormChange('role', e.target.value)}
                   label="Rolle"
+                  required
                 >
                   <SelectMenuItem value="super_admin">Super Administrator</SelectMenuItem>
                   <SelectMenuItem value="admin">Administrator</SelectMenuItem>

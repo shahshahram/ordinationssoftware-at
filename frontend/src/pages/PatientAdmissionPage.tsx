@@ -256,7 +256,7 @@ const PatientAdmissionPage: React.FC = () => {
             'dataProtectionConsent': 'Datenschutz-Einverständnis'
           };
           
-          validationErrors.forEach((err: any) => {
+        validationErrors.forEach((err: any) => {
             const fieldName = err.param || err.path || 'Unbekanntes Feld';
             const friendlyFieldName = fieldTranslations[fieldName] || fieldName;
             const msg = err.msg || err.message || 'Ungültiger Wert';

@@ -807,11 +807,32 @@ const LocationManagement: React.FC = () => {
           
           // Versuche, ein StaffProfile für diesen User zu finden oder zu erstellen
           try {
-            // Versuche zuerst, ein bestehendes StaffProfile zu finden
-            const existingStaffProfile = (Array.isArray(staffProfiles) ? staffProfiles : []).find(s => {
-              const userId = (s as any).user_id || (s as any).userId;
-              return userId === user._id;
-            });
+            // Hilfsfunktion zum Finden eines StaffProfiles nach userId
+            const findStaffProfileByUserId = (profiles: any[], userId: string): any => {
+              return profiles.find((s: any) => {
+                const profileUserId = s.user_id || s.userId;
+                const userIdString = typeof profileUserId === 'string' ? profileUserId : (profileUserId as any)?._id || profileUserId;
+                return userIdString === userId;
+              });
+            };
+            
+            // Versuche zuerst, ein bestehendes StaffProfile in den geladenen Profilen zu finden
+            let existingStaffProfile = findStaffProfileByUserId(Array.isArray(staffProfiles) ? staffProfiles : [], user._id);
+            
+            // Wenn nicht gefunden, lade alle StaffProfiles vom Backend (mit limit=1000)
+            if (!existingStaffProfile) {
+              console.log('[Assignment Submit] StaffProfile nicht in geladenen Profilen gefunden, lade alle vom Backend...');
+              try {
+                const allProfilesResponse: any = await api.get('/staff-profiles?limit=1000');
+                if (allProfilesResponse.data?.success && Array.isArray(allProfilesResponse.data.data)) {
+                  existingStaffProfile = findStaffProfileByUserId(allProfilesResponse.data.data, user._id);
+                  // Aktualisiere auch den Redux-State
+                  dispatch(fetchStaffProfiles());
+                }
+              } catch (fetchError) {
+                console.warn('[Assignment Submit] Fehler beim Abrufen aller StaffProfiles:', fetchError);
+              }
+            }
             
             if (existingStaffProfile) {
               actualStaffId = existingStaffProfile._id;
@@ -844,26 +865,100 @@ const LocationManagement: React.FC = () => {
               
               console.log('[Assignment Submit] Mapping user role:', { userRole, roleHint });
               
-              const response: any = await api.post('/staff-profiles', {
-                userId: user._id,
-                displayName: `${user.firstName} ${user.lastName}`,
-                roleHint: roleHint,
-                isActive: true
-              });
-              
-              if (response.data?.success && response.data.data) {
-                actualStaffId = response.data.data._id;
-                console.log('[Assignment Submit] Created new StaffProfile:', actualStaffId);
-                // Lade StaffProfiles neu, um das neue Profil zu erhalten
-                dispatch(fetchStaffProfiles());
-              } else {
-                throw new Error('Fehler beim Erstellen des Personalprofils');
+              try {
+                const response: any = await api.post('/staff-profiles', {
+                  userId: user._id,
+                  displayName: `${user.firstName} ${user.lastName}`,
+                  roleHint: roleHint,
+                  isActive: true
+                });
+                
+                if (response.data?.success && response.data.data) {
+                  actualStaffId = response.data.data._id;
+                  console.log('[Assignment Submit] Created new StaffProfile:', actualStaffId);
+                  // Lade StaffProfiles neu, um das neue Profil zu erhalten
+                  dispatch(fetchStaffProfiles());
+                } else {
+                  throw new Error('Fehler beim Erstellen des Personalprofils');
+                }
+              } catch (postError: any) {
+                // Wenn der Fehler ist, dass bereits ein StaffProfile existiert, lade alle StaffProfiles neu und suche danach
+                // Prüfe sowohl error.message als auch error.response.data.message
+                const errorMessage = (
+                  postError?.response?.data?.message || 
+                  postError?.message || 
+                  ''
+                ).toLowerCase();
+                
+                console.log('[Assignment Submit] POST Error details:', {
+                  message: postError?.message,
+                  responseMessage: postError?.response?.data?.message,
+                  combinedMessage: errorMessage
+                });
+                
+                if (errorMessage.includes('existiert bereits') || 
+                    errorMessage.includes('bereits ein personalprofil') ||
+                    errorMessage.includes('already exists')) {
+                  console.log('[Assignment Submit] StaffProfile existiert bereits, lade alle StaffProfiles neu...');
+                  
+                  // Lade alle StaffProfiles direkt vom Backend
+                  try {
+                    const allProfilesResponse: any = await api.get('/staff-profiles?limit=1000');
+                    if (allProfilesResponse.data?.success && Array.isArray(allProfilesResponse.data.data)) {
+                      const foundProfile = findStaffProfileByUserId(allProfilesResponse.data.data, user._id);
+                      if (foundProfile) {
+                        actualStaffId = foundProfile._id;
+                        console.log('[Assignment Submit] Found existing StaffProfile after error:', actualStaffId);
+                        // Aktualisiere auch den Redux-State
+                        dispatch(fetchStaffProfiles());
+                        // WICHTIG: Kein Fehler werfen, sondern mit dem gefundenen StaffProfile fortfahren
+                        console.log('[Assignment Submit] Continuing with existing StaffProfile:', actualStaffId);
+                        // StaffProfile wurde gefunden - kein Fehler werfen, Prozess fortsetzen
+                        // Der Code wird nach diesem catch-Block fortgesetzt, da actualStaffId gesetzt ist
+                        // BREAK: Verlasse den catch-Block ohne Fehler zu werfen
+                      } else {
+                        // Wenn immer noch nicht gefunden, versuche eine direkte Suche über die Backend-API
+                        console.log('[Assignment Submit] StaffProfile nicht in Liste gefunden, versuche direkte Suche...');
+                        // Versuche, das StaffProfile über userId zu finden (falls Backend eine solche Route hat)
+                        // Oder verwende die user_id direkt als staff_id (falls Backend das akzeptiert)
+                        throw new Error('StaffProfile konnte nicht gefunden werden. Bitte versuchen Sie es erneut oder kontaktieren Sie den Administrator.');
+                      }
+                    } else {
+                      throw new Error('Fehler beim Abrufen aller StaffProfiles');
+                    }
+                  } catch (fetchError: any) {
+                    // Nur Fehler werfen, wenn actualStaffId NICHT gesetzt wurde
+                    if (!actualStaffId || actualStaffId === assignmentForm.staff_id) {
+                      console.error('[Assignment Submit] Fehler beim Abrufen der StaffProfiles:', fetchError);
+                      throw new Error(`Fehler beim Finden des Personalprofils: ${fetchError?.message || 'Unbekannter Fehler'}`);
+                    } else {
+                      // actualStaffId wurde bereits gesetzt - kein Fehler werfen
+                      console.log('[Assignment Submit] StaffProfile wurde bereits gefunden, ignoriere fetchError');
+                    }
+                  }
+                  // Wenn actualStaffId gesetzt wurde, keinen Fehler werfen - Prozess fortsetzen
+                  if (!actualStaffId || actualStaffId === assignmentForm.staff_id) {
+                    // StaffProfile wurde nicht gefunden - Fehler werfen
+                    throw new Error('StaffProfile konnte nicht gefunden werden, obwohl es existieren sollte');
+                  }
+                  // Wenn wir hier ankommen, wurde actualStaffId gesetzt - kein Fehler werfen, Prozess fortsetzen
+                } else {
+                  // Anderer Fehler - weiterwerfen
+                  throw postError;
+                }
               }
             }
           } catch (createError: any) {
-            console.error('[Assignment Submit] Error creating StaffProfile:', createError);
-            alert(`Fehler beim Erstellen des Personalprofils: ${createError?.message || 'Unbekannter Fehler'}`);
-            return;
+            // Prüfe, ob actualStaffId bereits gesetzt wurde (d.h., das StaffProfile wurde gefunden)
+            if (actualStaffId && actualStaffId !== assignmentForm.staff_id) {
+              // StaffProfile wurde erfolgreich gefunden, fortfahren
+              console.log('[Assignment Submit] StaffProfile wurde gefunden, setze actualStaffId:', actualStaffId);
+            } else {
+              // Echter Fehler - anzeigen und abbrechen
+              console.error('[Assignment Submit] Error creating/finding StaffProfile:', createError);
+              alert(`Fehler beim Erstellen/Finden des Personalprofils: ${createError?.message || 'Unbekannter Fehler'}`);
+              return;
+            }
           }
         }
       }

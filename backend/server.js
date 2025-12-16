@@ -20,6 +20,8 @@ const billingReportsRoutes = require('./routes/billing-reports');
 const documentRoutes = require('./routes/documents');
 const onlineBookingRoutes = require('./routes/onlineBooking');
 const elgaRoutes = require('./routes/elga');
+const eldaRoutes = require('./routes/elda');
+const wahonlineRoutes = require('./routes/wahonline');
 const ecardRoutes = require('./routes/ecard');
 const userRoutes = require('./routes/users');
 const backupRoutes = require('./routes/backup');
@@ -261,6 +263,8 @@ function registerStaticRoutes(app) {
   app.use('/api/documents', documentRoutes);
   app.use('/api/online-booking', onlineBookingRoutes);
   app.use('/api/elga', elgaRoutes);
+  app.use('/api/elda', eldaRoutes);
+  app.use('/api/wahonline', wahonlineRoutes);
   app.use('/api/ecard', ecardRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/backup', backupRoutes);

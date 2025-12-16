@@ -79,7 +79,7 @@ router.get('/', auth, async (req, res) => {
     }
 
     const staffProfiles = await StaffProfile.find(query)
-      .populate('userId', 'firstName lastName email color_hex')
+      .populate('userId', 'firstName lastName email color_hex profile')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -123,10 +123,19 @@ router.get('/', auth, async (req, res) => {
       display_name: profile.displayName,
       first_name: profile.userId?.firstName || '',
       last_name: profile.userId?.lastName || '',
-      email: profile.userId?.email || '',
+      email: profile.userId?.email || profile.contact?.email || '',
       role: profile.roleHint,
       color_hex: profile.userId?.color_hex || profile.colorHex || '#6B7280', // Use user color first, fallback to profile color
       isActive: profile.isActive,
+      // StaffProfile-spezifische Felder
+      title: profile.title || profile.userId?.profile?.title || '',
+      specialization: Array.isArray(profile.specializations) && profile.specializations.length > 0 
+        ? profile.specializations[0] 
+        : (profile.userId?.profile?.specialization || ''),
+      specializations: profile.specializations || [],
+      phone: profile.contact?.phone || profile.userId?.profile?.phone || '',
+      contact: profile.contact || {},
+      isOnlineBookable: profile.acceptsOnline !== undefined ? profile.acceptsOnline : true,
       locations: profile.locations || [],
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt

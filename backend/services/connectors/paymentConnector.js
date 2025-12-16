@@ -35,8 +35,12 @@ class PaymentConnector {
     const paymentMethod = options.paymentMethod || 'stripe';
     const provider = this.providers[paymentMethod];
     
+    // Wenn Provider nicht verfügbar ist, werfe einen speziellen Fehler, der abgefangen werden kann
     if (!provider || !provider.enabled) {
-      throw new Error(`Zahlungsanbieter ${paymentMethod} nicht verfügbar`);
+      const error = new Error(`Zahlungsanbieter ${paymentMethod} nicht verfügbar`);
+      error.code = 'PAYMENT_PROVIDER_NOT_AVAILABLE';
+      error.provider = paymentMethod;
+      throw error;
     }
 
     try {
@@ -52,6 +56,10 @@ class PaymentConnector {
       }
     } catch (error) {
       console.error('Payment-Connector Fehler:', error);
+      // Wenn es bereits ein Provider-Fehler ist, diesen weiterwerfen
+      if (error.code === 'PAYMENT_PROVIDER_NOT_AVAILABLE') {
+        throw error;
+      }
       throw new Error(`Zahlung fehlgeschlagen: ${error.message}`);
     }
   }

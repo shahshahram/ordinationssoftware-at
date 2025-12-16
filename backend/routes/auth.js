@@ -356,7 +356,11 @@ router.put('/profile', auth, [
   body('profile.phone').optional().trim(),
   body('preferences.language').optional().isIn(['de', 'en']),
   body('preferences.theme').optional().isIn(['light', 'dark']),
-  body('profile.preferences.autoBillingEnabled').optional().isBoolean()
+  body('profile.preferences.autoBillingEnabled').optional().isBoolean(),
+  body('profile.preferences.eldaEnabled').optional().isBoolean(),
+  body('profile.preferences.eldaMethod').optional().isIn(['ftps', 'webservice', 'auto']),
+  body('profile.preferences.eldaEnvironment').optional().isIn(['test', 'sit', 'production']),
+  body('profile.preferences.wahonlineEnabled').optional().isBoolean()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

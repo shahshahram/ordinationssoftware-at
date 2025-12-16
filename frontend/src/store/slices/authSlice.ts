@@ -235,11 +235,29 @@ const authSlice = createSlice({
       })
       .addCase(loadUser.rejected, (state, action) => {
         state.loading = false;
+        
+        // Prüfe ob es ein Netzwerkfehler ist
+        const errorMessage = action.payload as string || '';
+        const isNetworkError = 
+          errorMessage.includes('Netzwerkfehler') ||
+          errorMessage.includes('Failed to fetch') ||
+          errorMessage.includes('NetworkError') ||
+          errorMessage.includes('ERR_CONNECTION_RESET');
+        
+        // Bei Netzwerkfehlern: Nicht abmelden, nur Fehler setzen
+        if (isNetworkError) {
+          console.warn('loadUser: Netzwerkfehler erkannt - Benutzer bleibt angemeldet');
+          state.error = errorMessage;
+          // Behalte den aktuellen Authentifizierungsstatus
+          return;
+        }
+        
+        // Bei echten Authentifizierungsfehlern: Abmelden
         state.isAuthenticated = false;
         state.user = null;
         state.token = null;
         state.refreshToken = null;
-        state.error = action.payload as string;
+        state.error = errorMessage;
         localStorage.removeItem('token');
         localStorage.removeItem('refreshToken');
       })

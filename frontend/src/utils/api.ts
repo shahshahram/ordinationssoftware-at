@@ -146,8 +146,23 @@ class ApiClient {
                 window.location.href = '/login';
                 throw new Error('Session expired. Please login again.');
               }
-            } catch (refreshError) {
+            } catch (refreshError: any) {
               console.error('Token refresh failed:', refreshError);
+              
+              // Prüfe ob es ein Netzwerkfehler ist
+              const isNetworkError = 
+                refreshError?.name === 'TypeError' && 
+                (refreshError?.message?.includes('Failed to fetch') || 
+                 refreshError?.message?.includes('NetworkError') ||
+                 refreshError?.message?.includes('ERR_CONNECTION_RESET'));
+              
+              // Bei Netzwerkfehlern: Nicht abmelden, nur Fehler werfen
+              if (isNetworkError) {
+                console.warn('Token-Refresh fehlgeschlagen wegen Netzwerkfehler - Benutzer wird nicht abgemeldet');
+                throw new Error('Netzwerkfehler: Verbindung zum Server konnte nicht hergestellt werden. Bitte versuchen Sie es erneut.');
+              }
+              
+              // Bei echten Authentifizierungsfehlern: Abmelden
               localStorage.removeItem('token');
               localStorage.removeItem('refreshToken');
               window.location.href = '/login';
@@ -182,6 +197,27 @@ class ApiClient {
         message: error?.message || 'Unknown error',
         stack: error?.stack || 'No stack trace'
       });
+      
+      // Unterscheide zwischen Netzwerkfehlern und Authentifizierungsfehlern
+      const isNetworkError = 
+        error?.name === 'TypeError' && 
+        (error?.message?.includes('Failed to fetch') || 
+         error?.message?.includes('NetworkError') ||
+         error?.message?.includes('ERR_CONNECTION_RESET') ||
+         error?.message?.includes('aborted'));
+      
+      // Bei Netzwerkfehlern: Fehler weiterwerfen, aber NICHT abmelden
+      // Nur bei echten Authentifizierungsfehlern (401) wird abgemeldet
+      if (isNetworkError) {
+        console.warn('Netzwerkfehler erkannt - Benutzer wird nicht abgemeldet:', error.message);
+        // Erstelle einen benutzerdefinierten Fehler für Netzwerkfehler
+        const networkError = new Error(`Netzwerkfehler: ${error.message}`);
+        (networkError as any).isNetworkError = true;
+        (networkError as any).originalError = error;
+        throw networkError;
+      }
+      
+      // Bei anderen Fehlern: Normal weiterwerfen
       throw error;
     }
   }

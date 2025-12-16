@@ -102,11 +102,17 @@ router.get('/:id', auth, async (req, res) => {
 // @desc    Create new user
 // @access  Private (Admin only)
 router.post('/', auth, [
-  body('email').isEmail().normalizeEmail(),
-  body('password').isLength({ min: 6 }),
-  body('firstName').notEmpty().trim(),
-  body('lastName').notEmpty().trim(),
-  body('role').isIn(['admin', 'doctor', 'nurse', 'receptionist', 'assistant', 'staff'])
+  body('email').isEmail().normalizeEmail().withMessage('Ungültige E-Mail-Adresse'),
+  body('password').isLength({ min: 6 }).withMessage('Das Passwort muss mindestens 6 Zeichen lang sein'),
+  body('firstName').notEmpty().trim().withMessage('Vorname ist erforderlich'),
+  body('lastName').notEmpty().trim().withMessage('Nachname ist erforderlich'),
+  body('role').custom((value) => {
+    const allowedRoles = ['admin', 'doctor', 'nurse', 'receptionist', 'assistant', 'staff', 'super_admin', 'arzt', 'assistent', 'rezeption', 'billing', 'patient'];
+    if (!allowedRoles.includes(value)) {
+      throw new Error(`Ungültige Rolle. Erlaubte Rollen: ${allowedRoles.join(', ')}`);
+    }
+    return true;
+  })
 ], async (req, res) => {
   try {
     // DEBUG: Log incoming request

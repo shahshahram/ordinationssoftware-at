@@ -70,7 +70,11 @@ const UserSchema = new mongoose.Schema({
       timezone: { type: String, default: 'Europe/Vienna' },
       dateFormat: { type: String, default: 'DD.MM.YYYY' },
       timeFormat: { type: String, default: '24h' },
-      autoBillingEnabled: { type: Boolean, default: false } // Systemeinstellung: Automatische Abrechnung
+      autoBillingEnabled: { type: Boolean, default: false }, // Systemeinstellung: Automatische Abrechnung
+      eldaEnabled: { type: Boolean, default: false },
+      eldaMethod: { type: String, enum: ['ftps', 'webservice', 'auto'], default: 'auto' },
+      eldaEnvironment: { type: String, enum: ['production', 'test', 'sit'], default: 'test' },
+      wahonlineEnabled: { type: Boolean, default: false } // WAHonline-Übermittlung aktivieren
     },
     onlineBookingEnabled: { type: Boolean, default: false },
     onlineBookingSettings: {

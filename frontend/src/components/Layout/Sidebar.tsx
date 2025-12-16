@@ -98,6 +98,9 @@ const menuItems = [
           { text: 'Leistungsabrechnung', icon: <Receipt />, path: '/performance-billing' },
           { text: 'Erstattungen', icon: <Receipt />, path: '/reimbursements' },
           { text: 'Abrechnungsberichte', icon: <Assessment />, path: '/billing-reports' },
+            { text: 'Kassa Teststrecke', icon: <Build />, path: '/kassa-test' },
+            { text: 'ELDA Teststrecke', icon: <Build />, path: '/elda-test' },
+            { text: 'WAHonline Teststrecke', icon: <Build />, path: '/wahonline-test' },
         ]
       },
   { 

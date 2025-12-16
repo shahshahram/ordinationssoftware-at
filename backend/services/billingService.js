@@ -7,6 +7,36 @@ const PatientExtended = require('../models/PatientExtended'); // Produktivsystem
 const Patient = require('../models/Patient'); // Fallback für Migration
 const ServiceCatalog = require('../models/ServiceCatalog');
 const InternalMessage = require('../models/InternalMessage');
+const eldaConnector = require('./connectors/eldaConnector');
+const eldaFormatGenerator = require('./eldaFormatGenerator');
+const wahonlineConnector = require('./connectors/wahonlineConnector');
+
+// invoiceService explizit laden (für Abwärtskompatibilität)
+// Diese Datei existiert und wird benötigt, auch wenn sie nicht direkt verwendet wird
+// Verwende direkten require() mit try-catch, um Fehler abzufangen
+const path = require('path');
+const fs = require('fs');
+try {
+  // Versuche zuerst mit relativem Pfad
+  require('./invoiceService');
+} catch (error) {
+  // Falls relativer Pfad fehlschlägt, versuche absoluten Pfad
+  try {
+    const invoiceServicePath = path.join(__dirname, 'invoiceService.js');
+    if (fs.existsSync(invoiceServicePath)) {
+      require(invoiceServicePath);
+    } else {
+      // Datei existiert nicht - das ist OK, wird nicht direkt verwendet
+      console.warn('⚠️ invoiceService.js nicht gefunden (nicht kritisch)');
+    }
+  } catch (error2) {
+    // Wenn invoiceService nicht geladen werden kann, ist das OK - es wird nicht direkt verwendet
+    // Der Fehler wird nur geloggt, aber nicht weitergeworfen
+    if (error2.code !== 'MODULE_NOT_FOUND') {
+      console.warn('⚠️ invoiceService konnte nicht geladen werden (nicht kritisch):', error2.message);
+    }
+  }
+}
 
 class BillingService {
   constructor() {
@@ -117,10 +147,40 @@ class BillingService {
       throw new Error('Arzt-ID fehlt');
     }
     
-    const doctor = await User.findById(id);
+    const doctor = await User.findById(id).select('+profile');
     if (!doctor) {
       throw new Error('Arzt nicht gefunden');
     }
+    
+    // contractType aus verschiedenen Quellen laden
+    // 1. Direkt im User-Objekt
+    // 2. In profile.contractType
+    // 3. Aus StaffProfile (falls vorhanden)
+    if (!doctor.contractType) {
+      if (doctor.profile?.contractType) {
+        doctor.contractType = doctor.profile.contractType;
+      } else {
+        // Versuche StaffProfile zu laden
+        try {
+          const StaffProfile = require('../models/StaffProfile');
+          const staffProfile = await StaffProfile.findOne({ userId: id });
+          if (staffProfile && staffProfile.contractType) {
+            doctor.contractType = staffProfile.contractType;
+          } else {
+            // Fallback: Basierend auf role bestimmen
+            if (doctor.role === 'arzt' || doctor.role === 'admin') {
+              doctor.contractType = 'wahlarzt'; // Standard: Wahlarzt
+            } else {
+              doctor.contractType = 'wahlarzt'; // Standard für alle anderen
+            }
+          }
+        } catch (error) {
+          // Fallback wenn StaffProfile nicht verfügbar
+          doctor.contractType = 'wahlarzt';
+        }
+      }
+    }
+    
     return doctor;
   }
 
@@ -178,13 +238,7 @@ class BillingService {
       switch (performance.tariffType) {
         case 'kassa':
           // Kassenleistung - prüfe ob Arzt Kassenarzt ist oder Location Kassenpraxis
-          console.log('🔍 Kassenleistung - Prüfe Bedingungen:');
-          console.log('  - Doctor contractType:', doctor.contractType);
-          console.log('  - Performance appointmentId:', performance.appointmentId);
-          console.log('  - Options locationId:', options.locationId);
-          
           if (doctor.contractType === 'kassenarzt') {
-            console.log('✅ Arzt ist Kassenarzt - Route: KASSE');
             return 'KASSE';
           }
           
@@ -195,52 +249,35 @@ class BillingService {
             if (performance.appointmentId && typeof performance.appointmentId === 'object' && performance.appointmentId.locationId) {
               // Bereits populated
               appointment = performance.appointmentId;
-              console.log('  - Appointment bereits populated, locationId:', appointment.locationId);
             } else if (performance.appointmentId && typeof performance.appointmentId === 'object' && performance.appointmentId._id) {
               // ObjectId als Objekt
               appointment = await Appointment.findById(performance.appointmentId._id || performance.appointmentId).select('locationId');
-              console.log('  - Appointment aus DB geladen, locationId:', appointment?.locationId);
             } else if (performance.appointmentId) {
               // String/ObjectId
               appointment = await Appointment.findById(performance.appointmentId).select('locationId');
-              console.log('  - Appointment aus DB geladen (String/ObjectId), locationId:', appointment?.locationId);
             }
             
             if (appointment && appointment.locationId) {
               location = await Location.findById(appointment.locationId);
-              console.log('  - Location gefunden:', location ? { _id: location._id, name: location.name, practiceType: location.practiceType } : 'NICHT GEFUNDEN');
-            } else {
-              console.log('  - Kein Appointment oder keine locationId im Appointment');
             }
-          } else {
-            console.log('  - Performance hat kein appointmentId');
           }
           
           // Location aus options laden (falls direkt übergeben)
           if (!location && options.locationId) {
             location = await Location.findById(options.locationId);
-            console.log('  - Location aus options geladen:', location ? { _id: location._id, name: location.name, practiceType: location.practiceType } : 'NICHT GEFUNDEN');
           }
           
           // Wenn Location Kassenpraxis ist, auch erlauben
           if (location && location.practiceType === 'kassenpraxis') {
-            console.log('✅ Location ist Kassenpraxis - Route: KASSE');
             return 'KASSE';
           }
           
           // Fallback: Wenn Kasse nicht möglich, automatisch auf Wahlarzt umschalten
           // (statt Fehler zu werfen, da der Arzt explizit "kassa" gewählt hat, aber die Bedingungen nicht erfüllt sind)
-          const errorDetails = {
-            doctorContractType: doctor.contractType || 'nicht gesetzt',
-            hasAppointment: !!performance.appointmentId,
-            locationFound: !!location,
-            locationPracticeType: location?.practiceType || 'nicht gefunden',
-            optionsLocationId: options.locationId || 'nicht übergeben'
-          };
-          console.warn('⚠️ Kassenleistung kann nicht als Kasse abgerechnet werden, wechsle zu Wahlarzt:', errorDetails);
-          console.warn('  - Arzt-Vertragstyp:', errorDetails.doctorContractType);
-          console.warn('  - Location-Praxistyp:', errorDetails.locationPracticeType);
-          console.warn('  - Route geändert: KASSE -> PATIENT+KASSE_REFUND');
+          // Nur in Development-Modus loggen
+          if (process.env.NODE_ENV === 'development') {
+            console.warn('⚠️ Kassenleistung -> Wahlarzt (Arzt: ' + (doctor.contractType || 'nicht gesetzt') + ', Location: ' + (location?.practiceType || 'nicht gefunden') + ')');
+          }
           return 'PATIENT+KASSE_REFUND';
           
         case 'wahl':
@@ -578,6 +615,9 @@ class BillingService {
       // Benachrichtigung an Arzt senden
       await this.notifyJobCompleted(job, response, 'success');
 
+      // ELDA-Übermittlung (wenn aktiviert)
+      await this.submitToELDA(job, response);
+
     } catch (error) {
       console.error(`Billing-Job ${jobId} fehlgeschlagen:`, error);
       
@@ -675,27 +715,67 @@ class BillingService {
    * Wahlarzt-Abrechnung verarbeiten
    */
   async processWahlarztBilling(job) {
-    // 1. Rechnung erstellen
-    const invoice = await this.createInvoice(job.payload);
-    
-    // 2. Zahlung initiieren
-    const paymentResponse = await this.connectors.payment.charge(
-      job.payload.patient,
-      invoice
-    );
-    
-    // 3. Rückerstattungsantrag an Kasse
-    const refundResponse = await this.connectors.kassa.submitRefundRequest(
-      job.payload,
-      job.idempotencyKey
-    );
-    
-    return {
-      invoice: invoice,
-      payment: paymentResponse,
-      refund: refundResponse,
-      externalRef: refundResponse.kassaRef
-    };
+    try {
+      // 1. Rechnung erstellen
+      const invoice = await this.createInvoice(job.payload);
+      
+      // 2. Zahlung initiieren (optional - nur wenn Zahlungsanbieter konfiguriert)
+      let paymentResponse = null;
+      try {
+        paymentResponse = await this.connectors.payment.charge(
+          job.payload.patient,
+          invoice,
+          { paymentMethod: 'stripe' } // Standard: Stripe
+        );
+      } catch (paymentError) {
+        // Wenn Zahlungsanbieter nicht verfügbar, Rechnung trotzdem erstellen
+        // Die Zahlung kann später manuell verarbeitet werden
+        if (paymentError.code === 'PAYMENT_PROVIDER_NOT_AVAILABLE' || paymentError.message.includes('nicht verfügbar')) {
+          console.warn('⚠️ Zahlungsanbieter nicht verfügbar, Rechnung wird ohne sofortige Zahlung erstellt:', paymentError.message);
+          paymentResponse = {
+            success: false,
+            message: 'Zahlung nicht automatisch verarbeitet - Rechnung erstellt, Zahlung muss manuell erfolgen',
+            invoiceNumber: invoice.invoiceNumber
+          };
+        } else {
+          // Andere Fehler weiterwerfen
+          throw paymentError;
+        }
+      }
+      
+      // 3. Rückerstattungsantrag an Kasse (optional - kann auch fehlschlagen)
+      let refundResponse = null;
+      try {
+        refundResponse = await this.connectors.kassa.submitRefundRequest(
+          job.payload,
+          job.idempotencyKey
+        );
+      } catch (refundError) {
+        // Wenn Rückerstattungsantrag fehlschlägt, Rechnung trotzdem erstellen
+        console.warn('⚠️ Rückerstattungsantrag konnte nicht gestellt werden:', refundError.message);
+        refundResponse = {
+          success: false,
+          message: 'Rückerstattungsantrag konnte nicht automatisch gestellt werden - muss manuell erfolgen',
+          invoiceNumber: invoice.invoiceNumber
+        };
+      }
+      
+      const result = {
+        invoice: invoice,
+        payment: paymentResponse,
+        refund: refundResponse,
+        externalRef: refundResponse?.kassaRef || invoice.invoiceNumber
+      };
+      
+      // WAHonline-Übermittlung (wenn aktiviert)
+      await this.submitToWAHonline(job, result);
+      
+      return result;
+    } catch (error) {
+      // Falls ein kritischer Fehler auftritt (z.B. beim createInvoice), diesen weiterwerfen
+      console.error('Kritischer Fehler in processWahlarztBilling:', error);
+      throw error;
+    }
   }
 
   /**
@@ -722,20 +802,44 @@ class BillingService {
    * Privatarzt-Abrechnung verarbeiten
    */
   async processPrivatBilling(job) {
-    // 1. Rechnung erstellen
-    const invoice = await this.createInvoice(job.payload);
-    
-    // 2. Zahlung initiieren
-    const paymentResponse = await this.connectors.payment.charge(
-      job.payload.patient,
-      invoice
-    );
-    
-    return {
-      invoice: invoice,
-      payment: paymentResponse,
-      externalRef: invoice.invoiceNumber
-    };
+    try {
+      // 1. Rechnung erstellen
+      const invoice = await this.createInvoice(job.payload);
+      
+      // 2. Zahlung initiieren (optional - nur wenn Zahlungsanbieter konfiguriert)
+      let paymentResponse = null;
+      try {
+        paymentResponse = await this.connectors.payment.charge(
+          job.payload.patient,
+          invoice,
+          { paymentMethod: 'stripe' } // Standard: Stripe
+        );
+      } catch (paymentError) {
+        // Wenn Zahlungsanbieter nicht verfügbar, Rechnung trotzdem erstellen
+        // Die Zahlung kann später manuell verarbeitet werden
+        if (paymentError.code === 'PAYMENT_PROVIDER_NOT_AVAILABLE' || paymentError.message.includes('nicht verfügbar')) {
+          console.warn('⚠️ Zahlungsanbieter nicht verfügbar, Rechnung wird ohne sofortige Zahlung erstellt:', paymentError.message);
+          paymentResponse = {
+            success: false,
+            message: 'Zahlung nicht automatisch verarbeitet - Rechnung erstellt, Zahlung muss manuell erfolgen',
+            invoiceNumber: invoice.invoiceNumber
+          };
+        } else {
+          // Andere Fehler weiterwerfen
+          throw paymentError;
+        }
+      }
+      
+      return {
+        invoice: invoice,
+        payment: paymentResponse,
+        externalRef: invoice.invoiceNumber
+      };
+    } catch (error) {
+      // Falls ein kritischer Fehler auftritt (z.B. beim createInvoice), diesen weiterwerfen
+      console.error('Kritischer Fehler in processPrivatBilling:', error);
+      throw error;
+    }
   }
 
   /**
@@ -756,34 +860,46 @@ class BillingService {
       billingType = 'privat';
     }
     
+    // Arzt-Adresse extrahieren (kann in profile.address sein)
+    const doctorAddress = doctor.profile?.address || doctor.address || {};
+    const doctorStreet = (doctorAddress.street || doctorAddress.address_line1 || '').trim() || 'Adresse nicht angegeben';
+    const doctorCity = (doctorAddress.city || '').trim() || 'Stadt nicht angegeben';
+    const doctorPostalCode = (doctorAddress.postalCode || doctorAddress.postal_code || '').trim() || '0000';
+    
+    // Patient-Adresse extrahieren
+    const patientAddress = patient.address || {};
+    const patientStreet = (patientAddress.street || patientAddress.address_line1 || '').trim() || 'Adresse nicht angegeben';
+    const patientCity = (patientAddress.city || '').trim() || 'Stadt nicht angegeben';
+    const patientPostalCode = (patientAddress.postalCode || patientAddress.postal_code || '').trim() || '0000';
+    
     // Invoice-Daten zusammenstellen
     const invoiceData = {
       invoiceDate: new Date(),
       dueDate: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 Tage Fälligkeit
       doctor: {
         name: doctor.name || `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim(),
-        title: doctor.title,
-        specialization: doctor.specialization,
-        address: doctor.address || {
-          street: '',
-          city: '',
-          postalCode: '',
-          country: 'Österreich'
+        title: doctor.profile?.title || doctor.title || '',
+        specialization: doctor.profile?.specialization || doctor.specialization || '',
+        address: {
+          street: doctorStreet,
+          city: doctorCity,
+          postalCode: doctorPostalCode,
+          country: doctorAddress.country || 'Österreich'
         },
-        taxNumber: doctor.taxNumber,
-        chamberNumber: doctor.chamberNumber
+        taxNumber: doctor.taxNumber || '',
+        chamberNumber: doctor.chamberNumber || ''
       },
       patient: {
         id: patient.id,
         name: patient.name || `${patient.firstName || ''} ${patient.lastName || ''}`.trim(),
-        address: patient.address || {
-          street: '',
-          city: '',
-          postalCode: '',
-          country: 'Österreich'
+        address: {
+          street: patientStreet,
+          city: patientCity,
+          postalCode: patientPostalCode,
+          country: patientAddress.country || 'Österreich'
         },
-        insuranceNumber: patient.insuranceNumber,
-        insuranceProvider: patient.insuranceProvider
+        insuranceNumber: patient.insuranceNumber || '',
+        insuranceProvider: patient.insuranceProvider || 'ÖGK (Österreichische Gesundheitskasse)'
       },
       billingType,
       services: [{
@@ -823,7 +939,7 @@ class BillingService {
     
     // Diagnosen hinzufügen, falls vorhanden
     if (payload.diagnoses && Array.isArray(payload.diagnoses)) {
-      invoiceData.diagnoses = payload.diagnoses.map((diag: any) => ({
+      invoiceData.diagnoses = payload.diagnoses.map((diag) => ({
         code: diag.code || diag.icd10Code,
         display: diag.display || diag.description || '',
         isPrimary: diag.isPrimary || false,
@@ -831,13 +947,239 @@ class BillingService {
       }));
     }
     
+    // Invoice-Nummer explizit generieren (vor Validierung)
+    if (!invoiceData.invoiceNumber) {
+      const count = await Invoice.countDocuments();
+      const year = new Date().getFullYear();
+      invoiceData.invoiceNumber = `R-${year}-${String(count + 1).padStart(6, '0')}`;
+    }
+    
+    // Sicherstellen, dass alle Pflichtfelder gesetzt sind (vor Validierung)
+    // Arzt-Adresse - explizit setzen, auch wenn leer
+    invoiceData.doctor.address = {
+      street: invoiceData.doctor.address.street || 'Adresse nicht angegeben',
+      city: invoiceData.doctor.address.city || 'Stadt nicht angegeben',
+      postalCode: invoiceData.doctor.address.postalCode || '0000',
+      country: invoiceData.doctor.address.country || 'Österreich'
+    };
+    
+    // Patient-Adresse - explizit setzen, auch wenn leer
+    invoiceData.patient.address = {
+      street: invoiceData.patient.address.street || 'Adresse nicht angegeben',
+      city: invoiceData.patient.address.city || 'Stadt nicht angegeben',
+      postalCode: invoiceData.patient.address.postalCode || '0000',
+      country: invoiceData.patient.address.country || 'Österreich'
+    };
+    
+    // Debug: Log invoiceData vor dem Speichern
+    console.log('DEBUG: invoiceData vor Validierung:', {
+      invoiceNumber: invoiceData.invoiceNumber,
+      doctorAddress: invoiceData.doctor.address,
+      patientAddress: invoiceData.patient.address
+    });
+    
     // Invoice erstellen
     const invoice = new Invoice(invoiceData);
+    
+    // Validierung manuell durchführen, bevor save()
+    const validationError = invoice.validateSync();
+    if (validationError) {
+      console.error('DEBUG: Validierungsfehler:', validationError.errors);
+      throw new Error(`Invoice validation failed: ${Object.keys(validationError.errors).map(key => `${key}: ${validationError.errors[key].message}`).join(', ')}`);
+    }
+    
     await invoice.save();
     
     return invoice;
   }
   
+  /**
+   * Übermittelt Abrechnung an ELDA (wenn aktiviert)
+   */
+  async submitToELDA(job, billingResponse) {
+    try {
+      // Prüfe ob ELDA aktiviert ist
+      const doctor = await User.findById(job.createdBy).select('+profile');
+      if (!doctor || !doctor.profile?.preferences?.eldaEnabled) {
+        return; // ELDA nicht aktiviert
+      }
+
+      // Nur für Kassenarzt-Abrechnungen
+      if (job.target !== 'KASSE') {
+        return; // ELDA nur für Kassenabrechnungen
+      }
+
+      // Lade Performance und Patient
+      const performance = await Performance.findById(job.performanceId);
+      if (!performance) {
+        console.warn('⚠️ Performance nicht gefunden für ELDA-Übermittlung:', job.performanceId);
+        return;
+      }
+
+      const patient = await this.loadPatientData(performance.patientId);
+      if (!patient || !patient.socialSecurityNumber) {
+        console.warn('⚠️ Patient oder Sozialversicherungsnummer fehlt für ELDA-Übermittlung');
+        return;
+      }
+
+      // Erstelle ELDA-Abrechnungs-Datensatz
+      const period = this.getBillingPeriod();
+      const periodParts = period.split('-');
+      const periodStart = new Date(parseInt(periodParts[0]), parseInt(periodParts[1]) - 1, 1);
+      const periodEnd = new Date(parseInt(periodParts[0]), parseInt(periodParts[1]), 0, 23, 59, 59);
+
+      const eldaData = {
+        patient: {
+          socialSecurityNumber: patient.socialSecurityNumber,
+          firstName: patient.firstName,
+          lastName: patient.lastName,
+          dateOfBirth: patient.dateOfBirth,
+          insuranceNumber: patient.insuranceNumber,
+          insuranceProvider: patient.insuranceProvider,
+          address: patient.address
+        },
+        doctor: {
+          taxNumber: doctor.taxNumber,
+          chamberNumber: doctor.chamberNumber,
+          name: `${doctor.firstName || ''} ${doctor.lastName || ''}`.trim(),
+          title: doctor.profile?.title || '',
+          specialization: doctor.profile?.specialization || '',
+          address: doctor.profile?.address || {}
+        },
+        services: [{
+          date: performance.serviceDatetime || new Date(),
+          code: performance.serviceCode,
+          ebmCode: performance.serviceCode, // EBM-Code falls vorhanden
+          description: performance.serviceDescription,
+          quantity: performance.quantity || 1,
+          unitPrice: performance.unitPrice,
+          totalPrice: performance.totalPrice,
+          copay: job.payload.kassaData?.copayAmount || 0
+        }],
+        period: {
+          startDate: periodStart,
+          endDate: periodEnd,
+          year: parseInt(periodParts[0]),
+          month: parseInt(periodParts[1])
+        },
+        totals: {
+          totalAmount: performance.totalPrice,
+          totalCopay: job.payload.kassaData?.copayAmount || 0,
+          insuranceAmount: performance.totalPrice - (job.payload.kassaData?.copayAmount || 0)
+        }
+      };
+
+      // Bestimme ELDA-Methode
+      const eldaMethod = doctor.profile?.preferences?.eldaMethod || 'auto';
+
+      // Sende an ELDA
+      const eldaResult = await eldaConnector.send(
+        eldaData,
+        'Abrechnung',
+        eldaMethod === 'auto' ? null : eldaMethod,
+        true // autoFormat = true
+      );
+
+      console.log(`✅ Abrechnung erfolgreich an ELDA übermittelt (Job: ${job._id})`);
+
+      // Audit-Log erstellen
+      await BillingAudit.logEvent(job._id, job.performanceId, 'ELDA_SUBMITTED', {
+        eldaResult,
+        method: eldaMethod,
+        processingTime: Date.now()
+      });
+
+    } catch (error) {
+      // ELDA-Fehler nicht kritisch - Abrechnung war bereits erfolgreich
+      console.error('⚠️ Fehler bei ELDA-Übermittlung (nicht kritisch):', error.message);
+      
+      // Audit-Log für ELDA-Fehler
+      try {
+        await BillingAudit.logEvent(job._id, job.performanceId, 'ELDA_SUBMIT_FAILED', {
+          error: error.message,
+          processingTime: Date.now()
+        });
+      } catch (auditError) {
+        // Ignoriere Audit-Fehler
+      }
+    }
+  }
+
+  /**
+   * Übermittelt Wahlarzt-Abrechnung an WAHonline (wenn aktiviert)
+   * @param {object} job - BillingJob-Objekt
+   * @param {object} billingResponse - Antwort der Wahlarzt-Abrechnung
+   */
+  async submitToWAHonline(job, billingResponse) {
+    try {
+      // Prüfe ob WAHonline aktiviert ist
+      const doctor = await User.findById(job.createdBy).select('+profile');
+      if (!doctor || !doctor.profile?.preferences?.wahonlineEnabled) {
+        return; // WAHonline nicht aktiviert
+      }
+
+      // WAHonline nur für Wahlarzt-Abrechnungen
+      if (job.route !== 'PATIENT+KASSE_REFUND') {
+        return; // WAHonline nur für Wahlarzt-Leistungen
+      }
+
+      // Lade Performance und Patient
+      const performance = await Performance.findById(job.performanceId);
+      if (!performance) {
+        console.warn('⚠️ Performance nicht gefunden für WAHonline-Übermittlung:', job.performanceId);
+        return;
+      }
+
+      const patient = await PatientExtended.findById(job.patientId);
+      if (!patient || !patient.socialSecurityNumber) {
+        console.warn('⚠️ Patient oder Sozialversicherungsnummer fehlt für WAHonline-Übermittlung');
+        return;
+      }
+
+      // Erstelle WAHonline-Meldungs-Datensatz
+      const wahonlineData = {
+        performance: {
+          ...performance.toObject(),
+          idempotencyKey: job.idempotencyKey
+        },
+        patient: patient.toObject(),
+        doctor: doctor.toObject()
+      };
+
+      // Generiere Idempotency-Key für WAHonline
+      const wahonlineIdempotencyKey = `wahonline_${job._id}_${Date.now()}`;
+
+      // Sende an WAHonline
+      const wahonlineResult = await wahonlineConnector.send(
+        wahonlineData,
+        wahonlineIdempotencyKey,
+        true // autoFormat
+      );
+
+      console.log(`✅ Wahlarzt-Abrechnung erfolgreich an WAHonline übermittelt (Job: ${job._id})`);
+
+      // Audit-Log für WAHonline-Übermittlung
+      await BillingAudit.logEvent(job._id, job.performanceId, 'WAHONLINE_SUBMITTED', {
+        wahonlineResult,
+        wahonlineRef: wahonlineResult.wahonlineRef
+      });
+
+    } catch (error) {
+      // WAHonline-Fehler nicht kritisch - Abrechnung war bereits erfolgreich
+      console.error('⚠️ Fehler bei WAHonline-Übermittlung (nicht kritisch):', error.message);
+
+      // Audit-Log für WAHonline-Fehler
+      try {
+        await BillingAudit.logEvent(job._id, job.performanceId, 'WAHONLINE_SUBMIT_FAILED', {
+          error: error.message,
+          stack: error.stack
+        });
+      } catch (auditError) {
+        // Audit-Fehler ignorieren
+      }
+    }
+  }
+
   /**
    * Billing-Period für ÖGK-Abrechnungen generieren
    */

@@ -79,6 +79,9 @@ import DicomProviderManagement from './pages/DicomProviderManagement';
 import DicomTestPage from './pages/DicomTestPage';
 import LaborProviderManagement from './pages/LaborProviderManagement';
 import LaborTestPage from './pages/LaborTestPage';
+import KassaTestPage from './pages/KassaTestPage';
+import ELDATestPage from './pages/ELDATestPage';
+import WAHonlineTestPage from './pages/WAHonlineTestPage';
 
 // Theme
 const theme = createTheme({
@@ -623,6 +626,30 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['settings.read']}>
                             <LaborTestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/kassa-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <KassaTestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/elda-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <ELDATestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/wahonline-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <WAHonlineTestPage />
                           </ProtectedRoute>
                         } 
                       />

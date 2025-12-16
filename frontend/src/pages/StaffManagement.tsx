@@ -51,6 +51,7 @@ import {
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { eventBus, EVENTS } from '../utils/eventBus';
+import api from '../utils/api';
 import {
   fetchStaffProfiles,
   createStaffProfile,
@@ -113,6 +114,10 @@ const StaffManagement: React.FC = () => {
     color_hex: '#2563EB',
     isActive: true,
     isOnlineBookable: false,
+    // User-Daten
+    firstName: '',
+    lastName: '',
+    userId: '',
   });
   const [absenceForm, setAbsenceForm] = useState({
     staffId: '',
@@ -200,7 +205,7 @@ const StaffManagement: React.FC = () => {
     setActiveTab(newValue);
   };
 
-  const handleOpenDialog = (mode: 'add' | 'edit', type: 'profile' | 'absence' | 'weekly-schedule', item?: any) => {
+  const handleOpenDialog = async (mode: 'add' | 'edit', type: 'profile' | 'absence' | 'weekly-schedule', item?: any) => {
     setDialogMode(mode);
     setDialogType(type);
     setOpenDialog(true);
@@ -208,16 +213,116 @@ const StaffManagement: React.FC = () => {
     if (mode === 'edit' && item) {
       setFormData(item);
       if (type === 'profile') {
+        // Debug: Zeige alle verfügbaren Daten
+        console.log('[StaffManagement] Opening edit dialog with item:', {
+          item,
+          title: item.title,
+          specialization: item.specialization,
+          specializations: item.specializations,
+          phone: item.phone,
+          contact: item.contact,
+          userId: item.userId,
+          user_id: item.user_id
+        });
+        
+        // Lade User-Daten, falls vorhanden
+        // Backend gibt sowohl userId (populated) als auch user_id (ID) zurück
+        const user = item.userId || item.user || item.user_id;
+        // Extrahiere User-Daten - userId kann ein Objekt (populated) oder eine ID sein
+        let userIdValue = '';
+        if (typeof item.userId === 'object' && item.userId !== null) {
+          userIdValue = item.userId._id || item.userId.id || '';
+        } else if (typeof item.user_id === 'object' && item.user_id !== null) {
+          userIdValue = item.user_id._id || item.user_id.id || '';
+        } else {
+          userIdValue = item.userId || item.user_id || '';
+        }
+        
+        // Verwende transformierte Felder vom Backend (first_name, last_name, email, title, specialization, phone)
+        // oder extrahiere aus populated user-Objekt oder direkt aus StaffProfile
+        let firstName = item.first_name || '';
+        let lastName = item.last_name || '';
+        let email = item.email || '';
+        // Titel: zuerst aus StaffProfile, dann aus User.profile
+        let title = item.title || '';
+        // Spezialisierung: zuerst aus StaffProfile (specialization oder first element von specializations), dann aus User.profile
+        let specialization = item.specialization || (Array.isArray(item.specializations) && item.specializations.length > 0 ? item.specializations[0] : '');
+        // Telefon: zuerst aus StaffProfile.contact.phone, dann aus StaffProfile.phone, dann aus User.profile.phone
+        let phone = item.phone || item.contact?.phone || '';
+        let colorHex = item.color_hex || item.colorHex || '#2563EB';
+        let isOnlineBookable = item.isOnlineBookable !== undefined ? item.isOnlineBookable : (item.acceptsOnline !== undefined ? item.acceptsOnline : true);
+        
+        console.log('[StaffManagement] Extracted values before user object check:', {
+          title,
+          specialization,
+          phone,
+          firstName,
+          lastName,
+          email
+        });
+        
+        // Wenn User-Daten nicht vollständig sind, versuche sie aus populated user-Objekt zu extrahieren
+        if (user && typeof user === 'object') {
+          firstName = firstName || user.firstName || user.first_name || '';
+          lastName = lastName || user.lastName || user.last_name || '';
+          email = email || user.email || '';
+          title = title || user.profile?.title || user.title || '';
+          specialization = specialization || user.profile?.specialization || user.specialization || '';
+          phone = phone || user.profile?.phone || user.phone || user.contact?.phone || '';
+          colorHex = colorHex || user.color_hex || user.colorHex || '#2563EB';
+        }
+        
+        // Wenn User-Daten immer noch fehlen und userId vorhanden ist, lade User-Daten vom Backend
+        // ODER wenn title, specialization oder phone fehlen, lade User-Daten
+        if (userIdValue && ((!firstName || !lastName || !email) || (!title || !specialization || !phone))) {
+          try {
+            const userResponse: any = await api.get(`/users/${userIdValue}`);
+            if (userResponse.data?.success && userResponse.data.data) {
+              const loadedUser = userResponse.data.data;
+              firstName = firstName || loadedUser.firstName || '';
+              lastName = lastName || loadedUser.lastName || '';
+              email = email || loadedUser.email || '';
+              // Nur wenn noch nicht gesetzt, aus User-Daten übernehmen
+              title = title || loadedUser.profile?.title || '';
+              specialization = specialization || loadedUser.profile?.specialization || '';
+              phone = phone || loadedUser.profile?.phone || '';
+              colorHex = colorHex || loadedUser.color_hex || '#2563EB';
+              
+              console.log('[StaffManagement] Loaded user data from API:', {
+                title,
+                specialization,
+                phone,
+                loadedUserProfile: loadedUser.profile
+              });
+            }
+          } catch (error) {
+            console.warn('Fehler beim Laden der User-Daten:', error);
+          }
+        }
+        
+        console.log('[StaffManagement] Final values before setting form:', {
+          title,
+          specialization,
+          phone,
+          firstName,
+          lastName,
+          email
+        });
+        
         setProfileForm({
-          displayName: item.display_name || '',
-          title: item.title || '',
-          roleHint: item.roleHint || '',
-          specialization: item.specialization || '',
-          phone: item.phone || '',
-          email: item.email || '',
-          color_hex: item.color_hex || '#2563EB',
-          isActive: item.isActive || false,
-          isOnlineBookable: item.isOnlineBookable || false,
+          displayName: item.display_name || item.displayName || `${firstName} ${lastName}`.trim() || '',
+          title: title,
+          roleHint: item.roleHint || item.role || user?.role || '',
+          specialization: specialization,
+          phone: phone,
+          email: email,
+          color_hex: colorHex,
+          isActive: item.isActive !== undefined ? item.isActive : (user?.isActive !== undefined ? user.isActive : true),
+          isOnlineBookable: isOnlineBookable,
+          // User-Daten
+          firstName: firstName,
+          lastName: lastName,
+          userId: userIdValue || '',
         });
       } else if (type === 'absence') {
         setAbsenceForm({
@@ -241,6 +346,10 @@ const StaffManagement: React.FC = () => {
         color_hex: '#2563EB',
         isActive: true,
         isOnlineBookable: false,
+        // User-Daten
+        firstName: '',
+        lastName: '',
+        userId: '',
       });
       setAbsenceForm({
         staffId: '',
@@ -441,9 +550,100 @@ const StaffManagement: React.FC = () => {
   const handleSave = async () => {
     try {
       if (dialogType === 'profile') {
-        // Profile creation is handled through user management
-        setSnackbar({ open: true, message: 'Personalprofile werden über die Benutzerverwaltung erstellt', severity: 'info' });
-        handleCloseDialog();
+        if (dialogMode === 'add') {
+          // Profile creation is handled through user management
+          setSnackbar({ open: true, message: 'Personalprofile werden über die Benutzerverwaltung erstellt', severity: 'info' });
+          handleCloseDialog();
+          return;
+        }
+        
+        // Bearbeitung: Aktualisiere sowohl StaffProfile als auch User
+        if (!formData._id) {
+          setSnackbar({ open: true, message: 'Fehler: Personalprofil-ID nicht gefunden', severity: 'error' });
+          return;
+        }
+
+        // Validierung
+        if (!profileForm.firstName || !profileForm.lastName || !profileForm.email) {
+          setSnackbar({ open: true, message: 'Bitte füllen Sie alle Pflichtfelder aus (Vorname, Nachname, E-Mail)', severity: 'error' });
+          return;
+        }
+
+        const token = localStorage.getItem('token');
+        
+        // 1. Aktualisiere User-Daten (falls userId vorhanden)
+        if (profileForm.userId) {
+          try {
+            const userUpdateData: any = {
+              firstName: profileForm.firstName,
+              lastName: profileForm.lastName,
+              email: profileForm.email,
+              color_hex: profileForm.color_hex,
+              isActive: profileForm.isActive,
+              profile: {
+                title: profileForm.title || '',
+                specialization: profileForm.specialization || '',
+                phone: profileForm.phone || ''
+              }
+            };
+
+            const userResponse = await fetch(`http://localhost:5001/api/users/${profileForm.userId}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`
+              },
+              body: JSON.stringify(userUpdateData)
+            });
+
+            if (!userResponse.ok) {
+              const errorData = await userResponse.json();
+              throw new Error(errorData.message || 'Fehler beim Aktualisieren der Benutzerdaten');
+            }
+          } catch (userError: any) {
+            console.error('Fehler beim Aktualisieren der Benutzerdaten:', userError);
+            setSnackbar({ open: true, message: `Fehler beim Aktualisieren der Benutzerdaten: ${userError.message}`, severity: 'error' });
+            return;
+          }
+        }
+
+        // 2. Aktualisiere StaffProfile
+        try {
+          const displayName = profileForm.displayName || `${profileForm.firstName} ${profileForm.lastName}`;
+          const staffProfileData: any = {
+            displayName: displayName,
+            title: profileForm.title,
+            roleHint: profileForm.roleHint,
+            specialization: profileForm.specialization,
+            colorHex: profileForm.color_hex,
+            isActive: profileForm.isActive,
+            contact: {
+              phone: profileForm.phone,
+              email: profileForm.email
+            }
+          };
+
+          const staffResponse = await fetch(`http://localhost:5001/api/staff-profiles/${formData._id}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`
+            },
+            body: JSON.stringify(staffProfileData)
+          });
+
+          if (!staffResponse.ok) {
+            const errorData = await staffResponse.json();
+            throw new Error(errorData.message || 'Fehler beim Aktualisieren des Personalprofils');
+          }
+
+          setSnackbar({ open: true, message: 'Benutzerdaten und Personalprofil erfolgreich aktualisiert', severity: 'success' });
+          dispatch(fetchStaffProfiles());
+          handleCloseDialog();
+        } catch (staffError: any) {
+          console.error('Fehler beim Aktualisieren des Personalprofils:', staffError);
+          setSnackbar({ open: true, message: `Fehler beim Aktualisieren des Personalprofils: ${staffError.message}`, severity: 'error' });
+        }
       } else if (dialogType === 'absence') {
         const absenceData = {
           staffId: absenceForm.staffId,
@@ -996,20 +1196,116 @@ const StaffManagement: React.FC = () => {
         <DialogContent sx={{ pt: 3, px: 3 }}>
           {dialogType === 'profile' && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Personalprofile werden über die Benutzerverwaltung erstellt. 
-                Bitte verwenden Sie die Benutzerverwaltung, um neue Mitarbeiter hinzuzufügen.
-              </Typography>
-              <Button
-                variant="outlined"
-                onClick={() => {
-                  handleCloseDialog();
-                  // Navigate to user management
-                  window.location.href = '/users';
-                }}
-              >
-                Zur Benutzerverwaltung
-              </Button>
+              {dialogMode === 'add' ? (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Personalprofile werden über die Benutzerverwaltung erstellt. 
+                    Bitte verwenden Sie die Benutzerverwaltung, um neue Mitarbeiter hinzuzufügen.
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    onClick={() => {
+                      handleCloseDialog();
+                      // Navigate to user management
+                      window.location.href = '/users';
+                    }}
+                  >
+                    Zur Benutzerverwaltung
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Bearbeiten Sie die Benutzerdaten und Personalprofil-Informationen.
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                      <TextField
+                        fullWidth
+                        label="Vorname"
+                        value={profileForm.firstName}
+                        onChange={(e) => setProfileForm({ ...profileForm, firstName: e.target.value })}
+                        required
+                      />
+                      <TextField
+                        fullWidth
+                        label="Nachname"
+                        value={profileForm.lastName}
+                        onChange={(e) => setProfileForm({ ...profileForm, lastName: e.target.value })}
+                        required
+                      />
+                    </Box>
+                    <TextField
+                      fullWidth
+                      label="E-Mail"
+                      type="email"
+                      value={profileForm.email}
+                      onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
+                      required
+                    />
+                    <TextField
+                      fullWidth
+                      label="Anzeigename"
+                      value={profileForm.displayName}
+                      onChange={(e) => setProfileForm({ ...profileForm, displayName: e.target.value })}
+                      helperText="Wird automatisch aus Vorname und Nachname generiert, falls leer"
+                    />
+                    <TextField
+                      fullWidth
+                      label="Titel"
+                      value={profileForm.title}
+                      onChange={(e) => setProfileForm({ ...profileForm, title: e.target.value })}
+                      placeholder="z.B. Dr., Prof., etc."
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel>Rolle</InputLabel>
+                      <Select
+                        value={profileForm.roleHint}
+                        onChange={(e) => setProfileForm({ ...profileForm, roleHint: e.target.value })}
+                        label="Rolle"
+                      >
+                        <MenuItem value="arzt">Arzt</MenuItem>
+                        <MenuItem value="assistent">Assistent</MenuItem>
+                        <MenuItem value="rezeption">Empfang</MenuItem>
+                        <MenuItem value="billing">Abrechnung</MenuItem>
+                        <MenuItem value="admin">Administrator</MenuItem>
+                        <MenuItem value="staff">Personal</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      fullWidth
+                      label="Spezialisierung"
+                      value={profileForm.specialization}
+                      onChange={(e) => setProfileForm({ ...profileForm, specialization: e.target.value })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Telefon"
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Farbe für Kalender"
+                      type="color"
+                      value={profileForm.color_hex}
+                      onChange={(e) => setProfileForm({ ...profileForm, color_hex: e.target.value })}
+                      InputProps={{
+                        style: { height: '56px' }
+                      }}
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={profileForm.isActive}
+                          onChange={(e) => setProfileForm({ ...profileForm, isActive: e.target.checked })}
+                        />
+                      }
+                      label="Aktiv"
+                    />
+                  </Box>
+                </>
+              )}
             </Box>
           )}
           

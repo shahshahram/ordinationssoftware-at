@@ -72,6 +72,9 @@ class KassenConnector {
    * Kassen-Payload erstellen
    */
   buildKassaPayload(payload) {
+    // Für Wahlarzt-Abrechnungen gibt es wahlarztData statt kassaData
+    const copayAmount = payload.kassaData?.copayAmount || payload.wahlarztData?.copayAmount || 0;
+    
     return {
       // ELGA-Daten
       elga: {
@@ -86,7 +89,7 @@ class KassenConnector {
         description: payload.performance.serviceDescription,
         datetime: payload.performance.serviceDatetime,
         price: payload.performance.totalPrice,
-        copay: payload.kassaData.copayAmount
+        copay: copayAmount
       },
       
       // Arztdaten
@@ -109,6 +112,11 @@ class KassenConnector {
    * Kassen-API aufrufen
    */
   async callKassaAPI(kassaPayload, idempotencyKey) {
+    // Prüfe ob API-Key konfiguriert ist
+    if (!this.apiKey) {
+      throw new Error('Kassen-API nicht konfiguriert (API-Key fehlt)');
+    }
+
     const headers = {
       'Authorization': `Bearer ${this.apiKey}`,
       'Content-Type': 'application/json',
@@ -160,12 +168,17 @@ class KassenConnector {
    * Rückerstattungsantrag einreichen (für Wahlarzt)
    */
   async submitRefundRequest(payload, idempotencyKey) {
+    // Prüfe ob wahlarztData vorhanden ist
+    if (!payload.wahlarztData) {
+      throw new Error('wahlarztData fehlt im Payload für Rückerstattungsantrag');
+    }
+
     const refundPayload = {
       ...this.buildKassaPayload(payload),
       refundRequest: {
         type: 'wahlarzt',
-        patientAmount: payload.wahlarztData.patientAmount,
-        refundAmount: payload.wahlarztData.refundAmount,
+        patientAmount: payload.wahlarztData.patientAmount || payload.performance.totalPrice,
+        refundAmount: payload.wahlarztData.refundAmount || 0,
         reason: 'Wahlarztleistung'
       }
     };
@@ -177,7 +190,7 @@ class KassenConnector {
         success: true,
         refundRef: response.referenceNumber,
         status: response.status,
-        refundAmount: payload.wahlarztData.refundAmount
+        refundAmount: payload.wahlarztData.refundAmount || 0
       };
       
     } catch (error) {
@@ -212,6 +225,11 @@ class KassenConnector {
    * Abrechnungsliste für Zeitraum abrufen
    */
   async getBillingList(startDate, endDate) {
+    // Prüfe ob API-Key konfiguriert ist
+    if (!this.apiKey) {
+      throw new Error('Kassen-API nicht konfiguriert (API-Key fehlt)');
+    }
+
     try {
       const response = await axios.get(
         `${this.baseUrl}/api/v1/billing/list`,
@@ -224,14 +242,26 @@ class KassenConnector {
             'Authorization': `Bearer ${this.apiKey}`,
             'Content-Type': 'application/json'
           },
-          timeout: this.timeout
+          timeout: this.timeout,
+          validateStatus: (status) => status < 500 // Nur Server-Fehler als Fehler behandeln
         }
       );
+
+      // Prüfe ob die Antwort JSON ist (nicht HTML)
+      if (typeof response.data === 'string' && response.data.trim().startsWith('<!DOCTYPE')) {
+        throw new Error('Kassen-API hat HTML statt JSON zurückgegeben (möglicherweise nicht konfiguriert)');
+      }
 
       return response.data;
       
     } catch (error) {
-      throw new Error(`Abrechnungsliste abrufen fehlgeschlagen: ${error.message}`);
+      if (error.response && typeof error.response.data === 'string' && error.response.data.trim().startsWith('<!DOCTYPE')) {
+        throw new Error('Kassen-API nicht verfügbar (HTML-Fehlerseite erhalten)');
+      } else if (error.request) {
+        throw new Error('Verbindung zur Krankenkasse fehlgeschlagen');
+      } else {
+        throw new Error(`Abrechnungsliste abrufen fehlgeschlagen: ${error.message}`);
+      }
     }
   }
 
