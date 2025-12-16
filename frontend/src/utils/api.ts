@@ -78,16 +78,29 @@ class ApiClient {
       console.log('Request config:', config);
       console.log('Request body:', data ? JSON.stringify(data, null, 2) : 'No body');
       
-      // Add timeout
+      // Add timeout (erhöht auf 30 Sekunden für langsamere Verbindungen)
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
       
-      const response = await fetch(url, {
-        ...config,
-        signal: controller.signal
-      });
+      let response: Response;
+      try {
+        response = await fetch(url, {
+          ...config,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        // Wenn der Request abgebrochen wurde (Timeout), werfe einen Netzwerkfehler
+        if (fetchError?.name === 'AbortError' || controller.signal.aborted) {
+          const networkError = new Error('Netzwerkfehler: Request-Timeout. Bitte versuchen Sie es erneut.');
+          (networkError as any).isNetworkError = true;
+          (networkError as any).isTimeout = true;
+          throw networkError;
+        }
+        throw fetchError;
+      }
       
-      clearTimeout(timeoutId);
       console.log('Received response:', response.status, response.statusText);
       
       if (!response.ok) {
@@ -200,11 +213,15 @@ class ApiClient {
       
       // Unterscheide zwischen Netzwerkfehlern und Authentifizierungsfehlern
       const isNetworkError = 
-        error?.name === 'TypeError' && 
-        (error?.message?.includes('Failed to fetch') || 
-         error?.message?.includes('NetworkError') ||
-         error?.message?.includes('ERR_CONNECTION_RESET') ||
-         error?.message?.includes('aborted'));
+        error?.isNetworkError === true ||
+        error?.isTimeout === true ||
+        error?.name === 'AbortError' ||
+        (error?.name === 'TypeError' && 
+         (error?.message?.includes('Failed to fetch') || 
+          error?.message?.includes('NetworkError') ||
+          error?.message?.includes('ERR_CONNECTION_RESET') ||
+          error?.message?.includes('aborted') ||
+          error?.message?.includes('Request-Timeout')));
       
       // Bei Netzwerkfehlern: Fehler weiterwerfen, aber NICHT abmelden
       // Nur bei echten Authentifizierungsfehlern (401) wird abgemeldet

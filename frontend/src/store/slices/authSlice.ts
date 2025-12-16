@@ -34,6 +34,21 @@ interface User {
   lastName: string;
   role: string;
   permissions?: string[];
+  profile?: {
+    preferences?: {
+      calendarSettings?: {
+        useStaffColumns?: boolean;
+        selectedStaffForColumns?: string[];
+        selectedStaff?: string;
+        selectedLocation?: string;
+        showOpeningHours?: boolean;
+        showWorkingHours?: boolean;
+        showBreaks?: boolean;
+        viewMode?: 'day' | 'week' | 'month';
+        currentDate?: string;
+      };
+    };
+  };
 }
 
 interface AuthState {
@@ -138,8 +153,48 @@ export const loadUser = createAsyncThunk(
       return userData;
     } catch (error: any) {
       console.error('loadUser: Error loading user:', error);
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
+      
+      // Prüfe ob es ein Netzwerkfehler ist
+      const isNetworkError = 
+        error?.isNetworkError === true ||
+        error?.isTimeout === true ||
+        error?.name === 'AbortError' ||
+        (error?.name === 'TypeError' && 
+         (error?.message?.includes('Failed to fetch') || 
+          error?.message?.includes('NetworkError') ||
+          error?.message?.includes('ERR_CONNECTION_RESET') ||
+          error?.message?.includes('aborted') ||
+          error?.message?.includes('Request-Timeout'))) ||
+        (error?.originalError?.isNetworkError === true ||
+         error?.originalError?.isTimeout === true ||
+         (error?.originalError?.name === 'TypeError' &&
+          (error?.originalError?.message?.includes('Failed to fetch') ||
+           error?.originalError?.message?.includes('NetworkError') ||
+           error?.originalError?.message?.includes('Request-Timeout'))));
+      
+      // Prüfe ob es ein echter Authentifizierungsfehler ist (401)
+      const isAuthError = 
+        error?.response?.status === 401 ||
+        error?.message?.includes('Session expired') ||
+        error?.message?.includes('Unauthorized') ||
+        error?.message?.includes('Token expired');
+      
+      // Bei Netzwerkfehlern: NICHT abmelden, nur Fehler zurückgeben
+      if (isNetworkError && !isAuthError) {
+        console.warn('loadUser: Netzwerkfehler erkannt - Benutzer wird nicht abgemeldet:', error.message);
+        return rejectWithValue('Netzwerkfehler: Verbindung zum Server konnte nicht hergestellt werden. Bitte versuchen Sie es erneut.');
+      }
+      
+      // Bei echten Authentifizierungsfehlern: Abmelden
+      if (isAuthError) {
+        console.log('loadUser: Authentifizierungsfehler erkannt - Benutzer wird abgemeldet');
+        localStorage.removeItem('token');
+        localStorage.removeItem('refreshToken');
+        return rejectWithValue(error.message || 'Session abgelaufen. Bitte melden Sie sich erneut an.');
+      }
+      
+      // Bei anderen Fehlern: Auch nicht abmelden (könnte temporär sein)
+      console.warn('loadUser: Unbekannter Fehler - Benutzer wird nicht abgemeldet:', error.message);
       return rejectWithValue(error.message || 'Benutzer konnte nicht geladen werden');
     }
   }
@@ -242,7 +297,9 @@ const authSlice = createSlice({
           errorMessage.includes('Netzwerkfehler') ||
           errorMessage.includes('Failed to fetch') ||
           errorMessage.includes('NetworkError') ||
-          errorMessage.includes('ERR_CONNECTION_RESET');
+          errorMessage.includes('ERR_CONNECTION_RESET') ||
+          errorMessage.includes('Request-Timeout') ||
+          errorMessage.includes('aborted');
         
         // Bei Netzwerkfehlern: Nicht abmelden, nur Fehler setzen
         if (isNetworkError) {

@@ -92,6 +92,22 @@ router.get('/', auth, async (req, res) => {
     const total = await Appointment.countDocuments(filter);
 
     console.log('Fetched appointments after populate - first item patient:', validItems[0]?.patient);
+    
+    // Debug: Log assigned_users for first appointment that has assigned_users
+    const firstWithAssignedUsers = validItems.find(item => item.assigned_users && item.assigned_users.length > 0);
+    if (firstWithAssignedUsers) {
+      console.log('🔍 First appointment with assigned_users:', {
+        _id: firstWithAssignedUsers._id,
+        title: firstWithAssignedUsers.title,
+        assigned_users: firstWithAssignedUsers.assigned_users,
+        assigned_users_length: firstWithAssignedUsers.assigned_users.length,
+        assigned_users_first: firstWithAssignedUsers.assigned_users[0],
+        assigned_users_first_id: firstWithAssignedUsers.assigned_users[0]?._id,
+        assigned_users_first_type: typeof firstWithAssignedUsers.assigned_users[0],
+        doctor: firstWithAssignedUsers.doctor,
+        doctor_id: typeof firstWithAssignedUsers.doctor === 'string' ? firstWithAssignedUsers.doctor : firstWithAssignedUsers.doctor?._id
+      });
+    }
 
     res.json({
       success: true,

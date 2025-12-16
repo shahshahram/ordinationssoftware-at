@@ -74,7 +74,19 @@ const UserSchema = new mongoose.Schema({
       eldaEnabled: { type: Boolean, default: false },
       eldaMethod: { type: String, enum: ['ftps', 'webservice', 'auto'], default: 'auto' },
       eldaEnvironment: { type: String, enum: ['production', 'test', 'sit'], default: 'test' },
-      wahonlineEnabled: { type: Boolean, default: false } // WAHonline-Übermittlung aktivieren
+      wahonlineEnabled: { type: Boolean, default: false }, // WAHonline-Übermittlung aktivieren
+      // Kalender-Einstellungen
+      calendarSettings: {
+        useStaffColumns: { type: Boolean, default: false },
+        selectedStaffForColumns: [{ type: String }],
+        selectedStaff: { type: String, default: 'all' },
+        selectedLocation: { type: String, default: 'all' },
+        showOpeningHours: { type: Boolean, default: true },
+        showWorkingHours: { type: Boolean, default: true },
+        showBreaks: { type: Boolean, default: true },
+        viewMode: { type: String, enum: ['day', 'week', 'month'], default: 'week' },
+        currentDate: { type: Date }
+      }
     },
     onlineBookingEnabled: { type: Boolean, default: false },
     onlineBookingSettings: {

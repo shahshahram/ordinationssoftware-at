@@ -160,11 +160,21 @@ const StaffManagement: React.FC = () => {
     fetchLocations();
   }, []);
 
+  // Initial load: Führe Synchronisation einmalig aus, dann normale Requests
+  const [hasSynced, setHasSynced] = useState(false);
+  
   useEffect(() => {
-    dispatch(fetchStaffProfiles());
+    // Beim ersten Laden: Synchronisation ausführen
+    if (!hasSynced) {
+      dispatch(fetchStaffProfiles({ sync: true }));
+      setHasSynced(true);
+    } else {
+      // Bei späteren Requests: Keine Synchronisation (bessere Performance)
+      dispatch(fetchStaffProfiles());
+    }
     dispatch(fetchAbsences());
     dispatch(fetchStaffStatistics());
-  }, [dispatch]);
+  }, [dispatch, hasSynced]);
 
   // Force refresh data when component becomes visible
   useEffect(() => {

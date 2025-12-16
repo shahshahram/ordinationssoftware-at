@@ -30,6 +30,7 @@ import StaffManagement from './pages/StaffManagement';
 import Calendar from './pages/Calendar';
 import DemoCalendar from './pages/DemoCalendar';
 import EnhancedCalendar from './pages/EnhancedCalendar';
+import ServiceDemoCalendar from './pages/ServiceDemoCalendar';
 import LocationManagement from './pages/LocationManagement';
 import LocationDashboard from './components/LocationDashboard';
 import LocationCalendar from './components/LocationCalendar';
@@ -283,6 +284,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['appointments.read']}>
                             <EnhancedCalendar />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/service-demo-calendar" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <ServiceDemoCalendar />
                           </ProtectedRoute>
                         } 
                       />

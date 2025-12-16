@@ -84,6 +84,7 @@ const menuItems = [
       { text: 'Terminverwaltung', icon: <CalendarToday />, path: '/appointments' },
       { text: 'Kalender', icon: <CalendarToday />, path: '/calendar' },
       { text: 'Demo-Kalender', icon: <CalendarToday />, path: '/demo-calendar' },
+      { text: 'Dienst-Demo', icon: <CalendarToday />, path: '/service-demo-calendar' },
       { text: 'Dienst-Kalender', icon: <CalendarMonth />, path: '/enhanced-calendar' },
       { text: 'Verfügbarkeiten', icon: <Schedule />, path: '/availability' },
       { text: 'Warteliste', icon: <PendingActions />, path: '/waiting-list' },

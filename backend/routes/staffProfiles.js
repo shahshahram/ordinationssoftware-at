@@ -26,38 +26,66 @@ router.get('/', auth, async (req, res) => {
       });
     }
 
-    const { page = 1, limit = 10, search = '', role = '', active = '' } = req.query;
+    const { page = 1, limit = 50, search = '', role = '', active = '', sync = 'false' } = req.query;
     const query = {};
 
-    // Automatische Synchronisation: Erstelle StaffProfile für alle aktiven User
-    try {
-      const activeUsers = await User.find({ isActive: true });
-      for (const user of activeUsers) {
-        const existingProfile = await StaffProfile.findOne({ userId: user._id });
-        if (!existingProfile) {
-          // Automatisch StaffProfile erstellen
-          const staffProfile = new StaffProfile({
-            userId: user._id,
-            displayName: `${user.firstName} ${user.lastName}`,
-            roleHint: user.role || 'staff',
-            isActive: user.isActive,
-            colorHex: user.color_hex || '#6B7280'
-          });
-          await staffProfile.save();
-          console.log(`✅ Auto-created StaffProfile for user: ${user.email}`);
-        } else {
-          // Aktualisiere bestehendes StaffProfile falls User-Infos geändert wurden
-          if (existingProfile.displayName !== `${user.firstName} ${user.lastName}`) {
-            existingProfile.displayName = `${user.firstName} ${user.lastName}`;
-            existingProfile.isActive = user.isActive;
-            await existingProfile.save();
-            console.log(`✅ Updated StaffProfile for user: ${user.email}`);
+    // Automatische Synchronisation: Nur bei expliziter Anfrage (sync=true) ausführen
+    // Dies verbessert die Performance erheblich, da die Synchronisation nicht bei jedem Request läuft
+    if (sync === 'true') {
+      try {
+        const activeUsers = await User.find({ isActive: true }).select('_id firstName lastName email role isActive color_hex');
+        const userIds = activeUsers.map(u => u._id);
+        
+        // Finde alle existierenden Profile in einem Query
+        const existingProfiles = await StaffProfile.find({ userId: { $in: userIds } }).select('userId displayName isActive');
+        const existingUserIds = new Set(existingProfiles.map(p => p.userId.toString()));
+        
+        // Erstelle nur fehlende Profile
+        const profilesToCreate = [];
+        const profilesToUpdate = [];
+        
+        for (const user of activeUsers) {
+          const existingProfile = existingProfiles.find(p => p.userId.toString() === user._id.toString());
+          if (!existingProfile) {
+            profilesToCreate.push({
+              userId: user._id,
+              displayName: `${user.firstName} ${user.lastName}`,
+              roleHint: user.role || 'staff',
+              isActive: user.isActive,
+              colorHex: user.color_hex || '#6B7280'
+            });
+          } else {
+            // Prüfe ob Update nötig ist
+            const expectedDisplayName = `${user.firstName} ${user.lastName}`;
+            if (existingProfile.displayName !== expectedDisplayName || existingProfile.isActive !== user.isActive) {
+              profilesToUpdate.push({
+                profile: existingProfile,
+                displayName: expectedDisplayName,
+                isActive: user.isActive
+              });
+            }
           }
         }
+        
+        // Batch-Insert für neue Profile
+        if (profilesToCreate.length > 0) {
+          await StaffProfile.insertMany(profilesToCreate);
+          console.log(`✅ Auto-created ${profilesToCreate.length} StaffProfiles`);
+        }
+        
+        // Batch-Update für bestehende Profile
+        if (profilesToUpdate.length > 0) {
+          await Promise.all(profilesToUpdate.map(({ profile, displayName, isActive }) => {
+            profile.displayName = displayName;
+            profile.isActive = isActive;
+            return profile.save();
+          }));
+          console.log(`✅ Updated ${profilesToUpdate.length} StaffProfiles`);
+        }
+      } catch (syncError) {
+        console.error('Error during staff profile sync:', syncError);
+        // Continue despite sync errors
       }
-    } catch (syncError) {
-      console.error('Error during staff profile sync:', syncError);
-      // Continue despite sync errors
     }
 
     // Suchfilter
@@ -78,33 +106,46 @@ router.get('/', auth, async (req, res) => {
       query.isActive = active === 'true';
     }
 
+    // Konvertiere limit zu Number und setze Maximum
+    const limitNum = Math.min(parseInt(limit) || 50, 500); // Maximum 500, Standard 50
+    const pageNum = parseInt(page) || 1;
+    
     const staffProfiles = await StaffProfile.find(query)
       .populate('userId', 'firstName lastName email color_hex profile')
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(limitNum)
+      .skip((pageNum - 1) * limitNum)
+      .lean(); // Verwende lean() für bessere Performance
 
     const total = await StaffProfile.countDocuments(query);
 
-    // Get location assignments for each staff profile
-    const staffProfilesWithLocations = await Promise.all(
-      staffProfiles.map(async (profile) => {
-        const locationAssignments = await StaffLocationAssignment.find({ staff_id: profile._id })
-          .populate('location_id', '_id name')
-          .lean();
-        
-        const locations = locationAssignments.map(assignment => ({
-          _id: assignment.location_id._id,
-          name: assignment.location_id.name,
-          is_primary: assignment.is_primary
-        }));
+    // Optimierung: Lade alle Location-Assignments in einem Query (vermeidet N+1 Problem)
+    const staffProfileIds = staffProfiles.map(p => p._id);
+    const allLocationAssignments = await StaffLocationAssignment.find({ 
+      staff_id: { $in: staffProfileIds } 
+    })
+      .populate('location_id', '_id name')
+      .lean();
+    
+    // Erstelle Map für schnellen Zugriff
+    const locationAssignmentsMap = new Map();
+    allLocationAssignments.forEach(assignment => {
+      const staffId = assignment.staff_id.toString();
+      if (!locationAssignmentsMap.has(staffId)) {
+        locationAssignmentsMap.set(staffId, []);
+      }
+      locationAssignmentsMap.get(staffId).push({
+        _id: assignment.location_id._id,
+        name: assignment.location_id.name,
+        is_primary: assignment.is_primary
+      });
+    });
 
-        return {
-          ...profile.toObject(),
-          locations
-        };
-      })
-    );
+    // Füge Locations zu jedem Profil hinzu
+    const staffProfilesWithLocations = staffProfiles.map(profile => ({
+      ...profile,
+      locations: locationAssignmentsMap.get(profile._id.toString()) || []
+    }));
 
     // Audit-Log
     await AuditLog.create({

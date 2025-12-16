@@ -33,27 +33,21 @@ const initialState: StaffState = {
 };
 
 // Async Thunks
-export const fetchStaffProfiles = createAsyncThunk<StaffProfile[], void>(
+export const fetchStaffProfiles = createAsyncThunk<StaffProfile[], { sync?: boolean } | void>(
   'staff/fetchStaffProfiles',
-  async (_, { rejectWithValue }) => {
+  async (options, { rejectWithValue }) => {
     try {
-      console.log('Fetching staff profiles from API...');
-      const response = await apiRequest.get<{ success: boolean; data: StaffProfile[]; pagination: any }>('/staff-profiles');
-      console.log('Staff profiles API response:', response.data);
-      
-      // Debug Dr. Thomas Schmidt specifically
-      const staffData = Array.isArray(response.data.data) ? response.data.data : [];
-      const thomasSchmidt = staffData.find((s: any) => 
-        s.first_name?.includes('Thomas') && s.last_name?.includes('Schmidt')
-      );
-      if (thomasSchmidt) {
-        console.log('Dr. Thomas Schmidt from API:', {
-          first_name: thomasSchmidt.first_name,
-          last_name: thomasSchmidt.last_name,
-          display_name: thomasSchmidt.display_name,
-          color_hex: thomasSchmidt.color_hex
-        });
+      // Verwende limit=50 für bessere Performance (Standard-Limit im Backend)
+      // Wenn sync=true, wird die automatische Synchronisation im Backend ausgeführt
+      const params: Record<string, string> = { limit: '50' };
+      if (options && typeof options === 'object' && options.sync) {
+        params.sync = 'true';
       }
+      
+      const response = await apiRequest.get<{ success: boolean; data: StaffProfile[]; pagination: any }>('/staff-profiles', params);
+      
+      const staffData = Array.isArray(response.data.data) ? response.data.data : [];
+      console.log(`Loaded ${staffData.length} staff profiles from API`);
       
       return staffData;
     } catch (error: any) {

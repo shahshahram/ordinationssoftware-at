@@ -290,17 +290,20 @@ router.get('/me', auth, async (req, res) => {
 
     try {
       // Try to find user in MongoDB first
-      user = await User.findById(req.user._id || req.user.id).select('-password');
-      if (user) {
-        console.log('Found user in MongoDB:', user.email);
-        // Convert MongoDB user to the expected format
+      const dbUser = await User.findById(req.user._id || req.user.id).select('-password').lean();
+      if (dbUser) {
+        console.log('Found user in MongoDB:', dbUser.email);
+        console.log('📥 User profile from DB:', JSON.stringify(dbUser.profile, null, 2));
+        // Convert MongoDB user to the expected format, including profile
         user = {
-          id: user._id.toString(),
-          email: user.email,
-          firstName: user.firstName,
-          lastName: user.lastName,
-          role: user.role,
-          permissions: user.permissions || []
+          id: dbUser._id.toString(),
+          _id: dbUser._id.toString(),
+          email: dbUser.email,
+          firstName: dbUser.firstName,
+          lastName: dbUser.lastName,
+          role: dbUser.role,
+          permissions: dbUser.permissions || [],
+          profile: dbUser.profile || null
         };
       }
     } catch (dbError) {
@@ -329,11 +332,13 @@ router.get('/me', auth, async (req, res) => {
       success: true,
       user: {
         id: user.id,
+        _id: user._id || user.id,
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
-        permissions: user.permissions || user.getDefaultPermissions?.() || []
+        permissions: user.permissions || user.getDefaultPermissions?.() || [],
+        profile: user.profile || (user.id ? null : undefined) // Nur null wenn user aus DB, sonst undefined
       }
     });
   } catch (error) {
@@ -360,7 +365,8 @@ router.put('/profile', auth, [
   body('profile.preferences.eldaEnabled').optional().isBoolean(),
   body('profile.preferences.eldaMethod').optional().isIn(['ftps', 'webservice', 'auto']),
   body('profile.preferences.eldaEnvironment').optional().isIn(['test', 'sit', 'production']),
-  body('profile.preferences.wahonlineEnabled').optional().isBoolean()
+  body('profile.preferences.wahonlineEnabled').optional().isBoolean(),
+  body('profile.preferences.calendarSettings').optional().isObject()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -386,14 +392,84 @@ router.put('/profile', auth, [
       if (req.body[field] !== undefined) {
         if (field === 'profile') {
           // Deep merge für profile (inkl. preferences)
-          user.profile = {
-            ...user.profile,
-            ...req.body.profile,
-            preferences: {
-              ...user.profile?.preferences,
-              ...req.body.profile?.preferences
+          // Wichtig: Nur definierte Felder überschreiben, nicht undefined-Werte setzen
+          const existingProfile = user.profile || {};
+          const newProfile = req.body.profile || {};
+          
+          // Merge preferences - nur definierte Werte übernehmen
+          const existingPreferences = existingProfile.preferences || {};
+          const newPreferences = newProfile.preferences || {};
+          
+          // Filtere undefined-Werte aus newProfile und merge verschachtelte Objekte
+          const filteredNewProfile = {};
+          for (const [key, value] of Object.entries(newProfile)) {
+            if (key !== 'preferences' && value !== undefined) {
+              // Spezialbehandlung für verschachtelte Objekte (address, onlineBookingSettings, etc.)
+              if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+                const existingValue = existingProfile[key];
+                if (existingValue && typeof existingValue === 'object' && !Array.isArray(existingValue)) {
+                  // Deep merge für verschachtelte Objekte
+                  filteredNewProfile[key] = {
+                    ...existingValue,
+                    ...Object.fromEntries(
+                      Object.entries(value).filter(([_, v]) => v !== undefined)
+                    )
+                  };
+                } else {
+                  filteredNewProfile[key] = value;
+                }
+              } else {
+                filteredNewProfile[key] = value;
+              }
             }
-          };
+          }
+          
+          // Filtere undefined-Werte aus newPreferences
+          const filteredNewPreferences = {};
+          for (const [key, value] of Object.entries(newPreferences)) {
+            if (value !== undefined) {
+              // Spezialbehandlung für calendarSettings (verschachteltes Objekt)
+              if (key === 'calendarSettings' && typeof value === 'object' && value !== null) {
+                const existingCalendarSettings = existingPreferences.calendarSettings || {};
+                filteredNewPreferences[key] = {
+                  ...existingCalendarSettings,
+                  ...Object.fromEntries(
+                    Object.entries(value).filter(([_, v]) => v !== undefined)
+                  )
+                };
+              } else {
+                filteredNewPreferences[key] = value;
+              }
+            }
+          }
+          
+          // Merge profile - nur definierte Werte setzen
+          // Wichtig: Setze nur die Felder, die im Request sind, lasse andere unverändert
+          
+          // Stelle sicher, dass user.profile existiert
+          if (!user.profile) {
+            user.profile = {};
+          }
+          
+          // Überschreibe nur die Felder, die im Request sind und nicht undefined sind
+          for (const [key, value] of Object.entries(filteredNewProfile)) {
+            if (value !== undefined && value !== null) {
+              user.profile[key] = value;
+              user.markModified(`profile.${key}`);
+            }
+          }
+          
+          // Merge preferences separat
+          if (!user.profile.preferences) {
+            user.profile.preferences = {};
+          }
+          // Überschreibe nur die Preferences, die im Request sind
+          for (const [key, value] of Object.entries(filteredNewPreferences)) {
+            if (value !== undefined && value !== null) {
+              user.profile.preferences[key] = value;
+            }
+          }
+          user.markModified('profile.preferences');
         } else if (field === 'preferences') {
           user.preferences = { ...user.preferences, ...req.body.preferences };
         } else {
@@ -403,6 +479,10 @@ router.put('/profile', auth, [
     });
 
     await user.save();
+
+    // Debug: Log saved profile
+    const savedUser = await User.findById(req.user.id).select('-password').lean();
+    console.log('💾 Saved profile after update:', JSON.stringify(savedUser?.profile?.preferences?.calendarSettings, null, 2));
 
     res.json({
       success: true,
@@ -418,10 +498,12 @@ router.put('/profile', auth, [
       }
     });
   } catch (error) {
-    console.error(error.message);
+    console.error('Error updating profile:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Server Fehler'
+      message: 'Server Fehler',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
