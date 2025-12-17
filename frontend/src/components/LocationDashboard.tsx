@@ -25,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchLocations } from '../store/slices/locationSlice';
+import api from '../utils/api';
 
 interface LocationStats {
   location: {
@@ -55,35 +56,122 @@ const LocationDashboard: React.FC = () => {
     dispatch(fetchLocations());
   }, [dispatch]);
 
-  useEffect(() => {
-    if (locations.length > 0) {
-      fetchLocationStats();
-    }
-  }, [locations]);
-
-  const fetchLocationStats = async () => {
+  const fetchLocationStats = React.useCallback(async () => {
+    if (locations.length === 0) return;
+    
     setLoadingStats(true);
     try {
-      const token = localStorage.getItem('token');
       const statsPromises = locations.map(async (location) => {
-        const response = await fetch(`http://localhost:5001/api/locations/${location._id}/stats`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+        try {
+          const response = await api.get<any>(`/locations/${location._id}/stats`);
+          console.log(`📊 Stats response for ${location.name} (${location._id}):`, response);
+          
+          if (response.success && response.data) {
+            // Die API-Antwort ist verschachtelt: response.data.data enthält die eigentlichen Stats
+            // oder response.data direkt, wenn es bereits die Stats sind
+            const rawData = response.data;
+            const stats = (rawData.data || rawData) as Partial<LocationStats>;
+            console.log(`📊 Raw stats data for ${location.name}:`, stats);
+            console.log(`📊 Raw response.data for ${location.name}:`, rawData);
+            
+            // Stelle sicher, dass location existiert, sonst füge es hinzu
+            if (!stats.location && location) {
+              stats.location = {
+                _id: location._id,
+                name: location.name,
+                code: location.code || '',
+                city: location.city || ''
+              };
+            }
+            
+            // Stelle sicher, dass appointments existiert
+            if (!stats.appointments) {
+              console.warn(`⚠️ No appointments data for ${location.name}, setting defaults`);
+              stats.appointments = {
+                total: 0,
+                today: 0,
+                thisWeek: 0
+              };
+            }
+            
+            // Stelle sicher, dass alle erforderlichen Felder vorhanden sind (nur wenn sie wirklich fehlen, nicht wenn sie 0 sind)
+            if (stats.staff === undefined || stats.staff === null) stats.staff = 0;
+            if (stats.rooms === undefined || stats.rooms === null) stats.rooms = 0;
+            if (stats.devices === undefined || stats.devices === null) stats.devices = 0;
+            if (stats.activeHours === undefined || stats.activeHours === null) stats.activeHours = 0;
+            if (stats.activeClosures === undefined || stats.activeClosures === null) stats.activeClosures = 0;
+            
+            console.log(`✅ Processed stats for ${location.name}:`, {
+              staff: stats.staff,
+              rooms: stats.rooms,
+              devices: stats.devices,
+              activeHours: stats.activeHours,
+              activeClosures: stats.activeClosures,
+              appointments: stats.appointments
+            });
+            
+            // Prüfe ob location gültig ist
+            if (stats.location && stats.location._id) {
+              return stats as LocationStats;
+            }
+            console.warn(`⚠️ Invalid location in stats for ${location._id}:`, stats);
+            return null;
           }
-        });
-        const data = await response.json();
-        return data.success ? data.data : null;
+          console.warn(`⚠️ No data in response for ${location.name}:`, response);
+          return null;
+        } catch (error) {
+          console.error(`Error fetching stats for location ${location._id}:`, error);
+          return null;
+        }
       });
 
       const statsData = await Promise.all(statsPromises);
-      setStats(statsData.filter(Boolean));
+      const validStats = statsData.filter((stat): stat is LocationStats => 
+        stat !== null && 
+        stat !== undefined && 
+        stat.location !== null && 
+        stat.location !== undefined &&
+        stat.location._id !== undefined
+      );
+      setStats(validStats);
+      console.log(`✅ Loaded stats for ${validStats.length} locations`);
     } catch (error) {
       console.error('Error fetching location stats:', error);
     } finally {
       setLoadingStats(false);
     }
-  };
+  }, [locations]);
+
+  useEffect(() => {
+    if (locations.length > 0) {
+      fetchLocationStats();
+    }
+  }, [locations, fetchLocationStats]);
+
+  // Automatische Aktualisierung alle 30 Sekunden
+  useEffect(() => {
+    if (locations.length === 0) return;
+
+    const interval = setInterval(() => {
+      console.log('🔄 Auto-refreshing location stats...');
+      fetchLocationStats();
+    }, 30000); // 30 Sekunden
+
+    return () => clearInterval(interval);
+  }, [locations, fetchLocationStats]);
+
+  // Aktualisiere beim Wechsel zurück zum Tab
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden && locations.length > 0) {
+        console.log('📱 Page became visible, refreshing location stats...');
+        fetchLocationStats();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [locations, fetchLocationStats]);
 
   const getStatusColor = (location: any) => {
     if (location.is_active) {
@@ -100,9 +188,12 @@ const LocationDashboard: React.FC = () => {
   };
 
   const getUtilizationPercentage = (stats: LocationStats) => {
+    // Prüfe ob appointments existiert
+    if (!stats.appointments || !stats.appointments.total) return 0;
     if (stats.appointments.total === 0) return 0;
-    const maxCapacity = stats.rooms * 8; // Annahme: 8 Termine pro Raum pro Tag
-    return Math.min((stats.appointments.today / maxCapacity) * 100, 100);
+    const maxCapacity = (stats.rooms || 1) * 8; // Annahme: 8 Termine pro Raum pro Tag
+    const today = stats.appointments.today || 0;
+    return Math.min((today / maxCapacity) * 100, 100);
   };
 
   if (loading) {
@@ -138,8 +229,17 @@ const LocationDashboard: React.FC = () => {
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 3 }}>
         {stats.map((locationStats) => {
+          // Prüfe ob locationStats und locationStats.location existieren
+          if (!locationStats || !locationStats.location || !locationStats.location._id) {
+            console.warn('⚠️ Invalid locationStats:', locationStats);
+            return null;
+          }
+          
           const location = locations.find(l => l._id === locationStats.location._id);
-          if (!location) return null;
+          if (!location) {
+            console.warn('⚠️ Location not found for stats:', locationStats.location._id);
+            return null;
+          }
 
           const utilization = getUtilizationPercentage(locationStats);
 
@@ -207,19 +307,19 @@ const LocationDashboard: React.FC = () => {
                     <Box display="flex" justifyContent="space-between" mb={1}>
                       <Typography variant="body2">Heute:</Typography>
                       <Typography variant="body2" fontWeight="bold">
-                        {locationStats.appointments.today}
+                        {locationStats.appointments?.today || 0}
                       </Typography>
                     </Box>
                     <Box display="flex" justifyContent="space-between" mb={1}>
                       <Typography variant="body2">Diese Woche:</Typography>
                       <Typography variant="body2" fontWeight="bold">
-                        {locationStats.appointments.thisWeek}
+                        {locationStats.appointments?.thisWeek || 0}
                       </Typography>
                     </Box>
                     <Box display="flex" justifyContent="space-between">
                       <Typography variant="body2">Gesamt:</Typography>
                       <Typography variant="body2" fontWeight="bold">
-                        {locationStats.appointments.total}
+                        {locationStats.appointments?.total || 0}
                       </Typography>
                     </Box>
                   </Paper>

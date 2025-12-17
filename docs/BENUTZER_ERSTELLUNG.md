@@ -222,3 +222,5 @@ node scripts/setupSuperAdmin.js
 - Passwort muss mindestens 6 Zeichen lang sein
 - E-Mail muss gültiges Format haben
 
+
+

@@ -1489,7 +1489,8 @@ router.get('/:id/stats', auth, async (req, res) => {
     // Termin-Statistiken (falls Appointment-Modell verfügbar)
     try {
       const Appointment = require('../models/Appointment');
-      const appointmentQuery = { location_id: locationId };
+      // Verwende locationId (camelCase) statt location_id, da das Appointment-Modell locationId verwendet
+      const appointmentQuery = { locationId: locationId };
       
       if (startDate && endDate) {
         appointmentQuery.startTime = {
@@ -1515,7 +1516,17 @@ router.get('/:id/stats', auth, async (req, res) => {
           }
         })
       };
+      
+      console.log(`📊 Location stats for ${locationId}:`, {
+        staff: stats.staff,
+        rooms: stats.rooms,
+        devices: stats.devices,
+        activeHours: stats.activeHours,
+        activeClosures: stats.activeClosures,
+        appointments: stats.appointments
+      });
     } catch (error) {
+      console.error('Error fetching appointment stats:', error);
       stats.appointments = { total: 0, today: 0, thisWeek: 0 };
     }
 

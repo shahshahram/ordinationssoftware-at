@@ -39,6 +39,10 @@ const AuditLogSchema = new mongoose.Schema({
       'INVOICE_CREATED', 'INVOICE_UPDATED', 'INVOICE_DELETED', 'INVOICE_VIEWED',
       'billing.read', 'billing.create', 'billing.update', 'billing.delete', 'billing.generate',
       
+      // Report Management
+      'reports.read', 'reports.create', 'reports.update', 'reports.delete', 
+      'reports.generate', 'reports.export', 'reports.view',
+      
       // System & Data Management
       'DATA_EXPORT', 'DATA_DELETION', 'AUDIT_LOG_EXPORT', 'SYSTEM_BACKUP', 'SYSTEM_RESTORE',
       'staff_profiles.read', 'staff_profiles.create', 'staff_profiles.update', 'staff_profiles.delete', 'staff_profiles.toggle_status', 'staff_profiles.statistics',

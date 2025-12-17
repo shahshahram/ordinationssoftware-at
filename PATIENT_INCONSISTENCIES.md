@@ -165,3 +165,5 @@ Das System verwendet zwei verschiedene Patient-Models:
 - MedicalDataHistory (Historie)
 - OnlineBooking (Online-Buchungen)
 
+
+

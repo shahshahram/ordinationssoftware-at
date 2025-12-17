@@ -15,6 +15,8 @@ class AvailabilityService {
    */
   static async getAvailableSlots(staffId, startDate, endDate, serviceId) {
     try {
+      console.log('🔍 AvailabilityService.getAvailableSlots called:', { staffId, startDate, endDate, serviceId });
+      
       // 1. Aktive wöchentliche Arbeitszeiten für den Zeitraum abrufen
       const weeklySchedules = await WeeklySchedule.find({
         staffId,
@@ -25,6 +27,23 @@ class AvailabilityService {
           { validTo: null }
         ]
       }).populate('staffId', 'displayName');
+      
+      console.log('📅 WeeklySchedules found:', weeklySchedules.length);
+      if (weeklySchedules.length === 0) {
+        console.warn('⚠️ Keine aktiven WeeklySchedules gefunden für staffId:', staffId);
+        console.warn('⚠️ Prüfe ob WeeklySchedules für diesen Mitarbeiter existieren und aktiv sind');
+        return []; // Keine Slots möglich ohne Arbeitszeiten
+      }
+      
+      if (weeklySchedules.length > 0) {
+        console.log('📅 First schedule:', {
+          _id: weeklySchedules[0]._id,
+          staffId: weeklySchedules[0].staffId,
+          schedules: weeklySchedules[0].schedules?.length || 0,
+          validFrom: weeklySchedules[0].validFrom,
+          validTo: weeklySchedules[0].validTo
+        });
+      }
       
       // 2. Abwesenheiten für den Zeitraum abrufen
       const absences = await Absence.find({
@@ -45,6 +64,26 @@ class AvailabilityService {
       if (!service) {
         throw new Error('Leistung nicht gefunden');
       }
+      
+      // Prüfe ob Service-Dauer definiert ist
+      if (!service.base_duration_min && !service.duration) {
+        console.warn('⚠️ Service hat keine Dauer definiert:', {
+          _id: service._id,
+          name: service.name,
+          base_duration_min: service.base_duration_min,
+          duration: service.duration
+        });
+        // Verwende Standard-Dauer von 30 Minuten
+        service.base_duration_min = 30;
+      }
+      
+      console.log('📋 Service details:', {
+        _id: service._id,
+        name: service.name,
+        base_duration_min: service.base_duration_min,
+        buffer_before_min: service.buffer_before_min,
+        buffer_after_min: service.buffer_after_min
+      });
       
       // 5. Verfügbare Slots berechnen
       const availableSlots = [];
@@ -73,6 +112,8 @@ class AvailabilityService {
         currentDate.setDate(currentDate.getDate() + 1);
       }
       
+      console.log('✅ Total available slots calculated:', availableSlots.length);
+      
       return availableSlots;
     } catch (error) {
       console.error('Fehler bei Verfügbarkeitsberechnung:', error);
@@ -93,7 +134,11 @@ class AvailabilityService {
    */
   static calculateSlotsForDay(date, daySchedule, absences, existingAppointments, service, staffId) {
     const slots = [];
-    const slotDuration = service.duration + service.bufferBefore + service.bufferAfter;
+    // Verwende die korrekten Feldnamen aus ServiceCatalog
+    const baseDuration = service.base_duration_min || service.duration || 30;
+    const bufferBefore = service.buffer_before_min || service.bufferBefore || 0;
+    const bufferAfter = service.buffer_after_min || service.bufferAfter || 0;
+    const slotDuration = baseDuration + bufferBefore + bufferAfter;
     const slotInterval = 15; // 15-Minuten-Intervalle
     
     // Arbeitszeiten für diesen Tag
@@ -117,7 +162,7 @@ class AvailabilityService {
         slots.push({
           start: new Date(currentTime),
           end: new Date(slotEnd),
-          duration: service.duration,
+          duration: baseDuration,
           serviceId: service._id,
           serviceName: service.name,
           staffId: staffId._id,

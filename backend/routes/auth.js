@@ -228,19 +228,30 @@ router.post('/login', [
       user.save().catch(err => console.log('Could not update last login:', err));
     }
 
+    // Lade vollständige User-Daten inklusive Profile
+    let userData = {
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      permissions: user.permissions || user.getDefaultPermissions?.() || []
+    };
+
+    // Wenn es ein MongoDB-User ist, füge das Profile hinzu
+    if (!isMockUser && user.profile) {
+      userData.profile = user.profile;
+    } else if (isMockUser) {
+      // Für Mock-User: Kein Profile (wird später über /auth/me geladen)
+      userData.profile = null;
+    }
+
     res.json({
       success: true,
       message: 'Erfolgreich angemeldet',
       token,
       refreshToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        permissions: user.permissions || user.getDefaultPermissions?.() || []
-      }
+      user: userData
     });
   } catch (error) {
     console.error(error.message);

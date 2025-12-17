@@ -5,6 +5,7 @@ const auth = require('../middleware/auth');
 const AvailabilityService = require('../services/availabilityService');
 const StaffProfile = require('../models/StaffProfile');
 const ServiceCatalog = require('../models/ServiceCatalog');
+const WeeklySchedule = require('../models/WeeklySchedule');
 const AuditLog = require('../models/AuditLog');
 
 // Verfügbare Slots für einen Mitarbeiter abrufen
@@ -14,9 +15,14 @@ router.get('/slots', auth, [
   query('endDate').isISO8601().withMessage('Enddatum muss ein gültiges Datum sein'),
   query('serviceId').notEmpty().withMessage('Service-ID ist erforderlich')
 ], async (req, res) => {
+  console.log('🔍 /availability/slots route called with query:', req.query);
+  console.log('🔍 /availability/slots route called with params:', req.params);
+  console.log('🔍 /availability/slots route called with body:', req.body);
   try {
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.error('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         message: 'Validierungsfehler',
@@ -26,6 +32,7 @@ router.get('/slots', auth, [
 
     // Berechtigung prüfen
     if (!req.user.permissions.includes('appointments.read')) {
+      console.warn('⚠️ No permission for appointments.read');
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Abrufen von Verfügbarkeiten'
@@ -33,31 +40,57 @@ router.get('/slots', auth, [
     }
 
     const { staffId, startDate, endDate, serviceId } = req.query;
+    console.log('📋 Request parameters:', { staffId, startDate, endDate, serviceId });
 
     // Prüfen ob Mitarbeiter existiert
     const staffProfile = await StaffProfile.findById(staffId);
     if (!staffProfile) {
+      console.warn('⚠️ StaffProfile not found for ID:', staffId);
       return res.status(404).json({
         success: false,
         message: 'Mitarbeiter nicht gefunden'
       });
     }
+    console.log('✅ StaffProfile found:', staffProfile.displayName || staffProfile._id);
 
     // Prüfen ob Service existiert
     const service = await ServiceCatalog.findById(serviceId);
     if (!service) {
+      console.warn('⚠️ Service not found for ID:', serviceId);
       return res.status(404).json({
         success: false,
         message: 'Service nicht gefunden'
       });
     }
+    console.log('✅ Service found:', service.name || service.code);
 
+    // Prüfe direkt ob WeeklySchedules existieren
+    const weeklySchedulesCheck = await WeeklySchedule.find({
+      staffId,
+      isActive: true
+    }).limit(1);
+    console.log('📅 WeeklySchedules check:', {
+      staffId,
+      found: weeklySchedulesCheck.length > 0,
+      count: weeklySchedulesCheck.length
+    });
+    if (weeklySchedulesCheck.length > 0) {
+      console.log('📅 First WeeklySchedule:', {
+        _id: weeklySchedulesCheck[0]._id,
+        validFrom: weeklySchedulesCheck[0].validFrom,
+        validTo: weeklySchedulesCheck[0].validTo,
+        schedulesCount: weeklySchedulesCheck[0].schedules?.length || 0
+      });
+    }
+
+    console.log('🔄 Calling AvailabilityService.getAvailableSlots...');
     const availableSlots = await AvailabilityService.getAvailableSlots(
       staffId,
       new Date(startDate),
       new Date(endDate),
       serviceId
     );
+    console.log('✅ AvailabilityService returned', availableSlots.length, 'slots');
 
     // Audit-Log
     await AuditLog.create({
@@ -69,9 +102,20 @@ router.get('/slots', auth, [
       details: { staffId, startDate, endDate, serviceId, slotCount: availableSlots.length }
     });
 
+    // Debug-Informationen hinzufügen
+    const weeklySchedulesCount = await WeeklySchedule.countDocuments({
+      staffId,
+      isActive: true
+    });
+    
     res.json({
       success: true,
-      data: availableSlots
+      data: availableSlots,
+      debug: {
+        staffId,
+        weeklySchedulesCount,
+        slotsFound: availableSlots.length
+      }
     });
   } catch (error) {
     console.error('Availability slots error:', error);

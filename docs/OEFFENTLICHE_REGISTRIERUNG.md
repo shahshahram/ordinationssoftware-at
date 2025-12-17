@@ -525,3 +525,5 @@ Die öffentliche Registrierung ist ein **öffentlicher API-Endpoint**, der es ne
 
 **Aktueller Status:** Nur über API verfügbar, keine Frontend-UI vorhanden.
 
+
+

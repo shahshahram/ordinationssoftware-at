@@ -231,6 +231,33 @@ const authSlice = createSlice({
       localStorage.setItem('token', action.payload.token);
       localStorage.setItem('refreshToken', action.payload.refreshToken);
     },
+    updateCalendarSettings: (state, action: PayloadAction<{
+      useStaffColumns?: boolean;
+      selectedStaffForColumns?: string[];
+      selectedStaff?: string;
+      selectedLocation?: string;
+      showOpeningHours?: boolean;
+      showWorkingHours?: boolean;
+      showBreaks?: boolean;
+      viewMode?: 'day' | 'week' | 'month';
+      currentDate?: string;
+    }>) => {
+      if (state.user) {
+        if (!state.user.profile) {
+          state.user.profile = {};
+        }
+        if (!state.user.profile.preferences) {
+          state.user.profile.preferences = {};
+        }
+        if (!state.user.profile.preferences.calendarSettings) {
+          state.user.profile.preferences.calendarSettings = {};
+        }
+        state.user.profile.preferences.calendarSettings = {
+          ...state.user.profile.preferences.calendarSettings,
+          ...action.payload,
+        };
+      }
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -329,5 +356,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setCredentials } = authSlice.actions;
+export const { clearError, setCredentials, updateCalendarSettings } = authSlice.actions;
 export default authSlice.reducer;

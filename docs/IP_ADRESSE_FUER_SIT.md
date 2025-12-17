@@ -224,3 +224,5 @@ A: Normalerweise nicht, da die Software **ausgehende** Verbindungen zur SIT-Plat
 
 **Wichtig**: Geben Sie die **öffentliche IP-Adresse** an, nicht die lokale (192.168.x.x oder 127.0.0.1)!
 
+
+

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -65,7 +65,7 @@ import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMo
 import { de } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { loadUser } from '../store/slices/authSlice';
+import { loadUser, updateCalendarSettings } from '../store/slices/authSlice';
 import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment, Appointment } from '../store/slices/appointmentSlice';
 import { fetchLocations, Location } from '../store/slices/locationSlice';
 import { fetchPatients, Patient } from '../store/slices/patientSlice';
@@ -274,7 +274,7 @@ const ServiceDemoCalendar: React.FC = () => {
   });
 
   // Save calendar settings to user preferences
-  const saveCalendarSettings = async () => {
+  const saveCalendarSettings = useCallback(async () => {
     if (!user || !settingsLoadedRef.current || isSavingRef.current || isLoadingSettingsRef.current) {
       // Nur speichern, wenn:
       // - User vorhanden ist
@@ -335,83 +335,97 @@ const ServiceDemoCalendar: React.FC = () => {
       
       if (response.success) {
         console.log('✅ Calendar settings saved successfully');
-        // KEIN loadUser() mehr - verhindert Endlosschleife!
-        // Die Einstellungen sind bereits im Backend gespeichert
+        // Aktualisiere den Redux Store direkt, ohne loadUser() aufzurufen
+        // Das verhindert eine Endlosschleife, aktualisiert aber den Store
+        dispatch(updateCalendarSettings(calendarSettings));
       }
     } catch (error) {
       console.error('❌ Fehler beim Speichern der Kalender-Einstellungen:', error);
     } finally {
       isSavingRef.current = false;
     }
-  };
+  }, [user, useStaffColumns, selectedStaffForColumns, selectedStaff, selectedLocation, showLocationHours, showStaffHours, showBreaks, viewMode, currentDate, dispatch]);
+
+  // Helper function to load calendar settings from user
+  const loadCalendarSettingsFromUser = useCallback(() => {
+    if (!user || settingsLoadedRef.current) {
+      return;
+    }
+    
+    isLoadingSettingsRef.current = true; // Markiere, dass Einstellungen geladen werden
+    const calendarSettings = (user as any)?.profile?.preferences?.calendarSettings;
+    console.log('📥 Loading calendar settings from user preferences:', calendarSettings);
+    if (calendarSettings) {
+      // Setze alle Einstellungen synchron, um Race Conditions zu vermeiden
+      // Verwende requestAnimationFrame, um sicherzustellen, dass alle State-Updates in einem Batch verarbeitet werden
+      requestAnimationFrame(() => {
+        // Batch alle State-Updates zusammen
+        if (calendarSettings.useStaffColumns !== undefined) {
+          setUseStaffColumns(calendarSettings.useStaffColumns);
+        }
+        if (calendarSettings.selectedStaffForColumns && Array.isArray(calendarSettings.selectedStaffForColumns)) {
+          setSelectedStaffForColumns(calendarSettings.selectedStaffForColumns);
+        }
+        if (calendarSettings.selectedStaff) {
+          setSelectedStaff(calendarSettings.selectedStaff);
+        }
+        if (calendarSettings.selectedLocation) {
+          setSelectedLocation(calendarSettings.selectedLocation);
+        }
+        if (calendarSettings.showOpeningHours !== undefined) {
+          setShowLocationHours(calendarSettings.showOpeningHours);
+        }
+        if (calendarSettings.showWorkingHours !== undefined) {
+          setShowStaffHours(calendarSettings.showWorkingHours);
+        }
+        if (calendarSettings.showBreaks !== undefined) {
+          setShowBreaks(calendarSettings.showBreaks);
+        }
+        if (calendarSettings.viewMode) {
+          setViewMode(calendarSettings.viewMode);
+        }
+        if (calendarSettings.currentDate) {
+          try {
+            const savedDate = new Date(calendarSettings.currentDate);
+            if (!isNaN(savedDate.getTime())) {
+              setCurrentDate(savedDate);
+            }
+          } catch (e) {
+            console.warn('Invalid date in calendar settings:', calendarSettings.currentDate);
+          }
+        }
+        settingsLoadedRef.current = true;
+        console.log('✅ Calendar settings loaded successfully');
+        // Warte länger, damit alle State-Updates verarbeitet werden, bevor wir das Flag zurücksetzen
+        // Verwende requestAnimationFrame zweimal, um sicherzustellen, dass alle Updates verarbeitet wurden
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            isLoadingSettingsRef.current = false;
+            console.log('🔄 Loading flag reset - settings can now be saved');
+          });
+        });
+      });
+    } else {
+      // Keine gespeicherten Einstellungen vorhanden - markiere als geladen, damit andere Hooks funktionieren
+      settingsLoadedRef.current = true;
+      console.log('ℹ️ No saved calendar settings found, using defaults');
+      // Auch hier das Flag zurücksetzen
+      requestAnimationFrame(() => {
+        isLoadingSettingsRef.current = false;
+      });
+    }
+  }, [user]);
 
   // Load settings when user is available (höchste Priorität - läuft zuerst)
   useEffect(() => {
-    if (user && !settingsLoadedRef.current) {
-      isLoadingSettingsRef.current = true; // Markiere, dass Einstellungen geladen werden
-      const calendarSettings = (user as any)?.profile?.preferences?.calendarSettings;
-      console.log('📥 Loading calendar settings from user preferences:', calendarSettings);
-      if (calendarSettings) {
-        // Setze alle Einstellungen synchron, um Race Conditions zu vermeiden
-        // Verwende requestAnimationFrame, um sicherzustellen, dass alle State-Updates in einem Batch verarbeitet werden
-        requestAnimationFrame(() => {
-          // Batch alle State-Updates zusammen
-          if (calendarSettings.useStaffColumns !== undefined) {
-            setUseStaffColumns(calendarSettings.useStaffColumns);
-          }
-          if (calendarSettings.selectedStaffForColumns && Array.isArray(calendarSettings.selectedStaffForColumns)) {
-            setSelectedStaffForColumns(calendarSettings.selectedStaffForColumns);
-          }
-          if (calendarSettings.selectedStaff) {
-            setSelectedStaff(calendarSettings.selectedStaff);
-          }
-          if (calendarSettings.selectedLocation) {
-            setSelectedLocation(calendarSettings.selectedLocation);
-          }
-          if (calendarSettings.showOpeningHours !== undefined) {
-            setShowLocationHours(calendarSettings.showOpeningHours);
-          }
-          if (calendarSettings.showWorkingHours !== undefined) {
-            setShowStaffHours(calendarSettings.showWorkingHours);
-          }
-          if (calendarSettings.showBreaks !== undefined) {
-            setShowBreaks(calendarSettings.showBreaks);
-          }
-          if (calendarSettings.viewMode) {
-            setViewMode(calendarSettings.viewMode);
-          }
-          if (calendarSettings.currentDate) {
-            try {
-              const savedDate = new Date(calendarSettings.currentDate);
-              if (!isNaN(savedDate.getTime())) {
-                setCurrentDate(savedDate);
-              }
-            } catch (e) {
-              console.warn('Invalid date in calendar settings:', calendarSettings.currentDate);
-            }
-          }
-          settingsLoadedRef.current = true;
-          console.log('✅ Calendar settings loaded successfully');
-          // Warte länger, damit alle State-Updates verarbeitet werden, bevor wir das Flag zurücksetzen
-          // Verwende requestAnimationFrame zweimal, um sicherzustellen, dass alle Updates verarbeitet wurden
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              isLoadingSettingsRef.current = false;
-              console.log('🔄 Loading flag reset - settings can now be saved');
-            });
-          });
-        });
-      } else {
-        // Keine gespeicherten Einstellungen vorhanden - markiere als geladen, damit andere Hooks funktionieren
-        settingsLoadedRef.current = true;
-        console.log('ℹ️ No saved calendar settings found, using defaults');
-        // Auch hier das Flag zurücksetzen
-        requestAnimationFrame(() => {
-          isLoadingSettingsRef.current = false;
-        });
-      }
-    }
-  }, [user]);
+    loadCalendarSettingsFromUser();
+  }, [user, loadCalendarSettingsFromUser]);
+
+  // Load settings on mount if user is already available
+  useEffect(() => {
+    loadCalendarSettingsFromUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Nur beim Mount
 
   // Save settings when they change (with debounce)
   useEffect(() => {

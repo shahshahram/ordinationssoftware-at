@@ -57,3 +57,5 @@ Um Stripe wieder zu deaktivieren, entfernen Sie einfach die Zeilen aus der `.env
 
 **Hinweis**: Die Abrechnung funktioniert auch ohne Stripe. Stripe ist nur für die automatische Online-Zahlungsabwicklung nötig.
 
+
+

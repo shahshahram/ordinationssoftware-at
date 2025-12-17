@@ -72,28 +72,69 @@ const Availability: React.FC = () => {
 
   const loadStaffList = async () => {
     try {
-      const response = await api.get('/staff-profiles');
-      if (response.success) {
-        setStaffList(Array.isArray(response.data) ? response.data : []);
+      // Lade alle Mitarbeiter mit einem höheren Limit
+      const response = await api.get<{data: Array<any>, pagination?: any}>('/staff-profiles', { limit: 500 });
+      console.log('📥 Staff profiles response:', response);
+      
+      if (response.success && response.data) {
+        // Die API-Antwort ist verschachtelt: response.data.data enthält das Array
+        const apiData = response.data as any;
+        const staffData = (apiData.data && Array.isArray(apiData.data)) ? apiData.data : (Array.isArray(apiData) ? apiData : []);
+        
+        console.log('✅ Loaded staff profiles:', staffData.length);
+        if (staffData.length > 0) {
+          console.log('📋 First staff profile:', staffData[0]);
+        }
+        
+        // Filtere nur aktive Mitarbeiter im Frontend
+        const activeStaff = staffData.filter((staff: any) => staff.isActive !== false);
+        console.log('✅ Active staff profiles:', activeStaff.length);
+        setStaffList(activeStaff);
+      } else {
+        console.warn('⚠️ No staff profiles in response');
+        setStaffList([]);
       }
     } catch (error: any) {
-      console.error('Error loading staff:', error);
+      console.error('❌ Error loading staff:', error);
+      enqueueSnackbar('Fehler beim Laden der Mitarbeiter', { variant: 'error' });
     }
   };
 
   const loadServiceList = async () => {
     try {
-      const response = await api.get('/service-catalog');
-      if (response.success) {
-        setServiceList(Array.isArray(response.data) ? response.data : []);
+      // Lade alle Services mit einem höheren Limit
+      const response = await api.get<{data: Array<any>, pagination?: any}>('/service-catalog', { limit: 500 });
+      console.log('📥 Service catalog response:', response);
+      
+      if (response.success && response.data) {
+        // Die API-Antwort ist verschachtelt: response.data.data enthält das Array
+        const apiData = response.data as any;
+        const serviceData = (apiData.data && Array.isArray(apiData.data)) ? apiData.data : (Array.isArray(apiData) ? apiData : []);
+        
+        console.log('✅ Loaded services:', serviceData.length);
+        if (serviceData.length > 0) {
+          console.log('📋 First service:', serviceData[0]);
+        }
+        
+        // Filtere nur aktive Services im Frontend
+        const activeServices = serviceData.filter((service: any) => service.is_active !== false);
+        console.log('✅ Active services:', activeServices.length);
+        setServiceList(activeServices);
+      } else {
+        console.warn('⚠️ No services in response');
+        setServiceList([]);
       }
     } catch (error: any) {
-      console.error('Error loading services:', error);
+      console.error('❌ Error loading services:', error);
+      enqueueSnackbar('Fehler beim Laden der Services', { variant: 'error' });
     }
   };
 
   const handleSearchSlots = async () => {
+    console.log('🔍 handleSearchSlots called with:', { staffId, serviceId, startDate, endDate });
+    
     if (!staffId || !serviceId || !startDate || !endDate) {
+      console.warn('⚠️ Missing required fields:', { staffId: !!staffId, serviceId: !!serviceId, startDate: !!startDate, endDate: !!endDate });
       enqueueSnackbar('Bitte alle Felder ausfüllen', { variant: 'warning' });
       return;
     }
@@ -106,13 +147,60 @@ const Availability: React.FC = () => {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
       };
+      console.log('🔍 Searching for available slots with params:', params);
+      console.log('🔍 Making API call to /availability/slots');
       const response = await api.get('/availability/slots', params);
+      console.log('🔍 API call completed, response received');
+      console.log('📥 Available slots full response:', JSON.stringify(response, null, 2));
+      console.log('📥 Available slots response.data:', response.data);
+      console.log('📥 Available slots response.success:', response.success);
+      
       if (response.success) {
-        const slots = Array.isArray(response.data) ? response.data : [];
+        const apiData = response.data as any;
+        console.log('📥 API data type:', typeof apiData, 'isArray:', Array.isArray(apiData));
+        console.log('📥 API data keys:', apiData ? Object.keys(apiData) : 'null');
+        
+        // Die API gibt zurück: { success: true, data: [...] }
+        // response.data ist bereits { success: true, data: [...] }
+        // Also müssen wir response.data.data verwenden, wenn es existiert
+        let slots: any[] = [];
+        if (Array.isArray(apiData)) {
+          slots = apiData;
+        } else if (apiData?.data && Array.isArray(apiData.data)) {
+          slots = apiData.data;
+        } else if (apiData?.success && apiData?.data && Array.isArray(apiData.data)) {
+          slots = apiData.data;
+        }
+        
+        console.log('✅ Found slots:', slots.length);
+        if (slots.length > 0) {
+          console.log('📋 First slot:', slots[0]);
+        }
+        
+        // Debug-Informationen anzeigen
+        const debugInfo = (apiData as any)?.debug;
+        if (debugInfo) {
+          console.log('🔍 Debug info from backend:', debugInfo);
+          if (debugInfo.weeklySchedulesCount === 0) {
+            console.warn('⚠️ No WeeklySchedules found for staffId:', debugInfo.staffId);
+          }
+        }
+        
         setAvailableSlots(slots);
-        enqueueSnackbar(`${slots.length} verfügbare Slots gefunden`, { variant: 'success' });
+        
+        if (slots.length === 0) {
+          enqueueSnackbar(
+            'Keine verfügbaren Slots gefunden. Bitte prüfen Sie, ob Arbeitszeiten für den Mitarbeiter definiert sind.',
+            { variant: 'info', autoHideDuration: 6000 }
+          );
+        } else {
+          enqueueSnackbar(`${slots.length} verfügbare Slots gefunden`, { variant: 'success' });
+        }
+      } else {
+        enqueueSnackbar(response.message || 'Fehler beim Laden der verfügbaren Slots', { variant: 'error' });
       }
     } catch (error: any) {
+      console.error('❌ Error loading slots:', error);
       enqueueSnackbar('Fehler beim Laden der verfügbaren Slots', { variant: 'error' });
     } finally {
       setLoading(false);
@@ -155,7 +243,10 @@ const Availability: React.FC = () => {
         serviceId,
         fromDate: new Date().toISOString(),
       };
+      console.log('🔍 Searching for next available slot:', params);
       const response = await api.get('/availability/next-available', params);
+      console.log('📥 Next available slot response:', response);
+      
       if (response.success && response.data && typeof response.data === 'object' && 'start' in response.data) {
         const slot = response.data as { start: string };
         enqueueSnackbar(
@@ -163,9 +254,13 @@ const Availability: React.FC = () => {
           { variant: 'success' }
         );
       } else {
-        enqueueSnackbar('Kein verfügbarer Termin gefunden', { variant: 'info' });
+        enqueueSnackbar(
+          'Kein verfügbarer Termin gefunden. Bitte prüfen Sie, ob Arbeitszeiten für den Mitarbeiter definiert sind.',
+          { variant: 'info', autoHideDuration: 6000 }
+        );
       }
     } catch (error: any) {
+      console.error('❌ Error finding next available slot:', error);
       enqueueSnackbar('Fehler beim Suchen des nächsten Termins', { variant: 'error' });
     } finally {
       setLoading(false);
@@ -187,19 +282,49 @@ const Availability: React.FC = () => {
             <Grid size={{ xs: 12, md: 4 }}>
               <Autocomplete
                 options={staffList}
-                getOptionLabel={(option) => option.displayName || `${option.firstName} ${option.lastName}`}
-                value={staffList.find(s => s._id === staffId) || null}
-                onChange={(_, newValue) => setStaffId(newValue?._id || '')}
+                getOptionLabel={(option: any) => option.display_name || option.displayName || `${option.first_name || option.firstName || ''} ${option.last_name || option.lastName || ''}`.trim() || 'Unbekannt'}
+                value={staffList.find((s: any) => s._id === staffId) || null}
+                onChange={(_, newValue: any) => setStaffId(newValue?._id || '')}
                 renderInput={(params) => <TextField {...params} label="Mitarbeiter" />}
+                isOptionEqualToValue={(option: any, value: any) => {
+                  if (!option || !value) return false;
+                  return (option._id || option.id) === (value._id || value.id);
+                }}
+                renderOption={(props, option: any) => {
+                  const { key, ...restProps } = props;
+                  const uniqueKey = option._id || option.id || key;
+                  return (
+                    <Box component="li" key={uniqueKey} {...restProps}>
+                      <Typography variant="body2">
+                        {option.display_name || option.displayName || `${option.first_name || option.firstName || ''} ${option.last_name || option.lastName || ''}`.trim() || 'Unbekannt'}
+                      </Typography>
+                    </Box>
+                  );
+                }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 4 }}>
               <Autocomplete
                 options={serviceList}
-                getOptionLabel={(option) => option.name || option.code}
-                value={serviceList.find(s => s._id === serviceId) || null}
-                onChange={(_, newValue) => setServiceId(newValue?._id || '')}
+                getOptionLabel={(option: any) => option.name || option.code || 'Unbekannt'}
+                value={serviceList.find((s: any) => s._id === serviceId) || null}
+                onChange={(_, newValue: any) => setServiceId(newValue?._id || '')}
                 renderInput={(params) => <TextField {...params} label="Service" />}
+                isOptionEqualToValue={(option: any, value: any) => {
+                  if (!option || !value) return false;
+                  return (option._id || option.id) === (value._id || value.id);
+                }}
+                renderOption={(props, option: any) => {
+                  const { key, ...restProps } = props;
+                  const uniqueKey = option._id || option.id || key;
+                  return (
+                    <Box component="li" key={uniqueKey} {...restProps}>
+                      <Typography variant="body2">
+                        {option.name || option.code || 'Unbekannt'}
+                      </Typography>
+                    </Box>
+                  );
+                }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 2 }}>
@@ -258,27 +383,29 @@ const Availability: React.FC = () => {
         <Card sx={{ mb: 3 }}>
           <CardContent>
             <Typography variant="h6" gutterBottom>
-              Auslastung: {utilization.staffName}
+              Auslastung: {utilization.staffName || 'Unbekannt'}
             </Typography>
             <Grid container spacing={2}>
               <Grid size={{ xs: 4 }}>
                 <Typography variant="body2" color="text.secondary">
                   Gesamt Slots
                 </Typography>
-                <Typography variant="h5">{utilization.totalSlots}</Typography>
+                <Typography variant="h5">{utilization.totalSlots ?? 0}</Typography>
               </Grid>
               <Grid size={{ xs: 4 }}>
                 <Typography variant="body2" color="text.secondary">
                   Gebuchte Slots
                 </Typography>
-                <Typography variant="h5">{utilization.bookedSlots}</Typography>
+                <Typography variant="h5">{utilization.bookedSlots ?? 0}</Typography>
               </Grid>
               <Grid size={{ xs: 4 }}>
                 <Typography variant="body2" color="text.secondary">
                   Auslastung
                 </Typography>
                 <Typography variant="h5">
-                  {utilization.utilizationRate.toFixed(1)}%
+                  {utilization.utilizationRate !== undefined && utilization.utilizationRate !== null 
+                    ? utilization.utilizationRate.toFixed(1) 
+                    : '0.0'}%
                 </Typography>
               </Grid>
             </Grid>

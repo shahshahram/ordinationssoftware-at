@@ -67,3 +67,5 @@ Die WAHonline-Integration ist bereits implementiert und bereit für Tests:
 
 Detaillierte Anleitung: `docs/WAHONLINE_SIT_REGISTRIERUNG.md`
 
+
+
