@@ -4,6 +4,7 @@ const OnlineBooking = require('../models/OnlineBooking');
 const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
 const Appointment = require('../models/Appointment');
 const User = require('../models/User');
+const StaffProfile = require('../models/StaffProfile');
 const WeeklySchedule = require('../models/WeeklySchedule');
 const ServiceCatalog = require('../models/ServiceCatalog');
 const Device = require('../models/Device');
@@ -34,43 +35,93 @@ router.get('/availability', async (req, res) => {
       });
     }
 
-    const requestedDate = new Date(date);
-    const dayOfWeek = requestedDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
-    
-    // Arbeitszeiten des Arztes aus WeeklySchedule abrufen
-    const weeklySchedules = await WeeklySchedule.find({
-      staffId: doctorId,
-      isActive: true,
-      validFrom: { $lte: requestedDate },
-      $or: [
-        { validTo: { $gte: requestedDate } },
-        { validTo: null }
-      ]
-    });
+    // Finde das StaffProfile für diesen User
+    const staffProfile = await StaffProfile.findOne({ userId: doctorId });
+    if (!staffProfile) {
+      console.error(`[OnlineBooking] No StaffProfile found for user ${doctorId}`);
+      return res.status(404).json({
+        success: false,
+        message: 'Personalprofil für diesen Arzt nicht gefunden'
+      });
+    }
 
+    const requestedDate = new Date(date);
+    if (isNaN(requestedDate.getTime())) {
+      console.error(`[OnlineBooking] Invalid date format: ${date}`);
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültiges Datumsformat'
+      });
+    }
+
+    // Konvertiere Datum zu Wochentag (monday, tuesday, etc.)
+    const dayIndex = requestedDate.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayOfWeek = dayNames[dayIndex];
+    
+    // Standard-Arbeitszeiten (Fallback)
     let workingHours = {
-      monday: { start: '09:00', end: '17:00', isWorking: false },
-      tuesday: { start: '09:00', end: '17:00', isWorking: false },
-      wednesday: { start: '09:00', end: '17:00', isWorking: false },
-      thursday: { start: '09:00', end: '17:00', isWorking: false },
-      friday: { start: '09:00', end: '17:00', isWorking: false },
+      monday: { start: '09:00', end: '17:00', isWorking: true },
+      tuesday: { start: '09:00', end: '17:00', isWorking: true },
+      wednesday: { start: '09:00', end: '17:00', isWorking: true },
+      thursday: { start: '09:00', end: '17:00', isWorking: true },
+      friday: { start: '09:00', end: '17:00', isWorking: true },
       saturday: { start: '09:00', end: '12:00', isWorking: false },
       sunday: { start: '09:00', end: '12:00', isWorking: false }
     };
 
-    // Aktuelle Arbeitszeiten aus WeeklySchedule setzen
-    for (const schedule of weeklySchedules) {
-      for (const daySchedule of schedule.schedules) {
-        if (daySchedule.isWorking) {
-          workingHours[daySchedule.day] = {
-            start: daySchedule.startTime,
-            end: daySchedule.endTime,
-            isWorking: true,
-            breakStart: daySchedule.breakStart,
-            breakEnd: daySchedule.breakEnd
-          };
+    // Versuche Arbeitszeiten aus WeeklySchedule abzurufen (staffId ist StaffProfile._id)
+    try {
+      const weeklySchedules = await WeeklySchedule.find({
+        staffId: staffProfile._id,
+        isActive: true,
+        validFrom: { $lte: requestedDate },
+        $or: [
+          { validTo: { $gte: requestedDate } },
+          { validTo: null }
+        ]
+      });
+
+      // Aktuelle Arbeitszeiten aus WeeklySchedule setzen
+      if (weeklySchedules && weeklySchedules.length > 0) {
+        console.log(`[OnlineBooking] Found ${weeklySchedules.length} weekly schedule(s) for staffProfile ${staffProfile._id}`);
+        for (const schedule of weeklySchedules) {
+          if (schedule.schedules && Array.isArray(schedule.schedules)) {
+            for (const daySchedule of schedule.schedules) {
+              if (daySchedule && daySchedule.day && daySchedule.isWorking) {
+                workingHours[daySchedule.day] = {
+                  start: daySchedule.startTime || '09:00',
+                  end: daySchedule.endTime || '17:00',
+                  isWorking: true,
+                  breakStart: daySchedule.breakStart,
+                  breakEnd: daySchedule.breakEnd
+                };
+                console.log(`[OnlineBooking] Set working hours for ${daySchedule.day}: ${daySchedule.startTime} - ${daySchedule.endTime}`);
+              }
+            }
+          }
+        }
+      } else {
+        console.log(`[OnlineBooking] No weekly schedules found, using fallback`);
+        // Fallback: Verwende Arbeitszeiten aus User.profile.onlineBookingSettings
+        if (doctor.profile?.onlineBookingSettings?.workingHours && Array.isArray(doctor.profile.onlineBookingSettings.workingHours)) {
+          console.log(`[OnlineBooking] Using onlineBookingSettings.workingHours (${doctor.profile.onlineBookingSettings.workingHours.length} entries)`);
+          for (const wh of doctor.profile.onlineBookingSettings.workingHours) {
+            if (wh && wh.day && wh.isWorking) {
+              workingHours[wh.day] = {
+                start: wh.startTime || '09:00',
+                end: wh.endTime || '17:00',
+                isWorking: true
+              };
+            }
+          }
+        } else {
+          console.log(`[OnlineBooking] No onlineBookingSettings.workingHours found, using default working hours (Mon-Fri 09:00-17:00)`);
         }
       }
+    } catch (scheduleError) {
+      console.error('[OnlineBooking] Error loading weekly schedules:', scheduleError);
+      // Verwende Standard-Arbeitszeiten als Fallback
     }
 
     const today = new Date();
@@ -88,7 +139,10 @@ router.get('/availability', async (req, res) => {
     }
 
     const workingDay = workingHours[dayOfWeek];
+    console.log(`[OnlineBooking] Requested date: ${date}, dayOfWeek: ${dayOfWeek}, workingDay:`, workingDay);
+    
     if (!workingDay || !workingDay.isWorking) {
+      console.log(`[OnlineBooking] No working hours for ${dayOfWeek}, returning empty slots`);
       return res.json({
         success: true,
         data: {
@@ -100,73 +154,98 @@ router.get('/availability', async (req, res) => {
 
     // Generiere verfügbare Zeitslots
     const availableSlots = [];
-    const startTime = new Date(`${date}T${workingDay.start}`);
-    const endTime = new Date(`${date}T${workingDay.end}`);
     
-    // Prüfe bestehende Termine
-    const existingAppointments = await Appointment.find({
-      doctor: doctorId,
-      date: {
-        $gte: new Date(`${date}T00:00:00`),
-        $lt: new Date(`${date}T23:59:59`)
-      },
-      status: { $nin: ['cancelled', 'no_show'] }
-    });
-
-    const bookedSlots = existingAppointments.map(apt => ({
-      start: apt.startTime,
-      end: apt.endTime
-    }));
-
-    // Generiere 30-Minuten-Slots mit Pausenzeiten-Berücksichtigung
-    const slotDuration = parseInt(duration);
-    let currentTime = new Date(startTime);
-    
-    while (currentTime < endTime) {
-      const slotStart = currentTime.toTimeString().slice(0, 5);
-      const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000).toTimeString().slice(0, 5);
+    try {
+      const startTime = new Date(`${date}T${workingDay.start}`);
+      const endTime = new Date(`${date}T${workingDay.end}`);
       
-      // Prüfe ob Slot in Pausenzeiten liegt
-      let isInBreak = false;
-      if (workingDay.breakStart && workingDay.breakEnd) {
-        if (slotStart < workingDay.breakEnd && slotEnd > workingDay.breakStart) {
-          isInBreak = true;
-        }
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) {
+        throw new Error(`Invalid time format: ${workingDay.start} - ${workingDay.end}`);
       }
       
-      // Prüfe ob Slot verfügbar ist (nur wenn nicht in Pause)
-      const isSlotAvailable = !isInBreak && !bookedSlots.some(booked => {
-        const bookedStart = new Date(`${date}T${booked.start}`);
-        const bookedEnd = new Date(`${date}T${booked.end}`);
-        const slotStartTime = new Date(`${date}T${slotStart}`);
-        const slotEndTime = new Date(`${date}T${slotEnd}`);
-        
-        return (slotStartTime < bookedEnd && slotEndTime > bookedStart);
+      // Prüfe bestehende Termine (doctor ist User-ID in Appointment)
+      const existingAppointments = await Appointment.find({
+        doctor: doctorId, // doctor ist User-ID
+        date: {
+          $gte: new Date(`${date}T00:00:00`),
+          $lt: new Date(`${date}T23:59:59`)
+        },
+        status: { $nin: ['cancelled', 'no_show'] }
+      }).catch(err => {
+        console.error('[OnlineBooking] Error fetching appointments:', err);
+        return []; // Fallback: keine Termine gefunden
       });
 
-      if (isSlotAvailable) {
-        availableSlots.push({
-          start: slotStart,
-          end: slotEnd,
-          duration: slotDuration
+      const bookedSlots = existingAppointments.map(apt => ({
+        start: apt.startTime,
+        end: apt.endTime
+      }));
+
+      // Generiere 30-Minuten-Slots mit Pausenzeiten-Berücksichtigung
+      const slotDuration = parseInt(duration) || 30;
+      let currentTime = new Date(startTime);
+      
+      while (currentTime < endTime) {
+        const slotStart = currentTime.toTimeString().slice(0, 5);
+        const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000).toTimeString().slice(0, 5);
+        
+        // Prüfe ob Slot in Pausenzeiten liegt
+        let isInBreak = false;
+        if (workingDay.breakStart && workingDay.breakEnd) {
+          if (slotStart < workingDay.breakEnd && slotEnd > workingDay.breakStart) {
+            isInBreak = true;
+          }
+        }
+        
+        // Prüfe ob Slot verfügbar ist (nur wenn nicht in Pause)
+        const isSlotAvailable = !isInBreak && !bookedSlots.some(booked => {
+          try {
+            const bookedStart = new Date(`${date}T${booked.start}`);
+            const bookedEnd = new Date(`${date}T${booked.end}`);
+            const slotStartTime = new Date(`${date}T${slotStart}`);
+            const slotEndTime = new Date(`${date}T${slotEnd}`);
+            
+            return (slotStartTime < bookedEnd && slotEndTime > bookedStart);
+          } catch (err) {
+            console.error('[OnlineBooking] Error checking slot availability:', err);
+            return false;
+          }
         });
+
+        if (isSlotAvailable) {
+          availableSlots.push({
+            start: slotStart,
+            end: slotEnd,
+            duration: slotDuration
+          });
+        }
+        
+        currentTime = new Date(currentTime.getTime() + 15 * 60000); // 15-Minuten-Intervalle
+      }
+
+      console.log(`[OnlineBooking] Generated ${availableSlots.length} available slots for ${date}`);
+      if (availableSlots.length > 0) {
+        console.log(`[OnlineBooking] First slot: ${availableSlots[0].start} - ${availableSlots[0].end}`);
       }
       
-      currentTime = new Date(currentTime.getTime() + 15 * 60000); // 15-Minuten-Intervalle
+      res.json({
+        success: true,
+        data: {
+          availableSlots,
+          workingHours: workingDay,
+          date: date
+        }
+      });
+    } catch (slotError) {
+      console.error('[OnlineBooking] Error generating slots:', slotError);
+      throw slotError; // Wird vom äußeren catch behandelt
     }
-
-    res.json({
-      success: true,
-      data: {
-        availableSlots,
-        workingHours: workingDay,
-        date: date
-      }
-    });
   } catch (error) {
+    console.error('[OnlineBooking] Error in /availability route:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Laden der Verfügbarkeit'
+      message: 'Fehler beim Laden der Verfügbarkeit',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
@@ -318,7 +397,7 @@ router.post('/book', [
         email: patient.email,
         phone: patient.phone,
         dateOfBirth: new Date(patient.dateOfBirth),
-        insuranceNumber: patient.insuranceNumber,
+        insuranceNumber: patient.socialSecurityNumber || patient.insuranceNumber || '',
         isNewPatient: !existingPatient
       },
       appointment: {
@@ -378,9 +457,14 @@ router.post('/book', [
       }
     });
   } catch (error) {
+    console.error('[OnlineBooking] Error in /book route:', error);
+    console.error('[OnlineBooking] Error stack:', error.stack);
+    console.error('[OnlineBooking] Request body:', JSON.stringify(req.body, null, 2));
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Buchen des Termins'
+      message: 'Fehler beim Buchen des Termins',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -493,22 +577,29 @@ router.put('/cancel/:bookingNumber', [
 // @access  Public
 router.get('/doctors', async (req, res) => {
   try {
+    // Suche nach Ärzten mit verschiedenen Rollen-Bezeichnungen
     const doctors = await User.find({
-      role: 'doctor',
+      role: { $in: ['doctor', 'arzt'] }, // Unterstütze sowohl 'doctor' als auch 'arzt'
       isActive: true,
       'profile.onlineBookingEnabled': true
-    }).select('firstName lastName specialization profile.workingHours');
+    }).select('firstName lastName profile.specialization profile.workingHours profile.onlineBookingEnabled role');
+
+    console.log(`[OnlineBooking] Found ${doctors.length} doctors with online booking enabled`);
+    doctors.forEach(doctor => {
+      console.log(`[OnlineBooking] Doctor: ${doctor.firstName} ${doctor.lastName}, role: ${doctor.role}, onlineBookingEnabled: ${doctor.profile?.onlineBookingEnabled}, profileKeys:`, doctor.profile ? Object.keys(doctor.profile) : 'no profile');
+    });
 
     res.json({
       success: true,
       data: doctors.map(doctor => ({
         id: doctor._id,
         name: `${doctor.firstName} ${doctor.lastName}`,
-        specialization: doctor.specialization,
+        specialization: doctor.profile?.specialization || doctor.specialization || '',
         workingHours: doctor.profile?.workingHours
       }))
     });
   } catch (error) {
+    console.error('[OnlineBooking] Error loading doctors:', error);
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Ärzte'

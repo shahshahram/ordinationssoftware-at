@@ -342,6 +342,128 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
   }
 });
 
+// Update-Status Endpunkte (MUSS VOR /:id stehen!)
+// GET /api/service-catalog/update-status
+router.get('/update-status', auth, checkPermission('services.read'), async (req, res) => {
+  try {
+    // AuditLog ist bereits am Anfang der Datei importiert
+    const lastUpdate = await AuditLog.findOne({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE'
+    }).sort({ timestamp: -1 });
+
+    const currentYear = new Date().getFullYear();
+    const nextUpdate = new Date(currentYear + 1, 0, 1);
+
+    const totalServices = await ServiceCatalog.countDocuments();
+    const activeServices = await ServiceCatalog.countDocuments({ is_active: true });
+    
+    const currentYearStart = new Date(currentYear, 0, 1);
+    const currentYearUpdates = await AuditLog.find({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE',
+      timestamp: { $gte: currentYearStart }
+    }).sort({ timestamp: -1 });
+
+    let newServicesThisYear = 0;
+    let deprecatedServicesThisYear = 0;
+    let priceAdjustmentsThisYear = 0;
+
+    if (Array.isArray(currentYearUpdates)) {
+      currentYearUpdates.forEach(update => {
+        if (update && update.changes && update.changes.details) {
+          newServicesThisYear += update.changes.details.newServices || 0;
+          deprecatedServicesThisYear += update.changes.details.deprecatedServices || 0;
+          priceAdjustmentsThisYear += update.changes.details.updatedPrices || 0;
+        }
+      });
+    }
+
+    const recentUpdates = await AuditLog.find({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE'
+    })
+    .sort({ timestamp: -1 })
+    .limit(10)
+    .select('timestamp changes details');
+
+    let status = 'never';
+    if (lastUpdate && lastUpdate.timestamp) {
+      const lastUpdateYear = lastUpdate.timestamp.getFullYear();
+      if (lastUpdateYear === currentYear) {
+        status = 'success';
+      } else if (lastUpdateYear < currentYear) {
+        status = 'pending';
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        lastUpdate: lastUpdate && lastUpdate.timestamp ? lastUpdate.timestamp.toISOString() : null,
+        nextUpdate: nextUpdate.toISOString(),
+        status,
+        statistics: {
+          totalServices,
+          activeServices,
+          newServicesThisYear,
+          deprecatedServicesThisYear,
+          priceAdjustmentsThisYear
+        },
+        recentUpdates: Array.isArray(recentUpdates) ? recentUpdates.map(update => ({
+          date: update.timestamp ? update.timestamp.toISOString() : null,
+          type: 'price',
+          description: `Update ${update.timestamp ? update.timestamp.getFullYear() : 'Unbekannt'}`,
+          count: (update.changes && update.changes.details && update.changes.details.newServices) || 0
+        })) : []
+      }
+    });
+  } catch (error) {
+    console.error('Fehler beim Laden der Update-Status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Update-Status',
+      error: error.message
+    });
+  }
+});
+
+// POST /api/service-catalog/trigger-update
+router.post('/trigger-update', auth, checkPermission('services.write'), async (req, res) => {
+  try {
+    // AuditLog ist bereits am Anfang der Datei importiert
+    const runningUpdate = await AuditLog.findOne({
+      action: 'SERVICE_CATALOG_ANNUAL_UPDATE',
+      timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+    });
+
+    if (runningUpdate) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ein Update wurde bereits in den letzten 24 Stunden durchgeführt'
+      });
+    }
+
+    const serviceCatalogUpdateService = require('../services/serviceCatalogUpdateService');
+    serviceCatalogUpdateService.updateAll()
+      .then(() => {
+        console.log('Manuelles Service-Katalog Update erfolgreich abgeschlossen');
+      })
+      .catch((error) => {
+        console.error('Manuelles Service-Katalog Update fehlgeschlagen:', error);
+      });
+
+    res.json({
+      success: true,
+      message: 'Service-Katalog Update wurde gestartet'
+    });
+  } catch (error) {
+    console.error('Fehler beim Starten des Updates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Starten des Updates',
+      error: error.message
+    });
+  }
+});
+
 // GET /api/service-catalog/:id - Einzelnen Service abrufen
 router.get('/:id', auth, checkPermission('services.read'), async (req, res) => {
   try {
@@ -1097,126 +1219,6 @@ router.get('/:id/available-rooms', auth, checkPermission('services.read'), async
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der verfügbaren Räume',
-      error: error.message
-    });
-  }
-});
-
-// Update-Status Endpunkte (aus serviceCatalogUpdate.js integriert)
-// GET /api/service-catalog/update-status
-router.get('/update-status', auth, checkPermission('services.read'), async (req, res) => {
-  try {
-    const AuditLog = require('../models/AuditLog');
-    const lastUpdate = await AuditLog.findOne({
-      action: 'SERVICE_CATALOG_ANNUAL_UPDATE'
-    }).sort({ timestamp: -1 });
-
-    const currentYear = new Date().getFullYear();
-    const nextUpdate = new Date(currentYear + 1, 0, 1);
-
-    const totalServices = await ServiceCatalog.countDocuments();
-    const activeServices = await ServiceCatalog.countDocuments({ is_active: true });
-    
-    const currentYearStart = new Date(currentYear, 0, 1);
-    const currentYearUpdates = await AuditLog.find({
-      action: 'SERVICE_CATALOG_ANNUAL_UPDATE',
-      timestamp: { $gte: currentYearStart }
-    }).sort({ timestamp: -1 });
-
-    let newServicesThisYear = 0;
-    let deprecatedServicesThisYear = 0;
-    let priceAdjustmentsThisYear = 0;
-
-    currentYearUpdates.forEach(update => {
-      if (update.changes && update.changes.details) {
-        newServicesThisYear += update.changes.details.newServices || 0;
-        deprecatedServicesThisYear += update.changes.details.deprecatedServices || 0;
-        priceAdjustmentsThisYear += update.changes.details.updatedPrices || 0;
-      }
-    });
-
-    const recentUpdates = await AuditLog.find({
-      action: 'SERVICE_CATALOG_ANNUAL_UPDATE'
-    })
-    .sort({ timestamp: -1 })
-    .limit(10)
-    .select('timestamp changes.metadata');
-
-    let status = 'never';
-    if (lastUpdate) {
-      const lastUpdateYear = lastUpdate.timestamp.getFullYear();
-      if (lastUpdateYear === currentYear) {
-        status = 'success';
-      } else if (lastUpdateYear < currentYear) {
-        status = 'pending';
-      }
-    }
-
-    res.json({
-      success: true,
-      data: {
-        lastUpdate: lastUpdate ? lastUpdate.timestamp.toISOString() : null,
-        nextUpdate: nextUpdate.toISOString(),
-        status,
-        statistics: {
-          totalServices,
-          activeServices,
-          newServicesThisYear,
-          deprecatedServicesThisYear,
-          priceAdjustmentsThisYear
-        },
-        recentUpdates: recentUpdates.map(update => ({
-          date: update.timestamp,
-          type: 'price',
-          description: `Update ${update.timestamp.getFullYear()}`,
-          count: update.changes?.details?.newServices || 0
-        }))
-      }
-    });
-  } catch (error) {
-    console.error('Fehler beim Laden der Update-Status:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Fehler beim Laden der Update-Status',
-      error: error.message
-    });
-  }
-});
-
-// POST /api/service-catalog/trigger-update
-router.post('/trigger-update', auth, checkPermission('services.write'), async (req, res) => {
-  try {
-    const AuditLog = require('../models/AuditLog');
-    const runningUpdate = await AuditLog.findOne({
-      action: 'SERVICE_CATALOG_ANNUAL_UPDATE',
-      timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
-    });
-
-    if (runningUpdate) {
-      return res.status(400).json({
-        success: false,
-        message: 'Ein Update wurde bereits in den letzten 24 Stunden durchgeführt'
-      });
-    }
-
-    const serviceCatalogUpdateService = require('../services/serviceCatalogUpdateService');
-    serviceCatalogUpdateService.updateAll()
-      .then(() => {
-        console.log('Manuelles Service-Katalog Update erfolgreich abgeschlossen');
-      })
-      .catch((error) => {
-        console.error('Manuelles Service-Katalog Update fehlgeschlagen:', error);
-      });
-
-    res.json({
-      success: true,
-      message: 'Service-Katalog Update wurde gestartet'
-    });
-  } catch (error) {
-    console.error('Fehler beim Starten des Updates:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Fehler beim Starten des Updates',
       error: error.message
     });
   }

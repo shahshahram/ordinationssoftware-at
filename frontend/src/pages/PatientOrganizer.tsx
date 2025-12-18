@@ -1053,6 +1053,8 @@ const PatientOrganizer: React.FC = () => {
       // Schwangerschaft und Stillen (nur bei Frauen)
       isPregnant: patient.gender === 'f' || patient.gender === 'w' ? (patient.isPregnant || false) : false,
       pregnancyWeek: patient.gender === 'f' || patient.gender === 'w' ? (patient.pregnancyWeek || undefined) : undefined,
+      pregnancyDueDate: patient.gender === 'f' || patient.gender === 'w' ? formatDateForInput(patient.pregnancyDueDate) : undefined,
+      lastMenstrualPeriod: patient.gender === 'f' || patient.gender === 'w' ? formatDateForInput((patient as any).lastMenstrualPeriod) : undefined,
       isBreastfeeding: patient.gender === 'f' || patient.gender === 'w' ? (patient.isBreastfeeding || false) : false,
       // Medizinische Implantate und Geräte
       hasPacemaker: patient.hasPacemaker || false,
@@ -1075,9 +1077,45 @@ const PatientOrganizer: React.FC = () => {
     setMedicalDialogOpen(true);
   };
 
+  // Funktion zur Berechnung der Schwangerschaftswoche
+  const calculatePregnancyWeek = React.useCallback((
+    lastMenstrualPeriod?: string,
+    pregnancyDueDate?: string | Date
+  ): number | undefined => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Option 1: Berechnung basierend auf letzter Menstruation
+    if (lastMenstrualPeriod) {
+      const lmpDate = new Date(lastMenstrualPeriod);
+      lmpDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.floor((today.getTime() - lmpDate.getTime()) / (1000 * 60 * 60 * 24));
+      const weeks = Math.floor(daysDiff / 7);
+      if (weeks >= 0 && weeks <= 42) {
+        return weeks;
+      }
+    }
+
+    // Option 2: Berechnung basierend auf Entbindungstermin
+    if (pregnancyDueDate) {
+      const dueDate = typeof pregnancyDueDate === 'string' 
+        ? new Date(pregnancyDueDate) 
+        : pregnancyDueDate;
+      dueDate.setHours(0, 0, 0, 0);
+      const daysDiff = Math.floor((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const weeks = 40 - Math.floor(daysDiff / 7);
+      if (weeks >= 0 && weeks <= 42) {
+        return weeks;
+      }
+    }
+
+    return undefined;
+  }, []);
+
   const handleMedicalDataChange = (field: string, value: any) => {
     setMedicalData(prev => {
       let processedValue = value;
+      let updatedData: Partial<Patient> = { ...prev };
       
       // Für numerische Felder: String zu Number konvertieren
       if (field === 'height' || field === 'weight' || field === 'bmi' || field === 'pregnancyWeek') {
@@ -1092,15 +1130,44 @@ const PatientOrganizer: React.FC = () => {
       // Für Boolean-Felder: String zu Boolean konvertieren
       if (field === 'isPregnant' || field === 'isBreastfeeding' || field === 'hasPacemaker' || field === 'hasDefibrillator') {
         processedValue = value === 'true' || value === true;
+        
+        // Wenn isPregnant auf true gesetzt wird, automatisch Schwangerschaftswoche berechnen
+        if (field === 'isPregnant' && processedValue === true) {
+          const calculatedWeek = calculatePregnancyWeek(
+            (prev as any).lastMenstrualPeriod as string | undefined,
+            prev.pregnancyDueDate
+          );
+          if (calculatedWeek && !prev.pregnancyWeek) {
+            updatedData.pregnancyWeek = calculatedWeek;
+          }
+        }
+        
+        // Wenn isPregnant auf false gesetzt wird, Schwangerschaftswoche zurücksetzen
+        if (field === 'isPregnant' && processedValue === false) {
+          updatedData.pregnancyWeek = undefined;
+          updatedData.pregnancyDueDate = undefined;
+          updatedData.lastMenstrualPeriod = undefined;
+        }
       }
       
       // Für Datums-Felder: String zu Date konvertieren
-      if (field === 'quitSmokingDate') {
+      if (field === 'quitSmokingDate' || field === 'lastMenstrualPeriod' || field === 'pregnancyDueDate') {
         processedValue = value ? new Date(value).toISOString().split('T')[0] : undefined;
+        
+        // Wenn lastMenstrualPeriod oder pregnancyDueDate geändert wird und isPregnant true ist, Woche neu berechnen
+        if ((field === 'lastMenstrualPeriod' || field === 'pregnancyDueDate') && prev.isPregnant) {
+          const calculatedWeek = calculatePregnancyWeek(
+            field === 'lastMenstrualPeriod' ? processedValue : ((prev as any).lastMenstrualPeriod as string | undefined),
+            field === 'pregnancyDueDate' ? processedValue : prev.pregnancyDueDate
+          );
+          if (calculatedWeek) {
+            updatedData.pregnancyWeek = calculatedWeek;
+          }
+        }
       }
       
       return {
-        ...prev,
+        ...updatedData,
         [field]: processedValue
       };
     });
@@ -2137,7 +2204,18 @@ const PatientOrganizer: React.FC = () => {
                     {patient.isPregnant && (patient.gender === 'w' || patient.gender === 'f') && (
                       <Chip 
                         icon={<PregnantWoman />}
-                        label={patient.pregnancyWeek ? `Schwanger (${patient.pregnancyWeek}. Woche)` : 'Schwanger'} 
+                        label={(() => {
+                          // Berechne Schwangerschaftswoche falls nicht vorhanden
+                          let week = patient.pregnancyWeek;
+                          if (!week) {
+                            const calculatedWeek = calculatePregnancyWeek(
+                              (patient as any).lastMenstrualPeriod,
+                              patient.pregnancyDueDate
+                            );
+                            week = calculatedWeek;
+                          }
+                          return week ? `Schwanger (${week}. Woche)` : 'Schwanger';
+                        })()}
                         size="small" 
                         color="secondary"
                         sx={{ 
@@ -3803,38 +3881,69 @@ const PatientOrganizer: React.FC = () => {
             {patient && (patient.gender === 'f' || patient.gender === 'w') && (
               <>
                 <Typography variant="h6" sx={{ mb: 2, mt: 3 }}>Schwangerschaft & Stillen</Typography>
-                <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-                  <FormControl sx={{ minWidth: 150, flex: 1 }}>
-                    <InputLabel>Schwanger</InputLabel>
-                    <Select
-                      value={medicalData.isPregnant ? 'true' : 'false'}
-                      onChange={(e) => handleMedicalDataChange('isPregnant', e.target.value)}
-                    >
-                      <MenuItem value="false">Nein</MenuItem>
-                      <MenuItem value="true">Ja</MenuItem>
-                    </Select>
-                  </FormControl>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mb: 2 }}>
+                  <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                    <FormControl sx={{ minWidth: 150, flex: 1 }}>
+                      <InputLabel>Schwanger</InputLabel>
+                      <Select
+                        value={medicalData.isPregnant ? 'true' : 'false'}
+                        onChange={(e) => handleMedicalDataChange('isPregnant', e.target.value)}
+                      >
+                        <MenuItem value="false">Nein</MenuItem>
+                        <MenuItem value="true">Ja</MenuItem>
+                      </Select>
+                    </FormControl>
+                    {medicalData.isPregnant && (
+                      <>
+                        <TextField
+                          label="Schwangerschaftswoche"
+                          type="number"
+                          value={medicalData.pregnancyWeek || ''}
+                          onChange={(e) => handleMedicalDataChange('pregnancyWeek', e.target.value)}
+                          sx={{ minWidth: 180, flex: 1 }}
+                          inputProps={{ min: 1, max: 42 }}
+                          helperText={medicalData.pregnancyWeek ? `${medicalData.pregnancyWeek}. Woche` : "1-42 Wochen (wird automatisch berechnet)"}
+                        />
+                        <TextField
+                          label="Letzte Menstruation"
+                          type="date"
+                          value={(medicalData as any).lastMenstrualPeriod || ''}
+                          onChange={(e) => handleMedicalDataChange('lastMenstrualPeriod', e.target.value)}
+                          sx={{ minWidth: 180, flex: 1 }}
+                          InputLabelProps={{ shrink: true }}
+                          helperText="Wird zur automatischen Berechnung der Schwangerschaftswoche verwendet"
+                        />
+                        <TextField
+                          label="Entbindungstermin"
+                          type="date"
+                          value={medicalData.pregnancyDueDate ? (typeof medicalData.pregnancyDueDate === 'string' ? medicalData.pregnancyDueDate : formatDateForInput(medicalData.pregnancyDueDate)) : ''}
+                          onChange={(e) => handleMedicalDataChange('pregnancyDueDate', e.target.value)}
+                          sx={{ minWidth: 180, flex: 1 }}
+                          InputLabelProps={{ shrink: true }}
+                          helperText="Alternativ zur Berechnung der Schwangerschaftswoche"
+                        />
+                      </>
+                    )}
+                    <FormControl sx={{ minWidth: 150, flex: 1 }}>
+                      <InputLabel>Stillen</InputLabel>
+                      <Select
+                        value={medicalData.isBreastfeeding ? 'true' : 'false'}
+                        onChange={(e) => handleMedicalDataChange('isBreastfeeding', e.target.value)}
+                      >
+                        <MenuItem value="false">Nein</MenuItem>
+                        <MenuItem value="true">Ja</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
                   {medicalData.isPregnant && (
-                    <TextField
-                      label="Schwangerschaftswoche"
-                      type="number"
-                      value={medicalData.pregnancyWeek || ''}
-                      onChange={(e) => handleMedicalDataChange('pregnancyWeek', e.target.value)}
-                      sx={{ minWidth: 180, flex: 1 }}
-                      inputProps={{ min: 1, max: 42 }}
-                      helperText="1-42 Wochen"
-                    />
+                    <Alert severity="info" sx={{ mt: 1 }}>
+                      <Typography variant="body2">
+                        {medicalData.pregnancyWeek 
+                          ? `Aktuelle Schwangerschaftswoche: ${medicalData.pregnancyWeek}. Woche`
+                          : 'Bitte geben Sie die letzte Menstruation oder den Entbindungstermin ein, um die Schwangerschaftswoche automatisch zu berechnen.'}
+                      </Typography>
+                    </Alert>
                   )}
-                  <FormControl sx={{ minWidth: 150, flex: 1 }}>
-                    <InputLabel>Stillen</InputLabel>
-                    <Select
-                      value={medicalData.isBreastfeeding ? 'true' : 'false'}
-                      onChange={(e) => handleMedicalDataChange('isBreastfeeding', e.target.value)}
-                    >
-                      <MenuItem value="false">Nein</MenuItem>
-                      <MenuItem value="true">Ja</MenuItem>
-                    </Select>
-                  </FormControl>
                 </Box>
               </>
             )}

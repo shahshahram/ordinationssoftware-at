@@ -111,7 +111,11 @@ router.get('/', auth, async (req, res) => {
     const pageNum = parseInt(page) || 1;
     
     const staffProfiles = await StaffProfile.find(query)
-      .populate('userId', 'firstName lastName email color_hex profile')
+      .populate({
+        path: 'userId',
+        select: 'firstName lastName email color_hex profile',
+        // Stelle sicher, dass profile vollständig geladen wird
+      })
       .sort({ createdAt: -1 })
       .limit(limitNum)
       .skip((pageNum - 1) * limitNum)
@@ -158,29 +162,44 @@ router.get('/', auth, async (req, res) => {
     });
 
     // Transform field names for frontend compatibility
-    const transformedProfiles = staffProfilesWithLocations.map(profile => ({
-      _id: profile._id,
-      user_id: profile.userId,
-      display_name: profile.displayName,
-      first_name: profile.userId?.firstName || '',
-      last_name: profile.userId?.lastName || '',
-      email: profile.userId?.email || profile.contact?.email || '',
-      role: profile.roleHint,
-      color_hex: profile.userId?.color_hex || profile.colorHex || '#6B7280', // Use user color first, fallback to profile color
-      isActive: profile.isActive,
-      // StaffProfile-spezifische Felder
-      title: profile.title || profile.userId?.profile?.title || '',
-      specialization: Array.isArray(profile.specializations) && profile.specializations.length > 0 
-        ? profile.specializations[0] 
-        : (profile.userId?.profile?.specialization || ''),
-      specializations: profile.specializations || [],
-      phone: profile.contact?.phone || profile.userId?.profile?.phone || '',
-      contact: profile.contact || {},
-      isOnlineBookable: profile.acceptsOnline !== undefined ? profile.acceptsOnline : true,
-      locations: profile.locations || [],
-      createdAt: profile.createdAt,
-      updatedAt: profile.updatedAt
-    }));
+    const transformedProfiles = staffProfilesWithLocations.map(profile => {
+      // Online-Buchung: IMMER aus User.profile.onlineBookingEnabled (auch wenn false)
+      // Nur wenn userId nicht populated ist oder profile nicht existiert, verwende acceptsOnline als Fallback
+      let isOnlineBookable = false;
+      if (profile.userId && typeof profile.userId === 'object' && profile.userId.profile) {
+        // userId ist populated und hat ein profile-Objekt
+        isOnlineBookable = profile.userId.profile.onlineBookingEnabled === true;
+      } else if (profile.acceptsOnline !== undefined) {
+        // Fallback: Verwende acceptsOnline nur wenn userId nicht verfügbar ist
+        isOnlineBookable = profile.acceptsOnline === true;
+      }
+      
+      return {
+        _id: profile._id,
+        user_id: profile.userId?._id || profile.userId, // String ID
+        userId: profile.userId, // Full object (populated)
+        display_name: profile.displayName,
+        first_name: profile.userId?.firstName || '',
+        last_name: profile.userId?.lastName || '',
+        email: profile.userId?.email || profile.contact?.email || '',
+        role: profile.roleHint,
+        color_hex: profile.userId?.color_hex || profile.colorHex || '#6B7280', // Use user color first, fallback to profile color
+        isActive: profile.isActive,
+        // StaffProfile-spezifische Felder
+        title: profile.title || profile.userId?.profile?.title || '',
+        specialization: Array.isArray(profile.specializations) && profile.specializations.length > 0 
+          ? profile.specializations[0] 
+          : (profile.userId?.profile?.specialization || ''),
+        specializations: profile.specializations || [],
+        phone: profile.contact?.phone || profile.userId?.profile?.phone || '',
+        contact: profile.contact || {},
+        // Online-Buchung: IMMER aus User.profile.onlineBookingEnabled
+        isOnlineBookable: isOnlineBookable,
+        locations: profile.locations || [],
+        createdAt: profile.createdAt,
+        updatedAt: profile.updatedAt
+      };
+    });
 
     res.json({
       success: true,

@@ -59,3 +59,4 @@ Um Stripe wieder zu deaktivieren, entfernen Sie einfach die Zeilen aus der `.env
 
 
 
+

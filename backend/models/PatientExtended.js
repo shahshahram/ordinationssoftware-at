@@ -316,6 +316,16 @@ const PatientExtendedSchema = new mongoose.Schema({
       message: 'Entbindungstermin muss in der Zukunft liegen'
     }
   },
+  lastMenstrualPeriod: {
+    type: Date,
+    validate: {
+      validator: function(value) {
+        if (!this.isPregnant || !value) return true;
+        return value <= new Date();
+      },
+      message: 'Letzte Menstruation darf nicht in der Zukunft liegen'
+    }
+  },
 
   // Medizinische Implantate und Geräte
   hasPacemaker: {

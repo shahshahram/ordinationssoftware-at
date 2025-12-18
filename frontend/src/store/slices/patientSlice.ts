@@ -63,6 +63,7 @@ export interface Patient {
   isPregnant?: boolean;
   pregnancyWeek?: number;
   pregnancyDueDate?: string | Date;
+  lastMenstrualPeriod?: string | Date;
   isBreastfeeding?: boolean;
   
   // Medizinische Implantate und Geräte

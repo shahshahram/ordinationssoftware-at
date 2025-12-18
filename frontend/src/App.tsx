@@ -79,6 +79,7 @@ import WaitingList from './pages/WaitingList';
 import DicomProviderManagement from './pages/DicomProviderManagement';
 import DicomTestPage from './pages/DicomTestPage';
 import LaborProviderManagement from './pages/LaborProviderManagement';
+import InsuranceProviderManagement from './pages/InsuranceProviderManagement';
 import LaborTestPage from './pages/LaborTestPage';
 import KassaTestPage from './pages/KassaTestPage';
 import ELDATestPage from './pages/ELDATestPage';
@@ -627,6 +628,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['settings.read']}>
                             <LaborProviderManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/insurance-providers" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <InsuranceProviderManagement />
                           </ProtectedRoute>
                         } 
                       />

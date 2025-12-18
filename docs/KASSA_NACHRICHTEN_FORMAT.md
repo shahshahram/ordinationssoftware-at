@@ -303,3 +303,4 @@ Wenn die Kassen-API nicht konfiguriert ist, simuliert das System die Antwort:
 
 
 
+

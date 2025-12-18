@@ -60,3 +60,4 @@ node scripts/migrate-appointment-locationId.js
 
 
 
+

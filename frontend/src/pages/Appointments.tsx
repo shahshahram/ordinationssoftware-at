@@ -352,10 +352,47 @@ const Appointments: React.FC = () => {
 
   // Filter and search
   const filteredAppointments = (Array.isArray(appointments) ? appointments : []).filter(appointment => {
-    const patientName = appointment.patient ? `${appointment.patient.firstName} ${appointment.patient.lastName}` : appointment.patientName || '';
-    const notes = appointment.notes || '';
-    const matchesSearch = patientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         notes.toLowerCase().includes(searchTerm.toLowerCase());
+    // Search functionality - search in multiple fields
+    const searchLower = searchTerm.toLowerCase().trim();
+    let matchesSearch = true;
+    
+    if (searchLower) {
+      const patientName = appointment.patient 
+        ? `${appointment.patient.firstName || ''} ${appointment.patient.lastName || ''}`.trim()
+        : appointment.patientName || '';
+      const notes = appointment.notes || '';
+      const title = appointment.title || '';
+      const serviceName = appointment.service?.name || '';
+      const doctorName = appointment.doctor 
+        ? `${appointment.doctor.firstName || ''} ${appointment.doctor.lastName || ''}`.trim()
+        : appointment.doctorName || '';
+      // Staff names from assigned_users array
+      const staffNames = appointment.assigned_users?.map(user => 
+        user.display_name || 
+        `${user.firstName || user.first_name || ''} ${user.lastName || user.last_name || ''}`.trim()
+      ).filter(Boolean).join(' ') || '';
+      const roomName = appointment.room?.name || '';
+      const assignedRoomsNames = appointment.assigned_rooms?.map(room => room.name).filter(Boolean).join(' ') || '';
+      const patientPhone = appointment.patient?.phone || appointment.patientPhone || '';
+      const patientEmail = appointment.patient?.email || appointment.patientEmail || '';
+      const patientInsuranceNumber = appointment.patient?.insuranceNumber || '';
+      const locationName = appointment.location?.name || '';
+      
+      matchesSearch = 
+        patientName.toLowerCase().includes(searchLower) ||
+        notes.toLowerCase().includes(searchLower) ||
+        title.toLowerCase().includes(searchLower) ||
+        serviceName.toLowerCase().includes(searchLower) ||
+        doctorName.toLowerCase().includes(searchLower) ||
+        staffNames.toLowerCase().includes(searchLower) ||
+        roomName.toLowerCase().includes(searchLower) ||
+        assignedRoomsNames.toLowerCase().includes(searchLower) ||
+        locationName.toLowerCase().includes(searchLower) ||
+        patientPhone.includes(searchLower) ||
+        patientEmail.toLowerCase().includes(searchLower) ||
+        patientInsuranceNumber.includes(searchLower);
+    }
+    
     const matchesStatus = filterStatus === 'all' || appointment.status === filterStatus;
     // Filter by service ID if available, otherwise by type
     const appointmentTypeValue = appointment.service?._id || appointment.serviceId || appointment.type;
@@ -372,9 +409,10 @@ const Appointments: React.FC = () => {
       matchesPatient = appointmentPatientId === patientSearchValue._id;
     }
     
-    // Filter by view mode (day/week/month)
+    // Filter by view mode (day/week/month) - but only if no search term is active
+    // If user is searching, show all matching results regardless of date
     let matchesViewMode = true;
-    if (viewMode === 'day' || viewMode === 'week' || viewMode === 'month') {
+    if (!searchLower && (viewMode === 'day' || viewMode === 'week' || viewMode === 'month')) {
       const appointmentDate = new Date(appointment.startTime);
       const today = new Date();
       

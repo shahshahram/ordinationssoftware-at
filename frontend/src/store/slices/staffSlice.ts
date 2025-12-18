@@ -5,6 +5,7 @@ import { apiRequest } from '../../utils/api';
 export interface StaffProfile {
   _id: string;
   user_id: string;
+  userId?: any; // User-Objekt (populated)
   display_name: string;
   first_name: string;
   last_name: string;
@@ -14,6 +15,7 @@ export interface StaffProfile {
   department?: string;
   color_hex: string;
   isActive: boolean;
+  isOnlineBookable?: boolean; // Online-Buchung aktiviert
   locations?: Array<{ _id: string; name: string }> | string[];
   // Audit fields
   createdAt: string;
@@ -48,6 +50,11 @@ export const fetchStaffProfiles = createAsyncThunk<StaffProfile[], { sync?: bool
       
       const staffData = Array.isArray(response.data.data) ? response.data.data : [];
       console.log(`Loaded ${staffData.length} staff profiles from API`);
+      
+      // Debug: Log isOnlineBookable values
+      staffData.forEach((profile, index) => {
+        console.log(`Profile ${index} (${profile.display_name}): isOnlineBookable=${profile.isOnlineBookable}, userId=${profile.userId?._id || profile.user_id || 'N/A'}`);
+      });
       
       return staffData;
     } catch (error: any) {

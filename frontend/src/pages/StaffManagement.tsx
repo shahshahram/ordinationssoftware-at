@@ -260,7 +260,8 @@ const StaffManagement: React.FC = () => {
         // Telefon: zuerst aus StaffProfile.contact.phone, dann aus StaffProfile.phone, dann aus User.profile.phone
         let phone = item.phone || item.contact?.phone || '';
         let colorHex = item.color_hex || item.colorHex || '#2563EB';
-        let isOnlineBookable = item.isOnlineBookable !== undefined ? item.isOnlineBookable : (item.acceptsOnline !== undefined ? item.acceptsOnline : true);
+        // Online-Buchung: Starte mit false, wird später aus User-Daten geladen
+        let isOnlineBookable = false;
         
         console.log('[StaffManagement] Extracted values before user object check:', {
           title,
@@ -268,7 +269,8 @@ const StaffManagement: React.FC = () => {
           phone,
           firstName,
           lastName,
-          email
+          email,
+          isOnlineBookable
         });
         
         // Wenn User-Daten nicht vollständig sind, versuche sie aus populated user-Objekt zu extrahieren
@@ -280,11 +282,14 @@ const StaffManagement: React.FC = () => {
           specialization = specialization || user.profile?.specialization || user.specialization || '';
           phone = phone || user.profile?.phone || user.phone || user.contact?.phone || '';
           colorHex = colorHex || user.color_hex || user.colorHex || '#2563EB';
+          // Online-Buchung aus User-Objekt übernehmen
+          if (user.profile?.onlineBookingEnabled !== undefined) {
+            isOnlineBookable = user.profile.onlineBookingEnabled;
+          }
         }
         
-        // Wenn User-Daten immer noch fehlen und userId vorhanden ist, lade User-Daten vom Backend
-        // ODER wenn title, specialization oder phone fehlen, lade User-Daten
-        if (userIdValue && ((!firstName || !lastName || !email) || (!title || !specialization || !phone))) {
+        // Wenn userId vorhanden ist, IMMER User-Daten vom Backend laden, um onlineBookingEnabled korrekt zu bekommen
+        if (userIdValue) {
           try {
             const userResponse: any = await api.get(`/users/${userIdValue}`);
             if (userResponse.data?.success && userResponse.data.data) {
@@ -297,16 +302,29 @@ const StaffManagement: React.FC = () => {
               specialization = specialization || loadedUser.profile?.specialization || '';
               phone = phone || loadedUser.profile?.phone || '';
               colorHex = colorHex || loadedUser.color_hex || '#2563EB';
+              // Online-Buchung IMMER aus User-Daten übernehmen (auch wenn false)
+              isOnlineBookable = loadedUser.profile?.onlineBookingEnabled === true;
               
               console.log('[StaffManagement] Loaded user data from API:', {
                 title,
                 specialization,
                 phone,
-                loadedUserProfile: loadedUser.profile
+                isOnlineBookable,
+                loadedUserProfile: loadedUser.profile,
+                onlineBookingEnabled: loadedUser.profile?.onlineBookingEnabled
               });
             }
           } catch (error) {
             console.warn('Fehler beim Laden der User-Daten:', error);
+            // Fallback: Verwende Wert aus item, wenn User-Laden fehlschlägt
+            if (item.isOnlineBookable !== undefined) {
+              isOnlineBookable = item.isOnlineBookable;
+            }
+          }
+        } else {
+          // Wenn kein userId vorhanden, verwende Wert aus item
+          if (item.isOnlineBookable !== undefined) {
+            isOnlineBookable = item.isOnlineBookable;
           }
         }
         
@@ -316,10 +334,11 @@ const StaffManagement: React.FC = () => {
           phone,
           firstName,
           lastName,
-          email
+          email,
+          isOnlineBookable
         });
         
-        setProfileForm({
+        const finalFormData = {
           displayName: item.display_name || item.displayName || `${firstName} ${lastName}`.trim() || '',
           title: title,
           roleHint: item.roleHint || item.role || user?.role || '',
@@ -333,7 +352,11 @@ const StaffManagement: React.FC = () => {
           firstName: firstName,
           lastName: lastName,
           userId: userIdValue || '',
-        });
+        };
+        
+        console.log('[StaffManagement] Setting profileForm with:', finalFormData);
+        
+        setProfileForm(finalFormData);
       } else if (type === 'absence') {
         setAbsenceForm({
           staffId: item.staffId?._id || '',
@@ -593,7 +616,8 @@ const StaffManagement: React.FC = () => {
               profile: {
                 title: profileForm.title || '',
                 specialization: profileForm.specialization || '',
-                phone: profileForm.phone || ''
+                phone: profileForm.phone || '',
+                onlineBookingEnabled: profileForm.isOnlineBookable || false
               }
             };
 
@@ -769,7 +793,10 @@ const StaffManagement: React.FC = () => {
       display_name: p.display_name,
       email: p.email,
       role: p.role,
-      isActive: p.isActive
+      isActive: p.isActive,
+      isOnlineBookable: p.isOnlineBookable,
+      userId: p.userId,
+      user_id: p.user_id
     })),
     filteredProfilesCount: filteredProfiles.length,
     searchTerm,
@@ -1017,9 +1044,10 @@ const StaffManagement: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={profile.isActive ? 'Ja' : 'Nein'}
+                        label={profile.isOnlineBookable ? 'Aktiv' : 'Inaktiv'}
                         size="small"
-                        color={profile.isActive ? 'success' : 'default'}
+                        color={profile.isOnlineBookable ? 'success' : 'default'}
+                        title={`isOnlineBookable: ${profile.isOnlineBookable}, userId: ${profile.userId?._id || profile.user_id || 'N/A'}`}
                       />
                     </TableCell>
                     <TableCell>
@@ -1313,6 +1341,15 @@ const StaffManagement: React.FC = () => {
                       }
                       label="Aktiv"
                     />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={profileForm.isOnlineBookable}
+                          onChange={(e) => setProfileForm({ ...profileForm, isOnlineBookable: e.target.checked })}
+                        />
+                      }
+                      label="Online-Buchung aktiviert"
+                    />
                   </Box>
                 </>
               )}
@@ -1437,10 +1474,12 @@ const StaffManagement: React.FC = () => {
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {locationAssignments.map((assignment) => (
                     <Box key={assignment._id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', p: 1 }}>
-                      <Typography variant="body2">
-                        {assignment.location_id?.name || 'Unbekannter Standort'}
-                        {assignment.is_primary && <Chip label="Primär" size="small" color="primary" sx={{ ml: 1 }} />}
-                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2">
+                          {assignment.location_id?.name || 'Unbekannter Standort'}
+                        </Typography>
+                        {assignment.is_primary && <Chip label="Primär" size="small" color="primary" />}
+                      </Box>
                       <IconButton
                         size="small"
                         onClick={() => handleDeleteLocationAssignment(assignment._id)}

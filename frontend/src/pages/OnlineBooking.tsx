@@ -75,6 +75,11 @@ interface BookingData {
 
 const OnlineBooking: React.FC = () => {
   const [activeStep, setActiveStep] = useState(0);
+  
+  // Debug: Log activeStep changes
+  useEffect(() => {
+    console.log('[OnlineBooking] activeStep changed to:', activeStep);
+  }, [activeStep]);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
@@ -119,10 +124,39 @@ const OnlineBooking: React.FC = () => {
     try {
       setLoading(true);
       const response = await api.get<any>('/online-booking/doctors');
-      if (response.success) {
-        setDoctors(response.data);
+      console.log('OnlineBooking: API response:', response);
+      
+      if (response.success && response.data) {
+        // API gibt { success: true, data: [...] } zurück
+        // api.ts wrapper gibt { data: { success: true, data: [...] }, success: true } zurück
+        const doctorsData = response.data.data || response.data;
+        console.log('OnlineBooking: Doctors data:', doctorsData);
+        
+        if (Array.isArray(doctorsData)) {
+          setDoctors(doctorsData);
+          if (doctorsData.length === 0) {
+            setSnackbar({ 
+              open: true, 
+              message: 'Keine Ärzte mit aktivierter Online-Buchung verfügbar. Bitte aktivieren Sie die Online-Buchung für einen Arzt in der Personalverwaltung.', 
+              severity: 'info' 
+            });
+          }
+        } else {
+          console.warn('OnlineBooking: Doctors data is not an array:', doctorsData);
+          setDoctors([]);
+        }
+      } else {
+        console.warn('OnlineBooking: API response not successful:', response);
+        setDoctors([]);
+        setSnackbar({ 
+          open: true, 
+          message: 'Keine Ärzte verfügbar. Bitte aktivieren Sie die Online-Buchung für einen Arzt.', 
+          severity: 'warning' 
+        });
       }
     } catch (error) {
+      console.error('Error loading doctors:', error);
+      setDoctors([]);
       setSnackbar({ 
         open: true, 
         message: 'Fehler beim Laden der Ärzte', 
@@ -136,11 +170,65 @@ const OnlineBooking: React.FC = () => {
   const loadAvailableSlots = async (doctorId: string, date: string) => {
     try {
       setLoading(true);
+      console.log('[OnlineBooking] Loading slots for doctorId:', doctorId, 'date:', date);
       const response = await api.get<any>(`/online-booking/availability?doctorId=${doctorId}&date=${date}`);
-      if (response.success) {
-        setAvailableSlots(response.data.availableSlots);
+      console.log('[OnlineBooking] Availability response:', response);
+      
+      if (response.success && response.data) {
+        // API-Wrapper gibt zurück: { data: { success: true, data: { availableSlots: [...] } }, success: true }
+        // Backend gibt zurück: { success: true, data: { availableSlots: [...] } }
+        console.log('[OnlineBooking] Full response structure:', {
+          responseSuccess: response.success,
+          responseData: response.data,
+          responseDataType: typeof response.data,
+          responseDataKeys: response.data ? Object.keys(response.data) : [],
+          responseDataData: response.data?.data,
+          responseDataDataKeys: response.data?.data ? Object.keys(response.data.data) : []
+        });
+        
+        // Versuche verschiedene Pfade
+        let slots: TimeSlot[] = [];
+        
+        // Pfad 1: response.data.data.availableSlots (wenn Backend-Antwort in response.data.data ist)
+        if (response.data?.data?.availableSlots && Array.isArray(response.data.data.availableSlots)) {
+          slots = response.data.data.availableSlots;
+          console.log('[OnlineBooking] Found slots via response.data.data.availableSlots:', slots.length);
+        }
+        // Pfad 2: response.data.availableSlots (wenn Backend-Antwort direkt in response.data ist)
+        else if (response.data?.availableSlots && Array.isArray(response.data.availableSlots)) {
+          slots = response.data.availableSlots;
+          console.log('[OnlineBooking] Found slots via response.data.availableSlots:', slots.length);
+        }
+        // Pfad 3: response.data.data ist direkt das Array
+        else if (Array.isArray(response.data?.data)) {
+          slots = response.data.data;
+          console.log('[OnlineBooking] Found slots via response.data.data (array):', slots.length);
+        }
+        // Pfad 4: response.data ist direkt das Array
+        else if (Array.isArray(response.data)) {
+          slots = response.data;
+          console.log('[OnlineBooking] Found slots via response.data (array):', slots.length);
+        }
+        
+        console.log('[OnlineBooking] Final extracted slots:', slots.length, slots.slice(0, 3));
+        setAvailableSlots(slots);
+        
+        if (slots.length === 0) {
+          // Versuche Message aus verschiedenen Pfaden zu extrahieren
+          const message = response.data?.data?.message || response.data?.message || 'Keine verfügbaren Termine für dieses Datum';
+          setSnackbar({ 
+            open: true, 
+            message: message, 
+            severity: 'info' 
+          });
+        }
+      } else {
+        console.warn('[OnlineBooking] Response not successful:', response);
+        setAvailableSlots([]);
       }
     } catch (error) {
+      console.error('Error loading available slots:', error);
+      setAvailableSlots([]);
       setSnackbar({ 
         open: true, 
         message: 'Fehler beim Laden der verfügbaren Termine', 
@@ -169,7 +257,12 @@ const OnlineBooking: React.FC = () => {
         appointment: { ...prev.appointment, date }
       }));
       if (selectedDoctor) {
+        console.log('[OnlineBooking] handleDateSelect: Loading slots for', selectedDoctor.id, date);
         loadAvailableSlots(selectedDoctor.id, date);
+        // Automatisch zu Schritt 3 wechseln, wenn Slots geladen werden
+        setActiveStep(2);
+      } else {
+        console.warn('[OnlineBooking] handleDateSelect: No doctor selected');
       }
     } else {
       console.error('Invalid date selected:', date);
@@ -182,16 +275,18 @@ const OnlineBooking: React.FC = () => {
   };
 
   const handleSlotSelect = (slot: TimeSlot) => {
+    console.log('[OnlineBooking] Slot selected:', slot);
     setSelectedSlot(slot);
     setFormData(prev => ({
       ...prev,
       appointment: { 
         ...prev.appointment, 
         startTime: slot.start,
-        type: 'Allgemeine Beratung' // Default
+        type: prev.appointment.type || 'Allgemeine Beratung' // Default, aber behalte vorhandenen Wert
       }
     }));
-    setActiveStep(2);
+    console.log('[OnlineBooking] Switching to step 3 (data entry)');
+    setActiveStep(3); // Schritt 4: Daten eingeben (Index 3)
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -231,8 +326,12 @@ const OnlineBooking: React.FC = () => {
       setLoading(true);
       const response = await api.post('/online-booking/book', formData);
       
-      if (response.success) {
-        setBookingResult(response.data);
+      if (response.success && response.data) {
+        // API gibt { success: true, data: {...} } zurück
+        // api.ts wrapper gibt { data: { success: true, data: {...} }, success: true } zurück
+        const responseData = response.data as any;
+        const bookingData = (responseData.data || responseData) as any;
+        setBookingResult(bookingData);
         setShowConfirmation(true);
         setSnackbar({ 
           open: true, 
@@ -246,10 +345,11 @@ const OnlineBooking: React.FC = () => {
           severity: 'error' 
         });
       }
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error booking appointment:', error);
       setSnackbar({ 
         open: true, 
-        message: 'Fehler beim Buchen des Termins', 
+        message: error?.response?.data?.message || 'Fehler beim Buchen des Termins', 
         severity: 'error' 
       });
     } finally {
@@ -301,7 +401,7 @@ const OnlineBooking: React.FC = () => {
       </Typography>
 
       <Card sx={{ p: 3 }}>
-        <Stepper activeStep={activeStep} orientation="vertical">
+        <Stepper activeStep={activeStep} orientation="vertical" nonLinear={false}>
           {/* Schritt 1: Arzt auswählen */}
           <Step>
             <StepLabel>
@@ -318,6 +418,22 @@ const OnlineBooking: React.FC = () => {
                 <Box display="flex" justifyContent="center" p={3}>
                   <CircularProgress />
                 </Box>
+              ) : doctors.length === 0 ? (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body1" gutterBottom>
+                    <strong>Keine Ärzte verfügbar</strong>
+                  </Typography>
+                  <Typography variant="body2">
+                    Es sind derzeit keine Ärzte für Online-Buchungen verfügbar. 
+                    Bitte aktivieren Sie die Online-Buchung für einen Arzt:
+                  </Typography>
+                  <Box component="ol" sx={{ mt: 1, pl: 2 }}>
+                    <li>Gehen Sie zu "Personalverwaltung" → "Mitarbeiter"</li>
+                    <li>Bearbeiten Sie einen Arzt</li>
+                    <li>Aktivieren Sie "Online-Buchung aktiviert"</li>
+                    <li>Speichern Sie die Änderungen</li>
+                  </Box>
+                </Alert>
               ) : (
                 <Grid container spacing={2}>
                   {doctors.map((doctor) => (
@@ -400,24 +516,33 @@ const OnlineBooking: React.FC = () => {
                   <CircularProgress />
                 </Box>
               ) : availableSlots.length > 0 ? (
-                <Grid container spacing={1}>
-                  {availableSlots.map((slot, index) => (
-                    <Grid size={{ xs: 6, sm: 4, md: 3 }} key={index}>
-                      <Chip
-                        label={`${slot.start} - ${slot.end}`}
-                        onClick={() => handleSlotSelect(slot)}
-                        color={selectedSlot === slot ? 'primary' : 'default'}
-                        variant={selectedSlot === slot ? 'filled' : 'outlined'}
-                        sx={{ width: '100%' }}
-                      />
-                    </Grid>
-                  ))}
-                </Grid>
+                <>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {availableSlots.length} verfügbare Termine gefunden
+                  </Typography>
+                  <Grid container spacing={1}>
+                    {availableSlots.map((slot, index) => (
+                      <Grid size={{ xs: 6, sm: 4, md: 3 }} key={index}>
+                        <Chip
+                          label={`${slot.start} - ${slot.end}`}
+                          onClick={() => handleSlotSelect(slot)}
+                          color={selectedSlot?.start === slot.start && selectedSlot?.end === slot.end ? 'primary' : 'default'}
+                          variant={selectedSlot?.start === slot.start && selectedSlot?.end === slot.end ? 'filled' : 'outlined'}
+                          sx={{ width: '100%', cursor: 'pointer' }}
+                        />
+                      </Grid>
+                    ))}
+                  </Grid>
+                </>
               ) : selectedDate ? (
                 <Alert severity="warning">
                   Keine verfügbaren Termine für dieses Datum
                 </Alert>
-              ) : null}
+              ) : (
+                <Alert severity="info">
+                  Bitte wählen Sie zuerst ein Datum aus
+                </Alert>
+              )}
             </StepContent>
           </Step>
 
