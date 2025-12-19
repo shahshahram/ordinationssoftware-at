@@ -565,8 +565,24 @@ router.put('/:id', [
     }
 
     // Update appointment
+    const oldStatus = appointment.status;
     Object.assign(appointment, updateData);
     await appointment.save();
+
+    // Wenn Termin storniert wird, benachrichtige Warteliste
+    if (updateData.status === 'cancelled' || updateData.status === 'abgesagt') {
+      if (oldStatus !== 'cancelled' && oldStatus !== 'abgesagt') {
+        // Benachrichtige Wartelisten-Patienten (asynchron, nicht blockierend)
+        const waitingListNotificationService = require('../services/waitingListNotificationService');
+        waitingListNotificationService.notifyWaitingListPatients(appointment)
+          .then(result => {
+            console.log('[Appointments] Wartelisten-Benachrichtigungen gesendet:', result);
+          })
+          .catch(error => {
+            console.error('[Appointments] Fehler bei Wartelisten-Benachrichtigung (non-blocking):', error);
+          });
+      }
+    }
 
     res.json({
       success: true,
@@ -607,12 +623,38 @@ router.delete('/:id', auth, async (req, res) => {
       }
     }
 
-    await Appointment.findByIdAndDelete(req.params.id);
-
-    res.json({
-      success: true,
-      message: 'Termin erfolgreich gelöscht'
-    });
+    // Wenn Termin gelöscht wird, markiere als storniert und benachrichtige Warteliste
+    // (DELETE wird als Stornierung behandelt, wenn der Termin noch nicht stattgefunden hat)
+    const appointmentDate = new Date(appointment.startTime);
+    const isFutureAppointment = appointmentDate > new Date();
+    
+    if (isFutureAppointment) {
+      // Markiere als storniert statt zu löschen, damit Warteliste benachrichtigt werden kann
+      appointment.status = 'cancelled';
+      await appointment.save();
+      
+      // Benachrichtige Wartelisten-Patienten (asynchron, nicht blockierend)
+      const waitingListNotificationService = require('../services/waitingListNotificationService');
+      waitingListNotificationService.notifyWaitingListPatients(appointment)
+        .then(result => {
+          console.log('[Appointments] Wartelisten-Benachrichtigungen gesendet:', result);
+        })
+        .catch(error => {
+          console.error('[Appointments] Fehler bei Wartelisten-Benachrichtigung (non-blocking):', error);
+        });
+      
+      res.json({
+        success: true,
+        message: 'Termin erfolgreich storniert (Warteliste wurde benachrichtigt)'
+      });
+    } else {
+      // Vergangene Termine können gelöscht werden
+      await Appointment.findByIdAndDelete(req.params.id);
+      res.json({
+        success: true,
+        message: 'Termin erfolgreich gelöscht'
+      });
+    }
   } catch (error) {
     console.error('Appointment deletion error:', error);
     res.status(500).json({ 

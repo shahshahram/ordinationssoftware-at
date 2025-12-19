@@ -21,6 +21,8 @@ import Resources from './pages/Resources';
 import Billing from './pages/Billing';
 import Documents from './pages/Documents';
 import OnlineBooking from './pages/OnlineBooking';
+import PatientBooking from './pages/PatientBooking';
+import WaitingListReservation from './pages/WaitingListReservation';
 import ELGA from './pages/ELGA';
 import Users from './pages/Users';
 import Reports from './pages/Reports';
@@ -196,6 +198,8 @@ const AppContent: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/online-booking" element={<OnlineBooking />} />
+        <Route path="/patient-booking/:token" element={<PatientBooking />} />
+        <Route path="/waiting-list-reservation/:token" element={<WaitingListReservation />} />
         <Route path="/checkin" element={<Checkin />} />
         
         {/* Protected Routes */}

@@ -57,6 +57,8 @@ import {
   AccessTime as AccessTimeIcon,
   AttachMoney as AttachMoneyIcon,
   Group as GroupIcon,
+  QuestionAnswer as QuestionAnswerIcon,
+  EventNote as EventNoteIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
@@ -217,6 +219,25 @@ interface ServiceCatalog {
     maxAmount?: number;
     exempt?: boolean;
   };
+  online_contingents?: Array<{
+    timeWindow: {
+      start: string;
+      end: string;
+    };
+    daysOfWeek: number[];
+    maxOnlineBookings: number;
+    priority: number;
+    description?: string;
+    isActive: boolean;
+  }>;
+  anamnesisQuestions?: Array<{
+    _id?: string;
+    questionText: string;
+    questionType: 'text' | 'textarea' | 'number' | 'boolean' | 'select' | 'multiselect';
+    options?: string[];
+    isRequired: boolean;
+    defaultValue?: any;
+  }>;
   createdBy: {
     _id: string;
     firstName: string;
@@ -249,6 +270,7 @@ const ServiceCatalog: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
+  const [categories, setCategories] = useState<Array<{ _id?: string; name: string; code: string }>>([]);
   const [selectedDeviceLocation, setSelectedDeviceLocation] = useState<string>('');
   const [selectedRoomLocation, setSelectedRoomLocation] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -298,6 +320,22 @@ const ServiceCatalog: React.FC = () => {
     requires_confirmation: false,
     requires_scheduling_confirmation: false,
     max_waitlist: 0,
+    online_contingents: [] as Array<{
+      timeWindow: { start: string; end: string };
+      daysOfWeek: number[];
+      maxOnlineBookings: number;
+      priority: number;
+      description: string;
+      isActive: boolean;
+    }>,
+    anamnesisQuestions: [] as Array<{
+      _id?: string;
+      questionText: string;
+      questionType: 'text' | 'textarea' | 'number' | 'boolean' | 'select' | 'multiselect';
+      options?: string[];
+      isRequired: boolean;
+      defaultValue?: any;
+    }>,
     price_cents: 0,
     billing_code: '',
     notes: '',
@@ -339,6 +377,67 @@ const ServiceCatalog: React.FC = () => {
     }, 500);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+
+  // Kategorien laden - sowohl aus ServiceCategories-Tabelle als auch aus bestehenden Services
+  const fetchCategories = async () => {
+    try {
+      // Lade Kategorien aus der ServiceCategories-Tabelle
+      const response = await api.get<{data: Array<{ _id?: string; name: string; code: string }>}>('/service-categories');
+      const categoriesFromTable: Array<{ _id?: string; name: string; code: string }> = [];
+      
+      if (response.success && response.data) {
+        const categoriesData = Array.isArray(response.data) 
+          ? response.data 
+          : (response.data.data || []);
+        categoriesFromTable.push(...categoriesData);
+      }
+
+      // Lade alle Services, um Kategorien zu extrahieren
+      try {
+        const servicesResponse = await api.get<any>('/service-catalog?limit=1000');
+        if (servicesResponse.success && servicesResponse.data) {
+          const servicesData = Array.isArray(servicesResponse.data)
+            ? servicesResponse.data
+            : (servicesResponse.data.data || []);
+          
+          // Extrahiere eindeutige Kategorien aus Services
+          const categoriesFromServices = new Set<string>();
+          servicesData.forEach((service: ServiceCatalog) => {
+            if (service.category && service.category.trim() !== '') {
+              categoriesFromServices.add(service.category.trim());
+            }
+          });
+
+          // Kombiniere Kategorien aus Tabelle und Services
+          const allCategories = new Map<string, { _id?: string; name: string; code: string }>();
+          
+          // Füge Kategorien aus Tabelle hinzu
+          categoriesFromTable.forEach(cat => {
+            allCategories.set(cat.name, cat);
+          });
+          
+          // Füge Kategorien aus Services hinzu (falls nicht bereits vorhanden)
+          categoriesFromServices.forEach(catName => {
+            if (!allCategories.has(catName)) {
+              allCategories.set(catName, { name: catName, code: '' });
+            }
+          });
+
+          setCategories(Array.from(allCategories.values()));
+        } else {
+          // Fallback: nur Kategorien aus Tabelle
+          setCategories(categoriesFromTable);
+        }
+      } catch (servicesError) {
+        console.error('Error fetching services for categories:', servicesError);
+        // Fallback: nur Kategorien aus Tabelle
+        setCategories(categoriesFromTable);
+      }
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      setCategories([]);
+    }
+  };
 
   // Services laden
   const fetchServices = async () => {
@@ -485,6 +584,38 @@ const ServiceCatalog: React.FC = () => {
   useEffect(() => {
     console.log('📊 State changed:', { page, rowsPerPage, totalCount, servicesLength: services.length });
   }, [page, rowsPerPage, totalCount, services]);
+
+  // Aktualisiere Kategorien, wenn Services geladen werden
+  useEffect(() => {
+    if (services.length > 0) {
+      // Extrahiere Kategorien aus geladenen Services
+      const categoriesFromServices = new Set<string>();
+      services.forEach((service: ServiceCatalog) => {
+        if (service.category && service.category.trim() !== '') {
+          categoriesFromServices.add(service.category.trim());
+        }
+      });
+
+      // Kombiniere mit bestehenden Kategorien
+      setCategories(prevCategories => {
+        const categoryMap = new Map<string, { _id?: string; name: string; code: string }>();
+        
+        // Füge bestehende Kategorien hinzu
+        prevCategories.forEach(cat => {
+          categoryMap.set(cat.name, cat);
+        });
+        
+        // Füge neue Kategorien aus Services hinzu
+        categoriesFromServices.forEach(catName => {
+          if (!categoryMap.has(catName)) {
+            categoryMap.set(catName, { name: catName, code: '' });
+          }
+        });
+        
+        return Array.from(categoryMap.values());
+      });
+    }
+  }, [services]);
   
   // Separate useEffect für initial load anderer Daten
   useEffect(() => {
@@ -492,6 +623,7 @@ const ServiceCatalog: React.FC = () => {
     fetchUsers();
     fetchDevices();
     fetchRooms();
+    fetchCategories();
   }, []);
 
   // Gefilterte Geräte basierend auf ausgewähltem Standort
@@ -621,7 +753,9 @@ const ServiceCatalog: React.FC = () => {
         percentage: 10,
         maxAmount: 28.50,
         exempt: false
-      }
+      },
+      online_contingents: [],
+      anamnesisQuestions: []
     });
     
     // Standort-Auswahl zurücksetzen
@@ -685,6 +819,8 @@ const ServiceCatalog: React.FC = () => {
       requires_confirmation: (service as any).requires_confirmation ?? false,
       requires_scheduling_confirmation: (service as any).requires_scheduling_confirmation ?? false,
       max_waitlist: (service as any).max_waitlist ?? 0,
+      online_contingents: (service as any).online_contingents || [],
+      anamnesisQuestions: (service as any).anamnesisQuestions || [],
       price_cents: service.price_cents || 0,
       billing_code: service.billing_code || '',
       notes: service.notes || '',
@@ -1316,6 +1452,8 @@ const ServiceCatalog: React.FC = () => {
             <Tabs 
               value={activeTab} 
               onChange={(_, newValue) => setActiveTab(newValue)}
+              variant="scrollable"
+              scrollButtons="auto"
               sx={{ 
                 mb: 3,
                 borderBottom: '1px solid',
@@ -1324,6 +1462,7 @@ const ServiceCatalog: React.FC = () => {
                   textTransform: 'none',
                   fontWeight: 500,
                   fontSize: '0.95rem',
+                  minWidth: 120,
                 }
               }}
             >
@@ -1333,6 +1472,8 @@ const ServiceCatalog: React.FC = () => {
               <Tab label="Preis & Billing" icon={<AttachMoneyIcon />} iconPosition="start" />
               <Tab label="Update-Status" icon={<SettingsIcon />} iconPosition="start" />
               <Tab label="Geräte & Räume" icon={<RoomIcon />} iconPosition="start" />
+              <Tab label="Online-Kontingente" icon={<EventNoteIcon />} iconPosition="start" />
+              <Tab label="Anamnese" icon={<QuestionAnswerIcon />} iconPosition="start" />
               <Tab label="Einstellungen" icon={<SettingsIcon />} iconPosition="start" />
             </Tabs>
 
@@ -1353,11 +1494,23 @@ const ServiceCatalog: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   required
                 />
-                <TextField
-                  fullWidth
-                  label="Kategorie"
-                  value={formData.category}
-                  onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                <Autocomplete
+                  freeSolo
+                  options={categories.map((category) => category.name)}
+                  value={formData.category || ''}
+                  onChange={(event, newValue) => {
+                    setFormData({ ...formData, category: newValue || '' });
+                  }}
+                  onInputChange={(event, newInputValue) => {
+                    setFormData({ ...formData, category: newInputValue });
+                  }}
+                  renderInput={(params) => (
+                    <TextField
+                      {...params}
+                      label="Kategorie"
+                      placeholder="Kategorie auswählen oder eingeben"
+                    />
+                  )}
                 />
                 <TextField
                   fullWidth
@@ -1942,12 +2095,320 @@ const ServiceCatalog: React.FC = () => {
             )}
 
             {/* Tab 6: Update-Status */}
-            {activeTab === 6 && (
+            {activeTab === 5 && (
               <ServiceCatalogUpdateStatus />
             )}
 
-            {/* Tab 7: Einstellungen */}
-            {activeTab === 5 && (
+            {/* Tab 7: Online-Kontingente */}
+            {activeTab === 6 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Reservieren Sie bestimmte Zeitslots für Online-Buchungen dieses Services (z.B. "Blutabnahmen nur 08:00-12:00").
+                </Typography>
+                
+                {formData.online_contingents.map((contingent, index) => (
+                  <Card key={index} sx={{ p: 2 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                      <Typography variant="subtitle1">Kontingent {index + 1}</Typography>
+                      <IconButton
+                        size="small"
+                        onClick={() => {
+                          const newContingents = [...formData.online_contingents];
+                          newContingents.splice(index, 1);
+                          setFormData({ ...formData, online_contingents: newContingents });
+                        }}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    </Box>
+                    
+                    <Grid container spacing={2}>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          label="Startzeit"
+                          type="time"
+                          value={contingent.timeWindow.start}
+                          onChange={(e) => {
+                            const newContingents = [...formData.online_contingents];
+                            newContingents[index].timeWindow.start = e.target.value;
+                            setFormData({ ...formData, online_contingents: newContingents });
+                          }}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          label="Endzeit"
+                          type="time"
+                          value={contingent.timeWindow.end}
+                          onChange={(e) => {
+                            const newContingents = [...formData.online_contingents];
+                            newContingents[index].timeWindow.end = e.target.value;
+                            setFormData({ ...formData, online_contingents: newContingents });
+                          }}
+                          InputLabelProps={{ shrink: true }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12 }}>
+                        <FormControl fullWidth>
+                          <InputLabel>Wochentage</InputLabel>
+                          <Select
+                            multiple
+                            value={contingent.daysOfWeek}
+                            onChange={(e) => {
+                              const newContingents = [...formData.online_contingents];
+                              newContingents[index].daysOfWeek = e.target.value as number[];
+                              setFormData({ ...formData, online_contingents: newContingents });
+                            }}
+                            renderValue={(selected) => {
+                              const dayNames = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+                              return (selected as number[]).map(d => dayNames[d]).join(', ');
+                            }}
+                          >
+                            {[
+                              { value: 0, label: 'Sonntag' },
+                              { value: 1, label: 'Montag' },
+                              { value: 2, label: 'Dienstag' },
+                              { value: 3, label: 'Mittwoch' },
+                              { value: 4, label: 'Donnerstag' },
+                              { value: 5, label: 'Freitag' },
+                              { value: 6, label: 'Samstag' }
+                            ].map(day => (
+                              <MenuItem key={day.value} value={day.value}>
+                                <Checkbox checked={contingent.daysOfWeek.indexOf(day.value) > -1} />
+                                <ListItemText primary={day.label} />
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          label="Max. Online-Buchungen"
+                          type="number"
+                          value={contingent.maxOnlineBookings}
+                          onChange={(e) => {
+                            const newContingents = [...formData.online_contingents];
+                            newContingents[index].maxOnlineBookings = parseInt(e.target.value) || 0;
+                            setFormData({ ...formData, online_contingents: newContingents });
+                          }}
+                          helperText="0 = unbegrenzt"
+                          inputProps={{ min: 0 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12, sm: 6 }}>
+                        <TextField
+                          fullWidth
+                          label="Priorität"
+                          type="number"
+                          value={contingent.priority}
+                          onChange={(e) => {
+                            const newContingents = [...formData.online_contingents];
+                            newContingents[index].priority = parseInt(e.target.value) || 0;
+                            setFormData({ ...formData, online_contingents: newContingents });
+                          }}
+                          helperText="Höhere Priorität = wird zuerst belegt"
+                          inputProps={{ min: 0 }}
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12 }}>
+                        <TextField
+                          fullWidth
+                          label="Beschreibung"
+                          value={contingent.description}
+                          onChange={(e) => {
+                            const newContingents = [...formData.online_contingents];
+                            newContingents[index].description = e.target.value;
+                            setFormData({ ...formData, online_contingents: newContingents });
+                          }}
+                          placeholder="z.B. 'Blutabnahmen nur morgens'"
+                        />
+                      </Grid>
+                      <Grid size={{ xs: 12 }}>
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={contingent.isActive}
+                              onChange={(e) => {
+                                const newContingents = [...formData.online_contingents];
+                                newContingents[index].isActive = e.target.checked;
+                                setFormData({ ...formData, online_contingents: newContingents });
+                              }}
+                            />
+                          }
+                          label="Aktiv"
+                        />
+                      </Grid>
+                    </Grid>
+                  </Card>
+                ))}
+                
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => {
+                    setFormData({
+                      ...formData,
+                      online_contingents: [
+                        ...formData.online_contingents,
+                        {
+                          timeWindow: { start: '08:00', end: '12:00' },
+                          daysOfWeek: [1, 2, 3, 4, 5], // Mo-Fr
+                          maxOnlineBookings: 0,
+                          priority: 0,
+                          description: '',
+                          isActive: true
+                        }
+                      ]
+                    });
+                  }}
+                  sx={{ mt: 1 }}
+                >
+                  Kontingent hinzufügen
+                </Button>
+              </Box>
+            )}
+
+            {/* Tab 7: Anamnese */}
+            {activeTab === 7 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">Anamnese-Vorabfragen</Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                    onClick={() => {
+                      const newQuestions = [...formData.anamnesisQuestions];
+                      newQuestions.push({
+                        questionText: '',
+                        questionType: 'text',
+                        options: [],
+                        isRequired: false,
+                        defaultValue: ''
+                      });
+                      setFormData({ ...formData, anamnesisQuestions: newQuestions });
+                    }}
+                    size="small"
+                  >
+                    Frage hinzufügen
+                  </Button>
+                </Box>
+
+                {formData.anamnesisQuestions.length === 0 ? (
+                  <Alert severity="info">Keine Anamnese-Fragen konfiguriert. Fügen Sie Fragen hinzu, die Patienten vor der Buchung beantworten sollen.</Alert>
+                ) : (
+                  formData.anamnesisQuestions.map((question, index) => (
+                    <Paper key={index} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                        <Typography variant="subtitle1">Frage {index + 1}</Typography>
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            const newQuestions = formData.anamnesisQuestions.filter((_, i) => i !== index);
+                            setFormData({ ...formData, anamnesisQuestions: newQuestions });
+                          }}
+                          color="error"
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Box>
+
+                      <Grid container spacing={2}>
+                        <Grid size={{ xs: 12 }}>
+                          <TextField
+                            fullWidth
+                            label="Fragentext *"
+                            value={question.questionText}
+                            onChange={(e) => {
+                              const newQuestions = [...formData.anamnesisQuestions];
+                              newQuestions[index].questionText = e.target.value;
+                              setFormData({ ...formData, anamnesisQuestions: newQuestions });
+                            }}
+                            required
+                          />
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <FormControl fullWidth>
+                            <InputLabel>Fragetyp *</InputLabel>
+                            <Select
+                              value={question.questionType}
+                              onChange={(e) => {
+                                const newQuestions = [...formData.anamnesisQuestions];
+                                newQuestions[index].questionType = e.target.value;
+                                // Lösche Options wenn Typ geändert wird
+                                if (e.target.value !== 'select' && e.target.value !== 'multiselect') {
+                                  newQuestions[index].options = [];
+                                }
+                                setFormData({ ...formData, anamnesisQuestions: newQuestions });
+                              }}
+                              label="Fragetyp *"
+                            >
+                              <MenuItem value="text">Text (einzeilig)</MenuItem>
+                              <MenuItem value="textarea">Text (mehrzeilig)</MenuItem>
+                              <MenuItem value="number">Zahl</MenuItem>
+                              <MenuItem value="boolean">Ja/Nein</MenuItem>
+                              <MenuItem value="select">Auswahl (einfach)</MenuItem>
+                              <MenuItem value="multiselect">Auswahl (mehrfach)</MenuItem>
+                            </Select>
+                          </FormControl>
+                        </Grid>
+                        <Grid size={{ xs: 12, sm: 6 }}>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={question.isRequired}
+                                onChange={(e) => {
+                                  const newQuestions = [...formData.anamnesisQuestions];
+                                  newQuestions[index].isRequired = e.target.checked;
+                                  setFormData({ ...formData, anamnesisQuestions: newQuestions });
+                                }}
+                              />
+                            }
+                            label="Pflichtfeld"
+                          />
+                        </Grid>
+                        {(question.questionType === 'select' || question.questionType === 'multiselect') && (
+                          <Grid size={{ xs: 12 }}>
+                            <TextField
+                              fullWidth
+                              label="Optionen (durch Komma getrennt)"
+                              value={question.options?.join(', ') || ''}
+                              onChange={(e) => {
+                                const newQuestions = [...formData.anamnesisQuestions];
+                                newQuestions[index].options = e.target.value.split(',').map(o => o.trim()).filter(o => o);
+                                setFormData({ ...formData, anamnesisQuestions: newQuestions });
+                              }}
+                              placeholder="z.B. Option 1, Option 2, Option 3"
+                              helperText="Geben Sie die Auswahloptionen durch Komma getrennt ein"
+                            />
+                          </Grid>
+                        )}
+                        {question.questionType !== 'boolean' && (
+                          <Grid size={{ xs: 12 }}>
+                            <TextField
+                              fullWidth
+                              label="Standardwert (optional)"
+                              value={question.defaultValue || ''}
+                              onChange={(e) => {
+                                const newQuestions = [...formData.anamnesisQuestions];
+                                newQuestions[index].defaultValue = e.target.value;
+                                setFormData({ ...formData, anamnesisQuestions: newQuestions });
+                              }}
+                            />
+                          </Grid>
+                        )}
+                      </Grid>
+                    </Paper>
+                  ))
+                )}
+              </Box>
+            )}
+
+            {/* Tab 8: Einstellungen */}
+            {activeTab === 8 && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <TextField
                   fullWidth

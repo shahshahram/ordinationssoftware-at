@@ -41,10 +41,14 @@ import {
   CheckCircle,
   Cancel,
   Pending,
+  CreditCard,
+  Link,
+  QuestionAnswer,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
+import GinaBoxStatus from '../components/GinaBoxStatus';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -389,6 +393,7 @@ const AppointmentDetail: React.FC = () => {
               <Tab label="Teilnehmer" icon={<People />} iconPosition="start" />
               <Tab label="Ressourcen" icon={<Devices />} iconPosition="start" />
               <Tab label="Services" icon={<MedicalServices />} iconPosition="start" />
+              <Tab label="Anamnese" icon={<QuestionAnswer />} iconPosition="start" />
             </Tabs>
             
             <TabPanel value={activeTab} index={0}>
@@ -579,6 +584,37 @@ const AppointmentDetail: React.FC = () => {
                   </TableBody>
                 </Table>
               </TableContainer>
+            </TabPanel>
+            
+            <TabPanel value={activeTab} index={4}>
+              <Typography variant="h6" gutterBottom>Anamnese-Vorabfrage</Typography>
+              {data?.anamnesisAnswers && Array.isArray(data.anamnesisAnswers) && data.anamnesisAnswers.length > 0 ? (
+                <Box sx={{ mt: 2 }}>
+                  {data.anamnesisAnswers.map((answer: any, index: number) => (
+                    <Paper key={index} sx={{ p: 2, mb: 2 }}>
+                      <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
+                        {answer.question || answer.questionText}
+                      </Typography>
+                      <Typography variant="body1" sx={{ mt: 1 }}>
+                        {Array.isArray(answer.answer) 
+                          ? answer.answer.join(', ')
+                          : typeof answer.answer === 'boolean'
+                          ? answer.answer ? 'Ja' : 'Nein'
+                          : String(answer.answer || '—')}
+                      </Typography>
+                      {answer.answeredAt && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                          Beantwortet am: {format(new Date(answer.answeredAt), 'dd.MM.yyyy HH:mm')}
+                        </Typography>
+                      )}
+                    </Paper>
+                  ))}
+                </Box>
+              ) : (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  Keine Anamnese-Antworten vorhanden. Diese werden bei Online-Buchungen mit konfigurierten Anamnese-Fragen automatisch erfasst.
+                </Alert>
+              )}
             </TabPanel>
           </>
         ) : (

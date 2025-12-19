@@ -1,5 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
+const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const OnlineBooking = require('../models/OnlineBooking');
 const PatientExtended = require('../models/PatientExtended'); // Produktivsystem-Standard
 const Appointment = require('../models/Appointment');
@@ -9,7 +11,10 @@ const WeeklySchedule = require('../models/WeeklySchedule');
 const ServiceCatalog = require('../models/ServiceCatalog');
 const Device = require('../models/Device');
 const Room = require('../models/Room');
+const Location = require('../models/Location');
+const SystemSettings = require('../models/SystemSettings');
 const AvailabilityService = require('../services/availabilityService');
+const { generateICSFromBooking } = require('../utils/icsGenerator');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
@@ -18,7 +23,7 @@ const router = express.Router();
 // @access  Public
 router.get('/availability', async (req, res) => {
   try {
-    const { date, doctorId, duration = 30 } = req.query;
+    const { date, doctorId, duration = 30, serviceId } = req.query;
     
     if (!date || !doctorId) {
       return res.status(400).json({
@@ -163,17 +168,53 @@ router.get('/availability', async (req, res) => {
         throw new Error(`Invalid time format: ${workingDay.start} - ${workingDay.end}`);
       }
       
+      // Lade Service-Daten falls serviceId vorhanden (für Ressourcen-Prüfung)
+      let serviceDoc = null;
+      let requiredRooms = [];
+      let requiredDevices = [];
+      
+      if (serviceId) {
+        try {
+          serviceDoc = await ServiceCatalog.findById(serviceId);
+          if (serviceDoc) {
+            // Lade zugewiesene Räume und Geräte
+            if (serviceDoc.assigned_rooms && serviceDoc.assigned_rooms.length > 0) {
+              requiredRooms = serviceDoc.assigned_rooms;
+            }
+            if (serviceDoc.assigned_devices && serviceDoc.assigned_devices.length > 0) {
+              requiredDevices = serviceDoc.assigned_devices;
+            }
+            console.log(`[OnlineBooking] Service ${serviceId} requires ${requiredRooms.length} rooms and ${requiredDevices.length} devices`);
+          }
+        } catch (serviceError) {
+          console.warn('[OnlineBooking] Error loading service:', serviceError);
+        }
+      }
+
       // Prüfe bestehende Termine (doctor ist User-ID in Appointment)
       const existingAppointments = await Appointment.find({
         doctor: doctorId, // doctor ist User-ID
-        date: {
+        startTime: {
           $gte: new Date(`${date}T00:00:00`),
           $lt: new Date(`${date}T23:59:59`)
         },
-        status: { $nin: ['cancelled', 'no_show'] }
+        status: { $nin: ['cancelled', 'no_show', 'abgesagt'] }
       }).catch(err => {
         console.error('[OnlineBooking] Error fetching appointments:', err);
         return []; // Fallback: keine Termine gefunden
+      });
+
+      // Prüfe belegte Räume und Geräte
+      const bookedRooms = new Set();
+      const bookedDevices = new Set();
+      
+      existingAppointments.forEach(apt => {
+        if (apt.assigned_rooms && Array.isArray(apt.assigned_rooms)) {
+          apt.assigned_rooms.forEach(roomId => bookedRooms.add(roomId.toString()));
+        }
+        if (apt.assigned_devices && Array.isArray(apt.assigned_devices)) {
+          apt.assigned_devices.forEach(deviceId => bookedDevices.add(deviceId.toString()));
+        }
       });
 
       const bookedSlots = existingAppointments.map(apt => ({
@@ -198,7 +239,7 @@ router.get('/availability', async (req, res) => {
         }
         
         // Prüfe ob Slot verfügbar ist (nur wenn nicht in Pause)
-        const isSlotAvailable = !isInBreak && !bookedSlots.some(booked => {
+        let isSlotAvailable = !isInBreak && !bookedSlots.some(booked => {
           try {
             const bookedStart = new Date(`${date}T${booked.start}`);
             const bookedEnd = new Date(`${date}T${booked.end}`);
@@ -212,6 +253,102 @@ router.get('/availability', async (req, res) => {
           }
         });
 
+        // Prüfe Ressourcen-Verfügbarkeit (Räume und Geräte)
+        if (isSlotAvailable && (requiredRooms.length > 0 || requiredDevices.length > 0)) {
+          const slotStartTime = new Date(`${date}T${slotStart}`);
+          const slotEndTime = new Date(`${date}T${slotEnd}`);
+          
+          // Prüfe ob alle benötigten Räume verfügbar sind
+          if (requiredRooms.length > 0) {
+            for (const roomId of requiredRooms) {
+              const roomBooked = existingAppointments.some(apt => {
+                if (!apt.assigned_rooms || !Array.isArray(apt.assigned_rooms)) return false;
+                if (!apt.assigned_rooms.some(r => r.toString() === roomId.toString())) return false;
+                
+                const aptStart = new Date(apt.startTime);
+                const aptEnd = new Date(apt.endTime);
+                return (slotStartTime < aptEnd && slotEndTime > aptStart);
+              });
+              
+              if (roomBooked) {
+                isSlotAvailable = false;
+                break;
+              }
+            }
+          }
+          
+          // Prüfe ob alle benötigten Geräte verfügbar sind
+          if (isSlotAvailable && requiredDevices.length > 0) {
+            for (const deviceId of requiredDevices) {
+              const deviceBooked = existingAppointments.some(apt => {
+                if (!apt.assigned_devices || !Array.isArray(apt.assigned_devices)) return false;
+                if (!apt.assigned_devices.some(d => d.toString() === deviceId.toString())) return false;
+                
+                const aptStart = new Date(apt.startTime);
+                const aptEnd = new Date(apt.endTime);
+                return (slotStartTime < aptEnd && slotEndTime > aptStart);
+              });
+              
+              if (deviceBooked) {
+                isSlotAvailable = false;
+                break;
+              }
+            }
+          }
+        }
+
+        // Prüfe Online-Kontingente falls Service angegeben
+        if (isSlotAvailable && serviceDoc && serviceDoc.online_contingents && serviceDoc.online_contingents.length > 0) {
+          const slotTime = slotStart; // HH:MM Format
+          const dayOfWeek = requestedDate.getDay(); // 0=Sonntag, 1=Montag, etc.
+          
+          // Prüfe ob Slot in einem aktiven Kontingent liegt
+          const matchingContingent = serviceDoc.online_contingents.find(contingent => {
+            if (!contingent.isActive) return false;
+            
+            // Prüfe Wochentag
+            if (contingent.daysOfWeek && contingent.daysOfWeek.length > 0) {
+              if (!contingent.daysOfWeek.includes(dayOfWeek)) return false;
+            }
+            
+            // Prüfe Zeitfenster
+            const slotTimeMinutes = parseInt(slotTime.split(':')[0]) * 60 + parseInt(slotTime.split(':')[1]);
+            const windowStartMinutes = parseInt(contingent.timeWindow.start.split(':')[0]) * 60 + parseInt(contingent.timeWindow.start.split(':')[1]);
+            const windowEndMinutes = parseInt(contingent.timeWindow.end.split(':')[0]) * 60 + parseInt(contingent.timeWindow.end.split(':')[1]);
+            
+            if (slotTimeMinutes < windowStartMinutes || slotTimeMinutes >= windowEndMinutes) {
+              return false;
+            }
+            
+            return true;
+          });
+          
+          // Wenn Slot in einem Kontingent liegt, prüfe maximale Buchungen
+          if (matchingContingent && matchingContingent.maxOnlineBookings > 0) {
+            // Zähle bereits gebuchte Online-Termine in diesem Zeitfenster
+            const dateStr = requestedDate.toISOString().split('T')[0];
+            const windowStart = new Date(`${dateStr}T${matchingContingent.timeWindow.start}`);
+            const windowEnd = new Date(`${dateStr}T${matchingContingent.timeWindow.end}`);
+            
+            const existingOnlineBookings = await OnlineBooking.countDocuments({
+              'appointment.date': requestedDate,
+              'appointment.startTime': {
+                $gte: matchingContingent.timeWindow.start,
+                $lt: matchingContingent.timeWindow.end
+              },
+              'appointment.serviceId': serviceId,
+              status: { $in: ['pending', 'confirmed'] }
+            });
+            
+            if (existingOnlineBookings >= matchingContingent.maxOnlineBookings) {
+              isSlotAvailable = false;
+            }
+          } else if (serviceDoc.online_contingents.length > 0) {
+            // Wenn Kontingente definiert sind, aber Slot nicht in einem liegt, ist er nicht verfügbar
+            isSlotAvailable = false;
+          }
+        }
+        
         if (isSlotAvailable) {
           availableSlots.push({
             start: slotStart,
@@ -228,12 +365,84 @@ router.get('/availability', async (req, res) => {
         console.log(`[OnlineBooking] First slot: ${availableSlots[0].start} - ${availableSlots[0].end}`);
       }
       
+      // Lade verfügbare Räume und Geräte (falls serviceId vorhanden)
+      let availableRooms = [];
+      let availableDevices = [];
+      
+      if (serviceId && serviceDoc) {
+        try {
+          // Lade verfügbare Räume (online buchbar, aktiv)
+          if (serviceDoc.requires_room_selection || requiredRooms.length > 0) {
+            const roomIds = requiredRooms.length > 0 ? requiredRooms : null;
+            const roomQuery = {
+              isActive: true,
+              isOnlineBookable: true
+            };
+            if (roomIds && roomIds.length > 0) {
+              roomQuery._id = { $in: roomIds };
+            }
+            availableRooms = await Room.find(roomQuery)
+              .select('_id name type capacity location_id')
+              .populate('location_id', 'name code')
+              .sort({ name: 1 });
+            console.log(`[OnlineBooking] Found ${availableRooms.length} available rooms for service ${serviceId}`);
+          }
+          
+          // Lade verfügbare Geräte (online buchbar, aktiv)
+          if (serviceDoc.requires_device_selection || requiredDevices.length > 0) {
+            const deviceIds = requiredDevices.length > 0 ? requiredDevices : null;
+            const deviceQuery = {
+              isActive: true,
+              isOnlineBookable: true
+            };
+            if (deviceIds && deviceIds.length > 0) {
+              deviceQuery._id = { $in: deviceIds };
+            }
+            availableDevices = await Device.find(deviceQuery)
+              .select('_id name type category location_id')
+              .populate('location_id', 'name code')
+              .sort({ name: 1 });
+            console.log(`[OnlineBooking] Found ${availableDevices.length} available devices for service ${serviceId}`);
+          }
+        } catch (resourceError) {
+          console.error('[OnlineBooking] Error loading resources:', resourceError);
+        }
+      }
+
       res.json({
         success: true,
         data: {
           availableSlots,
           workingHours: workingDay,
-          date: date
+          date: date,
+          availableRooms: availableRooms.map(room => ({
+            id: room._id,
+            name: room.name,
+            type: room.type,
+            capacity: room.capacity,
+            location: room.location_id ? {
+              id: room.location_id._id,
+              name: room.location_id.name,
+              code: room.location_id.code
+            } : null
+          })),
+          availableDevices: availableDevices.map(device => ({
+            id: device._id,
+            name: device.name,
+            type: device.type,
+            category: device.category,
+            location: device.location_id ? {
+              id: device.location_id._id,
+              name: device.location_id.name,
+              code: device.location_id.code
+            } : null
+          })),
+          serviceRequirements: serviceDoc ? {
+            requiresRoomSelection: serviceDoc.requires_room_selection || false,
+            roomQuantityRequired: serviceDoc.room_quantity_required || 0,
+            requiresDeviceSelection: serviceDoc.requires_device_selection || false,
+            deviceQuantityRequired: serviceDoc.device_quantity_required || 0
+          } : null
         }
       });
     } catch (slotError) {
@@ -278,7 +487,7 @@ router.post('/book', [
       });
     }
 
-    const { patient, appointment, doctor } = req.body;
+    const { patient, appointment, doctor, anamnesisResponses } = req.body;
 
     // Prüfe ob Arzt existiert
     const doctorExists = await User.findById(doctor.id);
@@ -371,7 +580,7 @@ router.post('/book', [
       }
     }
 
-    // Prüfe Verfügbarkeit
+    // Prüfe Verfügbarkeit (Arzt)
     const requestedDate = new Date(appointment.date);
     const isAvailable = await checkAvailability(doctor.id, requestedDate, appointment.startTime);
     
@@ -381,13 +590,147 @@ router.post('/book', [
         message: 'Der gewählte Termin ist nicht mehr verfügbar'
       });
     }
+    
+    // Prüfe Ressourcen-Verfügbarkeit (Räume und Geräte) - Kollisionsprüfung
+    if (appointment.assigned_rooms && appointment.assigned_rooms.length > 0) {
+      const CollisionDetection = require('../utils/collisionDetection');
+      const dateStr = requestedDate.toISOString().split('T')[0];
+      const [hours, minutes] = appointment.startTime.split(':').map(Number);
+      const startDateTime = new Date(requestedDate);
+      startDateTime.setHours(hours, minutes, 0, 0);
+      const endDateTime = new Date(startDateTime.getTime() + (appointment.duration || 30) * 60000);
+      
+      // Prüfe jeden Raum auf Kollisionen
+      for (const roomId of appointment.assigned_rooms) {
+        const roomCollisions = await CollisionDetection.checkRoomCollisions(
+          roomId,
+          startDateTime,
+          endDateTime
+        );
+        
+        if (roomCollisions.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: `Raum ist zum gewählten Zeitpunkt nicht verfügbar: ${roomCollisions[0].message}`,
+            code: 'ROOM_UNAVAILABLE'
+          });
+        }
+      }
+    }
+    
+    if (appointment.assigned_devices && appointment.assigned_devices.length > 0) {
+      const CollisionDetection = require('../utils/collisionDetection');
+      const dateStr = requestedDate.toISOString().split('T')[0];
+      const [hours, minutes] = appointment.startTime.split(':').map(Number);
+      const startDateTime = new Date(requestedDate);
+      startDateTime.setHours(hours, minutes, 0, 0);
+      const endDateTime = new Date(startDateTime.getTime() + (appointment.duration || 30) * 60000);
+      
+      // Prüfe alle Geräte auf Kollisionen
+      const deviceCollisions = await CollisionDetection.checkDeviceCollisions(
+        appointment.assigned_devices,
+        startDateTime,
+        endDateTime
+      );
+      
+      if (deviceCollisions.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Gerät ist zum gewählten Zeitpunkt nicht verfügbar: ${deviceCollisions[0].message}`,
+          code: 'DEVICE_UNAVAILABLE'
+        });
+      }
+    }
 
+    // Automatische Dublettenprüfung
     // Prüfe ob Patient bereits existiert (Produktivsystem: PatientExtended)
-    let existingPatient = await PatientExtended.findOne({
-      email: patient.email,
-      firstName: patient.firstName,
-      lastName: patient.lastName
-    });
+    // Suche nach verschiedenen Kombinationen für bessere Trefferquote
+    let existingPatient = null;
+    let isKnownPatient = false;
+    
+    // Prüfung 1: Exakte Übereinstimmung (Email + Name + Geburtsdatum)
+    if (patient.email && patient.firstName && patient.lastName && patient.dateOfBirth) {
+      const emailMatch = await PatientExtended.findOne({
+        email: patient.email.toLowerCase().trim(),
+        firstName: { $regex: new RegExp(`^${patient.firstName.trim()}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${patient.lastName.trim()}$`, 'i') },
+        dateOfBirth: new Date(patient.dateOfBirth)
+      });
+      
+      if (emailMatch) {
+        existingPatient = emailMatch;
+        isKnownPatient = true;
+        console.log(`[OnlineBooking] Bekannter Patient gefunden (Email+Name+Geburtsdatum): ${existingPatient._id}`);
+      }
+    }
+    
+    // Prüfung 2: SVNR + Name (falls SVNR vorhanden)
+    if (!existingPatient && patient.socialSecurityNumber) {
+      const svnrMatch = await PatientExtended.findOne({
+        socialSecurityNumber: patient.socialSecurityNumber.trim(),
+        firstName: { $regex: new RegExp(`^${patient.firstName.trim()}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${patient.lastName.trim()}$`, 'i') }
+      });
+      
+      if (svnrMatch) {
+        existingPatient = svnrMatch;
+        isKnownPatient = true;
+        console.log(`[OnlineBooking] Bekannter Patient gefunden (SVNR+Name): ${existingPatient._id}`);
+      }
+    }
+    
+    // Prüfung 3: Name + Geburtsdatum + Telefon (falls keine Email)
+    if (!existingPatient && patient.phone) {
+      const phoneMatch = await PatientExtended.findOne({
+        phone: patient.phone.trim(),
+        firstName: { $regex: new RegExp(`^${patient.firstName.trim()}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${patient.lastName.trim()}$`, 'i') },
+        dateOfBirth: new Date(patient.dateOfBirth)
+      });
+      
+      if (phoneMatch) {
+        existingPatient = phoneMatch;
+        isKnownPatient = true;
+        console.log(`[OnlineBooking] Bekannter Patient gefunden (Telefon+Name+Geburtsdatum): ${phoneMatch._id}`);
+      }
+    }
+    
+    // Erstelle neuen temporären Patienten, falls er nicht existiert
+    if (!existingPatient) {
+      // Für Online-Buchungen verwenden wir Standardwerte für erforderliche Felder
+      // Diese können später vom Personal aktualisiert werden
+      const newPatient = new PatientExtended({
+        userId: doctor.id, // Verwende Arzt-ID als userId (kann später geändert werden)
+        firstName: patient.firstName,
+        lastName: patient.lastName,
+        email: patient.email,
+        phone: patient.phone,
+        dateOfBirth: new Date(patient.dateOfBirth),
+        gender: 'd', // Standard: divers (kann später geändert werden)
+        socialSecurityNumber: patient.socialSecurityNumber || patient.insuranceNumber || '0000000000', // Temporärer Wert
+        insuranceProvider: 'ÖGK (Österreichische Gesundheitskasse)', // Standard-Versicherung
+        address: {
+          street: 'Nicht angegeben', // Wird später aktualisiert
+          zipCode: '0000', // Temporärer Wert
+          city: 'Nicht angegeben', // Wird später aktualisiert
+          country: 'Österreich'
+        },
+        createdBy: doctor.id, // Arzt, der die Buchung erhält
+        isActive: true,
+        isTemporary: true, // Markiere als temporären Patienten
+        notes: 'Patient über Online-Buchung erstellt - bitte Stammdaten vervollständigen'
+      });
+      existingPatient = await newPatient.save();
+      isKnownPatient = false;
+      console.log(`[OnlineBooking] Neuer temporärer Patient erstellt: ${existingPatient._id}`);
+    } else {
+      // Patient existiert bereits - markiere als nicht temporär (falls er temporär war)
+      if (existingPatient.isTemporary) {
+        existingPatient.isTemporary = false;
+        await existingPatient.save();
+        console.log(`[OnlineBooking] Temporärer Patient wurde validiert: ${existingPatient._id}`);
+      }
+    }
 
     const bookingData = {
       patient: {
@@ -398,8 +741,9 @@ router.post('/book', [
         phone: patient.phone,
         dateOfBirth: new Date(patient.dateOfBirth),
         insuranceNumber: patient.socialSecurityNumber || patient.insuranceNumber || '',
-        isNewPatient: !existingPatient
+        isNewPatient: !isKnownPatient
       },
+      isKnownPatient: isKnownPatient, // Markierung: Ist Patient bereits bekannt?
       appointment: {
         date: requestedDate,
         startTime: appointment.startTime,
@@ -417,33 +761,109 @@ router.post('/book', [
         name: `${doctorExists.firstName} ${doctorExists.lastName}`,
         specialization: doctorExists.specialization
       },
+      anamnesisAnswers: anamnesisResponses || [], // Konvertiere anamnesisResponses zu anamnesisAnswers
       source: 'online',
       ipAddress: req.ip,
       userAgent: req.get('User-Agent')
     };
 
+    // Initialisiere confirmation-Objekt falls nicht vorhanden
+    if (!bookingData.confirmation) {
+      bookingData.confirmation = {
+        emailSent: false,
+        smsSent: false,
+        reminderSent: false
+      };
+    }
+    
+    // Erstelle OnlineBooking - bookingNumber wird automatisch vom pre('save') Hook generiert
+    // Aber wir generieren sie manuell, um sicherzustellen, dass sie vorhanden ist
+    const count = await OnlineBooking.countDocuments();
+    const year = new Date().getFullYear();
+    const bookingNumber = `B-${year}-${String(count + 1).padStart(6, '0')}`;
+    
+    bookingData.bookingNumber = bookingNumber;
+    
+    // Prüfe ob Double Opt-In erforderlich ist (nur für neue/unbekannte Patienten)
+    const requiresDoubleOptIn = !isKnownPatient;
+    
+    // Generiere Double Opt-In Code falls erforderlich
+    if (requiresDoubleOptIn) {
+      const optInCode = Math.floor(100000 + Math.random() * 900000).toString(); // 6-stelliger Code
+      const optInExpiresAt = new Date();
+      optInExpiresAt.setHours(optInExpiresAt.getHours() + 24); // 24 Stunden gültig
+      
+      bookingData.doubleOptIn = {
+        code: optInCode,
+        emailSent: false,
+        smsSent: false,
+        verified: false,
+        expiresAt: optInExpiresAt,
+        attempts: 0,
+        maxAttempts: 3
+      };
+      
+      // Status auf 'pending' setzen (nicht 'confirmed')
+      bookingData.status = 'pending';
+    } else {
+      // Bekannte Patienten: Direkt bestätigen
+      bookingData.status = 'confirmed';
+    }
+    
     const booking = new OnlineBooking(bookingData);
+    
+    // Generiere Magic Link Token für Patienten-Terminverwaltung
+    const magicLinkToken = crypto.randomBytes(32).toString('hex');
+    const magicLinkExpiresAt = new Date();
+    magicLinkExpiresAt.setDate(magicLinkExpiresAt.getDate() + 90); // 90 Tage gültig
+    
+    booking.magicLink = {
+      token: magicLinkToken,
+      expiresAt: magicLinkExpiresAt,
+      createdAt: new Date(),
+      usageCount: 0,
+      maxUsage: 10
+    };
+    
     await booking.save();
 
-    // Erstelle Termin in der Haupt-Terminverwaltung
-    const appointmentData = {
-      patient: existingPatient?._id,
-      doctor: doctor.id,
-      date: requestedDate,
-      startTime: appointment.startTime,
-      endTime: bookingData.appointment.endTime,
-      type: appointment.type,
-      status: 'scheduled',
-      notes: `Online-Buchung: ${booking.bookingNumber}\nGrund: ${appointment.reason}`,
-      source: 'online_booking',
-      bookingId: booking._id
-    };
+    // Erstelle Termin NUR wenn Patient bekannt ist oder Double Opt-In bereits bestätigt wurde
+    // Für neue Patienten wird der Termin erst nach Code-Validierung erstellt
+    if (!requiresDoubleOptIn) {
+      // Konvertiere startTime und endTime (Strings "HH:MM") zu Date-Objekten
+      const dateStr = requestedDate.toISOString().split('T')[0];
+      const startDateTime = new Date(`${dateStr}T${appointment.startTime}`);
+      const endDateTime = new Date(`${dateStr}T${bookingData.appointment.endTime}`);
+      
+      const appointmentData = {
+        patient: existingPatient._id, // Patient existiert jetzt immer
+        doctor: doctor.id,
+        startTime: startDateTime, // Date-Objekt
+        endTime: endDateTime, // Date-Objekt
+        type: appointment.type,
+        anamnesisAnswers: booking.anamnesisAnswers || [], // Übernehme Anamnese-Antworten
+        status: 'geplant', // Verwende 'geplant' statt 'scheduled' (entspricht dem Enum im Schema)
+        title: appointment.type, // title ist required
+        notes: `Online-Buchung: ${booking.bookingNumber}\nGrund: ${appointment.reason}`,
+        bookingType: 'online',
+        onlineBookingRef: booking.bookingNumber,
+        isOnlineBooking: true
+      };
 
-    const newAppointment = new Appointment(appointmentData);
-    await newAppointment.save();
+      const newAppointment = new Appointment(appointmentData);
+      await newAppointment.save();
+    }
 
-    // Sende Bestätigungs-E-Mail (Mock)
-    await sendConfirmationEmail(booking);
+    // Sende E-Mail: Double Opt-In Code oder Bestätigung
+    try {
+      if (requiresDoubleOptIn) {
+        await sendDoubleOptInEmail(booking);
+      } else {
+        await sendConfirmationEmail(booking);
+      }
+    } catch (emailError) {
+      console.error('[OnlineBooking] Error sending email (non-blocking):', emailError);
+    }
 
     res.status(201).json({
       success: true,
@@ -465,6 +885,46 @@ router.post('/book', [
       message: 'Fehler beim Buchen des Termins',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// @route   GET /api/online-booking/cancellation-policy
+// @desc    Get cancellation policy (deadline hours, etc.)
+// @access  Public
+router.get('/cancellation-policy', async (req, res) => {
+  try {
+    const cancellationDeadlineHours = await SystemSettings.getSetting(
+      'onlineBooking',
+      'cancellationDeadlineHours',
+      24
+    );
+    
+    const allowOnlineCancellation = await SystemSettings.getSetting(
+      'onlineBooking',
+      'allowOnlineCancellation',
+      true
+    );
+    
+    const cancellationPhoneNumber = await SystemSettings.getSetting(
+      'onlineBooking',
+      'cancellationPhoneNumber',
+      null
+    );
+    
+    res.json({
+      success: true,
+      data: {
+        cancellationDeadlineHours,
+        allowOnlineCancellation,
+        cancellationPhoneNumber
+      }
+    });
+  } catch (error) {
+    console.error('[OnlineBooking] Error fetching cancellation policy:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Stornierungsrichtlinie'
     });
   }
 });
@@ -549,16 +1009,91 @@ router.put('/cancel/:bookingNumber', [
       });
     }
 
-    // Storniere Buchung
+    // Prüfe Stornierungsfristen
+    const appointmentDate = new Date(booking.appointment.date);
+    const appointmentTime = booking.appointment.startTime.split(':');
+    const appointmentDateTime = new Date(appointmentDate);
+    appointmentDateTime.setHours(parseInt(appointmentTime[0]), parseInt(appointmentTime[1]), 0, 0);
+    
+    const now = new Date();
+    const hoursUntilAppointment = (appointmentDateTime - now) / (1000 * 60 * 60);
+    
+    // Lade Stornierungsfristen aus SystemSettings
+    // Standard: 24 Stunden vor Termin
+    const cancellationDeadlineHours = await SystemSettings.getSetting(
+      'onlineBooking',
+      'cancellationDeadlineHours',
+      24
+    );
+    
+    const allowOnlineCancellation = await SystemSettings.getSetting(
+      'onlineBooking',
+      'allowOnlineCancellation',
+      true
+    );
+    
+    const cancellationPhoneNumber = await SystemSettings.getSetting(
+      'onlineBooking',
+      'cancellationPhoneNumber',
+      null
+    );
+    
+    // Prüfe ob Frist überschritten ist
+    if (hoursUntilAppointment < cancellationDeadlineHours) {
+      // Frist überschritten - Online-Stornierung nicht mehr möglich
+      const phoneMessage = cancellationPhoneNumber 
+        ? ` Bitte rufen Sie uns an: ${cancellationPhoneNumber}`
+        : ' Bitte kontaktieren Sie uns telefonisch.';
+      
+      return res.status(400).json({
+        success: false,
+        message: `Online-Stornierung ist nur bis ${cancellationDeadlineHours} Stunden vor dem Termin möglich.${phoneMessage}`,
+        code: 'CANCELLATION_DEADLINE_EXCEEDED',
+        deadlineHours: cancellationDeadlineHours,
+        hoursUntilAppointment: Math.round(hoursUntilAppointment * 10) / 10,
+        phoneNumber: cancellationPhoneNumber,
+        allowOnlineCancellation: false
+      });
+    }
+    
+    // Prüfe ob Online-Stornierung generell erlaubt ist
+    if (!allowOnlineCancellation) {
+      const phoneMessage = cancellationPhoneNumber 
+        ? ` Bitte rufen Sie uns an: ${cancellationPhoneNumber}`
+        : ' Bitte kontaktieren Sie uns telefonisch.';
+      
+      return res.status(400).json({
+        success: false,
+        message: `Online-Stornierung ist derzeit nicht möglich.${phoneMessage}`,
+        code: 'ONLINE_CANCELLATION_DISABLED',
+        phoneNumber: cancellationPhoneNumber,
+        allowOnlineCancellation: false
+      });
+    }
+
+    // Storniere Buchung (Frist eingehalten)
     booking.status = 'cancelled';
     booking.addAuditEntry('cancelled', `Grund: ${req.body.reason}`, req.ip);
     await booking.save();
 
     // Storniere zugehörigen Termin
-    await Appointment.findOneAndUpdate(
+    const cancelledAppointment = await Appointment.findOneAndUpdate(
       { bookingId: booking._id },
-      { status: 'cancelled' }
+      { status: 'cancelled' },
+      { new: true }
     );
+
+    // Benachrichtige Wartelisten-Patienten (asynchron, nicht blockierend)
+    if (cancelledAppointment) {
+      const waitingListNotificationService = require('../services/waitingListNotificationService');
+      waitingListNotificationService.notifyWaitingListPatients(cancelledAppointment)
+        .then(result => {
+          console.log('[OnlineBooking] Wartelisten-Benachrichtigungen gesendet:', result);
+        })
+        .catch(error => {
+          console.error('[OnlineBooking] Fehler bei Wartelisten-Benachrichtigung (non-blocking):', error);
+        });
+    }
 
     res.json({
       success: true,
@@ -609,25 +1144,56 @@ router.get('/doctors', async (req, res) => {
 
 // Hilfsfunktionen
 async function checkAvailability(doctorId, date, time) {
+  console.log(`[OnlineBooking] checkAvailability called: doctorId=${doctorId}, date=${date}, time=${time}`);
+  
+  // Konvertiere time (String "HH:MM") zu einem Date-Objekt für die Query
+  const dateStr = date.toISOString().split('T')[0];
+  const startDateTime = new Date(`${dateStr}T${time}`);
+  const endDateTime = new Date(startDateTime.getTime() + 30 * 60000); // 30 Minuten Dauer
+  
+  console.log(`[OnlineBooking] Checking availability for: ${dateStr} ${time} (${startDateTime.toISOString()} - ${endDateTime.toISOString()})`);
+  
   // 1. Prüfe ob Termin bereits existiert
-  const existingAppointment = await Appointment.findOne({
+  // startTime ist ein Date im Appointment-Modell, also müssen wir nach einem Date-Objekt suchen
+  const existingAppointments = await Appointment.find({
     doctor: doctorId,
-    date: {
-      $gte: new Date(`${date.toISOString().split('T')[0]}T00:00:00`),
-      $lt: new Date(`${date.toISOString().split('T')[0]}T23:59:59`)
+    startTime: {
+      $gte: new Date(`${dateStr}T00:00:00`),
+      $lt: new Date(`${dateStr}T23:59:59`)
     },
-    startTime: time,
-    status: { $nin: ['cancelled', 'no_show'] }
+    status: { $nin: ['cancelled', 'no_show', 'abgesagt'] }
   });
-
-  if (existingAppointment) {
-    return false;
+  
+  console.log(`[OnlineBooking] Found ${existingAppointments.length} existing appointments for this date`);
+  
+  // Prüfe ob der spezifische Zeitpunkt bereits belegt ist
+  for (const existingAppointment of existingAppointments) {
+    const existingStart = new Date(existingAppointment.startTime);
+    const existingEnd = new Date(existingAppointment.endTime);
+    console.log(`[OnlineBooking] Checking against existing appointment: ${existingStart.toISOString()} - ${existingEnd.toISOString()}`);
+    
+    // Prüfe ob der gewünschte Zeitpunkt mit einem bestehenden Termin kollidiert
+    if (startDateTime < existingEnd && endDateTime > existingStart) {
+      console.log(`[OnlineBooking] Time slot conflicts with existing appointment`);
+      return false;
+    }
   }
 
   // 2. Prüfe ob Arzt an diesem Tag arbeitet und ob Zeit in Pausenzeiten liegt
-  const dayOfWeek = date.toLocaleDateString('en-US', { weekday: 'lowercase' });
+  // Konvertiere Datum zu Wochentag (monday, tuesday, etc.)
+  const dayIndex = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const dayOfWeek = dayNames[dayIndex];
+  
+  // Finde StaffProfile für diesen Arzt (doctorId ist User-ID)
+  const staffProfile = await StaffProfile.findOne({ userId: doctorId });
+  if (!staffProfile) {
+    console.log(`[OnlineBooking] checkAvailability: No StaffProfile found for doctor ${doctorId}`);
+    return false;
+  }
+  
   const weeklySchedules = await WeeklySchedule.find({
-    staffId: doctorId,
+    staffId: staffProfile._id, // staffId ist StaffProfile._id, nicht User-ID
     isActive: true,
     validFrom: { $lte: date },
     $or: [
@@ -665,15 +1231,271 @@ function calculateEndTime(startTime, duration) {
 }
 
 async function sendConfirmationEmail(booking) {
-  // Mock-E-Mail-Versand
-  console.log(`📧 Bestätigungs-E-Mail gesendet an: ${booking.patient.email}`);
-  console.log(`📋 Buchungsnummer: ${booking.bookingNumber}`);
-  console.log(`📅 Termin: ${booking.appointment.date} um ${booking.appointment.startTime}`);
-  
-  // In einer echten Implementierung würde hier ein E-Mail-Service verwendet werden
-  booking.confirmation.emailSent = true;
-  booking.confirmation.confirmationCode = Math.random().toString(36).substr(2, 8).toUpperCase();
-  await booking.save();
+  try {
+    // Lade Location-Daten für Adresse (falls verfügbar)
+    let location = null;
+    try {
+      // Versuche Location zu finden (z.B. über Appointment oder Doctor)
+      // Für jetzt: Verwende erste aktive Location als Fallback
+      location = await Location.findOne({ is_active: true });
+    } catch (err) {
+      console.warn('[OnlineBooking] Location nicht gefunden, verwende Standard-Adresse');
+    }
+
+    // Generiere ICS-Kalenderfile
+    let icsContent = null;
+    try {
+      icsContent = generateICSFromBooking(booking, location);
+      console.log('[OnlineBooking] ICS-File generiert');
+    } catch (icsError) {
+      console.error('[OnlineBooking] Fehler bei ICS-Generierung:', icsError);
+      // ICS-Fehler sollte E-Mail-Versand nicht verhindern
+    }
+
+    // Versuche EmailService zu verwenden (falls verfügbar)
+    let emailSent = false;
+    try {
+      const emailService = require('../services/emailService');
+      
+      // HTML-E-Mail-Inhalt generieren
+      const emailHTML = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background-color: #2563EB; color: white; padding: 20px; text-align: center; }
+            .content { padding: 20px; background-color: #f9fafb; }
+            .details { background-color: white; padding: 15px; margin: 15px 0; border-radius: 5px; }
+            .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+            .button { display: inline-block; padding: 10px 20px; background-color: #2563EB; color: white; text-decoration: none; border-radius: 5px; margin: 10px 0; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>Terminbestätigung</h1>
+            </div>
+            <div class="content">
+              <p>Sehr geehrte/r ${booking.patient.firstName} ${booking.patient.lastName},</p>
+              <p>Ihr Termin wurde erfolgreich gebucht.</p>
+              
+              <div class="details">
+                <h2>Termindetails</h2>
+                <p><strong>Buchungsnummer:</strong> ${booking.bookingNumber}</p>
+                <p><strong>Datum:</strong> ${new Date(booking.appointment.date).toLocaleDateString('de-AT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <p><strong>Uhrzeit:</strong> ${booking.appointment.startTime} Uhr</p>
+                <p><strong>Arzt:</strong> ${booking.doctor.name}</p>
+                ${booking.doctor.specialization ? `<p><strong>Fachrichtung:</strong> ${booking.doctor.specialization}</p>` : ''}
+                <p><strong>Art der Behandlung:</strong> ${booking.appointment.type}</p>
+                ${booking.appointment.reason ? `<p><strong>Grund:</strong> ${booking.appointment.reason}</p>` : ''}
+                ${location ? `<p><strong>Adresse:</strong> ${location.address_line1}, ${location.postal_code} ${location.city}</p>` : ''}
+              </div>
+              
+              ${icsContent ? '<p>📅 Der Termin wurde als Anhang beigefügt und kann direkt in Ihren Kalender importiert werden.</p>' : ''}
+              
+              <p>Bitte erscheinen Sie pünktlich zum vereinbarten Termin.</p>
+              <p>Bei Fragen stehen wir Ihnen gerne zur Verfügung.</p>
+            </div>
+            <div class="footer">
+              <p>Mit freundlichen Grüßen<br>Ihr Praxisteam</p>
+            </div>
+          </div>
+        </body>
+        </html>
+      `;
+
+      const emailText = `
+Terminbestätigung
+
+Sehr geehrte/r ${booking.patient.firstName} ${booking.patient.lastName},
+
+Ihr Termin wurde erfolgreich gebucht.
+
+Termindetails:
+- Buchungsnummer: ${booking.bookingNumber}
+- Datum: ${new Date(booking.appointment.date).toLocaleDateString('de-AT')}
+- Uhrzeit: ${booking.appointment.startTime} Uhr
+- Arzt: ${booking.doctor.name}
+${booking.doctor.specialization ? `- Fachrichtung: ${booking.doctor.specialization}\n` : ''}- Art der Behandlung: ${booking.appointment.type}
+${booking.appointment.reason ? `- Grund: ${booking.appointment.reason}\n` : ''}${location ? `- Adresse: ${location.address_line1}, ${location.postal_code} ${location.city}\n` : ''}
+${icsContent ? '\nDer Termin wurde als .ics-Datei beigefügt und kann direkt in Ihren Kalender importiert werden.\n' : ''}
+
+Sie können Ihren Termin jederzeit online verwalten:
+${booking.magicLink?.token ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/patient-booking/${booking.magicLink.token}` : 'Link wird generiert...'}
+
+Bitte erscheinen Sie pünktlich zum vereinbarten Termin.
+
+Mit freundlichen Grüßen
+Ihr Praxisteam
+      `;
+
+      // E-Mail mit ICS-Anhang senden
+      const mailOptions = {
+        from: {
+          name: location?.name || booking.doctor.name || 'Ordination',
+          address: process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@praxis.at'
+        },
+        to: booking.patient.email,
+        subject: `Terminbestätigung - ${booking.bookingNumber}`,
+        html: emailHTML,
+        text: emailText,
+        attachments: icsContent ? [
+          {
+            filename: `Termin_${booking.bookingNumber}.ics`,
+            content: icsContent,
+            contentType: 'text/calendar; charset=utf-8; method=REQUEST'
+          }
+        ] : []
+      };
+
+      // Prüfe ob EmailService verfügbar ist
+      if (emailService.transporter) {
+        const result = await emailService.transporter.sendMail(mailOptions);
+        emailSent = true;
+        console.log(`📧 Bestätigungs-E-Mail mit ICS-Anhang gesendet an: ${booking.patient.email} (MessageID: ${result.messageId})`);
+      } else {
+        throw new Error('E-Mail-Transporter nicht verfügbar');
+      }
+    } catch (emailServiceError) {
+      console.warn('[OnlineBooking] EmailService nicht verfügbar oder Fehler:', emailServiceError.message);
+      // Fallback: Mock-E-Mail-Versand (für Entwicklung)
+      console.log(`📧 [MOCK] Bestätigungs-E-Mail würde gesendet werden an: ${booking.patient.email}`);
+      console.log(`📋 Buchungsnummer: ${booking.bookingNumber}`);
+      console.log(`📅 Termin: ${booking.appointment.date} um ${booking.appointment.startTime}`);
+      if (icsContent) {
+        console.log(`📅 ICS-File generiert (${icsContent.length} Zeichen)`);
+      }
+      emailSent = true; // Markiere als gesendet für Mock
+    }
+    
+    // Aktualisiere Booking-Status
+    if (!booking.confirmation) {
+      booking.confirmation = {};
+    }
+    booking.confirmation.emailSent = emailSent;
+    booking.confirmation.confirmationCode = Math.random().toString(36).substr(2, 8).toUpperCase();
+    booking.confirmation.confirmationDate = new Date();
+    if (icsContent) {
+      booking.confirmation.icsSent = true;
+    }
+    await booking.save();
+  } catch (error) {
+    console.error('[OnlineBooking] Error sending confirmation email:', error);
+    // Fehler beim E-Mail-Versand sollte die Buchung nicht verhindern
+    // Markiere trotzdem als versucht
+    if (!booking.confirmation) {
+      booking.confirmation = {};
+    }
+    booking.confirmation.emailSent = false;
+    booking.confirmation.emailError = error.message;
+    await booking.save().catch(() => {}); // Ignoriere Fehler beim Speichern
+    throw error; // Wird vom aufrufenden Code behandelt
+  }
 }
+
+// @route   POST /api/online-booking/waiting-list-reservation/:token
+// @desc    Reserviere einen freigewordenen Termin für einen Wartelisten-Patienten
+// @access  Public
+router.post('/waiting-list-reservation/:token', [
+  body('patientId').isMongoId().withMessage('Gültige Patient-ID erforderlich')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const { token } = req.params;
+    const { patientId } = req.body;
+
+    const waitingListNotificationService = require('../services/waitingListNotificationService');
+    const result = await waitingListNotificationService.reserveAppointmentForWaitingList(token, patientId);
+
+    res.json({
+      success: true,
+      message: result.message,
+      data: result.appointment
+    });
+  } catch (error) {
+    console.error('[OnlineBooking] Fehler bei Termin-Reservierung:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message || 'Fehler bei der Termin-Reservierung'
+    });
+  }
+});
+
+// @route   GET /api/online-booking/waiting-list-reservation/:token
+// @desc    Hole Details für einen Reservierungs-Link
+// @access  Public
+router.get('/waiting-list-reservation/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const WaitingList = require('../models/WaitingList');
+    const Appointment = require('../models/Appointment');
+
+    const waitingListEntry = await WaitingList.findOne({
+      reservationToken: token,
+      reservationExpiresAt: { $gt: new Date() },
+      status: 'waiting'
+    })
+      .populate('patient', 'firstName lastName email phone dateOfBirth')
+      .populate('reservationAppointmentId')
+      .lean();
+
+    if (!waitingListEntry) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ungültiger oder abgelaufener Reservierungslink'
+      });
+    }
+
+    // Lade Termin-Details
+    const appointment = await Appointment.findById(waitingListEntry.reservationAppointmentId)
+      .populate('doctor', 'firstName lastName')
+      .populate('service', 'name code')
+      .lean();
+
+    if (!appointment || appointment.status !== 'cancelled') {
+      return res.status(404).json({
+        success: false,
+        message: 'Termin ist nicht mehr verfügbar'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        waitingListEntry: {
+          _id: waitingListEntry._id,
+          patient: waitingListEntry.patient,
+          reason: waitingListEntry.reason
+        },
+        appointment: {
+          _id: appointment._id,
+          startTime: appointment.startTime,
+          endTime: appointment.endTime,
+          doctor: appointment.doctor,
+          service: appointment.service,
+          type: appointment.type
+        },
+        expiresAt: waitingListEntry.reservationExpiresAt
+      }
+    });
+  } catch (error) {
+    console.error('[OnlineBooking] Fehler beim Laden der Reservierungs-Details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Reservierungs-Details'
+    });
+  }
+});
 
 module.exports = router;

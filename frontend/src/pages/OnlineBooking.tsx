@@ -36,7 +36,15 @@ import {
   Schedule,
   AccessTime,
   Check,
+  QuestionAnswer,
 } from '@mui/icons-material';
+import {
+  Autocomplete,
+  Checkbox,
+  FormControlLabel,
+  Radio,
+  RadioGroup,
+} from '@mui/material';
 import api from '../utils/api';
 
 interface Doctor {
@@ -50,6 +58,53 @@ interface TimeSlot {
   start: string;
   end: string;
   duration: number;
+}
+
+interface Room {
+  id: string;
+  name: string;
+  type: string;
+  capacity?: number;
+  location?: {
+    id: string;
+    name: string;
+    code?: string;
+  };
+}
+
+interface Device {
+  id: string;
+  name: string;
+  type: string;
+  category?: string;
+  location?: {
+    id: string;
+    name: string;
+    code?: string;
+  };
+}
+
+interface ServiceRequirements {
+  requiresRoomSelection: boolean;
+  roomQuantityRequired: number;
+  requiresDeviceSelection: boolean;
+  deviceQuantityRequired: number;
+}
+
+interface AnamnesisQuestion {
+  _id?: string;
+  questionText: string;
+  questionType: 'text' | 'textarea' | 'number' | 'boolean' | 'select' | 'multiselect';
+  options?: string[];
+  isRequired: boolean;
+  defaultValue?: any;
+}
+
+interface Service {
+  _id: string;
+  code: string;
+  name: string;
+  anamnesisQuestions?: AnamnesisQuestion[];
 }
 
 interface BookingData {
@@ -67,6 +122,9 @@ interface BookingData {
     type: string;
     reason: string;
     notes?: string;
+    assigned_rooms?: string[];
+    assigned_devices?: string[];
+    serviceId?: string;
   };
   doctor: {
     id: string;
@@ -93,6 +151,16 @@ const OnlineBooking: React.FC = () => {
   });
   const [bookingResult, setBookingResult] = useState<any>(null);
   const [showConfirmation, setShowConfirmation] = useState(false);
+  const [requiresOptIn, setRequiresOptIn] = useState(false);
+  const [optInCode, setOptInCode] = useState('');
+  const [verifyingCode, setVerifyingCode] = useState(false);
+  const [optInError, setOptInError] = useState<string | null>(null);
+  
+  // Service und Anamnese
+  const [services, setServices] = useState<Service[]>([]);
+  const [selectedService, setSelectedService] = useState<Service | null>(null);
+  const [anamnesisQuestions, setAnamnesisQuestions] = useState<AnamnesisQuestion[]>([]);
+  const [anamnesisAnswers, setAnamnesisAnswers] = useState<Record<string, any>>({});
 
   const [formData, setFormData] = useState<BookingData>({
     patient: {
@@ -118,7 +186,41 @@ const OnlineBooking: React.FC = () => {
   // Lade verfügbare Ärzte
   useEffect(() => {
     loadDoctors();
+    loadServices();
   }, []);
+
+  // Lade Services
+  const loadServices = async () => {
+    try {
+      const response = await api.get<any>('/service-catalog?limit=1000&is_active=true');
+      if (response.success && response.data) {
+        const servicesData = Array.isArray(response.data) 
+          ? response.data 
+          : (response.data.data || []);
+        setServices(servicesData);
+      }
+    } catch (error) {
+      console.error('Error loading services:', error);
+    }
+  };
+
+  // Lade Anamnese-Fragen, wenn Service ausgewählt wird
+  useEffect(() => {
+    if (selectedService?.anamnesisQuestions && selectedService.anamnesisQuestions.length > 0) {
+      setAnamnesisQuestions(selectedService.anamnesisQuestions);
+      // Initialisiere Antworten mit Default-Werten
+      const initialAnswers: Record<string, any> = {};
+      selectedService.anamnesisQuestions.forEach((q) => {
+        if (q.defaultValue !== undefined) {
+          initialAnswers[q._id || q.questionText] = q.defaultValue;
+        }
+      });
+      setAnamnesisAnswers(initialAnswers);
+    } else {
+      setAnamnesisQuestions([]);
+      setAnamnesisAnswers({});
+    }
+  }, [selectedService]);
 
   const loadDoctors = async () => {
     try {
@@ -321,10 +423,101 @@ const OnlineBooking: React.FC = () => {
     }));
   };
 
+  const handleAnamnesisAnswer = (questionId: string, answer: any) => {
+    setAnamnesisAnswers(prev => ({
+      ...prev,
+      [questionId]: answer
+    }));
+  };
+
+  const handleVerifyOptIn = async () => {
+    if (!bookingResult?.bookingNumber || !optInCode) {
+      setOptInError('Bitte geben Sie den Bestätigungscode ein.');
+      return;
+    }
+    setVerifyingCode(true);
+    setOptInError(null);
+    try {
+      const response = await api.post('/online-booking/verify-opt-in', {
+        bookingNumber: bookingResult.bookingNumber,
+        code: optInCode
+      });
+      if (response.success) {
+        setSnackbar({ 
+          open: true, 
+          message: 'E-Mail erfolgreich bestätigt! Ihr Termin ist nun bestätigt.', 
+          severity: 'success' 
+        });
+        setRequiresOptIn(false);
+        setShowConfirmation(true);
+      } else {
+        setOptInError(response.message || 'Ungültiger Code oder abgelaufen.');
+      }
+    } catch (err: any) {
+      setOptInError(err.response?.data?.message || 'Fehler bei der Code-Verifizierung.');
+    } finally {
+      setVerifyingCode(false);
+    }
+  };
+
+  const handleResendOptIn = async () => {
+    if (!bookingResult?.bookingNumber || !formData.patient.email) {
+      setOptInError('Buchungsdaten für erneuten Versand nicht verfügbar.');
+      return;
+    }
+    setLoading(true);
+    setOptInError(null);
+    try {
+      const response = await api.post('/online-booking/resend-opt-in', {
+        bookingNumber: bookingResult.bookingNumber,
+        email: formData.patient.email
+      });
+      if (response.success) {
+        setSnackbar({ 
+          open: true, 
+          message: 'Neuer Code wurde an Ihre E-Mail gesendet.', 
+          severity: 'info' 
+        });
+        setOptInCode('');
+      } else {
+        setOptInError(response.message || 'Fehler beim erneuten Senden des Codes.');
+      }
+    } catch (err: any) {
+      setOptInError(err.response?.data?.message || 'Fehler beim erneuten Senden des Codes.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleBooking = async () => {
     try {
       setLoading(true);
-      const response = await api.post('/online-booking/book', formData);
+      
+      // Konvertiere Anamnese-Antworten in das erwartete Format
+      const anamnesisResponses = anamnesisQuestions.map((q) => {
+        const questionId = q._id || q.questionText;
+        return {
+          questionId: questionId,
+          questionText: q.questionText,
+          answer: anamnesisAnswers[questionId] ?? q.defaultValue ?? '',
+          answeredAt: new Date().toISOString()
+        };
+      }).filter((r) => {
+        // Filtere nur beantwortete Fragen oder Fragen mit Default-Werten
+        const question = anamnesisQuestions.find(q => (q._id || q.questionText) === r.questionId);
+        return question && (!question.isRequired || (r.answer !== '' && r.answer !== null && r.answer !== undefined));
+      });
+
+      const bookingData = {
+        ...formData,
+        appointment: {
+          ...formData.appointment,
+          serviceId: selectedService?._id
+        },
+        anamnesisResponses: anamnesisResponses
+      };
+      
+      const response = await api.post('/online-booking/book', bookingData);
       
       if (response.success && response.data) {
         // API gibt { success: true, data: {...} } zurück
@@ -616,21 +809,56 @@ const OnlineBooking: React.FC = () => {
                   />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
-                  <FormControl fullWidth>
-                    <InputLabel>Art der Behandlung</InputLabel>
-                    <Select
-                      value={formData.appointment.type}
-                      onChange={(e) => handleNestedFormChange('appointment', 'type', e.target.value)}
-                      label="Art der Behandlung"
-                    >
-                      <SelectMenuItem value="Allgemeine Beratung">Allgemeine Beratung</SelectMenuItem>
-                      <SelectMenuItem value="Kontrolle">Kontrolle</SelectMenuItem>
-                      <SelectMenuItem value="Impfung">Impfung</SelectMenuItem>
-                      <SelectMenuItem value="Untersuchung">Untersuchung</SelectMenuItem>
-                      <SelectMenuItem value="Notfall">Notfall</SelectMenuItem>
-                    </Select>
-                  </FormControl>
+                  <Autocomplete
+                    options={services}
+                    getOptionLabel={(option) => `${option.code || ''} - ${option.name}`}
+                    value={selectedService}
+                    onChange={(event, newValue) => {
+                      setSelectedService(newValue);
+                      if (newValue) {
+                        handleNestedFormChange('appointment', 'type', newValue.name);
+                        handleFormChange('appointment', {
+                          ...formData.appointment,
+                          serviceId: newValue._id,
+                          type: newValue.name
+                        });
+                      } else {
+                        handleNestedFormChange('appointment', 'type', '');
+                        handleFormChange('appointment', {
+                          ...formData.appointment,
+                          serviceId: undefined,
+                          type: ''
+                        });
+                      }
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Leistung/Service (optional)"
+                        placeholder="Wählen Sie eine Leistung aus"
+                      />
+                    )}
+                    isOptionEqualToValue={(option, value) => option._id === value._id}
+                  />
                 </Grid>
+                {!selectedService && (
+                  <Grid size={{ xs: 12 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Art der Behandlung</InputLabel>
+                      <Select
+                        value={formData.appointment.type}
+                        onChange={(e) => handleNestedFormChange('appointment', 'type', e.target.value)}
+                        label="Art der Behandlung"
+                      >
+                        <SelectMenuItem value="Allgemeine Beratung">Allgemeine Beratung</SelectMenuItem>
+                        <SelectMenuItem value="Kontrolle">Kontrolle</SelectMenuItem>
+                        <SelectMenuItem value="Impfung">Impfung</SelectMenuItem>
+                        <SelectMenuItem value="Untersuchung">Untersuchung</SelectMenuItem>
+                        <SelectMenuItem value="Notfall">Notfall</SelectMenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                )}
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
@@ -653,6 +881,120 @@ const OnlineBooking: React.FC = () => {
                   />
                 </Grid>
               </Grid>
+              
+              {/* Anamnese-Fragen */}
+              {anamnesisQuestions.length > 0 && (
+                <Box sx={{ mt: 4 }}>
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <QuestionAnswer />
+                    Anamnese-Vorabfrage
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Bitte beantworten Sie die folgenden Fragen vor Ihrem Termin:
+                  </Typography>
+                  <Grid container spacing={2}>
+                    {anamnesisQuestions.map((question, index) => {
+                      const questionId = question._id || question.questionText;
+                      const currentAnswer = anamnesisAnswers[questionId] ?? question.defaultValue ?? '';
+                      
+                      return (
+                        <Grid size={{ xs: 12 }} key={index}>
+                          <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                            <Typography variant="subtitle1" gutterBottom>
+                              {question.questionText}
+                              {question.isRequired && <span style={{ color: 'red' }}> *</span>}
+                            </Typography>
+                            
+                            {question.questionType === 'text' && (
+                              <TextField
+                                fullWidth
+                                value={currentAnswer}
+                                onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
+                                required={question.isRequired}
+                                error={question.isRequired && !currentAnswer}
+                              />
+                            )}
+                            
+                            {question.questionType === 'textarea' && (
+                              <TextField
+                                fullWidth
+                                multiline
+                                rows={3}
+                                value={currentAnswer}
+                                onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
+                                required={question.isRequired}
+                                error={question.isRequired && !currentAnswer}
+                              />
+                            )}
+                            
+                            {question.questionType === 'number' && (
+                              <TextField
+                                fullWidth
+                                type="number"
+                                value={currentAnswer}
+                                onChange={(e) => handleAnamnesisAnswer(questionId, parseFloat(e.target.value) || 0)}
+                                required={question.isRequired}
+                                error={question.isRequired && !currentAnswer}
+                              />
+                            )}
+                            
+                            {question.questionType === 'boolean' && (
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    checked={currentAnswer === true || currentAnswer === 'true'}
+                                    onChange={(e) => handleAnamnesisAnswer(questionId, e.target.checked)}
+                                  />
+                                }
+                                label={currentAnswer === true || currentAnswer === 'true' ? 'Ja' : 'Nein'}
+                              />
+                            )}
+                            
+                            {question.questionType === 'select' && question.options && (
+                              <FormControl fullWidth required={question.isRequired}>
+                                <InputLabel>{question.questionText}</InputLabel>
+                                <Select
+                                  value={currentAnswer}
+                                  onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
+                                  label={question.questionText}
+                                  error={question.isRequired && !currentAnswer}
+                                >
+                                  {question.options.map((option) => (
+                                    <SelectMenuItem key={option} value={option}>
+                                      {option}
+                                    </SelectMenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            )}
+                            
+                            {question.questionType === 'multiselect' && question.options && (
+                              <FormControl fullWidth required={question.isRequired}>
+                                <InputLabel>{question.questionText}</InputLabel>
+                                <Select
+                                  multiple
+                                  value={Array.isArray(currentAnswer) ? currentAnswer : []}
+                                  onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
+                                  label={question.questionText}
+                                  error={question.isRequired && (!currentAnswer || (Array.isArray(currentAnswer) && currentAnswer.length === 0))}
+                                  renderValue={(selected) => (selected as string[]).join(', ')}
+                                >
+                                  {question.options.map((option) => (
+                                    <SelectMenuItem key={option} value={option}>
+                                      <Checkbox checked={(Array.isArray(currentAnswer) ? currentAnswer : []).indexOf(option) > -1} />
+                                      {option}
+                                    </SelectMenuItem>
+                                  ))}
+                                </Select>
+                              </FormControl>
+                            )}
+                          </Box>
+                        </Grid>
+                      );
+                    })}
+                  </Grid>
+                </Box>
+              )}
               <Box sx={{ mt: 2 }}>
                 <Button
                   variant="contained"
@@ -667,6 +1009,53 @@ const OnlineBooking: React.FC = () => {
           </Step>
         </Stepper>
       </Card>
+
+      {/* Double Opt-In Dialog */}
+      <Dialog open={requiresOptIn && !showConfirmation} onClose={() => {}} maxWidth="sm" fullWidth>
+        <DialogTitle>Bestätigungscode eingeben</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Wir haben Ihnen einen 6-stelligen Bestätigungscode per E-Mail gesendet. 
+            Bitte geben Sie diesen Code ein, um Ihre Buchung zu bestätigen.
+          </Alert>
+          
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            <strong>Buchungsnummer:</strong> {bookingResult?.bookingNumber}
+          </Typography>
+          
+          <TextField
+            fullWidth
+            label="Bestätigungscode"
+            value={optInCode}
+            onChange={(e) => {
+              const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+              setOptInCode(value);
+              setOptInError(null);
+            }}
+            error={!!optInError}
+            helperText={optInError || '6-stelliger Code aus der E-Mail'}
+            inputProps={{ maxLength: 6, style: { textAlign: 'center', fontSize: '24px', letterSpacing: '8px' } }}
+            sx={{ mb: 2 }}
+          />
+          
+          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
+            <Button
+              variant="outlined"
+              onClick={handleResendOptIn}
+              disabled={loading}
+            >
+              Code erneut senden
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleVerifyOptIn}
+              disabled={verifyingCode || optInCode.length !== 6}
+            >
+              {verifyingCode ? <CircularProgress size={20} /> : 'Bestätigen'}
+            </Button>
+          </Box>
+        </DialogContent>
+      </Dialog>
 
       {/* Bestätigungs-Dialog */}
       <Dialog open={showConfirmation} onClose={() => setShowConfirmation(false)} maxWidth="sm" fullWidth>

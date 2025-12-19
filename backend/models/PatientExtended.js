@@ -455,6 +455,13 @@ const PatientExtendedSchema = new mongoose.Schema({
     default: 'aktiv',
     index: true
   },
+  
+  // Temporärer Patient (z.B. aus Online-Buchung, noch nicht validiert)
+  isTemporary: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   hasHint: {
     type: Boolean,
     default: false,

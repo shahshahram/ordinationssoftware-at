@@ -85,6 +85,24 @@ const WaitingListSchema = new mongoose.Schema({
   updatedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
+  },
+  
+  // Reservierung für Fast Track (Magic Link)
+  reservationToken: {
+    type: String,
+    index: true,
+    sparse: true
+  },
+  reservationExpiresAt: {
+    type: Date,
+    index: true
+  },
+  reservationAppointmentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Appointment'
+  },
+  lastNotificationSent: {
+    type: Date
   }
 }, {
   timestamps: true,

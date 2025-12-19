@@ -114,6 +114,15 @@ const AppointmentSchema = new mongoose.Schema({
     type: String, 
     trim: true 
   },
+  
+  // Anamnese-Antworten (von Online-Buchung übernommen)
+  anamnesisAnswers: [{
+    questionId: { type: String, required: true },
+    question: { type: String, required: true },
+    answer: { type: mongoose.Schema.Types.Mixed }, // Kann String, Number, Boolean, Array sein
+    answeredAt: { type: Date, default: Date.now },
+    source: { type: String, enum: ['online_booking', 'manual'], default: 'online_booking' }
+  }],
   diagnosis: { 
     type: String, 
     trim: true 

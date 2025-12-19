@@ -21,6 +21,13 @@ const OnlineBookingSchema = new mongoose.Schema({
     isNewPatient: { type: Boolean, default: true }
   },
   
+  // Markierung: Ist Patient bereits bekannt (durch Dublettenprüfung)
+  isKnownPatient: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  
   // Termin-Details
   appointment: {
     date: { type: Date, required: true },
@@ -72,8 +79,39 @@ const OnlineBookingSchema = new mongoose.Schema({
     emailSent: { type: Boolean, default: false },
     smsSent: { type: Boolean, default: false },
     reminderSent: { type: Boolean, default: false },
+    icsSent: { type: Boolean, default: false },
     confirmationCode: { type: String },
     confirmationDate: { type: Date }
+  },
+  
+  // Magic Link für Patienten-Terminverwaltung
+  magicLink: {
+    token: { type: String, index: true },
+    expiresAt: { type: Date, index: true },
+    createdAt: { type: Date, default: Date.now },
+    lastUsed: { type: Date },
+    usageCount: { type: Number, default: 0 },
+    maxUsage: { type: Number, default: 10 } // Max. 10 Zugriffe pro Token
+  },
+  
+  // Anamnese-Antworten (Vorabfrage bei Online-Buchung)
+  anamnesisAnswers: [{
+    questionId: { type: String, required: true },
+    question: { type: String, required: true },
+    answer: { type: mongoose.Schema.Types.Mixed }, // Kann String, Number, Boolean, Array sein
+    answeredAt: { type: Date, default: Date.now }
+  }],
+  
+  // Double Opt-In für neue Patienten
+  doubleOptIn: {
+    code: { type: String, index: true },
+    emailSent: { type: Boolean, default: false },
+    smsSent: { type: Boolean, default: false },
+    verified: { type: Boolean, default: false },
+    verifiedAt: { type: Date },
+    expiresAt: { type: Date, index: true },
+    attempts: { type: Number, default: 0 },
+    maxAttempts: { type: Number, default: 3 }
   },
   
   // Warteliste

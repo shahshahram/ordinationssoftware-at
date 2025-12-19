@@ -169,6 +169,92 @@ const ServiceCatalogSchema = new mongoose.Schema({
     default: true 
   },
   
+  // Anamnese-Vorabfragen für Online-Buchungen
+  anamnesisQuestions: [{
+    // Frage-ID (eindeutig innerhalb des Services)
+    questionId: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    // Fragetext
+    question: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    // Fragetyp
+    type: {
+      type: String,
+      enum: ['text', 'textarea', 'number', 'date', 'yes_no', 'multiple_choice', 'scale'],
+      default: 'text'
+    },
+    // Für multiple_choice: Optionen
+    options: [{
+      value: { type: String, required: true },
+      label: { type: String, required: true }
+    }],
+    // Für scale: Min/Max Werte
+    scaleMin: { type: Number, default: 0 },
+    scaleMax: { type: Number, default: 10 },
+    scaleLabelMin: { type: String },
+    scaleLabelMax: { type: String },
+    // Pflichtfeld?
+    required: {
+      type: Boolean,
+      default: false
+    },
+    // Reihenfolge
+    order: {
+      type: Number,
+      default: 0
+    },
+    // Aktiv/Inaktiv
+    isActive: {
+      type: Boolean,
+      default: true
+    },
+    // Platzhalter/Hilfetext
+    placeholder: { type: String },
+    helperText: { type: String }
+  }],
+  
+  // Online-Kontingente (Termin-Cluster für bestimmte Service-Typen)
+  online_contingents: [{
+    // Zeitfenster (z.B. "08:00-12:00" für Blutabnahmen)
+    timeWindow: {
+      start: { type: String, required: true }, // HH:MM Format
+      end: { type: String, required: true }    // HH:MM Format
+    },
+    // Wochentage (0=Sonntag, 1=Montag, ..., 6=Samstag)
+    daysOfWeek: [{
+      type: Number,
+      min: 0,
+      max: 6
+    }],
+    // Maximale Anzahl von Online-Buchungen in diesem Zeitfenster
+    maxOnlineBookings: {
+      type: Number,
+      default: 0, // 0 = unbegrenzt
+      min: 0
+    },
+    // Priorität (höhere Priorität = wird zuerst belegt)
+    priority: {
+      type: Number,
+      default: 0
+    },
+    // Beschreibung des Kontingents
+    description: {
+      type: String,
+      trim: true
+    },
+    // Aktiv/Inaktiv
+    isActive: {
+      type: Boolean,
+      default: true
+    }
+  }],
+  
   // Abrechnung
   price_cents: { 
     type: Number, 
