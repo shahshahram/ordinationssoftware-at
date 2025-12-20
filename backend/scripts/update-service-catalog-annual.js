@@ -12,7 +12,9 @@
 
 const mongoose = require('mongoose');
 const ServiceCatalog = require('../models/ServiceCatalog');
+const ServiceCategory = require('../models/ServiceCategory');
 const AuditLog = require('../models/AuditLog');
+const User = require('../models/User');
 require('dotenv').config();
 
 // EBM 2025 Updates (Beispiel - sollte aus offizieller Quelle kommen)
@@ -192,7 +194,97 @@ async function updateServiceCatalog() {
       }
     }
     
-    // 5. Audit Log erstellen
+    // 5. Kategorien automatisch aktualisieren
+    console.log('📋 Aktualisiere Service-Kategorien...');
+    try {
+      const adminUser = await User.findOne({ role: 'admin' });
+      if (!adminUser) {
+        console.log('⚠️  Kein Admin-User gefunden, überspringe Kategorien-Update');
+      } else {
+        // Extrahiere alle verwendeten Kategorien aus Services
+        const allServices = await ServiceCatalog.find({}).select('category').lean();
+        const uniqueCategories = new Set();
+        allServices.forEach(service => {
+          if (service.category && service.category.trim() !== '') {
+            uniqueCategories.add(service.category.trim());
+          }
+        });
+
+        // Prüfe welche Kategorien bereits existieren
+        const existingCategories = await ServiceCategory.find({}).select('name').lean();
+        const existingCategoryNames = new Set(existingCategories.map(cat => cat.name));
+
+        // Erstelle fehlende Kategorien
+        let newCategoriesCount = 0;
+        for (const categoryName of Array.from(uniqueCategories).sort()) {
+          if (existingCategoryNames.has(categoryName)) {
+            continue; // Kategorie existiert bereits
+          }
+
+          // Generiere Code aus Name
+          let code = categoryName
+            .toUpperCase()
+            .replace(/[ÄÖÜ]/g, (match) => {
+              const map = { 'Ä': 'AE', 'Ö': 'OE', 'Ü': 'UE' };
+              return map[match];
+            })
+            .replace(/[^A-Z0-9]/g, '')
+            .substring(0, 10);
+
+          if (code.length < 3) {
+            code = code.padEnd(3, 'X');
+          }
+
+          // Prüfe ob Code bereits existiert
+          let existingWithCode = await ServiceCategory.findOne({ code });
+          if (existingWithCode) {
+            let counter = 1;
+            let uniqueCode = `${code}-${counter}`;
+            while (await ServiceCategory.findOne({ code: uniqueCode })) {
+              counter++;
+              uniqueCode = `${code}-${counter}`;
+            }
+            code = uniqueCode;
+          }
+
+          // Bestimme Farbe
+          const colorHex = getColorForCategory(categoryName);
+
+          // Erstelle neue Kategorie
+          try {
+            const newCategory = new ServiceCategory({
+              name: categoryName,
+              code: code,
+              color_hex: colorHex,
+              is_active: true,
+              sort_order: newCategoriesCount,
+              visible_to_roles: [],
+              description: `Automatisch erstellt beim jährlichen Update`,
+              createdBy: adminUser._id,
+              updatedBy: adminUser._id
+            });
+            await newCategory.save();
+            newCategoriesCount++;
+            console.log(`✅ Neue Kategorie erstellt: "${categoryName}" (Code: ${code})`);
+          } catch (error) {
+            if (error.code !== 11000) { // Ignoriere Duplikate
+              console.error(`❌ Fehler beim Erstellen der Kategorie "${categoryName}":`, error.message);
+            }
+          }
+        }
+
+        if (newCategoriesCount > 0) {
+          console.log(`✅ ${newCategoriesCount} neue Kategorien erstellt`);
+        } else {
+          console.log(`✅ Alle Kategorien sind bereits vorhanden`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Fehler beim Kategorien-Update:', error.message);
+      updateResults.errors.push(`Kategorien-Update: ${error.message}`);
+    }
+
+    // 6. Audit Log erstellen
     await AuditLog.create({
       action: 'SERVICE_CATALOG_ANNUAL_UPDATE',
       entityType: 'ServiceCatalog',
@@ -211,7 +303,7 @@ async function updateServiceCatalog() {
       }
     });
     
-    // 6. Zusammenfassung
+    // 7. Zusammenfassung
     console.log('\n📊 Update-Zusammenfassung:');
     console.log(`✅ Neue Leistungen: ${updateResults.newServices}`);
     console.log(`✅ Preisanpassungen: ${updateResults.updatedPrices}`);
@@ -246,6 +338,45 @@ if (require.main === module) {
       console.error('❌ Script fehlgeschlagen:', error);
       process.exit(1);
     });
+}
+
+/**
+ * Bestimmt eine Farbe für eine Kategorie basierend auf dem Namen
+ */
+function getColorForCategory(categoryName) {
+  const nameLower = categoryName.toLowerCase();
+  
+  const colorMap = {
+    'konsultation': '#2563EB', 'konsultationen': '#2563EB',
+    'untersuchung': '#DC2626', 'untersuchungen': '#DC2626',
+    'impfung': '#059669', 'impfungen': '#059669',
+    'behandlung': '#7C3AED', 'behandlungen': '#7C3AED',
+    'diagnostik': '#EA580C', 'therapie': '#0891B2',
+    'chirurgie': '#BE185D', 'notfall': '#DC2626',
+    'vorsorge': '#10B981', 'labor': '#65A30D',
+    'beratung': '#3B82F6', 'kosmetik': '#EC4899',
+    'sportmedizin': '#F59E0B', 'arbeitsmedizin': '#0EA5E9'
+  };
+
+  if (colorMap[nameLower]) {
+    return colorMap[nameLower];
+  }
+
+  for (const [key, color] of Object.entries(colorMap)) {
+    if (nameLower.includes(key) || key.includes(nameLower)) {
+      return color;
+    }
+  }
+
+  const defaultColors = [
+    '#2563EB', '#DC2626', '#059669', '#7C3AED', '#EA580C',
+    '#0891B2', '#BE185D', '#10B981', '#65A30D', '#3B82F6',
+    '#EC4899', '#F59E0B', '#0EA5E9', '#8B5CF6', '#6366F1'
+  ];
+  
+  const firstChar = nameLower.charCodeAt(0) || 0;
+  const colorIndex = firstChar % defaultColors.length;
+  return defaultColors[colorIndex];
 }
 
 module.exports = { updateServiceCatalog, EBM_UPDATES_2025 };

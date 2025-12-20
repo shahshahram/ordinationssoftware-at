@@ -9,17 +9,21 @@ const AuditLog = require('../models/AuditLog');
 // GET /api/service-categories - Alle Kategorien abrufen
 router.get('/', auth, checkPermission('services.read'), async (req, res) => {
   try {
-    const { tree = false } = req.query;
+    const { tree = false, includeInactive = false } = req.query;
     
     let categories;
     if (tree === 'true') {
       categories = await ServiceCategory.getTree();
     } else {
-      categories = await ServiceCategory.find({ is_active: true })
+      // In der Verwaltungsseite sollten alle Kategorien angezeigt werden (auch inaktive)
+      // Nur wenn includeInactive=false, dann nur aktive
+      const filter = includeInactive === 'false' ? { is_active: true } : {};
+      categories = await ServiceCategory.find(filter)
         .populate('parent_category_id', 'name code')
         .sort({ level: 1, sort_order: 1, name: 1 });
     }
 
+    console.log(`[ServiceCategories] Returning ${categories.length} categories (includeInactive: ${includeInactive})`);
     res.json({
       success: true,
       data: categories

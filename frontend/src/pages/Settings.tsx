@@ -23,6 +23,7 @@ import { useSelector } from 'react-redux';
 import { useAppDispatch } from '../store/hooks';
 import { loadUser } from '../store/slices/authSlice';
 import api from '../utils/api';
+import UpdateMonitoring from '../components/UpdateMonitoring';
 
 const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -141,6 +142,15 @@ const Settings: React.FC = () => {
       )}
 
       <Grid container spacing={3}>
+        {/* Update-Monitoring */}
+        <Grid size={{ xs: 12 }}>
+          <Card>
+            <CardContent>
+              <UpdateMonitoring refreshInterval={30000} />
+            </CardContent>
+          </Card>
+        </Grid>
+
         {/* Abrechnungseinstellungen */}
         <Grid size={{ xs: 12, md: 8 }}>
           <Card>

@@ -87,16 +87,42 @@ const ServiceCategories: React.FC = () => {
   const loadCategories = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/service-categories');
-      if (response.success) {
-        setCategories(Array.isArray(response.data) ? response.data : []);
+      // Lade alle Kategorien (auch inaktive) für die Verwaltungsseite
+      const response = await api.get<any>('/service-categories?includeInactive=true');
+      console.log('📋 ServiceCategories - API Response:', response);
+      
+      if (response.success && response.data) {
+        // API gibt { success: true, data: [...] } zurück
+        // api.ts wrapper gibt { data: { success: true, data: [...] }, success: true } zurück
+        const responseData = response.data as any;
+        const categoriesData = Array.isArray(responseData) 
+          ? responseData 
+          : (responseData.data || []);
+        
+        console.log('📋 ServiceCategories - Parsed categories:', categoriesData);
+        console.log('📋 ServiceCategories - Categories count:', categoriesData.length);
+        setCategories(categoriesData);
+      } else {
+        console.warn('📋 ServiceCategories - No categories in response:', response);
+        setCategories([]);
       }
-      const treeResponse = await api.get('/service-categories', { tree: true });
-      if (treeResponse.success) {
-        setCategoryTree(Array.isArray(treeResponse.data) ? treeResponse.data : []);
+      
+      const treeResponse = await api.get<any>('/service-categories?tree=true');
+      if (treeResponse.success && treeResponse.data) {
+        const treeResponseData = treeResponse.data as any;
+        const treeData = Array.isArray(treeResponseData) 
+          ? treeResponseData 
+          : (treeResponseData.data || []);
+        console.log('📋 ServiceCategories - Parsed tree:', treeData);
+        setCategoryTree(treeData);
+      } else {
+        setCategoryTree([]);
       }
     } catch (error: any) {
+      console.error('📋 ServiceCategories - Error loading categories:', error);
       enqueueSnackbar('Fehler beim Laden der Kategorien', { variant: 'error' });
+      setCategories([]);
+      setCategoryTree([]);
     } finally {
       setLoading(false);
     }

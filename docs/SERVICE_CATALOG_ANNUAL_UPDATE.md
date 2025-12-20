@@ -30,14 +30,27 @@ Das jährliche Service-Katalog Update System sorgt dafür, dass der Leistungskat
 # - EBM-Code Änderungen
 ```
 
-### 2. Cron-Job Setup
-```bash
-# Script: scripts/run-annual-service-update.sh
-# Wird am 1. Januar jeden Jahres ausgeführt
+### 2. Automatischer Cron-Job (✅ AKTIVIERT)
+```javascript
+// In: backend/server.js
+// Wird automatisch am 1. Januar um 2:00 Uhr ausgeführt
+cron.schedule('0 2 1 1 *', async () => {
+  const { updateServiceCatalog } = require('./scripts/update-service-catalog-annual');
+  await updateServiceCatalog();
+});
 ```
 
-### 3. Cron-Job Konfiguration
+### 3. Manuelles Shell-Script (Optional)
 ```bash
+# Script: scripts/run-annual-service-update.sh
+# Kann manuell ausgeführt werden oder als externer Cron-Job
+# Verwendet relative Pfade und findet automatisch Node.js
+./scripts/run-annual-service-update.sh
+```
+
+### 4. Externe Cron-Job Konfiguration (Optional)
+```bash
+# Falls Sie das Shell-Script extern verwenden möchten:
 # Füge folgende Zeile zur crontab hinzu:
 # 0 2 1 1 * /path/to/scripts/run-annual-service-update.sh
 

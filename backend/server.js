@@ -278,6 +278,7 @@ function registerStaticRoutes(app) {
   app.use('/api/service-catalog', serviceCatalogRoutes);
   app.use('/api/service-bookings', serviceBookingRoutes);
   app.use('/api/service-categories', serviceCategoryRoutes);
+  app.use('/api/update-monitoring', require('./routes/updateMonitoring'));
   app.use('/api/weekly-schedules', weeklyScheduleRoutes);
   app.use('/api/appointment-participants', appointmentParticipantRoutes);
   app.use('/api/appointment-services', appointmentServiceRoutes);
@@ -427,6 +428,18 @@ cron.schedule('0 5 1 * *', async () => {
     }
   } catch (error) {
     logger.error('❌ Fehler bei Tarifdatenbank-Update:', error);
+  }
+});
+
+// Jährliches Service-Katalog Update (1. Januar um 2:00 Uhr)
+cron.schedule('0 2 1 1 *', async () => {
+  try {
+    logger.info('🔄 Starte jährliches Service-Katalog Update...');
+    const { updateServiceCatalog } = require('./scripts/update-service-catalog-annual');
+    await updateServiceCatalog();
+    logger.info('✅ Jährliches Service-Katalog Update erfolgreich abgeschlossen');
+  } catch (error) {
+    logger.error('❌ Fehler bei jährlichem Service-Katalog Update:', error);
   }
 });
 

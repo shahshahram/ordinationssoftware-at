@@ -9,6 +9,7 @@ const User = require('../models/User');
 const StaffProfile = require('../models/StaffProfile');
 const WeeklySchedule = require('../models/WeeklySchedule');
 const ServiceCatalog = require('../models/ServiceCatalog');
+const ServiceCategory = require('../models/ServiceCategory');
 const Device = require('../models/Device');
 const Room = require('../models/Room');
 const Location = require('../models/Location');
@@ -454,6 +455,402 @@ router.get('/availability', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Verfügbarkeit',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @route   GET /api/online-booking/availability-calendar
+// @desc    Get available time slots for a date range (for calendar month view)
+// @access  Public
+router.get('/availability-calendar', async (req, res) => {
+  try {
+    const { startDate, endDate, doctorId, serviceId, duration = 30 } = req.query;
+    
+    if (!startDate || !endDate || !doctorId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Startdatum, Enddatum und Arzt-ID sind erforderlich'
+      });
+    }
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültiges Datumsformat'
+      });
+    }
+
+    // Lade Service-Details falls angegeben
+    let serviceDoc = null;
+    if (serviceId) {
+      serviceDoc = await ServiceCatalog.findById(serviceId);
+      if (serviceDoc && !serviceDoc.online_bookable) {
+        return res.status(400).json({
+          success: false,
+          message: 'Dieser Service kann nicht online gebucht werden'
+        });
+      }
+    }
+
+    const slotDuration = serviceDoc?.base_duration_min || parseInt(duration) || 30;
+
+    // Finde StaffProfile
+    const staffProfile = await StaffProfile.findOne({ userId: doctorId });
+    if (!staffProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Personalprofil für diesen Arzt nicht gefunden'
+      });
+    }
+
+    // Generiere alle Tage im Bereich
+    const calendarData = {};
+    const currentDate = new Date(start);
+    
+    while (currentDate <= end) {
+      const dateStr = currentDate.toISOString().split('T')[0];
+      const dayIndex = currentDate.getDay();
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const dayOfWeek = dayNames[dayIndex];
+
+      // Lade Arbeitszeiten für diesen Tag
+      const weeklySchedules = await WeeklySchedule.find({
+        staffId: staffProfile._id,
+        isActive: true,
+        validFrom: { $lte: currentDate },
+        $or: [
+          { validTo: { $gte: currentDate } },
+          { validTo: null }
+        ]
+      });
+
+      let workingDay = null;
+      if (weeklySchedules.length > 0) {
+        for (const schedule of weeklySchedules) {
+          const daySchedule = schedule.schedules?.find(s => s.day === dayOfWeek && s.isWorking);
+          if (daySchedule) {
+            workingDay = {
+              start: daySchedule.startTime,
+              end: daySchedule.endTime,
+              breakStart: daySchedule.breakStart,
+              breakEnd: daySchedule.breakEnd,
+              isWorking: true
+            };
+            break;
+          }
+        }
+      }
+
+      // Wenn kein Schedule gefunden, überspringe diesen Tag
+      if (!workingDay || !workingDay.isWorking) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        continue;
+      }
+
+      // Lade bestehende Termine für diesen Tag
+      const existingAppointments = await Appointment.find({
+        doctor: doctorId,
+        startTime: {
+          $gte: new Date(`${dateStr}T00:00:00`),
+          $lt: new Date(`${dateStr}T23:59:59`)
+        },
+        status: { $nin: ['cancelled', 'no_show', 'abgesagt'] }
+      });
+
+      const bookedSlots = existingAppointments.map(apt => ({
+        start: new Date(apt.startTime).toTimeString().slice(0, 5),
+        end: new Date(apt.endTime).toTimeString().slice(0, 5)
+      }));
+
+      // Generiere verfügbare Slots
+      const availableSlots = [];
+      const [startHour, startMin] = workingDay.start.split(':').map(Number);
+      const [endHour, endMin] = workingDay.end.split(':').map(Number);
+      
+      let currentTime = new Date(`${dateStr}T${workingDay.start}`);
+      const endTime = new Date(`${dateStr}T${workingDay.end}`);
+
+      while (currentTime < endTime) {
+        const slotStart = currentTime.toTimeString().slice(0, 5);
+        const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000).toTimeString().slice(0, 5);
+
+        // Prüfe Pausenzeiten
+        let isInBreak = false;
+        if (workingDay.breakStart && workingDay.breakEnd) {
+          if (slotStart < workingDay.breakEnd && slotEnd > workingDay.breakStart) {
+            isInBreak = true;
+          }
+        }
+
+        // Prüfe ob Slot belegt ist
+        const isBooked = bookedSlots.some(booked => {
+          const slotStartTime = new Date(`${dateStr}T${slotStart}`);
+          const slotEndTime = new Date(`${dateStr}T${slotEnd}`);
+          const bookedStartTime = new Date(`${dateStr}T${booked.start}`);
+          const bookedEndTime = new Date(`${dateStr}T${booked.end}`);
+          return slotStartTime < bookedEndTime && slotEndTime > bookedStartTime;
+        });
+
+        if (!isInBreak && !isBooked && new Date(`${dateStr}T${slotEnd}`) <= endTime) {
+          availableSlots.push(slotStart);
+        }
+
+        currentTime = new Date(currentTime.getTime() + slotDuration * 60000);
+      }
+
+      // Prüfe Online-Kontingente falls Service angegeben
+      let finalSlots = availableSlots;
+      if (serviceDoc && serviceDoc.online_contingents && serviceDoc.online_contingents.length > 0) {
+        const activeContingents = serviceDoc.online_contingents.filter(c => c.isActive);
+        if (activeContingents.length > 0) {
+          // Filtere Slots nach Kontingenten (asynchron)
+          const filteredSlots = [];
+          for (const slot of availableSlots) {
+            let slotAllowed = false;
+            
+            for (const contingent of activeContingents) {
+              // Prüfe ob Tag in daysOfWeek enthalten ist
+              if (!contingent.daysOfWeek.includes(dayIndex)) {
+                continue;
+              }
+              
+              // Prüfe ob Slot im Zeitfenster liegt
+              if (slot >= contingent.timeWindow.start && slot < contingent.timeWindow.end) {
+                // Prüfe ob maxOnlineBookings erreicht ist
+                const bookingsInContingent = await OnlineBooking.countDocuments({
+                  'appointment.date': dateStr,
+                  'appointment.startTime': {
+                    $gte: `${dateStr}T${contingent.timeWindow.start}`,
+                    $lt: `${dateStr}T${contingent.timeWindow.end}`
+                  },
+                  'appointment.serviceId': serviceId,
+                  status: { $nin: ['cancelled', 'pending'] }
+                });
+
+                if (contingent.maxOnlineBookings === 0 || bookingsInContingent < contingent.maxOnlineBookings) {
+                  slotAllowed = true;
+                  break;
+                }
+              }
+            }
+            
+            if (slotAllowed) {
+              filteredSlots.push(slot);
+            }
+          }
+          
+          finalSlots = filteredSlots;
+        } else {
+          // Keine aktiven Kontingente = keine Slots erlaubt
+          finalSlots = [];
+        }
+      }
+
+      calendarData[dateStr] = {
+        date: dateStr,
+        availableSlots: finalSlots,
+        slotCount: finalSlots.length
+      };
+
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    res.json({
+      success: true,
+      data: {
+        calendar: calendarData,
+        startDate: startDate,
+        endDate: endDate
+      }
+    });
+  } catch (error) {
+    console.error('[OnlineBooking] Error in /availability-calendar route:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Kalender-Verfügbarkeit',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @route   GET /api/online-booking/categories
+// @desc    Get categories with online-bookable services
+// @access  Public
+router.get('/categories', async (req, res) => {
+  try {
+    // Finde alle Kategorien, die Services mit online_bookable=true haben
+    const onlineBookableServices = await ServiceCatalog.find({
+      online_bookable: true,
+      is_active: true
+    }).select('category').lean();
+
+    // Extrahiere eindeutige Kategorien
+    const uniqueCategories = [...new Set(
+      onlineBookableServices
+        .map(s => s.category)
+        .filter(c => c && c.trim() !== '')
+    )];
+
+    // Lade Kategorie-Details aus ServiceCategory (falls vorhanden)
+    const categoryDetails = await ServiceCategory.find({
+      name: { $in: uniqueCategories },
+      is_active: true
+    }).select('_id name code color_hex description').lean();
+
+    // Erstelle Map für schnellen Zugriff
+    const categoryMap = new Map();
+    categoryDetails.forEach(cat => {
+      categoryMap.set(cat.name, cat);
+    });
+
+    // Kombiniere Daten: Strukturierte Kategorien + einfache Kategorien
+    const categories = uniqueCategories.map(categoryName => {
+      const structured = categoryMap.get(categoryName);
+      if (structured) {
+        return {
+          _id: structured._id,
+          name: structured.name,
+          code: structured.code,
+          color_hex: structured.color_hex,
+          description: structured.description,
+          serviceCount: onlineBookableServices.filter(s => s.category === categoryName).length
+        };
+      } else {
+        // Fallback für Kategorien, die nicht in ServiceCategory existieren
+        return {
+          _id: null,
+          name: categoryName,
+          code: categoryName.toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10),
+          color_hex: '#6B7280',
+          description: null,
+          serviceCount: onlineBookableServices.filter(s => s.category === categoryName).length
+        };
+      }
+    }).sort((a, b) => a.name.localeCompare(b.name));
+
+    res.json({
+      success: true,
+      data: categories
+    });
+  } catch (error) {
+    console.error('[OnlineBooking] Error fetching categories:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Kategorien',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @route   GET /api/online-booking/services
+// @desc    Get online-bookable services, optionally filtered by category
+// @access  Public
+router.get('/services', async (req, res) => {
+  try {
+    const { categoryId, categoryName } = req.query;
+
+    const filter = {
+      online_bookable: true,
+      is_active: true
+    };
+
+    // Filter nach Kategorie
+    if (categoryId) {
+      const category = await ServiceCategory.findById(categoryId);
+      if (category) {
+        filter.category = category.name;
+      }
+    } else if (categoryName) {
+      filter.category = categoryName;
+    }
+
+    const services = await ServiceCatalog.find(filter)
+      .select('_id code name description category base_duration_min online_bookable assigned_users requires_user_selection')
+      .populate('assigned_users', '_id firstName lastName specialization')
+      .sort({ name: 1 })
+      .lean();
+
+    // Transformiere Services für Frontend
+    const transformedServices = services.map(service => ({
+      _id: service._id,
+      code: service.code,
+      name: service.name,
+      description: service.description,
+      category: service.category,
+      duration: service.base_duration_min || 30,
+      assignedUsers: service.assigned_users || [],
+      requiresUserSelection: service.requires_user_selection || false
+    }));
+
+    res.json({
+      success: true,
+      data: transformedServices
+    });
+  } catch (error) {
+    console.error('[OnlineBooking] Error fetching services:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Services',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// @route   GET /api/online-booking/doctors
+// @desc    Get doctors available for online booking, optionally filtered by service
+// @access  Public
+router.get('/doctors', async (req, res) => {
+  try {
+    const { serviceId } = req.query;
+
+    // Basis-Query für Ärzte
+    const doctorQuery = {
+      role: { $in: ['doctor', 'arzt'] },
+      isActive: true,
+      'profile.onlineBookingEnabled': true
+    };
+
+    let doctors = await User.find(doctorQuery)
+      .select('firstName lastName profile.specialization profile.workingHours profile.onlineBookingEnabled role');
+
+    // Wenn serviceId angegeben, filtere nach zugewiesenen Benutzern
+    if (serviceId) {
+      const service = await ServiceCatalog.findById(serviceId)
+        .select('assigned_users requires_user_selection')
+        .populate('assigned_users', '_id');
+
+      if (service) {
+        if (service.requires_user_selection && service.assigned_users && service.assigned_users.length > 0) {
+          // Nur Ärzte anzeigen, die diesem Service zugewiesen sind
+          const assignedUserIds = service.assigned_users.map(u => u._id || u);
+          doctors = doctors.filter(doctor => assignedUserIds.some(id => 
+            id.toString() === doctor._id.toString()
+          ));
+        }
+        // Wenn requires_user_selection = false, werden alle online-buchbaren Ärzte angezeigt
+      }
+    }
+
+    console.log(`[OnlineBooking] Found ${doctors.length} doctors with online booking enabled${serviceId ? ` (filtered by service ${serviceId})` : ''}`);
+
+    res.json({
+      success: true,
+      data: doctors.map(doctor => ({
+        id: doctor._id,
+        name: `${doctor.firstName} ${doctor.lastName}`,
+        specialization: doctor.profile?.specialization || doctor.specialization || '',
+        workingHours: doctor.profile?.workingHours
+      }))
+    });
+  } catch (error) {
+    console.error('[OnlineBooking] Error loading doctors:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Ärzte',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -1108,21 +1505,41 @@ router.put('/cancel/:bookingNumber', [
 });
 
 // @route   GET /api/online-booking/doctors
-// @desc    Get available doctors for online booking
+// @desc    Get available doctors for online booking, optionally filtered by service
 // @access  Public
 router.get('/doctors', async (req, res) => {
   try {
-    // Suche nach Ärzten mit verschiedenen Rollen-Bezeichnungen
-    const doctors = await User.find({
-      role: { $in: ['doctor', 'arzt'] }, // Unterstütze sowohl 'doctor' als auch 'arzt'
+    const { serviceId } = req.query;
+
+    // Basis-Query für Ärzte
+    const doctorQuery = {
+      role: { $in: ['doctor', 'arzt'] },
       isActive: true,
       'profile.onlineBookingEnabled': true
-    }).select('firstName lastName profile.specialization profile.workingHours profile.onlineBookingEnabled role');
+    };
 
-    console.log(`[OnlineBooking] Found ${doctors.length} doctors with online booking enabled`);
-    doctors.forEach(doctor => {
-      console.log(`[OnlineBooking] Doctor: ${doctor.firstName} ${doctor.lastName}, role: ${doctor.role}, onlineBookingEnabled: ${doctor.profile?.onlineBookingEnabled}, profileKeys:`, doctor.profile ? Object.keys(doctor.profile) : 'no profile');
-    });
+    let doctors = await User.find(doctorQuery)
+      .select('firstName lastName profile.specialization profile.workingHours profile.onlineBookingEnabled role');
+
+    // Wenn serviceId angegeben, filtere nach zugewiesenen Benutzern
+    if (serviceId) {
+      const service = await ServiceCatalog.findById(serviceId)
+        .select('assigned_users requires_user_selection')
+        .populate('assigned_users', '_id');
+
+      if (service) {
+        if (service.requires_user_selection && service.assigned_users && service.assigned_users.length > 0) {
+          // Nur Ärzte anzeigen, die diesem Service zugewiesen sind
+          const assignedUserIds = service.assigned_users.map(u => u._id || u);
+          doctors = doctors.filter(doctor => assignedUserIds.some(id => 
+            id.toString() === doctor._id.toString()
+          ));
+        }
+        // Wenn requires_user_selection = false, werden alle online-buchbaren Ärzte angezeigt
+      }
+    }
+
+    console.log(`[OnlineBooking] Found ${doctors.length} doctors with online booking enabled${serviceId ? ` (filtered by service ${serviceId})` : ''}`);
 
     res.json({
       success: true,
@@ -1137,7 +1554,8 @@ router.get('/doctors', async (req, res) => {
     console.error('[OnlineBooking] Error loading doctors:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Laden der Ärzte'
+      message: 'Fehler beim Laden der Ärzte',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

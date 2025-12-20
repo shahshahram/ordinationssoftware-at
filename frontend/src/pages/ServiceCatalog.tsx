@@ -270,7 +270,7 @@ const ServiceCatalog: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [devices, setDevices] = useState<Device[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [categories, setCategories] = useState<Array<{ _id?: string; name: string; code: string }>>([]);
+  const [categories, setCategories] = useState<Array<{ _id?: string; name: string; code: string; color_hex?: string; is_active?: boolean }>>([]);
   const [selectedDeviceLocation, setSelectedDeviceLocation] = useState<string>('');
   const [selectedRoomLocation, setSelectedRoomLocation] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -378,60 +378,32 @@ const ServiceCatalog: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Kategorien laden - sowohl aus ServiceCategories-Tabelle als auch aus bestehenden Services
+  // Kategorien laden - nur aus ServiceCategories-Tabelle (strukturierte Kategorien)
   const fetchCategories = async () => {
     try {
-      // Lade Kategorien aus der ServiceCategories-Tabelle
-      const response = await api.get<{data: Array<{ _id?: string; name: string; code: string }>}>('/service-categories');
-      const categoriesFromTable: Array<{ _id?: string; name: string; code: string }> = [];
+      const response = await api.get<{data: Array<{ _id?: string; name: string; code: string; color_hex?: string }>}>('/service-categories');
+      console.log('📋 Categories API Response:', response);
       
       if (response.success && response.data) {
         const categoriesData = Array.isArray(response.data) 
           ? response.data 
           : (response.data.data || []);
-        categoriesFromTable.push(...categoriesData);
-      }
-
-      // Lade alle Services, um Kategorien zu extrahieren
-      try {
-        const servicesResponse = await api.get<any>('/service-catalog?limit=1000');
-        if (servicesResponse.success && servicesResponse.data) {
-          const servicesData = Array.isArray(servicesResponse.data)
-            ? servicesResponse.data
-            : (servicesResponse.data.data || []);
-          
-          // Extrahiere eindeutige Kategorien aus Services
-          const categoriesFromServices = new Set<string>();
-          servicesData.forEach((service: ServiceCatalog) => {
-            if (service.category && service.category.trim() !== '') {
-              categoriesFromServices.add(service.category.trim());
-            }
-          });
-
-          // Kombiniere Kategorien aus Tabelle und Services
-          const allCategories = new Map<string, { _id?: string; name: string; code: string }>();
-          
-          // Füge Kategorien aus Tabelle hinzu
-          categoriesFromTable.forEach(cat => {
-            allCategories.set(cat.name, cat);
-          });
-          
-          // Füge Kategorien aus Services hinzu (falls nicht bereits vorhanden)
-          categoriesFromServices.forEach(catName => {
-            if (!allCategories.has(catName)) {
-              allCategories.set(catName, { name: catName, code: '' });
-            }
-          });
-
-          setCategories(Array.from(allCategories.values()));
-        } else {
-          // Fallback: nur Kategorien aus Tabelle
-          setCategories(categoriesFromTable);
-        }
-      } catch (servicesError) {
-        console.error('Error fetching services for categories:', servicesError);
-        // Fallback: nur Kategorien aus Tabelle
-        setCategories(categoriesFromTable);
+        
+        console.log('📋 Raw categories data:', categoriesData);
+        console.log('📋 Categories count:', categoriesData.length);
+        
+        // Backend filtert bereits nach is_active: true, aber zur Sicherheit nochmal filtern
+        const activeCategories = categoriesData.filter((cat: any) => {
+          const isActive = cat.is_active !== false && cat.is_active !== undefined;
+          console.log(`📋 Category "${cat.name}": is_active=${cat.is_active}, filtered=${isActive}`);
+          return isActive;
+        });
+        
+        console.log('📋 Active categories:', activeCategories);
+        setCategories(activeCategories);
+      } else {
+        console.warn('📋 No categories data in response:', response);
+        setCategories([]);
       }
     } catch (error) {
       console.error('Error fetching categories:', error);
@@ -585,37 +557,14 @@ const ServiceCatalog: React.FC = () => {
     console.log('📊 State changed:', { page, rowsPerPage, totalCount, servicesLength: services.length });
   }, [page, rowsPerPage, totalCount, services]);
 
-  // Aktualisiere Kategorien, wenn Services geladen werden
+  // Debug: Log categories when they change
   useEffect(() => {
-    if (services.length > 0) {
-      // Extrahiere Kategorien aus geladenen Services
-      const categoriesFromServices = new Set<string>();
-      services.forEach((service: ServiceCatalog) => {
-        if (service.category && service.category.trim() !== '') {
-          categoriesFromServices.add(service.category.trim());
-        }
-      });
-
-      // Kombiniere mit bestehenden Kategorien
-      setCategories(prevCategories => {
-        const categoryMap = new Map<string, { _id?: string; name: string; code: string }>();
-        
-        // Füge bestehende Kategorien hinzu
-        prevCategories.forEach(cat => {
-          categoryMap.set(cat.name, cat);
-        });
-        
-        // Füge neue Kategorien aus Services hinzu
-        categoriesFromServices.forEach(catName => {
-          if (!categoryMap.has(catName)) {
-            categoryMap.set(catName, { name: catName, code: '' });
-          }
-        });
-        
-        return Array.from(categoryMap.values());
-      });
-    }
-  }, [services]);
+    console.log('📋 Categories state updated:', categories);
+    console.log('📋 Categories count:', categories.length);
+    categories.forEach((cat, index) => {
+      console.log(`📋 Category ${index + 1}:`, { name: cat.name, code: cat.code, _id: cat._id, color_hex: cat.color_hex });
+    });
+  }, [categories]);
   
   // Separate useEffect für initial load anderer Daten
   useEffect(() => {
@@ -690,6 +639,8 @@ const ServiceCatalog: React.FC = () => {
 
   const handleAddNew = () => {
     setEditingService(null);
+    // Kategorien neu laden, falls neue hinzugefügt wurden
+    fetchCategories();
     setFormData({
       code: '',
       name: '',
@@ -777,6 +728,8 @@ const ServiceCatalog: React.FC = () => {
     console.log('handleEdit - assigned_rooms type:', typeof service.assigned_rooms);
     console.log('handleEdit - assigned_rooms is array:', Array.isArray(service.assigned_rooms));
     
+    // Kategorien neu laden, falls neue hinzugefügt wurden
+    fetchCategories();
     setEditingService(service);
     setFormData({
       code: service.code,
@@ -1495,22 +1448,69 @@ const ServiceCatalog: React.FC = () => {
                   required
                 />
                 <Autocomplete
-                  freeSolo
-                  options={categories.map((category) => category.name)}
-                  value={formData.category || ''}
-                  onChange={(event, newValue) => {
-                    setFormData({ ...formData, category: newValue || '' });
+                  freeSolo={false}
+                  options={categories}
+                  getOptionLabel={(option) => {
+                    if (typeof option === 'string') return option;
+                    return option.name || '';
                   }}
-                  onInputChange={(event, newInputValue) => {
-                    setFormData({ ...formData, category: newInputValue });
+                  value={categories.find(cat => cat.name === formData.category) || null}
+                  onChange={(event, newValue) => {
+                    console.log('📋 Category selected:', newValue);
+                    setFormData({ 
+                      ...formData, 
+                      category: newValue ? (typeof newValue === 'string' ? newValue : newValue.name) : '' 
+                    });
+                  }}
+                  onOpen={() => {
+                    console.log('📋 Autocomplete opened, categories available:', categories);
                   }}
                   renderInput={(params) => (
                     <TextField
                       {...params}
-                      label="Kategorie"
-                      placeholder="Kategorie auswählen oder eingeben"
+                      label="Kategorie *"
+                      placeholder={categories.length > 0 ? "Kategorie auswählen" : "Keine Kategorien verfügbar"}
+                      required
                     />
                   )}
+                  renderOption={(props, option) => {
+                    const category = typeof option === 'string' 
+                      ? categories.find(c => c.name === option)
+                      : option;
+                    if (!category) return null;
+                    return (
+                      <li {...props} key={category._id || category.name || 'unknown'}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {category.color_hex && (
+                            <Box
+                              sx={{
+                                width: 16,
+                                height: 16,
+                                borderRadius: '50%',
+                                bgcolor: category.color_hex,
+                                flexShrink: 0
+                              }}
+                            />
+                          )}
+                          <Box>
+                            <Typography variant="body1">{category.name || ''}</Typography>
+                            {category.code && (
+                              <Typography variant="caption" color="text.secondary">
+                                {category.code}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                      </li>
+                    );
+                  }}
+                  isOptionEqualToValue={(option, value) => {
+                    if (!option || !value) return false;
+                    const optName = typeof option === 'string' ? option : option.name;
+                    const valName = typeof value === 'string' ? value : value.name;
+                    return optName === valName;
+                  }}
+                  noOptionsText={categories.length === 0 ? "Keine Kategorien verfügbar. Bitte erstellen Sie zuerst eine Kategorie in der Service-Kategorien-Verwaltung." : "Keine Optionen"}
                 />
                 <TextField
                   fullWidth

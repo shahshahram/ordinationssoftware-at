@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
 const specialtyCatalogs = require('../data/specialty-catalogs');
 const ServiceCatalog = require('../models/ServiceCatalog');
+const ServiceCategory = require('../models/ServiceCategory');
 const User = require('../models/User');
 
 async function createSpecialtyServices() {
@@ -111,6 +112,83 @@ async function createSpecialtyServices() {
     }
 
     console.log(`\n✅ ${createdServices.length} Facharzt-Services erfolgreich erstellt!`);
+    
+    // Kategorien automatisch erstellen/aktualisieren
+    console.log('\n📋 Erstelle/aktualisiere Service-Kategorien...');
+    try {
+      const allServices = await ServiceCatalog.find({}).select('category').lean();
+      const uniqueCategories = new Set();
+      allServices.forEach(service => {
+        if (service.category && service.category.trim() !== '') {
+          uniqueCategories.add(service.category.trim());
+        }
+      });
+
+      const existingCategories = await ServiceCategory.find({}).select('name').lean();
+      const existingCategoryNames = new Set(existingCategories.map(cat => cat.name));
+
+      let newCategoriesCount = 0;
+      for (const categoryName of Array.from(uniqueCategories).sort()) {
+        if (existingCategoryNames.has(categoryName)) {
+          continue;
+        }
+
+        let code = categoryName
+          .toUpperCase()
+          .replace(/[ÄÖÜ]/g, (match) => {
+            const map = { 'Ä': 'AE', 'Ö': 'OE', 'Ü': 'UE' };
+            return map[match];
+          })
+          .replace(/[^A-Z0-9]/g, '')
+          .substring(0, 10);
+
+        if (code.length < 3) {
+          code = code.padEnd(3, 'X');
+        }
+
+        let existingWithCode = await ServiceCategory.findOne({ code });
+        if (existingWithCode) {
+          let counter = 1;
+          let uniqueCode = `${code}-${counter}`;
+          while (await ServiceCategory.findOne({ code: uniqueCode })) {
+            counter++;
+            uniqueCode = `${code}-${counter}`;
+          }
+          code = uniqueCode;
+        }
+
+        const colorHex = getColorForCategoryName(categoryName);
+
+        try {
+          const newCategory = new ServiceCategory({
+            name: categoryName,
+            code: code,
+            color_hex: colorHex,
+            is_active: true,
+            sort_order: newCategoriesCount,
+            visible_to_roles: [],
+            description: `Automatisch erstellt beim Service-Import`,
+            createdBy: adminUser._id,
+            updatedBy: adminUser._id
+          });
+          await newCategory.save();
+          newCategoriesCount++;
+          console.log(`  ✅ Kategorie erstellt: "${categoryName}" (${code})`);
+        } catch (error) {
+          if (error.code !== 11000) {
+            console.error(`  ❌ Fehler bei "${categoryName}":`, error.message);
+          }
+        }
+      }
+
+      if (newCategoriesCount > 0) {
+        console.log(`\n✅ ${newCategoriesCount} neue Kategorien erstellt`);
+      } else {
+        console.log(`\n✅ Alle Kategorien sind bereits vorhanden`);
+      }
+    } catch (error) {
+      console.error('❌ Fehler beim Kategorien-Update:', error.message);
+    }
     
     // Statistiken nach Fachrichtung
     const stats = {};
@@ -235,6 +313,45 @@ function getColorForSpecialty(specialty) {
 function isExemptFromCopay(specialty, serviceName) {
   const exemptServices = specialtyCatalogs.COPAY_RULES[specialty]?.exempt || [];
   return exemptServices.some(exempt => serviceName.includes(exempt));
+}
+
+/**
+ * Bestimmt eine Farbe für eine Kategorie basierend auf dem Namen
+ */
+function getColorForCategoryName(categoryName) {
+  const nameLower = categoryName.toLowerCase();
+  
+  const colorMap = {
+    'konsultation': '#2563EB', 'konsultationen': '#2563EB',
+    'untersuchung': '#DC2626', 'untersuchungen': '#DC2626',
+    'impfung': '#059669', 'impfungen': '#059669',
+    'behandlung': '#7C3AED', 'behandlungen': '#7C3AED',
+    'diagnostik': '#EA580C', 'therapie': '#0891B2',
+    'chirurgie': '#BE185D', 'notfall': '#DC2626',
+    'vorsorge': '#10B981', 'labor': '#65A30D',
+    'beratung': '#3B82F6', 'kosmetik': '#EC4899',
+    'sportmedizin': '#F59E0B', 'arbeitsmedizin': '#0EA5E9'
+  };
+
+  if (colorMap[nameLower]) {
+    return colorMap[nameLower];
+  }
+
+  for (const [key, color] of Object.entries(colorMap)) {
+    if (nameLower.includes(key) || key.includes(nameLower)) {
+      return color;
+    }
+  }
+
+  const defaultColors = [
+    '#2563EB', '#DC2626', '#059669', '#7C3AED', '#EA580C',
+    '#0891B2', '#BE185D', '#10B981', '#65A30D', '#3B82F6',
+    '#EC4899', '#F59E0B', '#0EA5E9', '#8B5CF6', '#6366F1'
+  ];
+  
+  const firstChar = nameLower.charCodeAt(0) || 0;
+  const colorIndex = firstChar % defaultColors.length;
+  return defaultColors[colorIndex];
 }
 
 createSpecialtyServices();

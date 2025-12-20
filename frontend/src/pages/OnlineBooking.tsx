@@ -3,6 +3,7 @@ import {
   Box,
   Typography,
   Card,
+  CardContent,
   Button,
   TextField,
   FormControl,
@@ -37,7 +38,11 @@ import {
   AccessTime,
   Check,
   QuestionAnswer,
+  Category,
+  MedicalServices,
 } from '@mui/icons-material';
+import CalendarMonthView from '../components/CalendarMonthView';
+import { startOfMonth, format } from 'date-fns';
 import {
   Autocomplete,
   Checkbox,
@@ -46,6 +51,36 @@ import {
   RadioGroup,
 } from '@mui/material';
 import api from '../utils/api';
+
+interface Category {
+  _id?: string | null;
+  name: string;
+  code: string;
+  color_hex?: string;
+  description?: string | null;
+  serviceCount: number;
+}
+
+interface Service {
+  _id: string;
+  code: string;
+  name: string;
+  description: string;
+  category: string;
+  duration: number;
+  assignedUsers: Array<{
+    _id: string;
+    firstName: string;
+    lastName: string;
+    specialization?: string;
+  }>;
+  requiresUserSelection: boolean;
+  anamnesisQuestions?: AnamnesisQuestion[];
+  requires_room_selection?: boolean;
+  room_quantity_required?: number;
+  requires_device_selection?: boolean;
+  device_quantity_required?: number;
+}
 
 interface Doctor {
   id: string;
@@ -138,9 +173,16 @@ const OnlineBooking: React.FC = () => {
   useEffect(() => {
     console.log('[OnlineBooking] activeStep changed to:', activeStep);
   }, [activeStep]);
+
+  // Neue States für erweiterten Workflow
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [doctors, setDoctors] = useState<Doctor[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedDateObj, setSelectedDateObj] = useState<Date | null>(null);
+  const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
+  const [calendarSlots, setCalendarSlots] = useState<{ [date: string]: string[] }>({});
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
   const [loading, setLoading] = useState(false);
@@ -183,13 +225,68 @@ const OnlineBooking: React.FC = () => {
     }
   });
 
-  // Lade verfügbare Ärzte
+  // Lade Kategorien beim Start
   useEffect(() => {
-    loadDoctors();
-    loadServices();
+    loadCategories();
   }, []);
 
-  // Lade Services
+  // Lade Services wenn Kategorie ausgewählt wird
+  useEffect(() => {
+    if (selectedCategory) {
+      loadServicesByCategory(selectedCategory.name);
+    }
+  }, [selectedCategory]);
+
+  // Lade Ärzte wenn Service ausgewählt wird
+  useEffect(() => {
+    if (selectedService) {
+      loadDoctorsByService(selectedService._id);
+    }
+  }, [selectedService]);
+
+  // Lade Kalender-Daten wenn Arzt und Service ausgewählt sind
+  useEffect(() => {
+    if (selectedDoctor && selectedService) {
+      loadCalendarAvailability();
+    }
+  }, [selectedDoctor, selectedService, currentMonth]);
+
+  // Lade Kategorien
+  const loadCategories = async () => {
+    try {
+      const response = await api.get<any>('/online-booking/categories');
+      if (response.success && response.data) {
+        const categoriesData = response.data.data || response.data;
+        if (Array.isArray(categoriesData)) {
+          setCategories(categoriesData);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      setSnackbar({ open: true, message: 'Fehler beim Laden der Kategorien', severity: 'error' });
+    }
+  };
+
+  // Lade Services nach Kategorie
+  const loadServicesByCategory = async (categoryName: string) => {
+    try {
+      setLoading(true);
+      const response = await api.get<any>(`/online-booking/services?categoryName=${encodeURIComponent(categoryName)}`);
+      if (response.success && response.data) {
+        const servicesData = response.data.data || response.data;
+        if (Array.isArray(servicesData)) {
+          setServices(servicesData);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading services:', error);
+      setSnackbar({ open: true, message: 'Fehler beim Laden der Leistungen', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Lade Services (alte Funktion für Kompatibilität)
   const loadServices = async () => {
     try {
       const response = await api.get<any>('/service-catalog?limit=1000&is_active=true');
@@ -222,6 +319,48 @@ const OnlineBooking: React.FC = () => {
     }
   }, [selectedService]);
 
+  // Lade Ärzte nach Service
+  const loadDoctorsByService = async (serviceId: string) => {
+    try {
+      setLoading(true);
+      const response = await api.get<any>(`/online-booking/doctors?serviceId=${serviceId}`);
+      console.log('OnlineBooking: API response:', response);
+      
+      if (response.success && response.data) {
+        const doctorsData = response.data.data || response.data;
+        console.log('OnlineBooking: Doctors data:', doctorsData);
+        
+        if (Array.isArray(doctorsData)) {
+          setDoctors(doctorsData);
+          if (doctorsData.length === 0) {
+            setSnackbar({ 
+              open: true, 
+              message: 'Keine Ärzte für diese Leistung verfügbar.', 
+              severity: 'info' 
+            });
+          }
+        } else {
+          console.warn('OnlineBooking: Doctors data is not an array:', doctorsData);
+          setDoctors([]);
+        }
+      } else {
+        console.warn('OnlineBooking: API response not successful:', response);
+        setDoctors([]);
+      }
+    } catch (error) {
+      console.error('Error loading doctors:', error);
+      setSnackbar({ 
+        open: true, 
+        message: 'Fehler beim Laden der Ärzte', 
+        severity: 'error' 
+      });
+      setDoctors([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Lade Ärzte (alte Funktion für Kompatibilität)
   const loadDoctors = async () => {
     try {
       setLoading(true);
@@ -269,6 +408,42 @@ const OnlineBooking: React.FC = () => {
     }
   };
 
+  // Lade Kalender-Verfügbarkeit für einen Monat
+  const loadCalendarAvailability = async () => {
+    if (!selectedDoctor || !selectedService) return;
+
+    try {
+      setLoading(true);
+      const monthStart = startOfMonth(currentMonth);
+      const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
+      
+      const startDateStr = format(monthStart, 'yyyy-MM-dd');
+      const endDateStr = format(monthEnd, 'yyyy-MM-dd');
+
+      const response = await api.get<any>(
+        `/online-booking/availability-calendar?doctorId=${selectedDoctor.id}&serviceId=${selectedService._id}&startDate=${startDateStr}&endDate=${endDateStr}`
+      );
+
+      if (response.success && response.data) {
+        const calendarData = response.data.data?.calendar || response.data.calendar || {};
+        
+        // Konvertiere zu { "2025-01-15": ["09:00", "10:30", ...] } Format
+        const slotsMap: { [date: string]: string[] } = {};
+        Object.keys(calendarData).forEach(dateStr => {
+          slotsMap[dateStr] = calendarData[dateStr].availableSlots || [];
+        });
+        
+        setCalendarSlots(slotsMap);
+      }
+    } catch (error) {
+      console.error('Error loading calendar availability:', error);
+      setSnackbar({ open: true, message: 'Fehler beim Laden der Kalender-Verfügbarkeit', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Lade verfügbare Slots für einen bestimmten Tag
   const loadAvailableSlots = async (doctorId: string, date: string) => {
     try {
       setLoading(true);
@@ -341,13 +516,50 @@ const OnlineBooking: React.FC = () => {
     }
   };
 
+  // Handler für neue Schritte
+  const handleCategorySelect = (category: Category) => {
+    setSelectedCategory(category);
+    setSelectedService(null);
+    setSelectedDoctor(null);
+    setSelectedDate('');
+    setSelectedDateObj(null);
+    setActiveStep(1);
+  };
+
+  const handleServiceSelect = (service: Service) => {
+    setSelectedService(service);
+    setSelectedDoctor(null);
+    setSelectedDate('');
+    setSelectedDateObj(null);
+    setFormData(prev => ({
+      ...prev,
+      appointment: {
+        ...prev.appointment,
+        serviceId: service._id,
+        type: service.name
+      }
+    }));
+    setActiveStep(2);
+  };
+
   const handleDoctorSelect = (doctor: Doctor) => {
     setSelectedDoctor(doctor);
     setFormData(prev => ({
       ...prev,
       doctor: { id: doctor.id }
     }));
-    setActiveStep(1);
+    setActiveStep(3);
+  };
+
+  const handleCalendarDateSelect = (date: Date) => {
+    setSelectedDateObj(date);
+    const dateStr = format(date, 'yyyy-MM-dd');
+    setSelectedDate(dateStr);
+    // Lade Slots für diesen Tag
+    if (selectedDoctor && selectedService) {
+      loadAvailableSlots(selectedDoctor.id, dateStr);
+    }
+    setActiveStep(4);
   };
 
   const handleDateSelect = (date: string) => {
@@ -595,15 +807,151 @@ const OnlineBooking: React.FC = () => {
 
       <Card sx={{ p: 3 }}>
         <Stepper activeStep={activeStep} orientation="vertical" nonLinear={false}>
-          {/* Schritt 1: Arzt auswählen */}
+          {/* Schritt 0: Kategorie auswählen */}
           <Step>
             <StepLabel>
               <Box display="flex" alignItems="center" gap={1}>
-                <LocalHospital />
-                Arzt auswählen
+                <Category />
+                Kategorie auswählen
               </Box>
             </StepLabel>
             <StepContent>
+              <Typography variant="h6" gutterBottom>
+                Wählen Sie eine Kategorie
+              </Typography>
+              {loading ? (
+                <Box display="flex" justifyContent="center" p={3}>
+                  <CircularProgress />
+                </Box>
+              ) : categories.length === 0 ? (
+                <Alert severity="info">
+                  Keine Kategorien verfügbar
+                </Alert>
+              ) : (
+                <Grid container spacing={2} sx={{ mt: 2 }}>
+                  {categories.map((category) => (
+                    <Grid size={{ xs: 12, sm: 6, md: 4 }} key={category.name}>
+                      <Card
+                        sx={{
+                          cursor: 'pointer',
+                          border: selectedCategory?.name === category.name ? 2 : 1,
+                          borderColor: selectedCategory?.name === category.name ? 'primary.main' : 'divider',
+                          '&:hover': {
+                            borderColor: 'primary.main',
+                            boxShadow: 2
+                          }
+                        }}
+                        onClick={() => handleCategorySelect(category)}
+                      >
+                        <CardContent>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            {category.color_hex && (
+                              <Box
+                                sx={{
+                                  width: 16,
+                                  height: 16,
+                                  borderRadius: '50%',
+                                  bgcolor: category.color_hex
+                                }}
+                              />
+                            )}
+                            <Typography variant="h6">{category.name}</Typography>
+                          </Box>
+                          {category.description && (
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                              {category.description}
+                            </Typography>
+                          )}
+                          <Chip
+                            label={`${category.serviceCount} Leistung${category.serviceCount !== 1 ? 'en' : ''}`}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                          />
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+                </Grid>
+              )}
+            </StepContent>
+          </Step>
+
+          {/* Schritt 1: Leistung auswählen */}
+          {selectedCategory && (
+            <Step>
+              <StepLabel>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <MedicalServices />
+                  Leistung auswählen
+                </Box>
+              </StepLabel>
+              <StepContent>
+                <Typography variant="h6" gutterBottom>
+                  Wählen Sie eine Leistung aus der Kategorie "{selectedCategory.name}"
+                </Typography>
+                {loading ? (
+                  <Box display="flex" justifyContent="center" p={3}>
+                    <CircularProgress />
+                  </Box>
+                ) : services.length === 0 ? (
+                  <Alert severity="info">
+                    Keine Leistungen in dieser Kategorie verfügbar
+                  </Alert>
+                ) : (
+                  <Autocomplete
+                    options={services}
+                    getOptionLabel={(option) => option.name}
+                    value={selectedService}
+                    onChange={(_, newValue) => {
+                      if (newValue) {
+                        handleServiceSelect(newValue);
+                      }
+                    }}
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Leistung auswählen"
+                        fullWidth
+                        margin="normal"
+                        required
+                      />
+                    )}
+                    renderOption={(props, option) => (
+                      <Box component="li" {...props} key={option._id}>
+                        <Box>
+                          <Typography variant="body1">{option.name}</Typography>
+                          {option.description && (
+                            <Typography variant="body2" color="text.secondary">
+                              {option.description}
+                            </Typography>
+                          )}
+                          <Typography variant="caption" color="text.secondary">
+                            Dauer: {option.duration} Min.
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    sx={{ mt: 2 }}
+                  />
+                )}
+                <Box sx={{ mt: 2 }}>
+                  <Button onClick={() => setActiveStep(0)}>Zurück</Button>
+                </Box>
+              </StepContent>
+            </Step>
+          )}
+
+          {/* Schritt 2: Arzt auswählen */}
+          {selectedService && (
+            <Step>
+              <StepLabel>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <LocalHospital />
+                  Arzt auswählen
+                </Box>
+              </StepLabel>
+              <StepContent>
               <Typography variant="h6" gutterBottom>
                 Wählen Sie Ihren Arzt
               </Typography>
@@ -657,42 +1005,47 @@ const OnlineBooking: React.FC = () => {
                   ))}
                 </Grid>
               )}
-            </StepContent>
-          </Step>
-
-          {/* Schritt 2: Datum wählen */}
-          <Step>
-            <StepLabel>
-              <Box display="flex" alignItems="center" gap={1}>
-                <CalendarToday />
-                Datum wählen
+              <Box sx={{ mt: 2 }}>
+                <Button onClick={() => setActiveStep(1)}>Zurück</Button>
               </Box>
-            </StepLabel>
-            <StepContent>
-              <Typography variant="h6" gutterBottom>
-                Wählen Sie ein Datum
-              </Typography>
-              <TextField
-                fullWidth
-                type="date"
-                value={selectedDate}
-                onChange={(e) => handleDateSelect(e.target.value)}
-                inputProps={{
-                  min: getMinDate(),
-                  max: getMaxDate()
-                }}
-                InputLabelProps={{ shrink: true }}
-                sx={{ mb: 2 }}
-              />
-              {selectedDate && (
-                <Alert severity="info">
-                  Verfügbare Termine für {selectedDate ? new Date(selectedDate).toLocaleDateString('de-DE') : selectedDate} werden geladen...
-                </Alert>
-              )}
             </StepContent>
           </Step>
+          )}
 
-          {/* Schritt 3: Zeit wählen */}
+          {/* Schritt 3: Monatskalender */}
+          {selectedDoctor && selectedService && (
+            <Step>
+              <StepLabel>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <CalendarToday />
+                  Datum wählen
+                </Box>
+              </StepLabel>
+              <StepContent>
+                <Typography variant="h6" gutterBottom>
+                  Wählen Sie ein Datum aus dem Kalender
+                </Typography>
+                {loading ? (
+                  <Box display="flex" justifyContent="center" p={3}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <CalendarMonthView
+                    selectedDate={selectedDateObj}
+                    onDateSelect={handleCalendarDateSelect}
+                    availableSlots={calendarSlots}
+                    currentMonth={currentMonth}
+                    onMonthChange={setCurrentMonth}
+                  />
+                )}
+                <Box sx={{ mt: 2 }}>
+                  <Button onClick={() => setActiveStep(2)}>Zurück</Button>
+                </Box>
+              </StepContent>
+            </Step>
+          )}
+
+          {/* Schritt 4: Zeit wählen */}
           <Step>
             <StepLabel>
               <Box display="flex" alignItems="center" gap={1}>
