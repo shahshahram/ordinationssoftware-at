@@ -500,7 +500,8 @@ const ServiceCatalog: React.FC = () => {
   // Benutzer laden
   const fetchUsers = async () => {
     try {
-      const response = await api.get<{data: User[]}>('/users');
+      // Lade alle Benutzer mit einem hohen Limit
+      const response = await api.get<{data: User[]}>('/users?limit=1000');
       
       if (response.success && response.data?.data) {
         setUsers(response.data.data || []);

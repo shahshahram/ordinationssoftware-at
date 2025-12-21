@@ -481,47 +481,131 @@ router.post('/', [
     }
 
     // Duplikatprüfung vor dem Erstellen
-    const duplicateQuery = {
-      userId: req.user.id,
-      firstName: req.body.firstName,
-      lastName: req.body.lastName,
-      dateOfBirth: new Date(req.body.dateOfBirth)
-    };
-
-    // Prüfe auf Duplikat basierend auf Name und Geburtsdatum
-    const existingPatient = await PatientExtended.findOne(duplicateQuery);
+    // WICHTIG: Prüfe GLOBAL (ohne userId-Filter), da Patienten systemweit eindeutig sein sollten
+    // Dies verhindert Duplikate zwischen Online-Buchungen und manuellen Einträgen
     
-    if (existingPatient) {
-      return res.status(409).json({
-        success: false,
-        message: 'Ein Patient mit diesem Namen und Geburtsdatum existiert bereits',
-        duplicate: {
-          id: existingPatient._id,
-          firstName: existingPatient.firstName,
-          lastName: existingPatient.lastName,
-          dateOfBirth: existingPatient.dateOfBirth,
-          socialSecurityNumber: existingPatient.socialSecurityNumber
-        }
-      });
-    }
+    // Normalisiere Eingabedaten
+    const normalizedFirstName = req.body.firstName ? req.body.firstName.trim() : '';
+    const normalizedLastName = req.body.lastName ? req.body.lastName.trim() : '';
+    const normalizedDateOfBirth = req.body.dateOfBirth ? new Date(req.body.dateOfBirth) : null;
+    const normalizedSVNR = req.body.socialSecurityNumber ? req.body.socialSecurityNumber.trim().replace(/\s+/g, '') : null;
+    const normalizedEmail = req.body.email ? req.body.email.toLowerCase().trim() : null;
+    const normalizedPhone = req.body.phone ? req.body.phone.trim().replace(/\s+/g, '') : null;
 
-    // Zusätzliche Prüfung auf Sozialversicherungsnummer falls vorhanden
-    if (req.body.socialSecurityNumber) {
+    // Prüfung 1: SVNR (höchste Priorität - eindeutigste Identifikation)
+    if (normalizedSVNR && normalizedSVNR !== '0000000000') {
       const duplicateBySSN = await PatientExtended.findOne({
-        userId: req.user.id,
-        socialSecurityNumber: req.body.socialSecurityNumber
+        socialSecurityNumber: normalizedSVNR,
+        firstName: { $regex: new RegExp(`^${normalizedFirstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${normalizedLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }
       });
 
       if (duplicateBySSN) {
         return res.status(409).json({
           success: false,
-          message: 'Ein Patient mit dieser Sozialversicherungsnummer existiert bereits',
+          message: 'Ein Patient mit dieser Sozialversicherungsnummer existiert bereits im System',
           duplicate: {
             id: duplicateBySSN._id,
             firstName: duplicateBySSN.firstName,
             lastName: duplicateBySSN.lastName,
             dateOfBirth: duplicateBySSN.dateOfBirth,
-            socialSecurityNumber: duplicateBySSN.socialSecurityNumber
+            socialSecurityNumber: duplicateBySSN.socialSecurityNumber,
+            email: duplicateBySSN.email,
+            phone: duplicateBySSN.phone
+          }
+        });
+      }
+    }
+
+    // Prüfung 2: Email + Name + Geburtsdatum
+    if (normalizedEmail && normalizedFirstName && normalizedLastName && normalizedDateOfBirth) {
+      const duplicateByEmail = await PatientExtended.findOne({
+        $or: [
+          { email: normalizedEmail },
+          { email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+        ],
+        firstName: { $regex: new RegExp(`^${normalizedFirstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${normalizedLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        dateOfBirth: {
+          $gte: new Date(normalizedDateOfBirth.getFullYear(), normalizedDateOfBirth.getMonth(), normalizedDateOfBirth.getDate()),
+          $lt: new Date(normalizedDateOfBirth.getFullYear(), normalizedDateOfBirth.getMonth(), normalizedDateOfBirth.getDate() + 1)
+        }
+      });
+      
+      if (duplicateByEmail) {
+        return res.status(409).json({
+          success: false,
+          message: 'Ein Patient mit diesem Namen, Geburtsdatum und E-Mail-Adresse existiert bereits im System',
+          duplicate: {
+            id: duplicateByEmail._id,
+            firstName: duplicateByEmail.firstName,
+            lastName: duplicateByEmail.lastName,
+            dateOfBirth: duplicateByEmail.dateOfBirth,
+            socialSecurityNumber: duplicateByEmail.socialSecurityNumber,
+            email: duplicateByEmail.email,
+            phone: duplicateByEmail.phone
+          }
+        });
+      }
+    }
+
+    // Prüfung 3: Name + Geburtsdatum + Telefon
+    if (normalizedPhone && normalizedFirstName && normalizedLastName && normalizedDateOfBirth) {
+      const duplicateByPhone = await PatientExtended.findOne({
+        $or: [
+          { phone: normalizedPhone },
+          { phone: { $regex: new RegExp(normalizedPhone.replace(/\D/g, ''), 'i') } }
+        ],
+        firstName: { $regex: new RegExp(`^${normalizedFirstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${normalizedLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        dateOfBirth: {
+          $gte: new Date(normalizedDateOfBirth.getFullYear(), normalizedDateOfBirth.getMonth(), normalizedDateOfBirth.getDate()),
+          $lt: new Date(normalizedDateOfBirth.getFullYear(), normalizedDateOfBirth.getMonth(), normalizedDateOfBirth.getDate() + 1)
+        }
+      });
+      
+      if (duplicateByPhone) {
+        return res.status(409).json({
+          success: false,
+          message: 'Ein Patient mit diesem Namen, Geburtsdatum und Telefonnummer existiert bereits im System',
+          duplicate: {
+            id: duplicateByPhone._id,
+            firstName: duplicateByPhone.firstName,
+            lastName: duplicateByPhone.lastName,
+            dateOfBirth: duplicateByPhone.dateOfBirth,
+            socialSecurityNumber: duplicateByPhone.socialSecurityNumber,
+            email: duplicateByPhone.email,
+            phone: duplicateByPhone.phone
+          }
+        });
+      }
+    }
+
+    // Prüfung 4: Name + Geburtsdatum (Fallback)
+    if (normalizedFirstName && normalizedLastName && normalizedDateOfBirth) {
+      const duplicateQuery = {
+        firstName: { $regex: new RegExp(`^${normalizedFirstName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        lastName: { $regex: new RegExp(`^${normalizedLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+        dateOfBirth: {
+          $gte: new Date(normalizedDateOfBirth.getFullYear(), normalizedDateOfBirth.getMonth(), normalizedDateOfBirth.getDate()),
+          $lt: new Date(normalizedDateOfBirth.getFullYear(), normalizedDateOfBirth.getMonth(), normalizedDateOfBirth.getDate() + 1)
+        }
+      };
+
+      const existingPatient = await PatientExtended.findOne(duplicateQuery);
+      
+      if (existingPatient) {
+        return res.status(409).json({
+          success: false,
+          message: 'Ein Patient mit diesem Namen und Geburtsdatum existiert bereits im System',
+          duplicate: {
+            id: existingPatient._id,
+            firstName: existingPatient.firstName,
+            lastName: existingPatient.lastName,
+            dateOfBirth: existingPatient.dateOfBirth,
+            socialSecurityNumber: existingPatient.socialSecurityNumber,
+            email: existingPatient.email,
+            phone: existingPatient.phone
           }
         });
       }

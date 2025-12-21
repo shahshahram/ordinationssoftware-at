@@ -42,7 +42,8 @@ import {
   MedicalServices,
 } from '@mui/icons-material';
 import CalendarMonthView from '../components/CalendarMonthView';
-import { startOfMonth, format } from 'date-fns';
+import CalendarWeekView from '../components/CalendarWeekView';
+import { startOfMonth, format, startOfWeek, endOfWeek } from 'date-fns';
 import {
   Autocomplete,
   Checkbox,
@@ -51,6 +52,8 @@ import {
   RadioGroup,
 } from '@mui/material';
 import api from '../utils/api';
+import { useAppDispatch } from '../store/hooks';
+import { fetchAppointments } from '../store/slices/appointmentSlice';
 
 interface Category {
   _id?: string | null;
@@ -67,14 +70,18 @@ interface Service {
   name: string;
   description: string;
   category: string;
-  duration: number;
-  assignedUsers: Array<{
+  duration?: number;
+  base_duration_min?: number;
+  buffer_before_min?: number;
+  buffer_after_min?: number;
+  price_cents?: number;
+  assignedUsers?: Array<{
     _id: string;
     firstName: string;
     lastName: string;
     specialization?: string;
   }>;
-  requiresUserSelection: boolean;
+  requiresUserSelection?: boolean;
   anamnesisQuestions?: AnamnesisQuestion[];
   requires_room_selection?: boolean;
   room_quantity_required?: number;
@@ -167,6 +174,7 @@ interface BookingData {
 }
 
 const OnlineBooking: React.FC = () => {
+  const dispatch = useAppDispatch();
   const [activeStep, setActiveStep] = useState(0);
   
   // Debug: Log activeStep changes
@@ -181,7 +189,10 @@ const OnlineBooking: React.FC = () => {
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedDateObj, setSelectedDateObj] = useState<Date | null>(null);
+  const [selectedTime, setSelectedTime] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
+  const [currentWeek, setCurrentWeek] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [calendarView, setCalendarView] = useState<'month' | 'week'>('week');
   const [calendarSlots, setCalendarSlots] = useState<{ [date: string]: string[] }>({});
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([]);
   const [selectedSlot, setSelectedSlot] = useState<TimeSlot | null>(null);
@@ -197,6 +208,7 @@ const OnlineBooking: React.FC = () => {
   const [optInCode, setOptInCode] = useState('');
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [optInError, setOptInError] = useState<string | null>(null);
+  const [gdprConsent, setGdprConsent] = useState(false);
   
   // Service und Anamnese
   const [services, setServices] = useState<Service[]>([]);
@@ -247,9 +259,56 @@ const OnlineBooking: React.FC = () => {
   // Lade Kalender-Daten wenn Arzt und Service ausgewählt sind
   useEffect(() => {
     if (selectedDoctor && selectedService) {
-      loadCalendarAvailability();
+      if (calendarView === 'month') {
+        loadCalendarAvailability();
+      } else {
+        loadWeekAvailability();
+      }
     }
-  }, [selectedDoctor, selectedService, currentMonth]);
+  }, [selectedDoctor, selectedService, currentMonth, currentWeek, calendarView]);
+
+  // Öffne Bestätigungsdialog automatisch, wenn bookingResult gesetzt wird (nur einmal)
+  useEffect(() => {
+    if (bookingResult && !requiresOptIn && !showConfirmation) {
+      console.log('[OnlineBooking] Opening confirmation dialog for new booking result');
+      setShowConfirmation(true);
+    }
+  }, [bookingResult?.bookingNumber]); // Nur wenn bookingNumber sich ändert (neue Buchung)
+
+  // Lade Wochen-Verfügbarkeit
+  const loadWeekAvailability = async () => {
+    if (!selectedDoctor || !selectedService) return;
+
+    try {
+      setLoading(true);
+      const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(currentWeek, { weekStartsOn: 1 });
+      
+      const startDateStr = format(weekStart, 'yyyy-MM-dd');
+      const endDateStr = format(weekEnd, 'yyyy-MM-dd');
+
+      const response = await api.get<any>(
+        `/online-booking/availability-calendar?doctorId=${selectedDoctor.id}&serviceId=${selectedService._id}&startDate=${startDateStr}&endDate=${endDateStr}`
+      );
+
+      if (response.success && response.data) {
+        const calendarData = response.data.data?.calendar || response.data.calendar || {};
+        
+        // Konvertiere zu { "2025-12-22": ["10:00", "11:15", ...] } Format
+        const slotsMap: { [date: string]: string[] } = {};
+        Object.keys(calendarData).forEach(dateStr => {
+          slotsMap[dateStr] = calendarData[dateStr].availableSlots || [];
+        });
+        
+        setCalendarSlots(slotsMap);
+      }
+    } catch (error) {
+      console.error('Error loading week availability:', error);
+      setSnackbar({ open: true, message: 'Fehler beim Laden der Wochen-Verfügbarkeit', severity: 'error' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Lade Kategorien
   const loadCategories = async () => {
@@ -275,7 +334,18 @@ const OnlineBooking: React.FC = () => {
       if (response.success && response.data) {
         const servicesData = response.data.data || response.data;
         if (Array.isArray(servicesData)) {
-          setServices(servicesData);
+          // Zusätzliche Frontend-Prüfung: Filtere Services heraus, die Geräte- oder Raumauswahl erfordern
+          // (Backend sollte bereits filtern, aber als Sicherheitsschicht)
+          const filteredServices = servicesData.filter((service: Service) => {
+            const requiresDevice = service.requires_device_selection === true;
+            const requiresRoom = service.requires_room_selection === true;
+            if (requiresDevice || requiresRoom) {
+              console.warn(`[OnlineBooking] Service ${service.name} erfordert ${requiresDevice ? 'Geräte' : ''}${requiresDevice && requiresRoom ? ' und ' : ''}${requiresRoom ? 'Räume' : ''} - wird aus Frontend-Liste entfernt`);
+              return false;
+            }
+            return true;
+          });
+          setServices(filteredServices);
         }
       }
     } catch (error) {
@@ -551,15 +621,49 @@ const OnlineBooking: React.FC = () => {
     setActiveStep(3);
   };
 
-  const handleCalendarDateSelect = (date: Date) => {
+  const handleCalendarDateSelect = (date: Date, time?: string) => {
     setSelectedDateObj(date);
     const dateStr = format(date, 'yyyy-MM-dd');
     setSelectedDate(dateStr);
-    // Lade Slots für diesen Tag
-    if (selectedDoctor && selectedService) {
-      loadAvailableSlots(selectedDoctor.id, dateStr);
+    
+    // Wenn eine Zeit mit übergeben wurde, setze sie direkt
+    if (time) {
+      setSelectedTime(time);
+      // Berechne Dauer mit Pufferzeiten (base_duration_min + buffer_before_min + buffer_after_min)
+      const baseDuration = selectedService?.base_duration_min || selectedService?.duration || 30;
+      const bufferBefore = selectedService?.buffer_before_min || 0;
+      const bufferAfter = selectedService?.buffer_after_min || 0;
+      const totalDuration = baseDuration + bufferBefore + bufferAfter;
+      
+      // Erstelle ein TimeSlot-Objekt für selectedSlot
+      const [hours, minutes] = time.split(':').map(Number);
+      const endTime = new Date(date);
+      endTime.setHours(hours, minutes + totalDuration, 0, 0);
+      const endTimeStr = format(endTime, 'HH:mm');
+      
+      setSelectedSlot({
+        start: time,
+        end: endTimeStr,
+        duration: totalDuration
+      });
+      
+      setFormData(prev => ({
+        ...prev,
+        appointment: {
+          ...prev.appointment,
+          startTime: time,
+          date: dateStr
+        }
+      }));
+      // Gehe direkt zum nächsten Schritt (Daten eingeben)
+      setActiveStep(5);
+    } else {
+      // Nur Datum ausgewählt, lade Slots für diesen Tag
+      if (selectedDoctor && selectedService) {
+        loadAvailableSlots(selectedDoctor.id, dateStr);
+      }
+      setActiveStep(4);
     }
-    setActiveStep(4);
   };
 
   const handleDateSelect = (date: string) => {
@@ -703,6 +807,18 @@ const OnlineBooking: React.FC = () => {
 
   const handleBooking = async () => {
     try {
+      // Validierung
+      if (!formData.appointment.startTime) {
+        setSnackbar({
+          open: true,
+          message: 'Bitte wählen Sie eine Zeit aus',
+          severity: 'warning'
+        });
+        // Gehe zurück zum Zeit-Auswahl-Schritt
+        setActiveStep(4);
+        return;
+      }
+      
       setLoading(true);
       
       // Konvertiere Anamnese-Antworten in das erwartete Format
@@ -720,33 +836,82 @@ const OnlineBooking: React.FC = () => {
         return question && (!question.isRequired || (r.answer !== '' && r.answer !== null && r.answer !== undefined));
       });
 
+      // Berechne Dauer mit Pufferzeiten
+      const baseDuration = selectedService?.base_duration_min || selectedService?.duration || 30;
+      const bufferBefore = selectedService?.buffer_before_min || 0;
+      const bufferAfter = selectedService?.buffer_after_min || 0;
+      const totalDuration = baseDuration + bufferBefore + bufferAfter;
+      
       const bookingData = {
         ...formData,
         appointment: {
           ...formData.appointment,
-          serviceId: selectedService?._id
+          serviceId: selectedService?._id,
+          duration: totalDuration // Sende die korrekte Dauer mit Pufferzeiten
         },
-        anamnesisResponses: anamnesisResponses
+        anamnesisResponses: anamnesisResponses,
+        gdprConsent: gdprConsent
       };
       
       const response = await api.post('/online-booking/book', bookingData);
       
-      if (response.success && response.data) {
-        // API gibt { success: true, data: {...} } zurück
-        // api.ts wrapper gibt { data: { success: true, data: {...} }, success: true } zurück
+      console.log('[OnlineBooking] Booking response:', response);
+      
+      // Die API gibt direkt { success: true, message: '...', data: {...} } zurück
+      // api.ts wrapper gibt { data: { success: true, message: '...', data: {...} }, success: true } zurück
+      if (response.success || (response.data as any)?.success) {
         const responseData = response.data as any;
-        const bookingData = (responseData.data || responseData) as any;
-        setBookingResult(bookingData);
-        setShowConfirmation(true);
+        const bookingResultData = responseData?.data || responseData;
+        
+        console.log('[OnlineBooking] Booking result data:', bookingResultData);
+        console.log('[OnlineBooking] requiresDoubleOptIn:', bookingResultData?.requiresDoubleOptIn);
+        
+        // Prüfe ob Double Opt-In erforderlich ist
+        if (bookingResultData?.requiresDoubleOptIn) {
+          console.log('[OnlineBooking] Setting requiresOptIn to true');
+          setRequiresOptIn(true);
+          setBookingResult(bookingResultData);
+        } else {
+          console.log('[OnlineBooking] Setting showConfirmation to true and activeStep to 6');
+          setBookingResult(bookingResultData);
+          setShowConfirmation(true);
+          setActiveStep(6); // Gehe zum Bestätigungsschritt
+          console.log('[OnlineBooking] showConfirmation should now be true');
+        }
+        
+        // Aktualisiere die Verfügbarkeit nach erfolgreicher Buchung
+        console.log('[OnlineBooking] Refreshing calendar availability after booking...');
+        if (selectedDoctor && selectedService) {
+          // Warte kurz, damit der Backend die Buchung verarbeitet hat
+          setTimeout(async () => {
+            // Aktualisiere Online-Booking Verfügbarkeit
+            if (calendarView === 'month') {
+              loadCalendarAvailability();
+            } else {
+              loadWeekAvailability();
+            }
+            
+            // Aktualisiere Appointments im Redux Store (für Hauptkalender)
+            try {
+              console.log('[OnlineBooking] Refreshing appointments in Redux store...');
+              await dispatch(fetchAppointments());
+              console.log('[OnlineBooking] Appointments refreshed successfully');
+            } catch (error) {
+              console.error('[OnlineBooking] Error refreshing appointments:', error);
+            }
+          }, 1000);
+        }
+        
         setSnackbar({ 
           open: true, 
-          message: 'Termin erfolgreich gebucht!', 
+          message: responseData?.message || bookingResultData?.message || 'Termin erfolgreich gebucht!', 
           severity: 'success' 
         });
       } else {
+        const errorMessage = (response.data as any)?.message || response.message || 'Fehler beim Buchen des Termins';
         setSnackbar({ 
           open: true, 
-          message: response.message || 'Fehler beim Buchen des Termins', 
+          message: errorMessage, 
           severity: 'error' 
         });
       }
@@ -899,41 +1064,97 @@ const OnlineBooking: React.FC = () => {
                     Keine Leistungen in dieser Kategorie verfügbar
                   </Alert>
                 ) : (
-                  <Autocomplete
-                    options={services}
-                    getOptionLabel={(option) => option.name}
-                    value={selectedService}
-                    onChange={(_, newValue) => {
-                      if (newValue) {
-                        handleServiceSelect(newValue);
-                      }
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Leistung auswählen"
-                        fullWidth
-                        margin="normal"
-                        required
-                      />
-                    )}
-                    renderOption={(props, option) => (
-                      <Box component="li" {...props} key={option._id}>
-                        <Box>
-                          <Typography variant="body1">{option.name}</Typography>
-                          {option.description && (
-                            <Typography variant="body2" color="text.secondary">
-                              {option.description}
+                  <>
+                    <Grid container spacing={2} sx={{ mt: 2 }}>
+                      {services.map((service) => (
+                        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={service._id}>
+                          <Card
+                            sx={{
+                              cursor: 'pointer',
+                              border: selectedService?._id === service._id ? 2 : 1,
+                              borderColor: selectedService?._id === service._id ? 'primary.main' : 'divider',
+                              '&:hover': {
+                                borderColor: 'primary.main',
+                                boxShadow: 3
+                              },
+                              height: '100%'
+                            }}
+                            onClick={() => handleServiceSelect(service)}
+                          >
+                            <CardContent>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                <MedicalServices color="primary" />
+                                <Typography variant="h6" fontWeight="bold">
+                                  {service.name}
+                                </Typography>
+                              </Box>
+                              {service.code && (
+                                <Chip
+                                  label={service.code}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ mb: 1 }}
+                                />
+                              )}
+                              {service.description && (
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                  {service.description}
+                                </Typography>
+                              )}
+                              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+                                <Chip
+                                  label={`${(service.base_duration_min || service.duration || 30) + (service.buffer_before_min || 0) + (service.buffer_after_min || 0)} Min.`}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                  title={`Grunddauer: ${service.base_duration_min || service.duration || 30} Min.${(service.buffer_before_min || 0) + (service.buffer_after_min || 0) > 0 ? ` + Puffer: ${(service.buffer_before_min || 0) + (service.buffer_after_min || 0)} Min.` : ''}`}
+                                />
+                                {service.price_cents && (
+                                  <Chip
+                                    label={`€${(service.price_cents / 100).toFixed(2)}`}
+                                    size="small"
+                                    color="secondary"
+                                    variant="outlined"
+                                  />
+                                )}
+                              </Box>
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                      ))}
+                    </Grid>
+                    {selectedService && (
+                      <Alert severity="success" sx={{ mt: 2 }}>
+                        <Typography variant="body1" fontWeight="bold">
+                          Ausgewählte Leistung: {selectedService.name}
+                        </Typography>
+                        {selectedService.description && (
+                          <Typography variant="body2" sx={{ mt: 0.5 }}>
+                            {selectedService.description}
+                          </Typography>
+                        )}
+                        <Box sx={{ display: 'flex', gap: 2, mt: 1, flexWrap: 'wrap' }}>
+                          <Typography variant="body2">
+                            <strong>Dauer:</strong> {
+                              (selectedService.base_duration_min || selectedService.duration || 30) + 
+                              (selectedService.buffer_before_min || 0) + 
+                              (selectedService.buffer_after_min || 0)
+                            } Min.
+                            {(selectedService.buffer_before_min || 0) + (selectedService.buffer_after_min || 0) > 0 && (
+                              <span style={{ fontSize: '0.85em', color: '#666' }}>
+                                {' '}(Grund: {selectedService.base_duration_min || selectedService.duration || 30} Min. + Puffer: {(selectedService.buffer_before_min || 0) + (selectedService.buffer_after_min || 0)} Min.)
+                              </span>
+                            )}
+                          </Typography>
+                          {selectedService.price_cents && (
+                            <Typography variant="body2">
+                              <strong>Preis:</strong> €{(selectedService.price_cents / 100).toFixed(2)}
                             </Typography>
                           )}
-                          <Typography variant="caption" color="text.secondary">
-                            Dauer: {option.duration} Min.
-                          </Typography>
                         </Box>
-                      </Box>
+                      </Alert>
                     )}
-                    sx={{ mt: 2 }}
-                  />
+                  </>
                 )}
                 <Box sx={{ mt: 2 }}>
                   <Button onClick={() => setActiveStep(0)}>Zurück</Button>
@@ -942,18 +1163,18 @@ const OnlineBooking: React.FC = () => {
             </Step>
           )}
 
-          {/* Schritt 2: Arzt auswählen */}
+          {/* Schritt 2: Personal auswählen */}
           {selectedService && (
             <Step>
               <StepLabel>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <LocalHospital />
-                  Arzt auswählen
+                  <Person />
+                  Personal auswählen
                 </Box>
               </StepLabel>
               <StepContent>
               <Typography variant="h6" gutterBottom>
-                Wählen Sie Ihren Arzt
+                Wählen Sie Ihr Personal
               </Typography>
               {loading ? (
                 <Box display="flex" justifyContent="center" p={3}>
@@ -962,15 +1183,15 @@ const OnlineBooking: React.FC = () => {
               ) : doctors.length === 0 ? (
                 <Alert severity="info" sx={{ mt: 2 }}>
                   <Typography variant="body1" gutterBottom>
-                    <strong>Keine Ärzte verfügbar</strong>
+                    <strong>Kein Personal verfügbar</strong>
                   </Typography>
                   <Typography variant="body2">
-                    Es sind derzeit keine Ärzte für Online-Buchungen verfügbar. 
-                    Bitte aktivieren Sie die Online-Buchung für einen Arzt:
+                    Es ist derzeit kein Personal für Online-Buchungen verfügbar. 
+                    Bitte aktivieren Sie die Online-Buchung für einen Mitarbeiter:
                   </Typography>
                   <Box component="ol" sx={{ mt: 1, pl: 2 }}>
                     <li>Gehen Sie zu "Personalverwaltung" → "Mitarbeiter"</li>
-                    <li>Bearbeiten Sie einen Arzt</li>
+                    <li>Bearbeiten Sie einen Mitarbeiter</li>
                     <li>Aktivieren Sie "Online-Buchung aktiviert"</li>
                     <li>Speichern Sie die Änderungen</li>
                   </Box>
@@ -1012,27 +1233,52 @@ const OnlineBooking: React.FC = () => {
           </Step>
           )}
 
-          {/* Schritt 3: Monatskalender */}
+          {/* Schritt 3: Kalender (Woche/Monat) */}
           {selectedDoctor && selectedService && (
             <Step>
               <StepLabel>
                 <Box display="flex" alignItems="center" gap={1}>
                   <CalendarToday />
-                  Datum wählen
+                  Datum & Zeit wählen
                 </Box>
               </StepLabel>
               <StepContent>
+                <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+                  <Button
+                    variant={calendarView === 'week' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setCalendarView('week')}
+                  >
+                    Woche
+                  </Button>
+                  <Button
+                    variant={calendarView === 'month' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setCalendarView('month')}
+                  >
+                    Monat
+                  </Button>
+                </Box>
                 <Typography variant="h6" gutterBottom>
-                  Wählen Sie ein Datum aus dem Kalender
+                  Wählen Sie ein Datum und eine Zeit
                 </Typography>
                 {loading ? (
                   <Box display="flex" justifyContent="center" p={3}>
                     <CircularProgress />
                   </Box>
+                ) : calendarView === 'week' ? (
+                  <CalendarWeekView
+                    selectedDate={selectedDateObj}
+                    onDateSelect={handleCalendarDateSelect}
+                    availableSlots={calendarSlots}
+                    currentWeek={currentWeek}
+                    onWeekChange={setCurrentWeek}
+                    doctorName={selectedDoctor.name}
+                  />
                 ) : (
                   <CalendarMonthView
                     selectedDate={selectedDateObj}
-                    onDateSelect={handleCalendarDateSelect}
+                    onDateSelect={(date) => handleCalendarDateSelect(date)}
                     availableSlots={calendarSlots}
                     currentMonth={currentMonth}
                     onMonthChange={setCurrentMonth}
@@ -1233,6 +1479,22 @@ const OnlineBooking: React.FC = () => {
                     onChange={(e) => handleNestedFormChange('appointment', 'notes', e.target.value)}
                   />
                 </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={gdprConsent}
+                        onChange={(e) => setGdprConsent(e.target.checked)}
+                        required
+                      />
+                    }
+                    label={
+                      <Typography variant="body2">
+                        Ich stimme der <strong>Datenschutzerklärung (DSGVO)</strong> zu und erlaube die Speicherung und Verarbeitung meiner Daten für die Terminbuchung und Kommunikation.
+                      </Typography>
+                    }
+                  />
+                </Grid>
               </Grid>
               
               {/* Anamnese-Fragen */}
@@ -1411,7 +1673,17 @@ const OnlineBooking: React.FC = () => {
       </Dialog>
 
       {/* Bestätigungs-Dialog */}
-      <Dialog open={showConfirmation} onClose={() => setShowConfirmation(false)} maxWidth="sm" fullWidth>
+      <Dialog 
+        open={showConfirmation} 
+        onClose={() => {
+          console.log('[OnlineBooking] Closing confirmation dialog');
+          setShowConfirmation(false);
+          // bookingResult nicht löschen, damit es später noch angezeigt werden kann
+        }} 
+        maxWidth="sm" 
+        fullWidth
+        disableEscapeKeyDown={false}
+      >
         <DialogTitle>
           <Box display="flex" alignItems="center" gap={1}>
             <CheckCircle color="success" />
@@ -1419,7 +1691,7 @@ const OnlineBooking: React.FC = () => {
           </Box>
         </DialogTitle>
         <DialogContent>
-          {bookingResult && (
+          {bookingResult ? (
             <Box>
               <Typography variant="h6" gutterBottom>
                 Buchungsdetails
@@ -1465,6 +1737,12 @@ const OnlineBooking: React.FC = () => {
               <Alert severity="success" sx={{ mt: 2 }}>
                 Sie erhalten eine Bestätigungs-E-Mail mit allen Details.
               </Alert>
+            </Box>
+          ) : (
+            <Box>
+              <Typography variant="body1" color="text.secondary">
+                Lade Buchungsdetails...
+              </Typography>
             </Box>
           )}
         </DialogContent>

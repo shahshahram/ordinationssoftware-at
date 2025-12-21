@@ -8,7 +8,7 @@ import {
   Chip,
   Tooltip
 } from '@mui/material';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, getDay, addMonths, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, getDay, addMonths, subMonths, isPast, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { CalendarToday } from '@mui/icons-material';
 
@@ -109,6 +109,7 @@ const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({
           const hasAvailableSlots = hasSlots(day);
           const isSelected = selectedDate && isSameDay(day, selectedDate);
           const isCurrentDay = isToday(day);
+          const isPastDate = isPast(startOfDay(day)) && !isCurrentDay;
 
           return (
             <Grid size={{ xs: 1 }} key={dateStr} sx={{ aspectRatio: '1', p: 0.5 }}>
@@ -122,8 +123,8 @@ const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({
                 <Button
                   fullWidth
                   variant={isSelected ? 'contained' : 'outlined'}
-                  onClick={() => hasAvailableSlots && onDateSelect(day)}
-                  disabled={!hasAvailableSlots}
+                  onClick={() => hasAvailableSlots && !isPastDate && onDateSelect(day)}
+                  disabled={!hasAvailableSlots || isPastDate}
                   sx={{
                     height: '100%',
                     minWidth: 0,
@@ -132,11 +133,11 @@ const CalendarMonthView: React.FC<CalendarMonthViewProps> = ({
                     border: isCurrentDay ? 2 : 1,
                     borderColor: isCurrentDay ? 'primary.main' : 'divider',
                     '&:hover': {
-                      bgcolor: hasAvailableSlots ? 'action.hover' : 'transparent'
+                      bgcolor: hasAvailableSlots && !isPastDate ? 'action.hover' : 'transparent'
                     },
                     bgcolor: isSelected ? 'primary.main' : 'transparent',
-                    color: isSelected ? 'primary.contrastText' : 'text.primary',
-                    opacity: hasAvailableSlots ? 1 : 0.5
+                    color: isSelected ? 'primary.contrastText' : (isPastDate ? 'text.disabled' : 'text.primary'),
+                    opacity: hasAvailableSlots && !isPastDate ? 1 : 0.3
                   }}
                 >
                   <Typography
