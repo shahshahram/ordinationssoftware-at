@@ -31,7 +31,8 @@ import {
   EventNote,
   Assessment,
   Medication,
-  Science
+  Science,
+  BookOnline
 } from '@mui/icons-material';
 import { DashboardWidget } from '../../store/slices/dashboardWidgetsSlice';
 
@@ -49,7 +50,8 @@ const iconMap: Record<string, React.ReactNode> = {
   AttachMoney: <AttachMoney />,
   EventNote: <EventNote />,
   Assessment: <Assessment />,
-  Medication: <Medication />
+  Medication: <Medication />,
+  BookOnline: <BookOnline />
 };
 
 interface ListWidgetProps {

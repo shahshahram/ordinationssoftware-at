@@ -41,6 +41,11 @@ export interface LocationBillingConfig {
   };
 }
 
+export interface LocationOnlineBookingConfig {
+  doubleOptInRequired?: boolean;
+  autoConfirmKnownPatients?: boolean;
+}
+
 export interface LocationOwner {
   title?: string;
   firstName?: string;
@@ -82,6 +87,7 @@ export interface Location {
   practiceType?: 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt';
   specialties?: string[]; // Medizinische Fachrichtungen
   billing?: LocationBillingConfig;
+  onlineBooking?: LocationOnlineBookingConfig;
   xdsRegistry?: XdsRegistryConfig;
   owner?: LocationOwner;
   logo?: LocationLogo | null;

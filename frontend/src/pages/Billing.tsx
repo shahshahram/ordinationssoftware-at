@@ -899,9 +899,12 @@ const Billing: React.FC = () => {
                     <LocalHospital />
                   </Avatar>
                   <Box flex={1}>
-                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                      {service.name}
-                    </Typography>
+                    <Typography 
+                      variant="subtitle2" 
+                      fontWeight="bold" 
+                      gutterBottom
+                      dangerouslySetInnerHTML={{ __html: service.name }}
+                    />
                     <Typography variant="caption" color="text.secondary" display="block">
                       {service.code}
                     </Typography>
@@ -1321,7 +1324,9 @@ const Billing: React.FC = () => {
                             {new Date(service.date).toLocaleDateString('de-DE')}
                           </TableCell>
                           <TableCell>{service.serviceCode}</TableCell>
-                          <TableCell>{service.description}</TableCell>
+                          <TableCell>
+                            <span dangerouslySetInnerHTML={{ __html: service.description || '' }} />
+                          </TableCell>
                           <TableCell>{service.quantity}</TableCell>
                           <TableCell>€{service.unitPrice.toFixed(2)}</TableCell>
                           <TableCell>€{service.totalPrice.toFixed(2)}</TableCell>

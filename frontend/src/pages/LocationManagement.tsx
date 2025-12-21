@@ -43,6 +43,7 @@ import {
   ExpandMore as ExpandMoreIcon,
   Storage as StorageIcon,
   Description as DescriptionIcon,
+  BookOnline,
 } from '@mui/icons-material';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -188,6 +189,10 @@ const LocationManagement: React.FC = () => {
         defaultTariff: 'GOÄ' as 'GOÄ' | 'custom'
       }
     },
+    onlineBooking: {
+      doubleOptInRequired: true,
+      autoConfirmKnownPatients: true
+    },
     xdsRegistry: {
       enabled: false,
       registryUrl: '',
@@ -319,6 +324,10 @@ const LocationManagement: React.FC = () => {
           defaultTariff: 'GOÄ'
         }
       };
+      const onlineBooking = location.onlineBooking || {
+        doubleOptInRequired: true,
+        autoConfirmKnownPatients: true
+      };
       setLocationForm({
         name: location.name,
         code: location.code || '',
@@ -352,6 +361,10 @@ const LocationManagement: React.FC = () => {
             enabled: billing.privat?.enabled ?? true,
             defaultTariff: (billing.privat?.defaultTariff || 'GOÄ') as 'GOÄ' | 'custom'
           }
+        },
+        onlineBooking: {
+          doubleOptInRequired: onlineBooking.doubleOptInRequired !== false, // Default true, explizit false = deaktiviert
+          autoConfirmKnownPatients: onlineBooking.autoConfirmKnownPatients !== false // Default true, explizit false = deaktiviert
         },
         xdsRegistry: {
           enabled: xdsRegistry.enabled || false,
@@ -432,6 +445,10 @@ const LocationManagement: React.FC = () => {
             enabled: true,
             defaultTariff: 'GOÄ'
           }
+        },
+        onlineBooking: {
+          doubleOptInRequired: true,
+          autoConfirmKnownPatients: true
         },
         xdsRegistry: {
           enabled: false,
@@ -2684,6 +2701,75 @@ const LocationManagement: React.FC = () => {
                         </Select>
                       </FormControl>
                     </Box>
+                  )}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+            
+            {/* Online-Buchungs-Konfiguration */}
+            <Accordion sx={{ mt: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <BookOnline />
+                  <Typography variant="subtitle1">Online-Buchungs-Einstellungen</Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    <Typography variant="body2">
+                      Konfigurieren Sie, ob für neue Patienten bei Online-Buchungen ein Double Opt-In (E-Mail-Bestätigung) erforderlich ist.
+                    </Typography>
+                  </Alert>
+                  
+                  <Box display="flex" alignItems="center">
+                    <Switch
+                      checked={locationForm.onlineBooking.doubleOptInRequired}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        onlineBooking: {
+                          ...locationForm.onlineBooking,
+                          doubleOptInRequired: e.target.checked
+                        }
+                      })}
+                    />
+                    <Box sx={{ ml: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        Double Opt-In für Neupatienten erforderlich
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Wenn aktiviert, müssen neue Patienten einen Bestätigungscode per E-Mail bestätigen, bevor der Termin bestätigt wird.
+                      </Typography>
+                    </Box>
+                  </Box>
+                  
+                  <Box display="flex" alignItems="center">
+                    <Switch
+                      checked={locationForm.onlineBooking.autoConfirmKnownPatients}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        onlineBooking: {
+                          ...locationForm.onlineBooking,
+                          autoConfirmKnownPatients: e.target.checked
+                        }
+                      })}
+                    />
+                    <Box sx={{ ml: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        Bekannte Patienten automatisch bestätigen
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Wenn aktiviert, werden Termine für bekannte Patienten (bereits im System) automatisch bestätigt, ohne Double Opt-In.
+                      </Typography>
+                    </Box>
+                  </Box>
+                  
+                  {!locationForm.onlineBooking.doubleOptInRequired && (
+                    <Alert severity="warning">
+                      <Typography variant="body2">
+                        <strong>Hinweis:</strong> Wenn Double Opt-In deaktiviert ist, werden alle Online-Buchungen sofort bestätigt, auch für neue Patienten. Dies kann zu "Fake-Buchungen" führen.
+                      </Typography>
+                    </Alert>
                   )}
                 </Box>
               </AccordionDetails>

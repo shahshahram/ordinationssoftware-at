@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -179,6 +179,8 @@ interface Appointment {
   diagnosis?: string; // Einzelne Diagnose als String
   icd10Code?: string;
   bookingType: 'online' | 'internal' | 'phone' | 'walk_in';
+  onlineBookingRef?: string; // Referenznummer für Online-Buchungen (z.B. "B-2025-000001")
+  isOnlineBooking?: boolean; // Flag für Online-Buchungen
   createdAt: string;
   updatedAt: string;
   
@@ -279,6 +281,14 @@ interface AppointmentType {
   };
 }
 
+// Hilfsfunktion zum Entfernen von HTML-Tags für Komponenten, die kein dangerouslySetInnerHTML unterstützen
+const stripHtmlTags = (html: string): string => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
 const Appointments: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -295,6 +305,7 @@ const Appointments: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterType, setFilterType] = useState<string>('all');
+  const [filterOnline, setFilterOnline] = useState<string>('all'); // 'all', 'online', 'offline'
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [waitingList, setWaitingList] = useState<WaitingList[]>([]);
@@ -315,8 +326,10 @@ const Appointments: React.FC = () => {
   const [selectedStaff, setSelectedStaff] = useState<string>('');
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<{ el: HTMLElement | null, appointmentId: string | null }>({ el: null, appointmentId: null });
   const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
+  const { appointments: reduxAppointments } = useAppSelector((state) => state.appointments);
   const [patientDiagnosesMap, setPatientDiagnosesMap] = useState<Map<string, PatientDiagnosis[]>>(new Map());
-  const [formData, setFormData] = useState<Partial<Appointment>>({
+  
+  const initialFormData: Partial<Appointment> = {
     patientId: '',
     patientName: '',
     patientPhone: '',
@@ -339,7 +352,9 @@ const Appointments: React.FC = () => {
     treatment: [] as string[],
     currentMedications: [] as string[],
     followUpRequired: false
-  });
+  };
+  
+  const [formData, setFormData] = useState<Partial<Appointment>>(initialFormData);
 
   const handleViewModeChange = (
     event: React.MouseEvent<HTMLElement>,
@@ -398,6 +413,14 @@ const Appointments: React.FC = () => {
     const appointmentTypeValue = appointment.service?._id || appointment.serviceId || appointment.type;
     const matchesType = filterType === 'all' || appointmentTypeValue === filterType;
     
+    // Filter by online booking
+    const isOnlineAppointment = appointment.bookingType === 'online' || 
+                                 appointment.onlineBookingRef || 
+                                 appointment.isOnlineBooking === true;
+    const matchesOnline = filterOnline === 'all' || 
+                         (filterOnline === 'online' && isOnlineAppointment) ||
+                         (filterOnline === 'offline' && !isOnlineAppointment);
+    
     // Filter by patient if patientSearchValue is set
     let matchesPatient = true;
     if (patientSearchValue) {
@@ -432,7 +455,7 @@ const Appointments: React.FC = () => {
       }
     }
     
-    return matchesSearch && matchesStatus && matchesType && matchesPatient && matchesViewMode;
+    return matchesSearch && matchesStatus && matchesType && matchesOnline && matchesPatient && matchesViewMode;
   });
 
   // CRUD Operations
@@ -501,14 +524,247 @@ const Appointments: React.FC = () => {
       time = appointment.time;
     }
 
+    // Extrahiere serviceId aus service (kann String-ID oder Objekt sein)
+    let serviceId = '';
+    let service: Service | undefined = undefined;
+    
+    // Prüfe zuerst serviceId Feld direkt
+    if ((appointment as any).serviceId) {
+      if (typeof (appointment as any).serviceId === 'string') {
+        serviceId = (appointment as any).serviceId;
+      } else if (typeof (appointment as any).serviceId === 'object' && (appointment as any).serviceId !== null) {
+        serviceId = ((appointment as any).serviceId as any)._id || '';
+      }
+    }
+    
+    // Prüfe service Objekt (gepopulated)
+    if (appointment.service) {
+      if (typeof appointment.service === 'string') {
+        serviceId = appointment.service;
+      } else if (typeof appointment.service === 'object' && appointment.service !== null) {
+        serviceId = (appointment.service as any)._id || '';
+        service = appointment.service as Service;
+      }
+    }
+    
+    // Prüfe serviceCode als Fallback
+    if (!serviceId && (appointment as any).serviceCode) {
+      // Versuche Service anhand des Codes zu finden
+      const serviceByCode = services.find(s => s.code === (appointment as any).serviceCode);
+      if (serviceByCode) {
+        serviceId = serviceByCode._id;
+        service = serviceByCode;
+      }
+    }
+    
+    // Prüfe type Feld als Fallback (Legacy)
+    // type kann der Service-Name oder Code sein
+    if (!serviceId && appointment.type) {
+      // Versuche Service anhand des type-Namens zu finden (case-insensitive)
+      let serviceByType = services.find(s => 
+        s.name.toLowerCase() === appointment.type.toLowerCase() || 
+        s.code.toLowerCase() === appointment.type.toLowerCase()
+      );
+      if (serviceByType) {
+        serviceId = serviceByType._id;
+        service = serviceByType;
+      }
+    }
+
+    // Extrahiere locationId aus locationId oder location (kann String-ID oder Objekt sein)
+    let locationId = '';
+    // Prüfe zuerst locationId Feld
+    if ((appointment as any).locationId) {
+      if (typeof (appointment as any).locationId === 'string') {
+        locationId = (appointment as any).locationId;
+      } else if (typeof (appointment as any).locationId === 'object' && (appointment as any).locationId !== null) {
+        locationId = ((appointment as any).locationId as any)._id || '';
+      }
+    }
+    // Fallback zu location Objekt (gepopulated)
+    if (!locationId && appointment.location) {
+      if (typeof appointment.location === 'string') {
+        locationId = appointment.location;
+      } else if (typeof appointment.location === 'object' && appointment.location !== null) {
+        locationId = appointment.location._id || '';
+      }
+    }
+    // Fallback: Versuche locationId aus room zu extrahieren
+    if (!locationId && appointment.room && typeof appointment.room === 'object') {
+      const room = appointment.room as any;
+      // Prüfe room.location (gepopulated)
+      if (room.location) {
+        if (typeof room.location === 'string') {
+          locationId = room.location;
+        } else if (typeof room.location === 'object' && room.location !== null) {
+          locationId = room.location._id || '';
+        }
+      }
+      // Prüfe room.location_id (direktes Feld)
+      if (!locationId && room.location_id) {
+        if (typeof room.location_id === 'string') {
+          locationId = room.location_id;
+        } else if (typeof room.location_id === 'object' && room.location_id !== null) {
+          locationId = room.location_id._id || '';
+        }
+      }
+    }
+    // Fallback: Versuche locationId aus assigned_rooms zu extrahieren
+    if (!locationId && appointment.assigned_rooms && appointment.assigned_rooms.length > 0) {
+      const firstRoom = appointment.assigned_rooms[0] as any;
+      if (firstRoom.location) {
+        if (typeof firstRoom.location === 'string') {
+          locationId = firstRoom.location;
+        } else if (typeof firstRoom.location === 'object' && firstRoom.location !== null) {
+          locationId = firstRoom.location._id || '';
+        }
+      }
+      if (!locationId && firstRoom.location_id) {
+        if (typeof firstRoom.location_id === 'string') {
+          locationId = firstRoom.location_id;
+        } else if (typeof firstRoom.location_id === 'object' && firstRoom.location_id !== null) {
+          locationId = firstRoom.location_id._id || '';
+        }
+      }
+    }
+    
+    // Fallback: Versuche locationId aus Service zu extrahieren (wenn Service location_id hat)
+    if (!locationId && service && (service as any).location_id) {
+      const serviceLocationId = (service as any).location_id;
+      if (typeof serviceLocationId === 'string') {
+        locationId = serviceLocationId;
+      } else if (typeof serviceLocationId === 'object' && serviceLocationId !== null) {
+        locationId = serviceLocationId._id || '';
+      }
+    }
+
+    // Extrahiere doctorId aus doctor oder assigned_users (kann String-ID oder Objekt sein)
+    let doctorId = '';
+    if (appointment.doctor) {
+      if (typeof appointment.doctor === 'string') {
+        doctorId = appointment.doctor;
+      } else if (typeof appointment.doctor === 'object' && appointment.doctor !== null) {
+        doctorId = (appointment.doctor as any)._id || '';
+      }
+    }
+    // Fallback zu assigned_users (erste Person)
+    if (!doctorId && appointment.assigned_users && appointment.assigned_users.length > 0) {
+      const firstUser = appointment.assigned_users[0];
+      if (typeof firstUser === 'string') {
+        doctorId = firstUser;
+      } else if (typeof firstUser === 'object' && firstUser !== null) {
+        doctorId = (firstUser as any)._id || '';
+      }
+    }
+    // Fallback zu doctorId Feld direkt
+    if (!doctorId && (appointment as any).doctorId) {
+      doctorId = (appointment as any).doctorId;
+    }
+
+    // Extrahiere Patient-Informationen
+    const patient = appointment.patient;
+    let patientName = '';
+    let patientPhone = '';
+    let patientEmail = '';
+    let patientId = '';
+
+    if (patient) {
+      if (typeof patient === 'string') {
+        patientId = patient;
+      } else if (typeof patient === 'object' && patient !== null) {
+        patientId = (patient as any)._id || '';
+        patientName = `${(patient as any).firstName || (patient as any).first_name || ''} ${(patient as any).lastName || (patient as any).last_name || ''}`.trim();
+        patientPhone = (patient as any).phone || '';
+        patientEmail = (patient as any).email || '';
+      }
+    }
+
+
+    // Finde Service-Objekt, falls serviceId vorhanden ist
+    if (serviceId && !service && services.length > 0) {
+      service = services.find(s => s._id === serviceId);
+    }
+    
     setFormData({
       ...appointment,
       date,
-      time
+      time,
+      serviceId: serviceId || '',
+      service: service || undefined, // Service-Objekt setzen, falls gefunden
+      patientId: patientId || (appointment as any).patientId || '',
+      patientName: patientName || appointment.patientName || '',
+      patientPhone: patientPhone || appointment.patientPhone || '',
+      patientEmail: patientEmail || appointment.patientEmail || '',
     });
     setSelectedAppointment(appointment);
-    setPatientSearchValue(appointment.patient || null);
-    setPatientSearchInput(appointment.patient ? `${appointment.patient.firstName} ${appointment.patient.lastName}` : '');
+    setPatientSearchValue(patient || null);
+    setPatientSearchInput(patientName || (patient ? `${(patient as any).firstName || (patient as any).first_name || ''} ${(patient as any).lastName || (patient as any).last_name || ''}`.trim() : ''));
+    
+    // Setze selectedLocation - nur wenn die Location-ID in der Liste existiert
+    if (locationId && locations.length > 0) {
+      const locationExists = locations.some(loc => loc._id === locationId);
+      if (locationExists) {
+        setSelectedLocation(locationId);
+        console.log('🔧 handleEditAppointment - Location gesetzt:', locationId);
+      } else {
+        console.log('🔧 handleEditAppointment - Location-ID nicht gefunden in Liste:', locationId, '(Verfügbare Locations:', locations.length, ')');
+        setSelectedLocation('');
+      }
+    } else {
+      setSelectedLocation('');
+    }
+    
+    // Setze selectedStaff - nur wenn die Staff-ID in der Liste existiert
+    if (doctorId && staff.length > 0) {
+      // Prüfe zuerst, ob die ID direkt in Staff existiert
+      let staffExists = staff.some(s => s._id === doctorId);
+      let foundStaffId = doctorId;
+      
+      // Wenn nicht direkt gefunden, prüfe ob Staff-Profile eine user_id oder userId Referenz hat
+      if (!staffExists) {
+        const foundStaff = staff.find(s => {
+          if ((s as any).user_id === doctorId) return true;
+          const userId = (s as any).userId;
+          if (typeof userId === 'string' && userId === doctorId) return true;
+          if (typeof userId === 'object' && userId?._id === doctorId) return true;
+          const user = (s as any).user;
+          if (typeof user === 'string' && user === doctorId) return true;
+          if (typeof user === 'object' && user?._id === doctorId) return true;
+          return false;
+        });
+        if (foundStaff) {
+          staffExists = true;
+          foundStaffId = foundStaff._id;
+        }
+      }
+      
+      if (staffExists) {
+        setSelectedStaff(foundStaffId);
+        console.log('🔧 handleEditAppointment - Staff gesetzt:', foundStaffId, '(Original doctorId:', doctorId, ')');
+      } else {
+        console.log('🔧 handleEditAppointment - Staff-ID nicht gefunden in Liste:', doctorId, '(Verfügbare Staff:', staff.length, ')');
+        setSelectedStaff('');
+      }
+    } else {
+      setSelectedStaff('');
+    }
+    
+    // Lade Diagnosen für den korrekten Patienten
+    if (patientId) {
+      dispatch(fetchPatientDiagnoses({ 
+        patientId: patientId, 
+        status: 'active' 
+      }));
+    } else if (patient && typeof patient === 'object') {
+      const patientIdFromObject = (patient as any)._id;
+      if (patientIdFromObject) {
+        dispatch(fetchPatientDiagnoses({ 
+          patientId: patientIdFromObject, 
+          status: 'active' 
+        }));
+      }
+    }
+    
     setDialogMode('edit');
     setOpenDialog(true);
   };
@@ -538,14 +794,227 @@ const Appointments: React.FC = () => {
       time = appointment.time;
     }
 
+    // Extrahiere serviceId und service (gleiche Logik wie handleEditAppointment)
+    let serviceId = '';
+    let service: Service | undefined = undefined;
+    
+    // Prüfe zuerst serviceId Feld direkt
+    if ((appointment as any).serviceId) {
+      if (typeof (appointment as any).serviceId === 'string') {
+        serviceId = (appointment as any).serviceId;
+      } else if (typeof (appointment as any).serviceId === 'object' && (appointment as any).serviceId !== null) {
+        serviceId = ((appointment as any).serviceId as any)._id || '';
+      }
+    }
+    
+    // Prüfe service Objekt (gepopulated)
+    if (appointment.service) {
+      if (typeof appointment.service === 'string') {
+        serviceId = appointment.service;
+      } else if (typeof appointment.service === 'object' && appointment.service !== null) {
+        serviceId = (appointment.service as any)._id || '';
+        service = appointment.service as Service;
+      }
+    }
+    
+    // Prüfe serviceCode als Fallback
+    if (!serviceId && (appointment as any).serviceCode) {
+      // Versuche Service anhand des Codes zu finden
+      const serviceByCode = services.find(s => s.code === (appointment as any).serviceCode);
+      if (serviceByCode) {
+        serviceId = serviceByCode._id;
+        service = serviceByCode;
+      }
+    }
+    
+    // Prüfe type Feld als Fallback (Legacy)
+    if (!serviceId && appointment.type) {
+      let serviceByType = services.find(s => 
+        s.name.toLowerCase() === appointment.type.toLowerCase() || 
+        s.code.toLowerCase() === appointment.type.toLowerCase()
+      );
+      if (serviceByType) {
+        serviceId = serviceByType._id;
+        service = serviceByType;
+      }
+    }
+
+    // Extrahiere locationId (gleiche Logik wie handleEditAppointment)
+    let locationId = '';
+    // Prüfe zuerst locationId Feld
+    if ((appointment as any).locationId) {
+      if (typeof (appointment as any).locationId === 'string') {
+        locationId = (appointment as any).locationId;
+      } else if (typeof (appointment as any).locationId === 'object' && (appointment as any).locationId !== null) {
+        locationId = ((appointment as any).locationId as any)._id || '';
+      }
+    }
+    // Fallback zu location Objekt (gepopulated)
+    if (!locationId && appointment.location) {
+      if (typeof appointment.location === 'string') {
+        locationId = appointment.location;
+      } else if (typeof appointment.location === 'object' && appointment.location !== null) {
+        locationId = appointment.location._id || '';
+      }
+    }
+    // Fallback: Versuche locationId aus room zu extrahieren
+    if (!locationId && appointment.room && typeof appointment.room === 'object') {
+      const room = appointment.room as any;
+      if (room.location) {
+        if (typeof room.location === 'string') {
+          locationId = room.location;
+        } else if (typeof room.location === 'object' && room.location !== null) {
+          locationId = room.location._id || '';
+        }
+      }
+      if (!locationId && room.location_id) {
+        if (typeof room.location_id === 'string') {
+          locationId = room.location_id;
+        } else if (typeof room.location_id === 'object' && room.location_id !== null) {
+          locationId = room.location_id._id || '';
+        }
+      }
+    }
+    // Fallback: Versuche locationId aus assigned_rooms zu extrahieren
+    if (!locationId && appointment.assigned_rooms && appointment.assigned_rooms.length > 0) {
+      const firstRoom = appointment.assigned_rooms[0] as any;
+      if (firstRoom.location) {
+        if (typeof firstRoom.location === 'string') {
+          locationId = firstRoom.location;
+        } else if (typeof firstRoom.location === 'object' && firstRoom.location !== null) {
+          locationId = firstRoom.location._id || '';
+        }
+      }
+      if (!locationId && firstRoom.location_id) {
+        if (typeof firstRoom.location_id === 'string') {
+          locationId = firstRoom.location_id;
+        } else if (typeof firstRoom.location_id === 'object' && firstRoom.location_id !== null) {
+          locationId = firstRoom.location_id._id || '';
+        }
+      }
+    }
+    // Fallback: Versuche locationId aus Service zu extrahieren
+    if (!locationId && service && (service as any).location_id) {
+      const serviceLocationId = (service as any).location_id;
+      if (typeof serviceLocationId === 'string') {
+        locationId = serviceLocationId;
+      } else if (typeof serviceLocationId === 'object' && serviceLocationId !== null) {
+        locationId = serviceLocationId._id || '';
+      }
+    }
+
+    // Extrahiere doctorId (gleiche Logik wie handleEditAppointment)
+    let doctorId = '';
+    if (appointment.doctor) {
+      if (typeof appointment.doctor === 'string') {
+        doctorId = appointment.doctor;
+      } else if (typeof appointment.doctor === 'object' && appointment.doctor !== null) {
+        doctorId = (appointment.doctor as any)._id || '';
+      }
+    }
+    // Fallback zu assigned_users (erste Person)
+    if (!doctorId && appointment.assigned_users && appointment.assigned_users.length > 0) {
+      const firstUser = appointment.assigned_users[0];
+      if (typeof firstUser === 'string') {
+        doctorId = firstUser;
+      } else if (typeof firstUser === 'object' && firstUser !== null) {
+        doctorId = (firstUser as any)._id || '';
+      }
+    }
+    // Fallback zu doctorId Feld direkt
+    if (!doctorId && (appointment as any).doctorId) {
+      doctorId = (appointment as any).doctorId;
+    }
+
+    // Extrahiere Patient-Informationen
+    const patient = appointment.patient;
+    let patientName = '';
+    let patientPhone = '';
+    let patientEmail = '';
+    let patientId = '';
+
+    if (patient) {
+      if (typeof patient === 'string') {
+        patientId = patient;
+      } else if (typeof patient === 'object' && patient !== null) {
+        patientId = (patient as any)._id || '';
+        patientName = `${(patient as any).firstName || (patient as any).first_name || ''} ${(patient as any).lastName || (patient as any).last_name || ''}`.trim();
+        patientPhone = (patient as any).phone || '';
+        patientEmail = (patient as any).email || '';
+      }
+    }
+
+    // Finde Service-Objekt, falls serviceId vorhanden ist
+    if (serviceId && !service && services.length > 0) {
+      service = services.find(s => s._id === serviceId);
+    }
+
     setFormData({
       ...appointment,
       date,
-      time
+      time,
+      serviceId: serviceId || '',
+      service: service || undefined,
+      patientId: patientId || (appointment as any).patientId || '',
+      patientName: patientName || appointment.patientName || '',
+      patientPhone: patientPhone || appointment.patientPhone || '',
+      patientEmail: patientEmail || appointment.patientEmail || '',
     });
     setSelectedAppointment(appointment);
-    setPatientSearchValue(appointment.patient || null);
-    setPatientSearchInput(appointment.patient ? `${appointment.patient.firstName} ${appointment.patient.lastName}` : '');
+    setPatientSearchValue(patient || null);
+    setPatientSearchInput(patientName || (patient ? `${(patient as any).firstName || (patient as any).first_name || ''} ${(patient as any).lastName || (patient as any).last_name || ''}`.trim() : ''));
+    
+    // Setze selectedLocation - nur wenn die Location-ID in der Liste existiert
+    if (locationId && locations.length > 0) {
+      const locationExists = locations.some(loc => loc._id === locationId);
+      if (locationExists) {
+        setSelectedLocation(locationId);
+      } else {
+        setSelectedLocation('');
+      }
+    } else {
+      setSelectedLocation('');
+    }
+    
+    // Setze selectedStaff - nur wenn die Staff-ID in der Liste existiert
+    if (doctorId && staff.length > 0) {
+      let staffExists = staff.some(s => s._id === doctorId);
+      let foundStaffId = doctorId;
+      
+      if (!staffExists) {
+        const foundStaff = staff.find(s => {
+          if ((s as any).user_id === doctorId) return true;
+          const userId = (s as any).userId;
+          if (typeof userId === 'string' && userId === doctorId) return true;
+          if (typeof userId === 'object' && userId?._id === doctorId) return true;
+          const user = (s as any).user;
+          if (typeof user === 'string' && user === doctorId) return true;
+          if (typeof user === 'object' && user?._id === doctorId) return true;
+          return false;
+        });
+        if (foundStaff) {
+          staffExists = true;
+          foundStaffId = foundStaff._id;
+        }
+      }
+      
+      if (staffExists) {
+        setSelectedStaff(foundStaffId);
+      } else {
+        setSelectedStaff('');
+      }
+    } else {
+      setSelectedStaff('');
+    }
+    
+    // Lade Diagnosen für den korrekten Patienten
+    if (patientId) {
+      dispatch(fetchPatientDiagnoses({ 
+        patientId: patientId, 
+        status: 'active' 
+      }));
+    }
+    
     setDialogMode('view');
     setOpenDialog(true);
   };
@@ -804,17 +1273,54 @@ const Appointments: React.FC = () => {
       // Aktualisiere Datumsfelder für Bearbeitung
       const date = formData.date || new Date().toISOString().split('T')[0];
       const time = formData.time || '09:00';
-      const startTime = new Date(`${date}T${time}:00Z`).toISOString();
+      const startTime = `${date}T${time}:00`;
       const duration = formData.duration || 30;
-      const endTime = new Date(new Date(startTime).getTime() + duration * 60000).toISOString();
+      const [hours, minutes] = time.split(':').map(Number);
+      const endDate = new Date(`${date}T${time}:00`);
+      endDate.setMinutes(endDate.getMinutes() + duration);
+      const endHours = endDate.getHours();
+      const endMinutes = endDate.getMinutes();
+      const endTime = `${date}T${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}:00`;
+
+      // Hole zugewiesene Räume, Geräte und Personal aus der Leistung
+      // Versuche zuerst, das vollständige Service-Objekt aus dem services Array zu holen
+      let selectedService: Service | undefined = undefined;
+      if (formData.serviceId) {
+        selectedService = services.find(s => s._id === formData.serviceId);
+      }
+      // Fallback: Wenn formData.service ein vollständiges Service-Objekt ist, verwende es
+      if (!selectedService && formData.service && typeof formData.service === 'object' && '_id' in formData.service) {
+        selectedService = formData.service as Service;
+      }
+      const assignedRooms = selectedService?.assigned_rooms?.map((r: { _id: string }) => r._id || r) || [];
+      const assignedDevices = selectedService?.assigned_devices?.map((d: { _id: string }) => d._id || d) || [];
+      const assignedUsers = selectedService?.assigned_users?.map((u: { _id: string }) => u._id || u) || [];
+      
+      // Füge ausgewähltes Personal hinzu
+      if (selectedStaff) {
+        if (!assignedUsers.includes(selectedStaff)) {
+          assignedUsers.push(selectedStaff);
+        }
+      }
+
+      // Validiere type - nur gültige Werte erlaubt
+      const validTypes = ['consultation', 'follow-up', 'emergency', 'procedure'];
+      const appointmentType = formData.type && validTypes.includes(formData.type) 
+        ? formData.type 
+        : 'consultation';
 
       const updatedAppointment = {
         title: formData.patientName || 'Termin',
         startTime,
         endTime,
         patient: formData.patientId,
-        type: formData.type || 'consultation',
-        notes: formData.notes || ''
+        type: appointmentType,
+        notes: formData.notes || '',
+        location_id: selectedLocation || undefined,
+        service: selectedService?._id || formData.serviceId || undefined,
+        assigned_rooms: assignedRooms.length > 0 ? assignedRooms : undefined,
+        assigned_devices: assignedDevices.length > 0 ? assignedDevices : undefined,
+        assigned_users: assignedUsers.length > 0 ? assignedUsers : undefined
       };
 
       // Redux Store aktualisieren (wird automatisch den lokalen State über useEffect aktualisieren)
@@ -833,9 +1339,42 @@ const Appointments: React.FC = () => {
       
       setSnackbar({ open: true, message: 'Termin erfolgreich aktualisiert', severity: 'success' });
     }
-    setOpenDialog(false);
+    
+    // Schließe Dialog und prüfe returnUrl
+    handleCloseDialog();
   };
 
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+    setDialogMode('add');
+    setFormData(initialFormData);
+    setSelectedAppointment(null);
+    setPatientSearchValue(null);
+    setPatientSearchInput('');
+    setSelectedLocation('');
+    setSelectedStaff('');
+    setPatientDiagnosesMap(new Map());
+    
+    // Prüfe, ob ein returnUrl Parameter vorhanden ist (z.B. von Online-Buchungen)
+    const searchParams = new URLSearchParams(location.search);
+    const returnUrl = searchParams.get('returnUrl');
+    if (returnUrl) {
+      try {
+        // Dekodiere returnUrl (falls URL-kodiert)
+        const decodedReturnUrl = decodeURIComponent(returnUrl);
+        // Entferne returnUrl aus der URL und navigiere zurück
+        searchParams.delete('returnUrl');
+        const newSearch = searchParams.toString();
+        // Navigiere zur returnUrl (ohne weitere Parameter, da wir zurück zur Übersicht wollen)
+        navigate(decodedReturnUrl, { replace: true });
+        console.log('🔧 Navigation zurück zu:', decodedReturnUrl);
+      } catch (error) {
+        console.error('Fehler beim Dekodieren von returnUrl:', error);
+        // Fallback: Navigiere ohne Dekodierung
+        navigate(returnUrl, { replace: true });
+      }
+    }
+  };
 
   const handleFormChange = (field: string, value: any) => {
     setFormData(prev => ({
@@ -1439,6 +1978,8 @@ const Appointments: React.FC = () => {
     const openDialogParam = searchParams.get('openDialog');
     const dateParam = searchParams.get('date');
     const timeParam = searchParams.get('time');
+    const editParam = searchParams.get('edit');
+    const viewParam = searchParams.get('view');
     
     if (openDialogParam === 'true') {
       // Open dialog and prefill date and time
@@ -1464,8 +2005,52 @@ const Appointments: React.FC = () => {
         const newSearch = newSearchParams.toString();
         navigate(location.pathname + (newSearch ? `?${newSearch}` : ''), { replace: true });
       }
+    } else if (editParam) {
+      // Find appointment by ID and open edit dialog
+      // Check both local appointments state and Redux store
+      let appointment: Appointment | undefined = appointments.find(apt => apt._id === editParam);
+      if (!appointment) {
+        const reduxApt = reduxAppointments.find((apt: any) => apt._id === editParam);
+        if (reduxApt) {
+          // Convert Redux appointment to local Appointment type
+          appointment = reduxApt as any as Appointment;
+        }
+      }
+      if (appointment) {
+        handleEditAppointment(appointment);
+        // Remove edit parameter from URL
+        const newSearchParams = new URLSearchParams(location.search);
+        newSearchParams.delete('edit');
+        const newSearch = newSearchParams.toString();
+        navigate(location.pathname + (newSearch ? `?${newSearch}` : ''), { replace: true });
+      } else if (appointments.length === 0 && reduxAppointments.length === 0) {
+        // If appointments are not loaded yet, wait a bit and try again
+        // This will be handled by the useEffect dependency on appointments
+      }
+    } else if (viewParam) {
+      // Find appointment by ID and open view dialog
+      // Check both local appointments state and Redux store
+      let appointment: Appointment | undefined = appointments.find(apt => apt._id === viewParam);
+      if (!appointment) {
+        const reduxApt = reduxAppointments.find((apt: any) => apt._id === viewParam);
+        if (reduxApt) {
+          // Convert Redux appointment to local Appointment type
+          appointment = reduxApt as any as Appointment;
+        }
+      }
+      if (appointment) {
+        handleViewAppointment(appointment);
+        // Remove view parameter from URL
+        const newSearchParams = new URLSearchParams(location.search);
+        newSearchParams.delete('view');
+        const newSearch = newSearchParams.toString();
+        navigate(location.pathname + (newSearch ? `?${newSearch}` : ''), { replace: true });
+      } else if (appointments.length === 0 && reduxAppointments.length === 0) {
+        // If appointments are not loaded yet, wait a bit and try again
+        // This will be handled by the useEffect dependency on appointments
+      }
     }
-  }, [location.search, navigate, location.pathname]);
+  }, [location.search, navigate, location.pathname, appointments, reduxAppointments]);
 
   // Initialize with real data from API - only once
   useEffect(() => {
@@ -1482,30 +2067,272 @@ const Appointments: React.FC = () => {
     }
   }, [isInitialized, dispatch]); // Only depend on isInitialized and dispatch
 
-  // Use appointments from Redux store instead of local state
-  const { appointments: reduxAppointments } = useAppSelector((state) => state.appointments);
-  
-  // Lade Diagnosen für alle Patienten in den Terminen
+  // Setze Formularwerte, wenn Services/Locations/Staff geladen sind und Dialog im Edit- oder View-Modus ist
   useEffect(() => {
-    if (reduxAppointments && reduxAppointments.length > 0) {
-      const patientIds = new Set<string>();
-      reduxAppointments.forEach((apt: any) => {
-        if (apt.patient && typeof apt.patient === 'object' && apt.patient._id) {
-          patientIds.add(apt.patient._id);
-        } else if (apt.patient && typeof apt.patient === 'string') {
-          patientIds.add(apt.patient);
+    if ((dialogMode === 'edit' || dialogMode === 'view') && selectedAppointment && openDialog) {
+
+      // Service setzen, wenn serviceId vorhanden ist und Services geladen sind
+      if (formData.serviceId && services.length > 0) {
+        const service = services.find(s => s._id === formData.serviceId);
+        if (service) {
+          // Setze Service-Objekt, auch wenn es bereits gesetzt ist (kann veraltet sein)
+          if (!formData.service || formData.service._id !== service._id) {
+            handleFormChange('service', service);
+          }
+        }
+      }
+      
+      // Fallback: Versuche Service über type zu finden, wenn serviceId leer ist
+      if (!formData.serviceId && selectedAppointment && selectedAppointment.type && services.length > 0) {
+        const serviceByType = services.find(s => 
+          s.name.toLowerCase() === selectedAppointment.type.toLowerCase() || 
+          s.code.toLowerCase() === selectedAppointment.type.toLowerCase()
+        );
+        if (serviceByType) {
+          handleFormChange('serviceId', serviceByType._id);
+          handleFormChange('service', serviceByType);
+        }
+      }
+      
+      // Location setzen/korrigieren, wenn locations geladen sind
+      if (locations.length > 0 && selectedAppointment) {
+        // Versuche locationId aus appointment zu extrahieren
+        let locationId = '';
+        if ((selectedAppointment as any).locationId) {
+          if (typeof (selectedAppointment as any).locationId === 'string') {
+            locationId = (selectedAppointment as any).locationId;
+          } else if (typeof (selectedAppointment as any).locationId === 'object') {
+            locationId = ((selectedAppointment as any).locationId as any)._id || '';
+          }
+        }
+        if (!locationId && selectedAppointment.location) {
+          if (typeof selectedAppointment.location === 'string') {
+            locationId = selectedAppointment.location;
+          } else if (typeof selectedAppointment.location === 'object') {
+            locationId = selectedAppointment.location._id || '';
+          }
+        }
+        // Fallback: Versuche locationId aus room zu extrahieren
+        if (!locationId && selectedAppointment.room && typeof selectedAppointment.room === 'object') {
+          const room = selectedAppointment.room as any;
+          // Prüfe room.location (gepopulated)
+          if (room.location) {
+            if (typeof room.location === 'string') {
+              locationId = room.location;
+            } else if (typeof room.location === 'object' && room.location !== null) {
+              locationId = room.location._id || '';
+            }
+          }
+          // Prüfe room.location_id (direktes Feld)
+          if (!locationId && room.location_id) {
+            if (typeof room.location_id === 'string') {
+              locationId = room.location_id;
+            } else if (typeof room.location_id === 'object' && room.location_id !== null) {
+              locationId = room.location_id._id || '';
+            }
+          }
+        }
+        // Fallback: Versuche locationId aus assigned_rooms zu extrahieren
+        if (!locationId && selectedAppointment.assigned_rooms && selectedAppointment.assigned_rooms.length > 0) {
+          const firstRoom = selectedAppointment.assigned_rooms[0] as any;
+          if (firstRoom.location) {
+            if (typeof firstRoom.location === 'string') {
+              locationId = firstRoom.location;
+            } else if (typeof firstRoom.location === 'object' && firstRoom.location !== null) {
+              locationId = firstRoom.location._id || '';
+            }
+          }
+          if (!locationId && firstRoom.location_id) {
+            if (typeof firstRoom.location_id === 'string') {
+              locationId = firstRoom.location_id;
+            } else if (typeof firstRoom.location_id === 'object' && firstRoom.location_id !== null) {
+              locationId = firstRoom.location_id._id || '';
+            }
+          }
+        }
+        
+        // Fallback: Versuche locationId aus Service zu extrahieren (wenn Service location_id hat)
+        if (!locationId && formData.service && (formData.service as any).location_id) {
+          const serviceLocationId = (formData.service as any).location_id;
+          if (typeof serviceLocationId === 'string') {
+            locationId = serviceLocationId;
+          } else if (typeof serviceLocationId === 'object' && serviceLocationId !== null) {
+            locationId = serviceLocationId._id || '';
+          }
+          if (locationId && locations.some(loc => loc._id === locationId)) {
+            setSelectedLocation(locationId);
+          }
+        }
+        
+        // Setze nur, wenn die Location-ID in der Liste existiert und noch nicht gesetzt ist
+        if (locationId) {
+          const locationExists = locations.some(loc => loc._id === locationId);
+          if (locationExists) {
+            // Nur setzen, wenn noch nicht gesetzt oder wenn der aktuelle Wert ungültig ist
+            if (!selectedLocation || selectedLocation !== locationId) {
+              setSelectedLocation(locationId);
+              console.log('🔧 useEffect - Location gesetzt:', locationId);
+            }
+          } else {
+            // Ungültige Location-ID - zurücksetzen, wenn aktuell gesetzt
+            if (selectedLocation === locationId) {
+              setSelectedLocation('');
+              console.log('🔧 useEffect - Ungültige Location-ID zurückgesetzt:', locationId);
+            }
+          }
+        } else if (!selectedLocation && formData.service && (formData.service as any).location_id) {
+          // Fallback: Versuche locationId aus Service zu extrahieren (wenn Service location_id hat)
+          const serviceLocationId = (formData.service as any).location_id;
+          let serviceLocationIdValue = '';
+          if (typeof serviceLocationId === 'string') {
+            serviceLocationIdValue = serviceLocationId;
+          } else if (typeof serviceLocationId === 'object' && serviceLocationId !== null) {
+            serviceLocationIdValue = serviceLocationId._id || '';
+          }
+          if (serviceLocationIdValue && locations.some(loc => loc._id === serviceLocationIdValue)) {
+            setSelectedLocation(serviceLocationIdValue);
+            console.log('🔧 useEffect - Location aus Service gesetzt:', serviceLocationIdValue);
+          }
+        }
+      }
+      
+      // Staff setzen/korrigieren, wenn staff geladen ist
+      if (staff.length > 0 && selectedAppointment) {
+        // Versuche doctorId aus appointment zu extrahieren
+        let doctorId = '';
+        if (selectedAppointment.doctor) {
+          if (typeof selectedAppointment.doctor === 'string') {
+            doctorId = selectedAppointment.doctor;
+          } else if (typeof selectedAppointment.doctor === 'object') {
+            doctorId = (selectedAppointment.doctor as any)._id || '';
+          }
+        }
+        if (!doctorId && selectedAppointment.assigned_users && selectedAppointment.assigned_users.length > 0) {
+          const firstUser = selectedAppointment.assigned_users[0];
+          if (typeof firstUser === 'string') {
+            doctorId = firstUser;
+          } else if (typeof firstUser === 'object') {
+            doctorId = (firstUser as any)._id || '';
+          }
+        }
+        // Fallback zu doctorId Feld direkt
+        if (!doctorId && (selectedAppointment as any).doctorId) {
+          doctorId = (selectedAppointment as any).doctorId;
+        }
+        
+        // Setze nur, wenn die Staff-ID in der Liste existiert
+        // Prüfe sowohl nach Staff-Profile-ID als auch nach User-ID (user_id oder userId)
+        if (doctorId) {
+          let staffExists = staff.some(s => s._id === doctorId);
+          // Fallback: Prüfe ob Staff-Profile eine user_id oder userId Referenz hat, die mit doctorId übereinstimmt
+          if (!staffExists) {
+            staffExists = staff.some(s => {
+              // Prüfe user_id (String)
+              if ((s as any).user_id === doctorId) {
+                return true;
+              }
+              // Prüfe userId (kann String oder Objekt sein)
+              const userId = (s as any).userId;
+              if (typeof userId === 'string') {
+                return userId === doctorId;
+              } else if (typeof userId === 'object' && userId !== null) {
+                return userId._id === doctorId;
+              }
+              // Prüfe user (Legacy)
+              const user = (s as any).user;
+              if (typeof user === 'string') {
+                return user === doctorId;
+              } else if (typeof user === 'object' && user !== null) {
+                return user._id === doctorId;
+              }
+              return false;
+            });
+          }
+          if (staffExists) {
+            // Finde die Staff-ID (kann Staff-Profile-ID oder User-ID sein)
+            let foundStaffId = doctorId;
+            if (!staff.some(s => s._id === doctorId)) {
+              // Wenn nicht direkt gefunden, suche nach Staff-Profile mit dieser User-ID
+              const foundStaff = staff.find(s => {
+                // Prüfe user_id (String)
+                if ((s as any).user_id === doctorId) {
+                  return true;
+                }
+                // Prüfe userId (kann String oder Objekt sein)
+                const userId = (s as any).userId;
+                if (typeof userId === 'string') {
+                  return userId === doctorId;
+                } else if (typeof userId === 'object' && userId !== null) {
+                  return userId._id === doctorId;
+                }
+                // Prüfe user (Legacy)
+                const user = (s as any).user;
+                if (typeof user === 'string') {
+                  return user === doctorId;
+                } else if (typeof user === 'object' && user !== null) {
+                  return user._id === doctorId;
+                }
+                return false;
+              });
+              if (foundStaff) {
+                foundStaffId = foundStaff._id;
+              }
+            }
+            // Nur setzen, wenn noch nicht gesetzt oder wenn der aktuelle Wert ungültig ist
+            if (!selectedStaff || selectedStaff !== foundStaffId) {
+              setSelectedStaff(foundStaffId);
+              console.log('🔧 useEffect - Staff gesetzt:', foundStaffId, '(Original doctorId:', doctorId, ')');
+            }
+          } else {
+            // Ungültige Staff-ID - zurücksetzen, wenn aktuell gesetzt
+            if (selectedStaff === doctorId) {
+              setSelectedStaff('');
+              console.log('🔧 useEffect - Ungültige Staff-ID zurückgesetzt:', doctorId);
+            }
+          }
+        }
+      }
+    }
+  }, [dialogMode, selectedAppointment, openDialog, services, locations, staff, formData.serviceId, formData.service]);
+
+  // Berechne Patient-IDs mit useMemo, um unnötige Neuberechnungen zu vermeiden
+  const patientIdsFromAppointments = useMemo(() => {
+    if (!reduxAppointments || reduxAppointments.length === 0) return new Set<string>();
+    const ids = new Set<string>();
+    reduxAppointments.forEach((apt: any) => {
+      if (apt.patient && typeof apt.patient === 'object' && apt.patient._id) {
+        ids.add(apt.patient._id);
+      } else if (apt.patient && typeof apt.patient === 'string') {
+        ids.add(apt.patient);
+      }
+    });
+    return ids;
+  }, [reduxAppointments]);
+
+  // Verwende useRef, um zu verfolgen, welche Patient-IDs bereits geladen wurden
+  const loadedPatientIdsRef = useRef<Set<string>>(new Set());
+
+  // Lade Diagnosen für alle Patienten in den Terminen - nur wenn sich Patient-IDs ändern
+  useEffect(() => {
+    if (patientIdsFromAppointments.size > 0) {
+      // Prüfe, welche Diagnosen bereits geladen wurden (aus dem Ref, nicht aus dem State)
+      const currentlyLoadedIds = new Set(patientDiagnoses.map((d: PatientDiagnosis) => d.patientId));
+      
+      // Lade nur Diagnosen für Patienten, die noch nicht geladen wurden
+      patientIdsFromAppointments.forEach(patientId => {
+        if (!loadedPatientIdsRef.current.has(patientId) && !currentlyLoadedIds.has(patientId)) {
+          loadedPatientIdsRef.current.add(patientId);
+          dispatch(fetchPatientDiagnoses({ 
+            patientId, 
+            status: 'active'
+          }));
         }
       });
       
-      // Lade Diagnosen für alle eindeutigen Patienten
-      patientIds.forEach(patientId => {
-        dispatch(fetchPatientDiagnoses({ 
-          patientId, 
-          status: 'active'
-        }));
-      });
+      // Aktualisiere den Ref mit den aktuell geladenen IDs
+      currentlyLoadedIds.forEach(id => loadedPatientIdsRef.current.add(id));
     }
-  }, [reduxAppointments, dispatch]);
+  }, [patientIdsFromAppointments, dispatch]); // Entferne patientDiagnoses aus den Dependencies
   
   // Erstelle eine Map von Patient-ID zu Diagnosen
   useEffect(() => {
@@ -1772,6 +2599,17 @@ const Appointments: React.FC = () => {
               ))}
             </Select>
           </FormControl>
+          <FormControl sx={{ minWidth: 140 }}>
+            <InputLabel>Buchungsart</InputLabel>
+            <Select
+              value={filterOnline}
+              onChange={(e) => setFilterOnline(e.target.value as string)}
+            >
+              <MenuItem value="all">Alle</MenuItem>
+              <MenuItem value="online">Online</MenuItem>
+              <MenuItem value="offline">Vor Ort</MenuItem>
+            </Select>
+          </FormControl>
           <IconButton>
             <Refresh />
           </IconButton>
@@ -1905,10 +2743,24 @@ const Appointments: React.FC = () => {
                               }
                             }}
                           >
-                            {appointment.title || 'Unbekannt'}
+                            {(() => {
+                              // Bei Online-Buchungen: Patientname aus appointment.patient extrahieren
+                              if (appointment.patient) {
+                                const firstName = appointment.patient.firstName || '';
+                                const lastName = appointment.patient.lastName || '';
+                                if (firstName || lastName) {
+                                  return `${firstName} ${lastName}`.trim() || appointment.title || 'Unbekannt';
+                                }
+                              }
+                              // Fallback zu title oder patientName - entferne HTML-Tags falls vorhanden
+                              const titleText = appointment.title || appointment.patientName || 'Unbekannt';
+                              // Entferne HTML-Tags falls vorhanden
+                              const cleanTitle = titleText.replace(/<[^>]*>/g, '');
+                              return cleanTitle;
+                            })()}
                           </Typography>
                           <Chip
-                            label={appointment.service?.name || appointmentTypes.find(t => t.value === appointment.type)?.label || appointment.type}
+                            label={appointment.service?.name ? stripHtmlTags(appointment.service.name) : (appointmentTypes.find(t => t.value === appointment.type)?.label || appointment.type)}
                             size="medium"
                             sx={{
                               backgroundColor: appointment.service?.color_hex || 'primary.main',
@@ -2140,9 +2992,14 @@ const Appointments: React.FC = () => {
                           ) : null;
                         })()}
                         {appointment.service?.description && (
-                          <Typography variant="body2" color="text.secondary" display="block" mt={1.5} sx={{ fontStyle: 'italic' }}>
-                            {appointment.service.description}
-                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            color="text.secondary" 
+                            display="block" 
+                            mt={1.5} 
+                            sx={{ fontStyle: 'italic' }}
+                            dangerouslySetInnerHTML={{ __html: appointment.service.description }}
+                          />
                         )}
                         {appointment.notes && (
                           <Typography variant="body2" color="text.secondary" mt={1} sx={{ fontStyle: 'italic' }}>
@@ -2457,7 +3314,7 @@ const Appointments: React.FC = () => {
       {/* Appointment Dialog */}
       <Dialog 
         open={openDialog} 
-        onClose={() => setOpenDialog(false)} 
+        onClose={handleCloseDialog} 
         maxWidth="md" 
         fullWidth
         PaperProps={{
@@ -2470,7 +3327,7 @@ const Appointments: React.FC = () => {
           backdrop: {
             onClick: (e: React.MouseEvent<HTMLDivElement>) => {
               if (dialogMode === 'view') {
-                setOpenDialog(false);
+                handleCloseDialog();
               }
             }
           }
@@ -3001,17 +3858,28 @@ const Appointments: React.FC = () => {
                   )}
                   
                   {/* Aktive Diagnosen anzeigen */}
-                  {patientDiagnoses && patientDiagnoses.length > 0 && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', color: 'primary.main' }}>
-                        <LocalHospital sx={{ fontSize: 18, verticalAlign: 'middle', mr: 0.5 }} />
-                        Aktive Diagnosen
-                      </Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                        {patientDiagnoses
-                          .filter((diag: PatientDiagnosis) => diag.status === 'active')
-                          .slice(0, 5) // Zeige maximal 5 Diagnosen
-                          .map((diag: PatientDiagnosis) => (
+                  {(() => {
+                    // Filtere Diagnosen nach dem aktuellen Patienten
+                    const currentPatientId = formData.patient?._id || formData.patientId || '';
+                    const filteredDiagnoses = patientDiagnoses && currentPatientId
+                      ? patientDiagnoses.filter((diag: PatientDiagnosis) => 
+                          diag.status === 'active' && 
+                          (diag.patientId === currentPatientId || (diag as any).patient === currentPatientId)
+                        )
+                      : [];
+                    
+                    if (filteredDiagnoses.length === 0) return null;
+                    
+                    return (
+                      <Box sx={{ mb: 2 }}>
+                        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', color: 'primary.main' }}>
+                          <LocalHospital sx={{ fontSize: 18, verticalAlign: 'middle', mr: 0.5 }} />
+                          Aktive Diagnosen
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {filteredDiagnoses
+                            .slice(0, 5) // Zeige maximal 5 Diagnosen
+                            .map((diag: PatientDiagnosis) => (
                             <Paper 
                               key={diag._id} 
                               elevation={1} 
@@ -3044,15 +3912,16 @@ const Appointments: React.FC = () => {
                                 />
                               )}
                             </Paper>
-                          ))}
-                        {patientDiagnoses.filter((diag: PatientDiagnosis) => diag.status === 'active').length > 5 && (
-                          <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                            ... und {patientDiagnoses.filter((diag: PatientDiagnosis) => diag.status === 'active').length - 5} weitere
-                          </Typography>
-                        )}
+                            ))}
+                          {filteredDiagnoses.length > 5 && (
+                            <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                              ... und {filteredDiagnoses.length - 5} weitere
+                            </Typography>
+                          )}
+                        </Box>
                       </Box>
-                    </Box>
-                  )}
+                    );
+                  })()}
                 </Box>
               ) : (
                 <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
@@ -3233,7 +4102,7 @@ const Appointments: React.FC = () => {
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2.5, bgcolor: 'grey.50', borderTop: '1px solid', borderColor: 'divider' }}>
           <Button 
-            onClick={() => setOpenDialog(false)}
+            onClick={handleCloseDialog}
             size="large"
             sx={{ minWidth: 120, textTransform: 'none' }}
           >

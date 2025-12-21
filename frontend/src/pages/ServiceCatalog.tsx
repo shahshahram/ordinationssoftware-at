@@ -65,6 +65,7 @@ import { RootState } from '../store/store';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 import { Refresh } from '@mui/icons-material';
+import RichTextEditor from '../components/RichTextEditor';
 
 // Interface-Definitionen
 interface Location {
@@ -1107,13 +1108,16 @@ const ServiceCatalog: React.FC = () => {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2">
-                      {service.name}
-                    </Typography>
+                    <Typography 
+                      variant="body2"
+                      dangerouslySetInnerHTML={{ __html: service.name }}
+                    />
                     {service.description && (
-                      <Typography variant="caption" color="text.secondary">
-                        {service.description}
-                      </Typography>
+                      <Typography 
+                        variant="caption" 
+                        color="text.secondary"
+                        dangerouslySetInnerHTML={{ __html: service.description }}
+                      />
                     )}
                   </TableCell>
                   <TableCell>
@@ -1441,13 +1445,17 @@ const ServiceCatalog: React.FC = () => {
                   onChange={(e) => setFormData({ ...formData, code: e.target.value })}
                   required
                 />
-                <TextField
-                  fullWidth
-                  label="Name *"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  required
-                />
+                <Box sx={{ gridColumn: { xs: '1', sm: '1 / -1' } }}>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                    Name *
+                  </Typography>
+                  <RichTextEditor
+                    value={formData.name}
+                    onChange={(html) => setFormData({ ...formData, name: html })}
+                    placeholder="Leistungsname eingeben..."
+                    minHeight={80}
+                  />
+                </Box>
                 <Autocomplete
                   freeSolo={false}
                   options={categories}
@@ -1513,14 +1521,17 @@ const ServiceCatalog: React.FC = () => {
                   }}
                   noOptionsText={categories.length === 0 ? "Keine Kategorien verfügbar. Bitte erstellen Sie zuerst eine Kategorie in der Service-Kategorien-Verwaltung." : "Keine Optionen"}
                 />
-                <TextField
-                  fullWidth
-                  label="Beschreibung"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  multiline
-                  rows={3}
-                />
+                <Box>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                    Beschreibung
+                  </Typography>
+                  <RichTextEditor
+                    value={formData.description}
+                    onChange={(html) => setFormData({ ...formData, description: html })}
+                    placeholder="Beschreibung eingeben..."
+                    minHeight={150}
+                  />
+                </Box>
                 <FormControl fullWidth>
                   <InputLabel>Fachrichtung</InputLabel>
                   <Select
@@ -1564,14 +1575,17 @@ const ServiceCatalog: React.FC = () => {
                     ))}
                   </Select>
                 </FormControl>
-                <TextField
-                  fullWidth
-                  label="Beschreibung"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  multiline
-                  rows={3}
-                />
+                <Box sx={{ gridColumn: { xs: '1', sm: '1 / -1' } }}>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 500 }}>
+                    Beschreibung
+                  </Typography>
+                  <RichTextEditor
+                    value={formData.description}
+                    onChange={(html) => setFormData({ ...formData, description: html })}
+                    placeholder="Beschreibung eingeben..."
+                    minHeight={150}
+                  />
+                </Box>
                 <Box>
                   <FormControlLabel
                     control={

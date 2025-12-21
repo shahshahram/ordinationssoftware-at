@@ -66,6 +66,7 @@ const ambulanzbefundeRoutes = require('./routes/ambulanzbefunde');
 const dashboardWidgetsRoutes = require('./routes/dashboardWidgets');
 const dekursRoutes = require('./routes/dekurs');
 const internalMessagesRoutes = require('./routes/internalMessages');
+const messageFoldersRoutes = require('./routes/messageFolders');
 const vitalSignsRoutes = require('./routes/vitalSigns');
 const medicalDataHistoryRoutes = require('./routes/medicalDataHistory');
 const patientDataHistoryRoutes = require('./routes/patientDataHistory');
@@ -312,6 +313,7 @@ function registerStaticRoutes(app) {
   app.use('/api/dekurs', dekursRoutes);
   app.use('/api/dekurs-vorlagen', dekursVorlagenRoutes);
   app.use('/api/internal-messages', internalMessagesRoutes);
+  app.use('/api/message-folders', messageFoldersRoutes);
   app.use('/api/vital-signs', vitalSignsRoutes);
 app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/patient-data-history', patientDataHistoryRoutes);

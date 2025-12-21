@@ -15,12 +15,14 @@ import LocationProvider from './components/Location/LocationProvider';
 // Pages
 import Dashboard from './pages/Dashboard';
 import Patients from './pages/Patients';
+import TemporaryPatients from './pages/TemporaryPatients';
 import PatientsHints from './pages/PatientsHints';
 import Appointments from './pages/Appointments';
 import Resources from './pages/Resources';
 import Billing from './pages/Billing';
 import Documents from './pages/Documents';
 import OnlineBooking from './pages/OnlineBooking';
+import OnlineBookings from './pages/OnlineBookings';
 import PatientBooking from './pages/PatientBooking';
 import WaitingListReservation from './pages/WaitingListReservation';
 import ELGA from './pages/ELGA';
@@ -237,6 +239,14 @@ const AppContent: React.FC = () => {
                         } 
                       />
                       <Route 
+                        path="/temporary-patients" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <TemporaryPatients />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
                         path="/patients-hints" 
                         element={
                           <ProtectedRoute requiredPermissions={['patients.read']}>
@@ -265,6 +275,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['appointments.read']}>
                             <Appointments />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/online-bookings" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <OnlineBookings />
                           </ProtectedRoute>
                         } 
                       />

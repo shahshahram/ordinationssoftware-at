@@ -527,15 +527,33 @@ router.put('/:id', [
       });
     }
 
-    const appointment = await Appointment.findOne({
-      _id: req.params.id,
-      doctor: req.user.id
-    });
+    // Finde Termin nach ID
+    const appointment = await Appointment.findById(req.params.id);
 
     if (!appointment) {
       return res.status(404).json({
         success: false,
         message: 'Termin nicht gefunden'
+      });
+    }
+
+    // Prüfe Berechtigung: Admin oder appointments.write Berechtigung erlaubt Bearbeitung aller Termine
+    // Sonst muss der Benutzer der Arzt sein oder in assigned_users enthalten sein
+    const hasPermission = req.user.permissions?.includes('appointments.write') || req.user.permissions?.includes('admin');
+    const isDoctor = appointment.doctor && (
+      (typeof appointment.doctor === 'string' && appointment.doctor.toString() === req.user.id.toString()) ||
+      (typeof appointment.doctor === 'object' && appointment.doctor._id?.toString() === req.user.id.toString())
+    );
+    const isAssignedUser = appointment.assigned_users && Array.isArray(appointment.assigned_users) &&
+      appointment.assigned_users.some((userId) => {
+        const id = typeof userId === 'string' ? userId : userId._id || userId;
+        return id.toString() === req.user.id.toString();
+      });
+
+    if (!hasPermission && !isDoctor && !isAssignedUser) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung, diesen Termin zu bearbeiten'
       });
     }
 
@@ -546,20 +564,20 @@ router.put('/:id', [
       const startTime = updateData.startTime || appointment.startTime;
       const endTime = updateData.endTime || appointment.endTime;
 
-      const validation = await validator.validateAppointment({
-        startTime,
-        endTime,
-        doctorId: req.user.id,
-        resourceId: updateData.resourceId || appointment.resourceId,
-        appointmentId: appointment._id
-      }, Appointment, SlotReservation);
-
-      if (!validation.isValid) {
+      try {
+        await validator.validateAppointment({
+          startTime,
+          endTime,
+          resourceId: updateData.resourceId || appointment.resourceId || null,
+          doctorId: updateData.doctor || appointment.doctor || req.user.id, // Use doctor for conflict checking
+          skipMinBookingWindow: true, // Allow internal bookings without 2-hour minimum
+          appointmentId: appointment._id // Exclude current appointment from conflict check
+        });
+      } catch (validationError) {
+        console.log('Appointment validation failed:', validationError.message);
         return res.status(400).json({
           success: false,
-          message: 'Termin-Validierung fehlgeschlagen',
-          errors: validation.errors,
-          warnings: validation.warnings
+          message: validationError.message || 'Termin-Validierung fehlgeschlagen'
         });
       }
     }
@@ -685,23 +703,40 @@ router.post('/validate', [
 
     const { startTime, endTime, resourceId = 'default', appointmentId = null } = req.body;
 
-    const validation = await validator.validateAppointment({
-      startTime,
-      endTime,
-      doctorId: req.user.id,
-      resourceId,
-      appointmentId
-    }, Appointment, SlotReservation);
+    try {
+      await validator.validateAppointment({
+        startTime,
+        endTime,
+        resourceId,
+        skipMinBookingWindow: true, // Allow internal bookings without 2-hour minimum
+        appointmentId // Exclude current appointment from conflict check if provided
+      });
 
-    res.json({
-      success: true,
-      data: {
-        isValid: validation.isValid,
-        errors: validation.errors,
-        warnings: validation.warnings,
-        duration: validation.duration
-      }
-    });
+      // Calculate duration
+      const start = new Date(startTime);
+      const end = new Date(endTime);
+      const duration = Math.round((end - start) / (1000 * 60)); // duration in minutes
+
+      res.json({
+        success: true,
+        data: {
+          isValid: true,
+          errors: [],
+          warnings: [],
+          duration: duration
+        }
+      });
+    } catch (validationError) {
+      res.json({
+        success: true,
+        data: {
+          isValid: false,
+          errors: [validationError.message],
+          warnings: [],
+          duration: null
+        }
+      });
+    }
   } catch (error) {
     console.error('Appointment validation error:', error);
     res.status(500).json({ 

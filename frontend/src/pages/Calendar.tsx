@@ -251,7 +251,9 @@ interface NewEventState {
         }
         
         if (patientName === 'Termin') {
-          patientName = appointment.title || 'Termin';
+          // Entferne HTML-Tags aus title falls vorhanden
+          const titleText = appointment.title || 'Termin';
+          patientName = titleText.replace(/<[^>]*>/g, '');
         }
         
         const roomName = rooms.find((r: any) => r._id === appointment.room)?.name;

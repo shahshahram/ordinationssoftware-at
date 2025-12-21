@@ -34,7 +34,8 @@ import {
   EventNote,
   Medication,
   Mail,
-  Science
+  Science,
+  BookOnline
 } from '@mui/icons-material';
 
 export interface AvailableWidget {
@@ -298,6 +299,15 @@ const AVAILABLE_WIDGETS: AvailableWidget[] = [
     icon: <Mail />,
     defaultConfig: {},
     defaultPosition: { x: 0, y: 47, w: 6, h: 8 }
+  },
+  {
+    widgetId: 'new-online-bookings',
+    widgetType: 'list',
+    title: 'Neue Online-Buchungen',
+    description: 'Online-Buchungen der letzten 3 Tage',
+    icon: <BookOnline />,
+    defaultConfig: { items: [] },
+    defaultPosition: { x: 6, y: 47, w: 6, h: 8 }
   }
 ];
 

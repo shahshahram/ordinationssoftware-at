@@ -157,12 +157,17 @@ interface BookingData {
     phone: string;
     dateOfBirth: string;
     socialSecurityNumber?: string;
+    address?: {
+      street: string;
+      zipCode: string;
+      city: string;
+      country: string;
+    };
   };
   appointment: {
     date: string;
     startTime: string;
     type: string;
-    reason: string;
     notes?: string;
     assigned_rooms?: string[];
     assigned_devices?: string[];
@@ -209,12 +214,15 @@ const OnlineBooking: React.FC = () => {
   const [verifyingCode, setVerifyingCode] = useState(false);
   const [optInError, setOptInError] = useState<string | null>(null);
   const [gdprConsent, setGdprConsent] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
   
   // Service und Anamnese
   const [services, setServices] = useState<Service[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [anamnesisQuestions, setAnamnesisQuestions] = useState<AnamnesisQuestion[]>([]);
   const [anamnesisAnswers, setAnamnesisAnswers] = useState<Record<string, any>>({});
+  const [openServiceDetailDialog, setOpenServiceDetailDialog] = useState(false);
+  const [pendingService, setPendingService] = useState<Service | null>(null);
 
   const [formData, setFormData] = useState<BookingData>({
     patient: {
@@ -223,13 +231,18 @@ const OnlineBooking: React.FC = () => {
       email: '',
       phone: '',
       dateOfBirth: '',
-      socialSecurityNumber: ''
+      socialSecurityNumber: '',
+      address: {
+        street: '',
+        zipCode: '',
+        city: '',
+        country: 'Österreich'
+      }
     },
     appointment: {
       date: '',
       startTime: '',
       type: '',
-      reason: '',
       notes: ''
     },
     doctor: {
@@ -597,19 +610,44 @@ const OnlineBooking: React.FC = () => {
   };
 
   const handleServiceSelect = (service: Service) => {
-    setSelectedService(service);
-    setSelectedDoctor(null);
-    setSelectedDate('');
-    setSelectedDateObj(null);
-    setFormData(prev => ({
-      ...prev,
-      appointment: {
-        ...prev.appointment,
-        serviceId: service._id,
-        type: service.name
-      }
-    }));
-    setActiveStep(2);
+    setPendingService(service);
+    setOpenServiceDetailDialog(true);
+  };
+
+  const handleConfirmServiceSelection = () => {
+    if (pendingService) {
+      setSelectedService(pendingService);
+      setSelectedDoctor(null);
+      setSelectedDate('');
+      setSelectedDateObj(null);
+      
+      // Entferne HTML-Tags aus dem Service-Namen
+      const stripHtmlTags = (html: string): string => {
+        if (!html) return '';
+        const tmp = document.createElement('DIV');
+        tmp.innerHTML = html;
+        return tmp.textContent || tmp.innerText || '';
+      };
+      
+      const cleanServiceName = stripHtmlTags(pendingService.name || 'Allgemeine Beratung');
+      
+      setFormData(prev => ({
+        ...prev,
+        appointment: {
+          ...prev.appointment,
+          serviceId: pendingService._id,
+          type: cleanServiceName
+        }
+      }));
+      setOpenServiceDetailDialog(false);
+      setPendingService(null);
+      setActiveStep(2);
+    }
+  };
+
+  const handleCancelServiceSelection = () => {
+    setOpenServiceDetailDialog(false);
+    setPendingService(null);
   };
 
   const handleDoctorSelect = (doctor: Doctor) => {
@@ -715,6 +753,14 @@ const OnlineBooking: React.FC = () => {
     }));
   };
 
+  // E-Mail-Validierungsfunktion
+  const validateEmail = (email: string): boolean => {
+    if (!email) return false;
+    // RFC 5322 kompatible E-Mail-Validierung
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
+  };
+
   const handleNestedFormChange = (parent: string, field: string, value: any) => {
     // Spezielle Validierung für Datumsfelder
     if (field === 'dateOfBirth' && value) {
@@ -727,6 +773,15 @@ const OnlineBooking: React.FC = () => {
           severity: 'error'
         });
         return;
+      }
+    }
+    
+    // E-Mail-Validierung
+    if (parent === 'patient' && field === 'email') {
+      if (value && !validateEmail(value)) {
+        setEmailError('Bitte geben Sie eine gültige E-Mail-Adresse ein');
+      } else {
+        setEmailError(null);
       }
     }
     
@@ -819,6 +874,19 @@ const OnlineBooking: React.FC = () => {
         return;
       }
       
+      // E-Mail-Validierung vor dem Absenden
+      if (!formData.patient.email || !validateEmail(formData.patient.email)) {
+        setEmailError('Bitte geben Sie eine gültige E-Mail-Adresse ein');
+        setSnackbar({
+          open: true,
+          message: 'Bitte geben Sie eine gültige E-Mail-Adresse ein',
+          severity: 'error'
+        });
+        // Gehe zurück zum Daten-Eingabe-Schritt
+        setActiveStep(5);
+        return;
+      }
+      
       setLoading(true);
       
       // Konvertiere Anamnese-Antworten in das erwartete Format
@@ -842,12 +910,37 @@ const OnlineBooking: React.FC = () => {
       const bufferAfter = selectedService?.buffer_after_min || 0;
       const totalDuration = baseDuration + bufferBefore + bufferAfter;
       
+      // Entferne HTML-Tags aus appointment.type und reason
+      const stripHtmlTags = (html: string): string => {
+        if (!html) return '';
+        const tmp = document.createElement('DIV');
+        tmp.innerHTML = html;
+        return tmp.textContent || tmp.innerText || '';
+      };
+      
+      const cleanAppointmentType = stripHtmlTags(formData.appointment.type || '');
+      const cleanReason = formData.appointment.notes 
+        ? stripHtmlTags(formData.appointment.notes) 
+        : (formData.appointment.type ? stripHtmlTags(formData.appointment.type) : 'Online-Buchung');
+      
       const bookingData = {
         ...formData,
+        patient: {
+          ...formData.patient,
+          address: formData.patient.address || {
+            street: '',
+            zipCode: '',
+            city: '',
+            country: 'Österreich'
+          }
+        },
         appointment: {
           ...formData.appointment,
+          type: cleanAppointmentType || 'Allgemeine Beratung', // Bereinigter Service-Name ohne HTML
           serviceId: selectedService?._id,
-          duration: totalDuration // Sende die korrekte Dauer mit Pufferzeiten
+          duration: totalDuration, // Sende die korrekte Dauer mit Pufferzeiten
+          reason: cleanReason, // Bereinigter Grund ohne HTML
+          notes: formData.appointment.notes ? stripHtmlTags(formData.appointment.notes) : ''
         },
         anamnesisResponses: anamnesisResponses,
         gdprConsent: gdprConsent
@@ -1084,9 +1177,11 @@ const OnlineBooking: React.FC = () => {
                             <CardContent>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                 <MedicalServices color="primary" />
-                                <Typography variant="h6" fontWeight="bold">
-                                  {service.name}
-                                </Typography>
+                                <Typography 
+                                  variant="h6" 
+                                  fontWeight="bold"
+                                  dangerouslySetInnerHTML={{ __html: service.name }}
+                                />
                               </Box>
                               {service.code && (
                                 <Chip
@@ -1097,9 +1192,12 @@ const OnlineBooking: React.FC = () => {
                                 />
                               )}
                               {service.description && (
-                                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                  {service.description}
-                                </Typography>
+                                <Typography 
+                                  variant="body2" 
+                                  color="text.secondary" 
+                                  sx={{ mb: 1 }}
+                                  dangerouslySetInnerHTML={{ __html: service.description }}
+                                />
                               )}
                               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
                                 <Chip
@@ -1125,13 +1223,17 @@ const OnlineBooking: React.FC = () => {
                     </Grid>
                     {selectedService && (
                       <Alert severity="success" sx={{ mt: 2 }}>
-                        <Typography variant="body1" fontWeight="bold">
-                          Ausgewählte Leistung: {selectedService.name}
-                        </Typography>
+                        <Typography 
+                          variant="body1" 
+                          fontWeight="bold"
+                          dangerouslySetInnerHTML={{ __html: `Ausgewählte Leistung: ${selectedService.name}` }}
+                        />
                         {selectedService.description && (
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            {selectedService.description}
-                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ mt: 0.5 }}
+                            dangerouslySetInnerHTML={{ __html: selectedService.description }}
+                          />
                         )}
                         <Box sx={{ display: 'flex', gap: 2, mt: 1, flexWrap: 'wrap' }}>
                           <Typography variant="body2">
@@ -1376,6 +1478,14 @@ const OnlineBooking: React.FC = () => {
                     type="email"
                     value={formData.patient.email}
                     onChange={(e) => handleNestedFormChange('patient', 'email', e.target.value)}
+                    onBlur={(e) => {
+                      // Zusätzliche Validierung beim Verlassen des Felds
+                      if (e.target.value && !validateEmail(e.target.value)) {
+                        setEmailError('Bitte geben Sie eine gültige E-Mail-Adresse ein');
+                      }
+                    }}
+                    error={!!emailError}
+                    helperText={emailError || ''}
                     required
                   />
                 </Grid>
@@ -1408,9 +1518,103 @@ const OnlineBooking: React.FC = () => {
                   />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
+                  <Typography variant="subtitle2" sx={{ mb: 1, mt: 1 }}>
+                    Adresse
+                  </Typography>
+                </Grid>
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    label="Straße und Hausnummer"
+                    value={formData.patient.address?.street || ''}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        patient: {
+                          ...formData.patient,
+                          address: {
+                            ...formData.patient.address!,
+                            street: e.target.value
+                          }
+                        }
+                      });
+                    }}
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Postleitzahl"
+                    value={formData.patient.address?.zipCode || ''}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        patient: {
+                          ...formData.patient,
+                          address: {
+                            ...formData.patient.address!,
+                            zipCode: e.target.value
+                          }
+                        }
+                      });
+                    }}
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Stadt"
+                    value={formData.patient.address?.city || ''}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        patient: {
+                          ...formData.patient,
+                          address: {
+                            ...formData.patient.address!,
+                            city: e.target.value
+                          }
+                        }
+                      });
+                    }}
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Land"
+                    value={formData.patient.address?.country || 'Österreich'}
+                    onChange={(e) => {
+                      setFormData({
+                        ...formData,
+                        patient: {
+                          ...formData.patient,
+                          address: {
+                            ...formData.patient.address!,
+                            country: e.target.value
+                          }
+                        }
+                      });
+                    }}
+                    required
+                  />
+                </Grid>
+                <Grid size={{ xs: 12 }}>
                   <Autocomplete
                     options={services}
-                    getOptionLabel={(option) => `${option.code || ''} - ${option.name}`}
+                    getOptionLabel={(option) => {
+                      const stripHtmlTags = (html: string): string => {
+                        if (!html) return '';
+                        const tmp = document.createElement('DIV');
+                        tmp.innerHTML = html;
+                        return tmp.textContent || tmp.innerText || '';
+                      };
+                      const cleanName = stripHtmlTags(option.name || '');
+                      return `${option.code || ''} - ${cleanName}`;
+                    }}
                     value={selectedService}
                     onChange={(event, newValue) => {
                       setSelectedService(newValue);
@@ -1461,22 +1665,12 @@ const OnlineBooking: React.FC = () => {
                 <Grid size={{ xs: 12 }}>
                   <TextField
                     fullWidth
-                    label="Grund des Termins"
-                    multiline
-                    rows={3}
-                    value={formData.appointment.reason}
-                    onChange={(e) => handleNestedFormChange('appointment', 'reason', e.target.value)}
-                    required
-                  />
-                </Grid>
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
                     label="Zusätzliche Notizen (optional)"
                     multiline
-                    rows={2}
+                    rows={3}
                     value={formData.appointment.notes}
                     onChange={(e) => handleNestedFormChange('appointment', 'notes', e.target.value)}
+                    placeholder="Hier können Sie zusätzliche Informationen oder Anmerkungen eingeben..."
                   />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
@@ -1766,6 +1960,158 @@ const OnlineBooking: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Service-Detail-Dialog */}
+      <Dialog
+        open={openServiceDetailDialog}
+        onClose={handleCancelServiceSelection}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            maxHeight: '90vh'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          bgcolor: 'primary.main', 
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          pb: 2
+        }}>
+          <MedicalServices />
+          <Typography variant="h6" component="span" fontWeight="bold">
+            Leistungsdetails
+          </Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: 3 }}>
+          {pendingService && (
+            <Box>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                <Avatar
+                  sx={{
+                    bgcolor: 'primary.main',
+                    width: 56,
+                    height: 56
+                  }}
+                >
+                  <MedicalServices fontSize="large" />
+                </Avatar>
+                <Box sx={{ flex: 1 }}>
+                  <Typography 
+                    variant="h5" 
+                    fontWeight="bold"
+                    gutterBottom
+                    dangerouslySetInnerHTML={{ __html: pendingService.name }}
+                  />
+                  {pendingService.code && (
+                    <Chip
+                      label={pendingService.code}
+                      size="small"
+                      variant="outlined"
+                      sx={{ mt: 0.5 }}
+                    />
+                  )}
+                </Box>
+              </Box>
+
+              {pendingService.description && (
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" fontWeight="bold" gutterBottom color="text.secondary">
+                    Beschreibung
+                  </Typography>
+                  <Card variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
+                    <Typography 
+                      variant="body1"
+                      sx={{ 
+                        whiteSpace: 'pre-wrap',
+                        lineHeight: 1.8
+                      }}
+                      dangerouslySetInnerHTML={{ __html: pendingService.description }}
+                    />
+                  </Card>
+                </Box>
+              )}
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight="bold" color="text.secondary" gutterBottom>
+                      Dauer
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <AccessTime color="primary" />
+                      <Typography variant="h6" fontWeight="bold">
+                        {
+                          (pendingService.base_duration_min || pendingService.duration || 30) + 
+                          (pendingService.buffer_before_min || 0) + 
+                          (pendingService.buffer_after_min || 0)
+                        } Min.
+                      </Typography>
+                    </Box>
+                    {(pendingService.buffer_before_min || 0) + (pendingService.buffer_after_min || 0) > 0 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                        Grund: {pendingService.base_duration_min || pendingService.duration || 30} Min. + Puffer: {(pendingService.buffer_before_min || 0) + (pendingService.buffer_after_min || 0)} Min.
+                      </Typography>
+                    )}
+                  </Box>
+
+                  {pendingService.price_cents && (
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight="bold" color="text.secondary" gutterBottom>
+                        Preis
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <LocalHospital color="secondary" />
+                        <Typography variant="h6" fontWeight="bold" color="secondary.main">
+                          €{(pendingService.price_cents / 100).toFixed(2)}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  )}
+
+                  {pendingService.category && (
+                    <Box>
+                      <Typography variant="subtitle2" fontWeight="bold" color="text.secondary" gutterBottom>
+                        Kategorie
+                      </Typography>
+                      <Chip
+                        label={pendingService.category}
+                        size="medium"
+                        color="primary"
+                        variant="outlined"
+                      />
+                    </Box>
+                  )}
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 3, pt: 2, gap: 2 }}>
+          <Button
+            onClick={handleCancelServiceSelection}
+            variant="outlined"
+            color="inherit"
+            size="large"
+          >
+            Abbrechen
+          </Button>
+          <Button
+            onClick={handleConfirmServiceSelection}
+            variant="contained"
+            color="primary"
+            size="large"
+            startIcon={<CheckCircle />}
+            sx={{ minWidth: 150 }}
+          >
+            Diese Leistung wählen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

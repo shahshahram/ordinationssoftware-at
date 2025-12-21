@@ -73,7 +73,7 @@ import VitalSignsChart from './VitalSignsChart';
 
 interface EPAEntry {
   id: string;
-  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo' | 'vital' | 'allergy' | 'infection' | 'pregnancy' | 'pacemaker' | 'defibrillator' | 'implant' | 'preExistingCondition' | 'medicalHistory' | 'surgery' | 'vaccination' | 'bloodType' | 'anthropometry' | 'smokingStatus';
+  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo' | 'vital' | 'allergy' | 'infection' | 'pregnancy' | 'pacemaker' | 'defibrillator' | 'implant' | 'preExistingCondition' | 'medicalHistory' | 'surgery' | 'vaccination' | 'bloodType' | 'anthropometry' | 'smokingStatus' | 'notes' | 'medicalNotes';
   date: Date;
   title: string;
   description?: string;
@@ -85,7 +85,7 @@ interface EPAEntry {
 
 interface GroupedEPAEntry {
   id: string;
-  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo' | 'vital' | 'allergy' | 'infection' | 'pregnancy' | 'pacemaker' | 'defibrillator' | 'implant' | 'preExistingCondition' | 'medicalHistory' | 'surgery' | 'vaccination' | 'bloodType' | 'anthropometry' | 'smokingStatus';
+  type: 'appointment' | 'dekurs' | 'diagnosis' | 'medication' | 'labor' | 'dicom' | 'document' | 'photo' | 'vital' | 'allergy' | 'infection' | 'pregnancy' | 'pacemaker' | 'defibrillator' | 'implant' | 'preExistingCondition' | 'medicalHistory' | 'surgery' | 'vaccination' | 'bloodType' | 'anthropometry' | 'smokingStatus' | 'notes' | 'medicalNotes';
   date: Date;
   title: string;
   description?: string;
@@ -318,6 +318,8 @@ const EPADateCard = memo(({
                                     groupedEntry.type === 'bloodType' ? 'warning.main' :
                                     groupedEntry.type === 'anthropometry' ? 'info.main' :
                                     groupedEntry.type === 'smokingStatus' ? 'warning.main' :
+                                    groupedEntry.type === 'notes' ? 'info.main' :
+                                    groupedEntry.type === 'medicalNotes' ? 'warning.main' :
                                     'grey.400'
                     }}
                     onClick={handleEntryClick}
@@ -420,9 +422,11 @@ const EPADateCard = memo(({
                               </Typography>
                             )}
                             {groupedEntry.metadata.service?.name && (
-                              <Typography variant="caption" color="text.secondary">
-                                <strong>Leistung:</strong> {groupedEntry.metadata.service.name}
-                              </Typography>
+                              <Typography 
+                                variant="caption" 
+                                color="text.secondary"
+                                dangerouslySetInnerHTML={{ __html: `<strong>Leistung:</strong> ${groupedEntry.metadata.service.name}` }}
+                              />
                             )}
                             {groupedEntry.metadata.type && (
                               <Typography variant="caption" color="text.secondary">
@@ -1066,7 +1070,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       patientFromStore.hasPacemaker !== patient.hasPacemaker ||
       patientFromStore.hasDefibrillator !== patient.hasDefibrillator ||
       JSON.stringify(patientFromStore.implants || []) !== JSON.stringify(patient.implants || []) ||
-      patientFromStore.isPregnant !== patient.isPregnant
+      patientFromStore.isPregnant !== patient.isPregnant ||
+      patientFromStore.notes !== patient.notes ||
+      patientFromStore.medicalNotes !== patient.medicalNotes
     );
     
     // Wenn die Redux-Version neuer ist ODER sich medizinische Daten geändert haben, lade die Daten sofort
@@ -1076,7 +1082,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         store: new Date(storePatientUpdatedAt).toISOString(),
         diff: storePatientUpdatedAt > currentPatientUpdatedAt ? ((storePatientUpdatedAt - currentPatientUpdatedAt) / 1000).toFixed(2) + 's' : '0s (Datenänderung)',
         hasMedicalDataChanged,
-        triggerReason: hasMedicalDataChanged ? 'medizinische Daten geändert' : 'updatedAt neuer',
+        triggerReason: hasMedicalDataChanged ? 'medizinische Daten oder Notizen geändert' : 'updatedAt neuer',
+        notesChanged: patientFromStore?.notes !== patient?.notes,
+        medicalNotesChanged: patientFromStore?.medicalNotes !== patient?.medicalNotes,
         currentLastPatientUpdateRef: lastPatientUpdateRef.current ? new Date(lastPatientUpdateRef.current).toISOString() : '0'
       });
       
@@ -1134,6 +1142,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     patientFromStore?.hasDefibrillator,
     patientFromStore?.implants?.length,
     patientFromStore?.isPregnant,
+    patientFromStore?.notes,
+    patientFromStore?.medicalNotes,
     patient?.updatedAt
   ]);
 
@@ -1470,6 +1480,47 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
       // Raucherstatus - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
 
+      // Notizen
+      try {
+        if (patient) {
+          // Allgemeine Notizen
+          if (patient.notes && patient.notes.trim()) {
+            entries.push({
+              id: `notes-${patient._id || patient.id}`,
+              type: 'notes',
+              date: new Date(patient.updatedAt || patient.createdAt || new Date()),
+              title: 'Allgemeine Notiz',
+              description: patient.notes,
+              status: 'aktiv',
+              metadata: {
+                notes: patient.notes,
+                updatedAt: patient.updatedAt,
+                createdAt: patient.createdAt
+              }
+            });
+          }
+
+          // Medizinische Notizen
+          if (patient.medicalNotes && patient.medicalNotes.trim()) {
+            entries.push({
+              id: `medicalNotes-${patient._id || patient.id}`,
+              type: 'medicalNotes',
+              date: new Date(patient.updatedAt || patient.createdAt || new Date()),
+              title: 'Medizinische Notiz',
+              description: patient.medicalNotes,
+              status: 'aktiv',
+              metadata: {
+                medicalNotes: patient.medicalNotes,
+                updatedAt: patient.updatedAt,
+                createdAt: patient.createdAt
+              }
+            });
+          }
+        }
+      } catch (error) {
+        console.error('Fehler beim Verarbeiten von Notizen:', error);
+      }
+
       // Vitalwerte
       try {
         // Hilfsfunktion zum Extrahieren der patientId aus einem Vitalwert
@@ -1752,6 +1803,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       case 'bloodType': return <MonitorHeart />;
       case 'anthropometry': return <ShowChart />;
       case 'smokingStatus': return <Warning />;
+      case 'notes': return <Description />;
+      case 'medicalNotes': return <Description />;
       default: return <Description />;
     }
   }, []);
@@ -1780,6 +1833,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       case 'bloodType': return 'Blutgruppe';
       case 'anthropometry': return 'Körpermaße';
       case 'smokingStatus': return 'Raucherstatus';
+      case 'notes': return 'Notiz';
+      case 'medicalNotes': return 'Medizinische Notiz';
       default: return type;
     }
   }, []);
@@ -1808,6 +1863,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       case 'bloodType': return 'warning';
       case 'anthropometry': return 'info';
       case 'smokingStatus': return 'warning';
+      case 'notes': return 'info';
+      case 'medicalNotes': return 'warning';
       default: return 'primary';
     }
   }, []);

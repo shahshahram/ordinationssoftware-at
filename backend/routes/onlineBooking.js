@@ -16,6 +16,7 @@ const Location = require('../models/Location');
 const SystemSettings = require('../models/SystemSettings');
 const AvailabilityService = require('../services/availabilityService');
 const { generateICSFromBooking } = require('../utils/icsGenerator');
+const InternalMessage = require('../models/InternalMessage');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
@@ -899,10 +900,15 @@ router.post('/book', [
   body('patient.email').isEmail().normalizeEmail(),
   body('patient.phone').notEmpty().trim(),
   body('patient.dateOfBirth').isISO8601(),
+  body('patient.address.street').optional().trim(),
+  body('patient.address.zipCode').optional().trim(),
+  body('patient.address.city').optional().trim(),
+  body('patient.address.country').optional().trim(),
   body('appointment.date').isISO8601(),
   body('appointment.startTime').notEmpty(),
   body('appointment.type').notEmpty().trim(),
-  body('appointment.reason').notEmpty().trim(),
+  body('appointment.reason').optional().trim(), // Jetzt optional
+  body('appointment.notes').optional().trim(),
   body('appointment.serviceId').optional().isMongoId(),
   body('appointment.assigned_devices').optional().isArray(),
   body('appointment.assigned_rooms').optional().isArray(),
@@ -1239,10 +1245,10 @@ router.post('/book', [
         socialSecurityNumber: patient.socialSecurityNumber || patient.insuranceNumber || '0000000000', // Temporärer Wert
         insuranceProvider: 'ÖGK (Österreichische Gesundheitskasse)', // Standard-Versicherung
         address: {
-          street: 'Nicht angegeben', // Wird später aktualisiert
-          zipCode: '0000', // Temporärer Wert
-          city: 'Nicht angegeben', // Wird später aktualisiert
-          country: 'Österreich'
+          street: patient.address?.street || 'Nicht angegeben',
+          zipCode: patient.address?.zipCode || '0000',
+          city: patient.address?.city || 'Nicht angegeben',
+          country: patient.address?.country || 'Österreich'
         },
         createdBy: doctor.id, // Arzt, der die Buchung erhält
         isActive: true,
@@ -1258,6 +1264,16 @@ router.post('/book', [
         existingPatient.isTemporary = false;
         await existingPatient.save();
         console.log(`[OnlineBooking] Temporärer Patient wurde validiert: ${existingPatient._id}`);
+      }
+      
+      // Prüfe ob Online-Buchung für diesen Patienten blockiert ist
+      if (existingPatient.onlineBookingBlocked === true) {
+        console.log(`[OnlineBooking] Online-Buchung für Patient ${existingPatient._id} ist blockiert`);
+        return res.status(403).json({
+          success: false,
+          message: 'Online-Buchungen sind für Sie nicht möglich. Bitte vereinbaren Sie Ihren Termin telefonisch.',
+          code: 'ONLINE_BOOKING_BLOCKED'
+        });
       }
     }
 
@@ -1290,7 +1306,7 @@ router.post('/book', [
           serviceDoc.buffer_after_min || 0
         ) : calculateEndTime(appointment.startTime, appointment.duration || 30),
         type: appointment.type,
-        reason: appointment.reason,
+        reason: appointment.reason || appointment.notes || appointment.type || 'Online-Buchung', // Fallback für reason
         notes: appointment.notes,
         serviceId: appointment.serviceId,
         assigned_devices: finalAssignedDevices,
@@ -1324,8 +1340,76 @@ router.post('/book', [
     
     bookingData.bookingNumber = bookingNumber;
     
-    // Prüfe ob Double Opt-In erforderlich ist (nur für neue/unbekannte Patienten)
-    const requiresDoubleOptIn = !isKnownPatient;
+    // Hole Location-Einstellungen für Double Opt-In
+    let locationDoubleOptInRequired = true; // Default: aktiviert
+    let autoConfirmKnownPatients = true; // Default: aktiviert
+    
+    // Versuche Standort zu finden: 1. Direkt aus Service, 2. Aus zugewiesenen Räumen, 3. Aus zugewiesenen Geräten
+    let location = null;
+    if (serviceDoc) {
+      // 1. Versuche Standort direkt aus Service zu laden
+      if (serviceDoc.location_id) {
+        location = await Location.findById(serviceDoc.location_id);
+      }
+      
+      // 2. Falls nicht gefunden, versuche Standort aus zugewiesenen Räumen zu ermitteln
+      if (!location && finalAssignedRooms && finalAssignedRooms.length > 0) {
+        const firstRoom = await Room.findById(finalAssignedRooms[0]).select('location_id').populate('location_id');
+        if (firstRoom && firstRoom.location_id) {
+          location = firstRoom.location_id;
+        }
+      }
+      
+      // 3. Falls immer noch nicht gefunden, versuche Standort aus zugewiesenen Geräten zu ermitteln
+      if (!location && finalAssignedDevices && finalAssignedDevices.length > 0) {
+        const firstDevice = await Device.findById(finalAssignedDevices[0]).select('location_id').populate('location_id');
+        if (firstDevice && firstDevice.location_id) {
+          location = firstDevice.location_id;
+        }
+      }
+      
+      // 4. Falls immer noch nicht gefunden, versuche Standort aus Service-assigned_rooms zu ermitteln
+      if (!location && serviceDoc.assigned_rooms && serviceDoc.assigned_rooms.length > 0) {
+        const firstServiceRoom = await Room.findById(serviceDoc.assigned_rooms[0]).select('location_id').populate('location_id');
+        if (firstServiceRoom && firstServiceRoom.location_id) {
+          location = firstServiceRoom.location_id;
+        }
+      }
+      
+      // 5. Falls immer noch nicht gefunden, versuche Standort aus Service-assigned_devices zu ermitteln
+      if (!location && serviceDoc.assigned_devices && serviceDoc.assigned_devices.length > 0) {
+        const firstServiceDevice = await Device.findById(serviceDoc.assigned_devices[0]).select('location_id').populate('location_id');
+        if (firstServiceDevice && firstServiceDevice.location_id) {
+          location = firstServiceDevice.location_id;
+        }
+      }
+      
+      // Lade Location-Einstellungen, falls Standort gefunden wurde
+      if (location && location.onlineBooking) {
+        locationDoubleOptInRequired = location.onlineBooking.doubleOptInRequired !== false; // Default true, explizit false = deaktiviert
+        autoConfirmKnownPatients = location.onlineBooking.autoConfirmKnownPatients !== false; // Default true, explizit false = deaktiviert
+        console.log(`[OnlineBooking] Location-Einstellungen geladen von Standort "${location.name}": doubleOptInRequired=${locationDoubleOptInRequired}, autoConfirmKnownPatients=${autoConfirmKnownPatients}`);
+      } else if (location) {
+        console.log(`[OnlineBooking] Standort "${location.name}" gefunden, aber keine onlineBooking-Einstellungen vorhanden, verwende Defaults`);
+      } else {
+        console.log(`[OnlineBooking] Kein Standort gefunden, verwende Default-Einstellungen für Double Opt-In`);
+      }
+    }
+    
+    // Prüfe ob Double Opt-In erforderlich ist
+    // 1. Muss vom Standort aktiviert sein (locationDoubleOptInRequired)
+    // 2. Muss für neue/unbekannte Patienten sein (!isKnownPatient)
+    // 3. Oder wenn autoConfirmKnownPatients = false, auch für bekannte Patienten
+    let requiresDoubleOptIn = false;
+    if (locationDoubleOptInRequired) {
+      if (!isKnownPatient) {
+        // Neue Patienten: Double Opt-In erforderlich (wenn vom Standort aktiviert)
+        requiresDoubleOptIn = true;
+      } else if (!autoConfirmKnownPatients) {
+        // Bekannte Patienten: Double Opt-In erforderlich, wenn autoConfirmKnownPatients = false
+        requiresDoubleOptIn = true;
+      }
+    }
     
     // Generiere Double Opt-In Code falls erforderlich
     if (requiresDoubleOptIn) {
@@ -1376,10 +1460,12 @@ router.post('/book', [
       patientExists: !!existingPatient
     });
 
-    // Erstelle Termin NUR wenn Patient bekannt ist oder Double Opt-In bereits bestätigt wurde
-    // Für neue Patienten wird der Termin erst nach Code-Validierung erstellt
+    // Erstelle Termin:
+    // - Wenn Double Opt-In deaktiviert ist: sofort für alle Patienten (neu und bekannt)
+    // - Wenn Double Opt-In aktiviert ist: sofort nur für bekannte Patienten
+    // - Für neue Patienten mit aktiviertem Double Opt-In: erst nach Code-Validierung (siehe /verify-opt-in Route)
     if (!requiresDoubleOptIn) {
-      console.log('[OnlineBooking] Patient is known, creating appointment immediately');
+      console.log('[OnlineBooking] Double Opt-In nicht erforderlich - erstelle Termin sofort (Patient: ' + (isKnownPatient ? 'bekannt' : 'neu') + ')');
       
       // Validierung: Patient muss existieren
       if (!existingPatient || !existingPatient._id) {
@@ -1442,6 +1528,42 @@ router.post('/book', [
         patient: newAppointment.patient,
         doctor: newAppointment.doctor
       });
+
+      // Benachrichtige alle Personal über die neue Online-Buchung
+      try {
+        await notifyStaffAboutOnlineBooking(newAppointment, existingPatient, booking, doctorExists, serviceDoc);
+      } catch (notificationError) {
+        console.error('[OnlineBooking] Error sending staff notifications (non-blocking):', notificationError);
+      }
+    } else {
+      // Double Opt-In erforderlich: Sende Benachrichtigung auch ohne Termin
+      // (Termin wird erst nach Code-Validierung erstellt)
+      console.log('[OnlineBooking] Double Opt-In erforderlich - sende Benachrichtigung ohne Termin');
+      try {
+        // Erstelle temporäres Appointment-Objekt für die Benachrichtigung
+        const tempStartDateTime = new Date(requestedDate);
+        const tempEndDateTime = new Date(requestedDate);
+        const [startHours, startMinutes] = appointment.startTime.split(':').map(Number);
+        const [endHours, endMinutes] = bookingData.appointment.endTime.split(':').map(Number);
+        tempStartDateTime.setHours(startHours, startMinutes, 0, 0);
+        tempEndDateTime.setHours(endHours, endMinutes, 0, 0);
+        
+        const tempAppointment = {
+          startTime: tempStartDateTime,
+          endTime: tempEndDateTime,
+          duration: bookingData.appointment.duration,
+          type: appointment.type,
+          bookingType: 'online',
+          onlineBookingRef: booking.bookingNumber,
+          isOnlineBooking: true
+        };
+        
+        await notifyStaffAboutOnlineBooking(tempAppointment, existingPatient, booking, doctorExists, serviceDoc);
+        console.log('[OnlineBooking] Benachrichtigung für Double Opt-In Buchung gesendet');
+      } catch (notificationError) {
+        console.error('[OnlineBooking] Error sending staff notifications for Double Opt-In booking (non-blocking):', notificationError);
+        console.error('[OnlineBooking] Notification error details:', notificationError.stack);
+      }
     }
 
     // Sende E-Mail: Double Opt-In Code oder Bestätigung
@@ -1563,6 +1685,16 @@ router.post('/verify-opt-in', [
       });
     }
 
+    // Prüfe ob Online-Buchung für diesen Patienten blockiert ist
+    if (existingPatient.onlineBookingBlocked === true) {
+      console.log(`[OnlineBooking] Online-Buchung für Patient ${existingPatient._id} ist blockiert (verify-opt-in)`);
+      return res.status(403).json({
+        success: false,
+        message: 'Online-Buchungen sind für Sie nicht möglich. Bitte vereinbaren Sie Ihren Termin telefonisch.',
+        code: 'ONLINE_BOOKING_BLOCKED'
+      });
+    }
+
     // Finde Arzt
     const doctorExists = await User.findById(booking.doctor.id);
     if (!doctorExists) {
@@ -1638,6 +1770,13 @@ router.post('/verify-opt-in', [
       id: newAppointment._id,
       bookingNumber: booking.bookingNumber
     });
+
+    // Benachrichtige alle Personal über die neue Online-Buchung
+    try {
+      await notifyStaffAboutOnlineBooking(newAppointment, existingPatient, booking, doctorExists, serviceDoc);
+    } catch (notificationError) {
+      console.error('[OnlineBooking] Error sending staff notifications (non-blocking):', notificationError);
+    }
 
     // Sende Bestätigungs-E-Mail
     try {
@@ -2122,8 +2261,8 @@ async function sendDoubleOptInEmail(booking) {
                 <p><strong>Uhrzeit:</strong> ${booking.appointment.startTime} Uhr</p>
                 <p><strong>Arzt:</strong> ${booking.doctor.name}</p>
                 ${booking.doctor.specialization ? `<p><strong>Fachrichtung:</strong> ${booking.doctor.specialization}</p>` : ''}
-                <p><strong>Art der Behandlung:</strong> ${booking.appointment.type}</p>
-                ${booking.appointment.reason ? `<p><strong>Grund:</strong> ${booking.appointment.reason}</p>` : ''}
+                <p><strong>Art der Behandlung:</strong> ${stripHtmlTags(booking.appointment.type || '')}</p>
+                ${booking.appointment.reason ? `<p><strong>Grund:</strong> ${stripHtmlTags(booking.appointment.reason || '')}</p>` : ''}
               </div>
               
               <p><strong>Wichtig:</strong> Ihr Termin wird erst nach Bestätigung des Codes endgültig gebucht. Der Code ist 24 Stunden gültig.</p>
@@ -2152,8 +2291,8 @@ Termindetails:
 - Datum: ${new Date(booking.appointment.date).toLocaleDateString('de-AT')}
 - Uhrzeit: ${booking.appointment.startTime} Uhr
 - Arzt: ${booking.doctor.name}
-${booking.doctor.specialization ? `- Fachrichtung: ${booking.doctor.specialization}\n` : ''}- Art der Behandlung: ${booking.appointment.type}
-${booking.appointment.reason ? `- Grund: ${booking.appointment.reason}\n` : ''}
+${booking.doctor.specialization ? `- Fachrichtung: ${booking.doctor.specialization}\n` : ''}- Art der Behandlung: ${stripHtmlTags(booking.appointment.type || '')}
+${booking.appointment.reason ? `- Grund: ${stripHtmlTags(booking.appointment.reason || '')}\n` : ''}
 Wichtig: Ihr Termin wird erst nach Bestätigung des Codes endgültig gebucht. Der Code ist 24 Stunden gültig.
 
 Mit freundlichen Grüßen
@@ -2261,8 +2400,8 @@ async function sendConfirmationEmail(booking) {
                 <p><strong>Uhrzeit:</strong> ${booking.appointment.startTime} Uhr</p>
                 <p><strong>Arzt:</strong> ${booking.doctor.name}</p>
                 ${booking.doctor.specialization ? `<p><strong>Fachrichtung:</strong> ${booking.doctor.specialization}</p>` : ''}
-                <p><strong>Art der Behandlung:</strong> ${booking.appointment.type}</p>
-                ${booking.appointment.reason ? `<p><strong>Grund:</strong> ${booking.appointment.reason}</p>` : ''}
+                <p><strong>Art der Behandlung:</strong> ${stripHtmlTags(booking.appointment.type || '')}</p>
+                ${booking.appointment.reason ? `<p><strong>Grund:</strong> ${stripHtmlTags(booking.appointment.reason || '')}</p>` : ''}
                 ${location ? `<p><strong>Adresse:</strong> ${location.address_line1}, ${location.postal_code} ${location.city}</p>` : ''}
               </div>
               
@@ -2291,8 +2430,8 @@ Termindetails:
 - Datum: ${new Date(booking.appointment.date).toLocaleDateString('de-AT')}
 - Uhrzeit: ${booking.appointment.startTime} Uhr
 - Arzt: ${booking.doctor.name}
-${booking.doctor.specialization ? `- Fachrichtung: ${booking.doctor.specialization}\n` : ''}- Art der Behandlung: ${booking.appointment.type}
-${booking.appointment.reason ? `- Grund: ${booking.appointment.reason}\n` : ''}${location ? `- Adresse: ${location.address_line1}, ${location.postal_code} ${location.city}\n` : ''}
+${booking.doctor.specialization ? `- Fachrichtung: ${booking.doctor.specialization}\n` : ''}- Art der Behandlung: ${stripHtmlTags(booking.appointment.type || '')}
+${booking.appointment.reason ? `- Grund: ${stripHtmlTags(booking.appointment.reason || '')}\n` : ''}${location ? `- Adresse: ${location.address_line1}, ${location.postal_code} ${location.city}\n` : ''}
 ${icsContent ? '\nDer Termin wurde als .ics-Datei beigefügt und kann direkt in Ihren Kalender importiert werden.\n' : ''}
 
 Sie können Ihren Termin jederzeit online verwalten:
@@ -2469,5 +2608,129 @@ router.get('/waiting-list-reservation/:token', async (req, res) => {
     });
   }
 });
+
+// Helper-Funktion: Entferne HTML-Tags aus Text
+function stripHtmlTags(html) {
+  if (!html || typeof html !== 'string') return '';
+  // Entferne HTML-Tags
+  return html.replace(/<[^>]*>/g, '').trim();
+}
+
+// Helper-Funktion: Benachrichtige alle Personal über eine neue Online-Buchung
+async function notifyStaffAboutOnlineBooking(appointment, patient, booking, doctor, serviceDoc) {
+  try {
+    // Finde alle aktiven Personal (alle User mit Rolle außer 'patient')
+    const allStaff = await User.find({
+      isActive: true,
+      role: { $nin: ['patient', 'guest'] } // Alle außer Patienten und Gäste
+    }).select('_id firstName lastName email');
+
+    if (!allStaff || allStaff.length === 0) {
+      console.log('[OnlineBooking] Kein Personal gefunden für Benachrichtigung');
+      return;
+    }
+
+    // Finde System-User als Absender
+    const systemUser = await User.findOne({
+      role: { $in: ['admin', 'super_admin'] },
+      isActive: true
+    }).select('_id');
+
+    const senderId = systemUser?._id || allStaff[0]._id;
+
+    // Formatiere Termindatum und -zeit
+    const appointmentDate = new Date(appointment.startTime);
+    const dateStr = appointmentDate.toLocaleDateString('de-DE', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+    const timeStr = appointmentDate.toLocaleTimeString('de-DE', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    // Service-Name - entferne HTML-Tags
+    let serviceName = appointment.type || 'Termin';
+    if (serviceDoc && serviceDoc.name) {
+      serviceName = serviceDoc.name;
+    }
+    // Entferne HTML-Tags aus dem Service-Namen
+    serviceName = stripHtmlTags(serviceName);
+
+    // Erstelle Nachrichtentext
+    let message = `Neue Online-Buchung erhalten:\n\n`;
+    message += `Patient:\n`;
+    message += `- Name: ${patient.firstName} ${patient.lastName}\n`;
+    message += `- Geburtsdatum: ${patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('de-DE') : 'Nicht angegeben'}\n`;
+    message += `- E-Mail: ${patient.email || 'Nicht angegeben'}\n`;
+    message += `- Telefon: ${patient.phone || 'Nicht angegeben'}\n`;
+    
+    if (patient.address) {
+      message += `- Adresse: ${patient.address.street || ''}, ${patient.address.zipCode || ''} ${patient.address.city || ''}\n`;
+    }
+
+    message += `\nTermin:\n`;
+    message += `- Datum: ${dateStr}\n`;
+    message += `- Zeit: ${timeStr}\n`;
+    message += `- Dauer: ${appointment.duration || 30} Minuten\n`;
+    message += `- Arzt: ${doctor.firstName} ${doctor.lastName}\n`;
+    message += `- Leistung: ${serviceName}\n`;
+    message += `- Buchungsnummer: ${booking.bookingNumber}\n`;
+
+    // Zusätzliche Information für neue Patienten
+    if (patient.isTemporary === true) {
+      message += `\n⚠️ WICHTIG: Dieser Patient ist NEU im System und hat nur temporäre Stammdaten.\n`;
+      message += `Bitte vervollständigen Sie die Stammdaten im Patienten-Organizer.\n`;
+      message += `Der Patient ist in der Liste "Temporäre Patienten" zu finden.`;
+    }
+
+    // Warnung für Patienten mit Hinweisen
+    if (patient.hasHint === true && patient.hintText) {
+      message += `\n\n🚨 WARNUNG: Dieser Patient hat einen hinterlegten Hinweis!\n`;
+      message += `Hinweis: ${patient.hintText}\n`;
+      message += `Bitte beachten Sie diesen Hinweis bei der Terminvorbereitung.`;
+    }
+
+    const subject = `Neue Online-Buchung: ${patient.firstName} ${patient.lastName} - ${dateStr} ${timeStr}`;
+    
+    // Erhöhe Priorität wenn Patient temporär ist oder einen Hinweis hat
+    let priority = 'normal';
+    if (patient.isTemporary === true || (patient.hasHint === true && patient.hintText)) {
+      priority = 'high';
+    }
+
+    // Sende Nachricht an alle Personal
+    const notificationPromises = allStaff.map(async (staffMember) => {
+      try {
+        const notification = new InternalMessage({
+          senderId: senderId,
+          recipientId: staffMember._id,
+          subject: subject,
+          message: message,
+          priority: priority,
+          status: 'sent',
+          patientId: patient._id || patient.id
+        });
+
+        await notification.save();
+        console.log(`✅ Online-Booking Benachrichtigung an ${staffMember.firstName} ${staffMember.lastName} gesendet`);
+        return { success: true, userId: staffMember._id, messageId: notification._id };
+      } catch (err) {
+        console.error(`❌ Fehler beim Senden der Benachrichtigung an ${staffMember.firstName} ${staffMember.lastName}:`, err);
+        return { success: false, userId: staffMember._id, error: err.message };
+      }
+    });
+
+    const results = await Promise.all(notificationPromises);
+    const successCount = results.filter(r => r.success).length;
+    const failCount = results.filter(r => !r.success).length;
+    console.log(`📧 Online-Booking Benachrichtigungen: ${successCount} erfolgreich, ${failCount} fehlgeschlagen von ${allStaff.length} insgesamt`);
+  } catch (error) {
+    console.error('❌ Fehler beim Senden der Online-Booking Benachrichtigungen:', error);
+    throw error;
+  }
+}
 
 module.exports = router;

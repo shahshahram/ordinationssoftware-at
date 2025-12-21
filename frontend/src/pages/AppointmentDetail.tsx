@@ -555,7 +555,9 @@ const AppointmentDetail: React.FC = () => {
                       const service = typeof s.serviceId === 'object' ? s.serviceId : serviceCatalog.find(svc => svc._id === s.serviceId);
                       return (
                         <TableRow key={s._id}>
-                          <TableCell>{service?.name || 'Unbekannt'}</TableCell>
+                          <TableCell>
+                            <span dangerouslySetInnerHTML={{ __html: service?.name || 'Unbekannt' }} />
+                          </TableCell>
                           <TableCell>{service?.code || '—'}</TableCell>
                           <TableCell>{s.quantity}</TableCell>
                           <TableCell>€{s.pricePerUnit.toFixed(2)}</TableCell>

@@ -429,9 +429,12 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
       }
     }
     
+    // Entferne HTML-Tags aus title falls vorhanden
+    const cleanTitle = apt.title ? apt.title.replace(/<[^>]*>/g, '') : 'Termin';
+    
     return {
       id: apt._id,
-      title: apt.title,
+      title: cleanTitle,
       start: apt.startTime,
       end: apt.endTime,
       resourceId: (apt as any).resourceId,
@@ -510,7 +513,9 @@ const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
     const hasAllergies = patientObj && patientObj.allergies && Array.isArray(patientObj.allergies) && patientObj.allergies.length > 0;
     
     // Erstelle HTML-String für FullCalendar - verwende innerHTML für bessere Kompatibilität
-    const title = eventInfo.event.title || 'Termin';
+    // Strip HTML tags from title for display (da FullCalendar HTML nicht richtig rendert)
+    const rawTitle = eventInfo.event.title || 'Termin';
+    const title = rawTitle.replace(/<[^>]*>/g, ''); // Entferne HTML-Tags für Anzeige
     let content = `<div style="padding: 2px; font-size: 0.75rem; line-height: 1.2; overflow: hidden;">
       <div style="font-weight: bold; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${title}</div>`;
     

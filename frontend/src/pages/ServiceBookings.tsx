@@ -590,9 +590,11 @@ const ServiceBookings: React.FC = () => {
               {bookings.map((booking) => (
                 <TableRow key={booking._id}>
                   <TableCell>
-                    <Typography variant="body2" fontWeight="bold">
-                      {booking.service_id.name}
-                    </Typography>
+                    <Typography 
+                      variant="body2" 
+                      fontWeight="bold"
+                      dangerouslySetInnerHTML={{ __html: booking.service_id.name }}
+                    />
                     <Typography variant="caption" color="text.secondary">
                       {booking.service_id.code}
                     </Typography>
@@ -733,7 +735,7 @@ const ServiceBookings: React.FC = () => {
                   >
                     {services.map((service) => (
                       <MenuItem key={service._id} value={service._id}>
-                        {service.name} ({service.code})
+                        <span dangerouslySetInnerHTML={{ __html: service.name }} /> ({service.code})
                       </MenuItem>
                     ))}
                   </Select>

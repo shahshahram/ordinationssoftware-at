@@ -1586,8 +1586,11 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
                     }
                   };
                   
+                  // Eindeutiger Key: diagnosisId oder Kombination aus icd10Code und index
+                  const uniqueKey = diag.diagnosisId || `${diag.icd10Code || 'diag'}-${index}`;
+                  
                   return (
-                    <Paper key={index} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <Paper key={uniqueKey} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <Box sx={{ flex: 1 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                           <Typography variant="body2" fontWeight="bold">

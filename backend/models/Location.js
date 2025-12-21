@@ -282,6 +282,20 @@ const locationSchema = new mongoose.Schema({
     // Kein enum mehr - Fachrichtungen werden dynamisch aus MedicalSpecialty-Collection geladen
   }],
   
+  // Online-Buchungs-Konfiguration
+  onlineBooking: {
+    // Double Opt-In für Neupatienten erforderlich
+    doubleOptInRequired: {
+      type: Boolean,
+      default: true
+    },
+    // Automatische Bestätigung für bekannte Patienten
+    autoConfirmKnownPatients: {
+      type: Boolean,
+      default: true
+    }
+  },
+  
   // XDS Registry Konfiguration
   xdsRegistry: {
     enabled: {

@@ -29,6 +29,8 @@ export interface Patient {
   };
   bloodType?: string;
   status: string;
+  isTemporary?: boolean; // Markiert temporäre Patienten (z.B. aus Online-Buchung)
+  onlineBookingBlocked?: boolean; // Online-Buchung für diesen Patienten blockiert
   medicalHistory?: string[];
   allergies?: Array<string | {
     type: string;

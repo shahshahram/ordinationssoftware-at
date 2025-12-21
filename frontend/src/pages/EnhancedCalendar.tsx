@@ -23,6 +23,7 @@ import {
   Switch,
   FormControlLabel,
   Tooltip,
+  Checkbox,
 } from '@mui/material';
 import {
   ArrowBackIos as ArrowBackIosIcon,
@@ -150,6 +151,7 @@ const EnhancedCalendar: React.FC = () => {
   });
   const [viewMode, setViewMode] = useState<'day' | '3day' | 'week' | 'month'>('week');
   const [selectedLocation, setSelectedLocation] = useState<string>('all');
+  const [selectedLocations, setSelectedLocations] = useState<string[]>([]); // Array für Checkbox-Auswahl
   const [medicalFilter, setMedicalFilter] = useState<'all' | 'medical' | 'non-medical'>('all');
   const [showLocationHours, setShowLocationHours] = useState(true);
   const [showStaffHours, setShowStaffHours] = useState(true);
@@ -656,23 +658,104 @@ const EnhancedCalendar: React.FC = () => {
   const calendarEvents = useMemo(() => {
     return (Array.isArray(appointments) ? appointments : [])
       .filter(appointment => {
-        // Filter by location if selected
-        if (selectedLocation !== 'all') {
-          // Try to find the room for this appointment
-          const room = (Array.isArray(rooms) ? rooms : []).find(r => r._id === appointment.room);
+        // Filter by location if selected (Checkboxen haben Priorität)
+        const locationsToFilter = selectedLocations.length > 0 ? selectedLocations : (selectedLocation !== 'all' ? [selectedLocation] : []);
+        
+        if (locationsToFilter.length > 0) {
+          let appointmentLocationId: string | null = null;
           
-          if (room) {
-            // Room might have location as object or ID
-            const roomLocationId = typeof room.location === 'object' ? (room.location as any)._id : room.location;
-            if (roomLocationId !== selectedLocation) {
-              return false;
-            }
-          } else {
-            // If no room found, try direct locationId on appointment (fallback)
-            if (appointment.locationId && appointment.locationId !== selectedLocation) {
-              return false;
+          // 1. Try direct locationId on appointment
+          if (appointment.locationId) {
+            appointmentLocationId = typeof appointment.locationId === 'string' 
+              ? appointment.locationId 
+              : String(appointment.locationId);
+            if (locationsToFilter.includes(appointmentLocationId)) {
+              return true; // Match found, keep appointment
             }
           }
+          
+          // 2. Try to find location from assigned_rooms (array)
+          const assignedRooms = (appointment as any).assigned_rooms || [];
+          if (assignedRooms.length > 0) {
+            for (const roomId of assignedRooms) {
+              const roomIdStr = typeof roomId === 'string' ? roomId : String(roomId);
+              const room = (Array.isArray(rooms) ? rooms : []).find(r => {
+                const rId = typeof r._id === 'string' ? r._id : String(r._id);
+                return rId === roomIdStr;
+              });
+              
+              if (room) {
+                const roomLocationId = typeof room.location === 'object' 
+                  ? (room.location as any)?._id 
+                  : room.location;
+                if (roomLocationId) {
+                  const roomLocationIdStr = typeof roomLocationId === 'string' 
+                    ? roomLocationId 
+                    : String(roomLocationId);
+                  if (locationsToFilter.includes(roomLocationIdStr)) {
+                    return true; // Match found, keep appointment
+                  }
+                }
+              }
+            }
+          }
+          
+          // 3. Try single room (legacy support)
+          if (appointment.room) {
+            const roomId = typeof appointment.room === 'string' 
+              ? appointment.room 
+              : String((appointment.room as any)?._id || appointment.room);
+            const room = (Array.isArray(rooms) ? rooms : []).find(r => {
+              const rId = typeof r._id === 'string' ? r._id : String(r._id);
+              return rId === roomId;
+            });
+            
+            if (room) {
+              const roomLocationId = typeof room.location === 'object' 
+                ? (room.location as any)?._id 
+                : room.location;
+              if (roomLocationId) {
+                const roomLocationIdStr = typeof roomLocationId === 'string' 
+                  ? roomLocationId 
+                  : String(roomLocationId);
+                if (locationsToFilter.includes(roomLocationIdStr)) {
+                  return true; // Match found, keep appointment
+                }
+              }
+            }
+          }
+          
+          // 4. Try to find location from assigned_devices
+          const assignedDevices = (appointment as any).assigned_devices || [];
+          if (assignedDevices.length > 0) {
+            // Note: Devices might have location_id, but we'd need to load devices for this
+            // For now, we skip this as devices are not loaded in the calendar
+          }
+          
+          // 5. Try to find location from service
+          const service = (appointment as any).service;
+          if (service) {
+            const serviceLocationId = typeof service.location_id === 'string' 
+              ? service.location_id 
+              : (service.location_id?._id ? String(service.location_id._id) : null);
+            if (serviceLocationId && locationsToFilter.includes(serviceLocationId)) {
+              return true; // Match found, keep appointment
+            }
+          }
+          
+          // 6. Try nested location object (if appointment has location populated)
+          if ((appointment as any).location) {
+            const location = (appointment as any).location;
+            const locationId = typeof location === 'string' 
+              ? location 
+              : (location?._id ? String(location._id) : null);
+            if (locationId && locationsToFilter.includes(locationId)) {
+              return true; // Match found, keep appointment
+            }
+          }
+          
+          // No location match found - filter out this appointment
+          return false;
         }
         
         // Filter by medical/non-medical staff
@@ -1694,14 +1777,72 @@ const EnhancedCalendar: React.FC = () => {
         <CardContent sx={{ p: 2 }}>
           <Typography variant="h6" sx={{ mb: 2, fontSize: '1.1rem' }}>Filter</Typography>
           
-          {/* Dropdown Filters */}
+          {/* Standort-Auswahl mit Checkboxen */}
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
+              Standorte (Checkboxen)
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {(Array.isArray(locations) ? locations : []).map((location) => (
+                <FormControlLabel
+                  key={location._id}
+                  control={
+                    <Checkbox
+                      checked={selectedLocations.includes(location._id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedLocations([...selectedLocations, location._id]);
+                        } else {
+                          setSelectedLocations(selectedLocations.filter(id => id !== location._id));
+                        }
+                        // Synchronisiere auch mit selectedLocation für Kompatibilität
+                        if (e.target.checked && selectedLocations.length === 0) {
+                          setSelectedLocation(location._id);
+                        } else if (!e.target.checked && selectedLocations.length === 1 && selectedLocations[0] === location._id) {
+                          setSelectedLocation('all');
+                        }
+                      }}
+                      sx={{
+                        color: location.color_hex || '#2563EB',
+                        '&.Mui-checked': { color: location.color_hex || '#2563EB' },
+                      }}
+                    />
+                  }
+                  label={
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      <Box
+                        sx={{
+                          width: 12,
+                          height: 12,
+                          borderRadius: '50%',
+                          backgroundColor: location.color_hex || '#2563EB',
+                          mr: 1
+                        }}
+                      />
+                      {location.name}{location.code ? ` (${location.code})` : ''}
+                    </Box>
+                  }
+                />
+              ))}
+            </Box>
+          </Box>
+          
+          {/* Dropdown Filters (Legacy - wird synchronisiert) */}
           <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap' }}>
             <FormControl sx={{ minWidth: 180 }}>
-              <InputLabel>Standort</InputLabel>
+              <InputLabel>Standort (Dropdown)</InputLabel>
               <Select
                 value={selectedLocation}
-                onChange={(e) => setSelectedLocation(e.target.value)}
-                label="Standort"
+                onChange={(e) => {
+                  setSelectedLocation(e.target.value);
+                  // Synchronisiere mit Checkboxen
+                  if (e.target.value === 'all') {
+                    setSelectedLocations([]);
+                  } else {
+                    setSelectedLocations([e.target.value]);
+                  }
+                }}
+                label="Standort (Dropdown)"
               >
                 <MenuItem value="all">Alle Standorte</MenuItem>
                 {(Array.isArray(locations) ? locations : []).map((location) => (

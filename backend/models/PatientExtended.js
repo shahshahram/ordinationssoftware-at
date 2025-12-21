@@ -472,6 +472,12 @@ const PatientExtendedSchema = new mongoose.Schema({
     trim: true,
     maxlength: [500, 'Hinweistext darf maximal 500 Zeichen haben']
   },
+  // Online-Buchung blockiert
+  onlineBookingBlocked: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
   createdAt: {
     type: Date,
     default: Date.now

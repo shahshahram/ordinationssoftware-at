@@ -821,6 +821,7 @@ router.put('/:id', [
 
     console.log('🔍 Updating patient:', req.params.id);
     console.log('📦 Request body infections:', JSON.stringify(req.body.infections, null, 2));
+    console.log('📦 Request body onlineBookingBlocked:', req.body.onlineBookingBlocked);
     
     // Verarbeite infections: Konvertiere detectedDate von ISO-String zu Date-Objekt
     let processedInfections = req.body.infections;
@@ -858,7 +859,15 @@ router.put('/:id', [
       updateData.infections = processedInfections || [];
     }
     
+    // Explizit onlineBookingBlocked setzen - auch wenn es false ist, muss es explizit gesetzt werden
+    // WICHTIG: Boolean-Felder müssen explizit gesetzt werden, auch wenn sie false sind
+    if ('onlineBookingBlocked' in req.body) {
+      // Konvertiere zu Boolean (behandelt true, 'true', false, 'false', etc.)
+      updateData.onlineBookingBlocked = Boolean(req.body.onlineBookingBlocked === true || req.body.onlineBookingBlocked === 'true');
+    }
+    
     console.log('📤 Update data infections:', JSON.stringify(updateData.infections, null, 2));
+    console.log('📤 Update data onlineBookingBlocked:', updateData.onlineBookingBlocked);
     
     const updatedPatient = await PatientExtended.findByIdAndUpdate(
       req.params.id,

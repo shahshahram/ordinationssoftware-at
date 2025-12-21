@@ -43,6 +43,8 @@ import {
   ListItemAvatar,
   ListItemText,
   CircularProgress,
+  Switch,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Search,
@@ -1098,6 +1100,17 @@ const Patients: React.FC = () => {
                 color={patient.status === 'aktiv' ? 'success' : patient.status === 'wartend' ? 'warning' : 'default'}
                 size="small"
               />
+              {patient.isTemporary && (
+                <Tooltip title="Temporärer Patient - Stammdaten müssen vervollständigt werden">
+                  <Chip
+                    label="Temporär"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ fontWeight: 'bold' }}
+                  />
+                </Tooltip>
+              )}
               {isImportant && (
                 <Tooltip title={
                   isSonderklasse 
@@ -1773,15 +1786,39 @@ const Patients: React.FC = () => {
             )}
 
             {activeTab === 4 && (
-              <TextField
-                fullWidth
-                label="Notizen"
-                multiline
-                rows={6}
-                value={formData.notes || ''}
-                onChange={(e) => handleFormChange('notes', e.target.value)}
-                disabled={dialogMode === 'view'}
-              />
+              <Box display="flex" flexDirection="column" gap={2}>
+                <TextField
+                  fullWidth
+                  label="Notizen"
+                  multiline
+                  rows={6}
+                  value={formData.notes || ''}
+                  onChange={(e) => handleFormChange('notes', e.target.value)}
+                  disabled={dialogMode === 'view'}
+                />
+                <Divider />
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom fontWeight="bold">
+                    Online-Buchung
+                  </Typography>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={formData.onlineBookingBlocked || false}
+                        onChange={(e) => handleFormChange('onlineBookingBlocked', e.target.checked)}
+                        disabled={dialogMode === 'view'}
+                        color="warning"
+                      />
+                    }
+                    label="Online-Buchung für diesen Patienten blockieren"
+                  />
+                  {formData.onlineBookingBlocked && (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                      Dieser Patient kann keine Termine online buchen. Er muss sich telefonisch einen Termin vereinbaren.
+                    </Alert>
+                  )}
+                </Box>
+              </Box>
             )}
           </Box>
         </DialogContent>

@@ -83,14 +83,17 @@ const Dashboard: React.FC = () => {
   const [newLaborResults, setNewLaborResults] = useState<any[]>([]);
   const [newDicomStudies, setNewDicomStudies] = useState<any[]>([]);
   const [importantPatients, setImportantPatients] = useState<any[]>([]);
+  const [newOnlineBookings, setNewOnlineBookings] = useState<any[]>([]);
   
   // Refs um Widget-IDs zu speichern und Endlosschleifen zu vermeiden
   const importantPatientsWidgetIdRef = useRef<string | null>(null);
   const laborWidgetIdRef = useRef<string | null>(null);
   const dicomWidgetIdRef = useRef<string | null>(null);
+  const onlineBookingsWidgetIdRef = useRef<string | null>(null);
   const lastImportantPatientsUpdateRef = useRef<string>('');
   const lastLaborResultsUpdateRef = useRef<string>('');
   const lastDicomStudiesUpdateRef = useRef<string>('');
+  const lastOnlineBookingsUpdateRef = useRef<string>('');
 
   // Initialisiere Widget-IDs wenn widgets geladen werden
   useEffect(() => {
@@ -108,6 +111,11 @@ const Dashboard: React.FC = () => {
       const dicomWidget = widgets.find(w => w.widgetId === 'new-dicom-studies');
       if (dicomWidget?._id) {
         dicomWidgetIdRef.current = dicomWidget._id;
+      }
+      
+      const onlineBookingsWidget = widgets.find(w => w.widgetId === 'new-online-bookings');
+      if (onlineBookingsWidget?._id) {
+        onlineBookingsWidgetIdRef.current = onlineBookingsWidget._id;
       }
     }
   }, [widgets.length]); // Nur wenn sich die Anzahl der Widgets ändert
@@ -376,6 +384,149 @@ const Dashboard: React.FC = () => {
     const interval = setInterval(fetchNewDicomStudies, 5 * 60 * 1000);
     return () => clearInterval(interval);
   }, [dispatch]);
+
+  // Lade neue Online-Buchungen (letzte 3 Tage)
+  useEffect(() => {
+    const fetchNewOnlineBookings = async () => {
+      try {
+        // Berechne Datum vor 3 Tagen
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        const threeDaysAgoISO = threeDaysAgo.toISOString();
+        
+        // Lade alle Termine und filtere nach Online-Buchungen der letzten 3 Tage
+        const response = await api.get<any>('/appointments?limit=1000');
+        console.log('🔍 Dashboard: Online bookings response:', response);
+        
+        const backendData = response.data;
+        const appointmentsArray = backendData?.data || backendData || [];
+        
+        // Filtere nach Online-Buchungen der letzten 3 Tage
+        const onlineBookings = appointmentsArray.filter((apt: any) => {
+          const isOnline = apt.bookingType === 'online' || apt.onlineBookingRef || apt.isOnlineBooking === true;
+          const createdAt = new Date(apt.createdAt || apt.startTime);
+          const isRecent = createdAt >= threeDaysAgo;
+          return isOnline && isRecent;
+        });
+        
+        // Sortiere nach Erstellungsdatum: neueste zuerst
+        const sortedBookings = [...onlineBookings].sort((a: any, b: any) => {
+          const dateA = new Date(a.createdAt || a.startTime || 0).getTime();
+          const dateB = new Date(b.createdAt || b.startTime || 0).getTime();
+          return dateB - dateA; // Neueste zuerst
+        });
+        
+        console.log('🔍 Dashboard: Online bookings filtered:', sortedBookings.length);
+        
+        if (sortedBookings.length > 0) {
+          const formattedItems = sortedBookings.slice(0, 10).map((item: any) => {
+            const createdAt = new Date(item.createdAt || item.startTime);
+            const timeStr = createdAt.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+            const dateStr = createdAt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            
+            // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
+            const now = new Date();
+            const hoursSinceCreation = (now.getTime() - createdAt.getTime()) / (1000 * 60 * 60);
+            const isNew = hoursSinceCreation < 24;
+            
+            // Extrahiere Patient-Informationen
+            let patientName = 'Unbekannt';
+            let patientId = null;
+            if (item.patient) {
+              if (typeof item.patient === 'string') {
+                patientId = item.patient;
+              } else if (typeof item.patient === 'object' && item.patient !== null) {
+                patientId = item.patient._id || null;
+                patientName = `${item.patient.firstName || ''} ${item.patient.lastName || ''}`.trim() || 'Unbekannt';
+              }
+            }
+            
+            // Extrahiere Service-Informationen
+            const stripHtmlTags = (html: string): string => {
+              if (!html) return '';
+              const tmp = document.createElement('DIV');
+              tmp.innerHTML = html;
+              return tmp.textContent || tmp.innerText || '';
+            };
+            
+            let serviceName = 'Unbekannt';
+            if (item.service) {
+              if (typeof item.service === 'string') {
+                serviceName = 'Service';
+              } else if (typeof item.service === 'object' && item.service !== null) {
+                const rawName = item.service.name || item.service.code || 'Unbekannt';
+                serviceName = stripHtmlTags(rawName);
+              }
+            } else if (item.type) {
+              serviceName = stripHtmlTags(item.type);
+            }
+            
+            // Extrahiere Startzeit
+            const startTime = item.startTime ? new Date(item.startTime) : null;
+            const startTimeStr = startTime ? startTime.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
+            const startDateStr = startTime ? startTime.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' }) : '';
+            
+            return {
+              primary: patientName,
+              secondary: `${serviceName}${startTimeStr ? ` • ${startDateStr} ${startTimeStr}` : ''} • ${dateStr} ${timeStr}`,
+              icon: 'CalendarToday',
+              chip: item.onlineBookingRef 
+                ? { label: item.onlineBookingRef, color: 'primary' as const }
+                : item.status 
+                  ? { label: item.status, color: item.status === 'bestätigt' ? 'success' as const : 'default' as const }
+                  : undefined,
+              details: `Online-Buchung für ${patientName}\n\nService: ${serviceName}\nBuchungsreferenz: ${item.onlineBookingRef || 'Keine'}\nStatus: ${item.status || 'Unbekannt'}${startTimeStr ? `\nTerminzeit: ${startDateStr} ${startTimeStr}` : ''}\nErstellt: ${dateStr} um ${timeStr}`,
+              patientId: patientId ? String(patientId) : null,
+              appointmentId: item._id ? String(item._id) : null,
+              isNew: isNew,
+              onClick: (e?: React.MouseEvent) => {
+                if (e) {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }
+                // Navigiere zur Online-Buchungen-Seite oder zum Termin
+                if (item._id) {
+                  const appointmentId = String(item._id);
+                  navigate(`/appointments?view=${appointmentId}&returnUrl=${encodeURIComponent('/online-bookings')}`);
+                } else {
+                  navigate('/online-bookings');
+                }
+              }
+            };
+          });
+          
+          setNewOnlineBookings(formattedItems);
+          
+          // Aktualisiere Widget-Konfiguration nur wenn sich die Items geändert haben
+          if (onlineBookingsWidgetIdRef.current) {
+            const itemsToSave = formattedItems.map(({ onClick, isNew, ...rest }: any) => rest);
+            const itemsHash = JSON.stringify(itemsToSave);
+            
+            if (itemsHash !== lastOnlineBookingsUpdateRef.current) {
+              lastOnlineBookingsUpdateRef.current = itemsHash;
+              dispatch(updateDashboardWidget({
+                id: onlineBookingsWidgetIdRef.current,
+                updates: {
+                  config: { items: itemsToSave }
+                }
+              }));
+            }
+          }
+        } else {
+          console.log('🔍 Dashboard: No online bookings found');
+          setNewOnlineBookings([]);
+        }
+      } catch (err) {
+        console.error('Error fetching new online bookings:', err);
+        setNewOnlineBookings([]);
+      }
+    };
+    
+    fetchNewOnlineBookings();
+    // Aktualisiere alle 5 Minuten
+    const interval = setInterval(fetchNewOnlineBookings, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [dispatch, navigate]);
         
         // Handler für Nachrichten-Klicks
         const handleMessageClick = (message: any) => {
@@ -640,6 +791,49 @@ const Dashboard: React.FC = () => {
               if (currentPatientId) {
                 const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
                 window.location.href = `/patient-organizer/${patientIdStr}?tab=dicom`;
+              }
+            }
+          };
+        });
+      case 'new-online-bookings':
+        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
+        if (newOnlineBookings.length > 0) {
+          console.log('🔍 Dashboard: getWidgetData - Using newOnlineBookings', { count: newOnlineBookings.length, firstItem: newOnlineBookings[0] });
+          return newOnlineBookings;
+        }
+        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
+        const savedOnlineBookingItems = widget.config?.items || [];
+        return savedOnlineBookingItems.map((item: any) => {
+          const appointmentId = item.appointmentId;
+          // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
+          let isNew = false;
+          if (item.secondary) {
+            // Versuche Datum aus secondary zu extrahieren (Format: "Service • DD.MM.YYYY HH:MM • DD.MM.YYYY HH:MM")
+            const dateMatch = item.secondary.match(/(\d{2})\.(\d{2})\.(\d{4})/);
+            if (dateMatch) {
+              const [, day, month, year] = dateMatch;
+              const itemDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+              const now = new Date();
+              const hoursSinceCreation = (now.getTime() - itemDate.getTime()) / (1000 * 60 * 60);
+              isNew = hoursSinceCreation < 24;
+            }
+          }
+          return {
+            ...item,
+            icon: 'CalendarToday',
+            appointmentId: appointmentId ? String(appointmentId) : null,
+            isNew: isNew,
+            onClick: (e?: React.MouseEvent) => {
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              // Navigiere zur Online-Buchungen-Seite oder zum Termin
+              if (appointmentId) {
+                const appointmentIdStr = typeof appointmentId === 'string' ? appointmentId : String(appointmentId);
+                navigate(`/appointments?view=${appointmentIdStr}&returnUrl=${encodeURIComponent('/online-bookings')}`);
+              } else {
+                navigate('/online-bookings');
               }
             }
           };

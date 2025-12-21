@@ -92,6 +92,14 @@ const InternalMessageSchema = new mongoose.Schema({
     index: true
   },
   
+  // Ordner-ID (für benutzerdefinierte Ordner)
+  folderId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'MessageFolder',
+    required: false,
+    index: true
+  },
+  
   // Metadaten
   createdAt: {
     type: Date,
@@ -108,6 +116,8 @@ const InternalMessageSchema = new mongoose.Schema({
 InternalMessageSchema.index({ recipientId: 1, status: 1, createdAt: -1 });
 InternalMessageSchema.index({ senderId: 1, deletedBySender: 1, createdAt: -1 });
 InternalMessageSchema.index({ recipientId: 1, deletedByRecipient: 1 });
+InternalMessageSchema.index({ folderId: 1, recipientId: 1 });
+InternalMessageSchema.index({ folderId: 1, senderId: 1 });
 
 // Virtual für ungelesene Nachrichten
 InternalMessageSchema.virtual('isUnread').get(function() {

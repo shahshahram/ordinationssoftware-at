@@ -17,7 +17,7 @@ class AppointmentValidator {
 
   // Validate appointment slot
   async validateAppointment(appointmentData) {
-    const { startTime, endTime, resourceId, skipMinBookingWindow = false } = appointmentData;
+    const { startTime, endTime, resourceId, skipMinBookingWindow = false, appointmentId = null, doctorId = null } = appointmentData;
     
     // Check working hours
     if (!this.isWithinWorkingHours(startTime, endTime)) {
@@ -39,10 +39,13 @@ class AppointmentValidator {
       }
     }
 
-    // Check for conflicts
-    const conflicts = await this.checkConflicts(resourceId, startTime, endTime);
-    if (conflicts.length > 0) {
-      throw new Error('Zeitslot ist bereits belegt. Bitte wählen Sie einen anderen Zeitpunkt.');
+    // Check for conflicts (exclude current appointment if updating)
+    // Nur prüfen, wenn resourceId oder doctorId vorhanden ist
+    if (resourceId || doctorId) {
+      const conflicts = await this.checkConflicts(resourceId, startTime, endTime, appointmentId, doctorId);
+      if (conflicts.length > 0) {
+        throw new Error('Zeitslot ist bereits belegt. Bitte wählen Sie einen anderen Zeitpunkt.');
+      }
     }
 
     return true;
@@ -89,16 +92,38 @@ class AppointmentValidator {
   }
 
   // Check for conflicts
-  async checkConflicts(resourceId, startTime, endTime) {
-    // Check existing appointments
-    const existingAppointments = await Appointment.find({
-      resourceId,
+  async checkConflicts(resourceId, startTime, endTime, excludeAppointmentId = null, doctorId = null) {
+    // Check existing appointments (exclude current appointment if updating)
+    // Wenn resourceId vorhanden ist, suche danach, sonst suche nach doctor
+    const query = {
       startTime: { $lt: endTime },
       endTime: { $gt: startTime }
-    });
+    };
+    
+    if (resourceId) {
+      query.resourceId = resourceId;
+    } else if (doctorId) {
+      // Fallback: Suche nach doctor, wenn kein resourceId vorhanden ist
+      query.$or = [
+        { doctor: doctorId },
+        { assigned_users: doctorId }
+      ];
+    } else {
+      // Wenn weder resourceId noch doctorId vorhanden ist, keine Validierung möglich
+      return [];
+    }
+    
+    if (excludeAppointmentId) {
+      query._id = { $ne: excludeAppointmentId };
+    }
+    
+    const existingAppointments = await Appointment.find(query);
 
-    // Check slot reservations
-    const reservations = await SlotReservation.findConflicts(resourceId, startTime, endTime);
+    // Check slot reservations (nur wenn resourceId vorhanden ist)
+    let reservations = [];
+    if (resourceId) {
+      reservations = await SlotReservation.findConflicts(resourceId, startTime, endTime);
+    }
 
     return [...existingAppointments, ...reservations];
   }

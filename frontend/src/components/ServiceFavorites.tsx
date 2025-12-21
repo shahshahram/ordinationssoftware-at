@@ -171,14 +171,19 @@ const ServiceFavorites: React.FC<ServiceFavoritesProps> = ({
                   )}
                 </Box>
                 
-                <Typography variant="h6" gutterBottom>
-                  {service.name}
-                </Typography>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  dangerouslySetInnerHTML={{ __html: service.name }}
+                />
                 
                 {service.description && (
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    {service.description}
-                  </Typography>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary" 
+                    sx={{ mb: 1 }}
+                    dangerouslySetInnerHTML={{ __html: service.description }}
+                  />
                 )}
                 
                 {service.category && (

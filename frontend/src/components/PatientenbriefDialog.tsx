@@ -75,6 +75,14 @@ interface PatientenbriefDialogProps {
   onSaveSuccess?: () => void; // Callback nach erfolgreichem Speichern
 }
 
+// Hilfsfunktion zum Entfernen von HTML-Tags
+const stripHtmlTags = (html: string): string => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
 const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   open,
   onClose,
@@ -2608,8 +2616,11 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
             />
             {linkedDiagnoses.length > 0 && (
               <Stack spacing={1} sx={{ mt: 2 }}>
-                {linkedDiagnoses.map((diag, index) => (
-                  <Paper key={index} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                {linkedDiagnoses.map((diag, index) => {
+                  // Eindeutiger Key: diagnosisId oder Kombination aus icd10Code und index
+                  const uniqueKey = diag.diagnosisId || `${diag.icd10Code || 'diag'}-${index}`;
+                  return (
+                  <Paper key={uniqueKey} sx={{ p: 1.5, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <Box sx={{ flex: 1 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                         <Typography variant="body2" fontWeight="bold">
@@ -2651,7 +2662,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
                       <Delete />
                     </IconButton>
                   </Paper>
-                ))}
+                  );
+                })}
               </Stack>
             )}
           </Box>
@@ -3172,7 +3184,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
                     onClick={() => handleAddAppointment(appointment)}
                   >
                     <ListItemText
-                      primary={appointment.title || appointment.service?.name || 'Termin'}
+                      primary={appointment.title || (appointment.service?.name ? stripHtmlTags(appointment.service.name) : 'Termin')}
                       secondary={`${appointment.startTime ? new Date(appointment.startTime).toLocaleString('de-DE') : 'Unbekanntes Datum'} - ${appointment.doctor ? (typeof appointment.doctor === 'string' ? appointment.doctor : `${appointment.doctor.firstName || ''} ${appointment.doctor.lastName || ''}`.trim()) : ''}`}
                     />
                   </ListItemButton>

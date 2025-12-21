@@ -69,6 +69,7 @@ const menuItems = [
     path: '/patients',
     subItems: [
       { text: 'Patientenliste', icon: <People />, path: '/patients' },
+      { text: 'Temporäre Patienten', icon: <Warning />, path: '/temporary-patients' },
       { text: 'Hinweisliste', icon: <Warning />, path: '/patients-hints' },
       { text: 'Patientenaufnahme', icon: <PersonAdd />, path: '/patient-admission' },
       { text: 'Self-Check-In', icon: <Login />, path: '/self-checkin' },
@@ -82,8 +83,10 @@ const menuItems = [
     path: '/appointments',
     subItems: [
       { text: 'Terminverwaltung', icon: <CalendarToday />, path: '/appointments' },
+      { text: 'Online-Buchungen', icon: <BookOnline />, path: '/online-bookings' },
       { text: 'Terminkalender', icon: <CalendarToday />, path: '/demo-calendar' },
       { text: 'Dienstkalender', icon: <CalendarToday />, path: '/service-demo-calendar' },
+      { text: 'Dienst-Kalender (Enhanced)', icon: <CalendarToday />, path: '/enhanced-calendar' },
       { text: 'Verfügbarkeiten', icon: <Schedule />, path: '/availability' },
       { text: 'Warteliste', icon: <PendingActions />, path: '/waiting-list' },
     ]
@@ -451,6 +454,11 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       <Drawer
         variant="persistent"
         open={open}
+        ModalProps={{
+          disableAutoFocus: true,
+          disableEnforceFocus: true,
+          disableRestoreFocus: true,
+        }}
         sx={{
           display: { xs: 'none', sm: 'block' },
           '& .MuiDrawer-paper': {

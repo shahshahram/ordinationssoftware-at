@@ -442,13 +442,17 @@ const DemoCalendar: React.FC = () => {
       const aptService = (apt as any).service;
       if (aptService) {
         if (typeof aptService === 'object' && aptService !== null) {
-          serviceName = aptService.name || serviceName;
+          // Entferne HTML-Tags aus Service-Namen
+          const rawServiceName = aptService.name || serviceName;
+          serviceName = rawServiceName.replace(/<[^>]*>/g, '');
           serviceColor = aptService.color_hex;
         } else if (typeof aptService === 'string') {
           // Service is just an ID, try to find it in services list
           const foundService = services.find(s => s._id === aptService);
           if (foundService) {
-            serviceName = foundService.name;
+            // Entferne HTML-Tags aus Service-Namen
+            const rawServiceName = foundService.name;
+            serviceName = rawServiceName.replace(/<[^>]*>/g, '');
             serviceColor = foundService.color_hex;
           }
         }
@@ -458,7 +462,9 @@ const DemoCalendar: React.FC = () => {
       if (!serviceColor && (apt as any).serviceId) {
         const foundService = services.find(s => s._id === (apt as any).serviceId);
         if (foundService) {
-          serviceName = foundService.name;
+          // Entferne HTML-Tags aus Service-Namen
+          const rawServiceName = foundService.name;
+          serviceName = rawServiceName.replace(/<[^>]*>/g, '');
           serviceColor = foundService.color_hex;
         }
       }
@@ -1460,9 +1466,36 @@ const DemoCalendar: React.FC = () => {
                               p: 0.5,
                               fontSize: '0.65rem',
                               cursor: 'pointer',
+                              position: 'relative',
                               '&:hover': { opacity: 0.9 },
                             }}
                           >
+                            {/* Online-Badge oben rechts */}
+                            {(() => {
+                              const apt = appointment.appointment;
+                              const isOnline = apt?.bookingType === 'online' || apt?.onlineBookingRef;
+                              if (!isOnline) return null;
+                              return (
+                                <Chip
+                                  label="Online"
+                                  size="small"
+                                  sx={{
+                                    position: 'absolute',
+                                    top: 2,
+                                    right: 2,
+                                    height: 16,
+                                    fontSize: '0.6rem',
+                                    fontWeight: 600,
+                                    bgcolor: 'rgba(255, 255, 255, 0.9)',
+                                    color: 'primary.main',
+                                    zIndex: 1,
+                                    '& .MuiChip-label': {
+                                      px: 0.5,
+                                    },
+                                  }}
+                                />
+                              );
+                            })()}
                             <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 600, display: 'block', mb: 0.25 }}>
                               {format(appointment.start, 'HH:mm')} {appointment.patientName}
                             </Typography>
@@ -1592,6 +1625,32 @@ const DemoCalendar: React.FC = () => {
                           },
                         }}
                       >
+                        {/* Online-Badge oben rechts */}
+                        {(() => {
+                          const apt = appointment.appointment;
+                          const isOnline = apt?.bookingType === 'online' || apt?.onlineBookingRef;
+                          if (!isOnline) return null;
+                          return (
+                            <Chip
+                              label="Online"
+                              size="small"
+                              sx={{
+                                position: 'absolute',
+                                top: 2,
+                                right: 2,
+                                height: 16,
+                                fontSize: '0.6rem',
+                                fontWeight: 600,
+                                bgcolor: 'rgba(255, 255, 255, 0.9)',
+                                color: 'primary.main',
+                                zIndex: 1,
+                                '& .MuiChip-label': {
+                                  px: 0.5,
+                                },
+                              }}
+                            />
+                          );
+                        })()}
                         <Box>
                           <Typography 
                             variant="caption" 
@@ -1956,9 +2015,11 @@ const DemoCalendar: React.FC = () => {
                             flexShrink: 0
                           }}
                         />
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {formData.service.name}
-                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          sx={{ fontWeight: 600 }}
+                          dangerouslySetInnerHTML={{ __html: formData.service.name }}
+                        />
                         {formData.service.code && (
                           <Chip
                             label={formData.service.code}
@@ -1969,9 +2030,12 @@ const DemoCalendar: React.FC = () => {
                         )}
                       </Box>
                       {formData.service.description && (
-                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', ml: 2.5 }}>
-                          {formData.service.description}
-                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary" 
+                          sx={{ fontStyle: 'italic', ml: 2.5 }}
+                          dangerouslySetInnerHTML={{ __html: formData.service.description }}
+                        />
                       )}
                       <Box sx={{ display: 'flex', gap: 2, ml: 2.5, flexWrap: 'wrap' }}>
                         <Chip

@@ -34,7 +34,9 @@ import {
   CircularProgress,
   Badge,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Switch,
+  FormControlLabel
 } from '@mui/material';
 import { 
   Add, 
@@ -374,6 +376,14 @@ const PatientOrganizer: React.FC = () => {
   
   // State für Hinweis-Dialog
   const [hintDetailsDialogOpen, setHintDetailsDialogOpen] = useState(false);
+  const [hintEditMode, setHintEditMode] = useState(false);
+  const [hintTextEdit, setHintTextEdit] = useState('');
+  
+  // State für Notizen-Dialog
+  const [notesDialogOpen, setNotesDialogOpen] = useState(false);
+  const [notesEdit, setNotesEdit] = useState('');
+  const [medicalNotesEdit, setMedicalNotesEdit] = useState('');
+  const [onlineBookingBlockedEdit, setOnlineBookingBlockedEdit] = useState(false);
   
   // State für Stammdaten-Bearbeitung
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -2184,13 +2194,31 @@ const PatientOrganizer: React.FC = () => {
                         sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'inherit' }}
                       />
                     )}
+                    {patient.isTemporary && (
+                      <Chip 
+                        icon={<Warning />}
+                        label="Temporär" 
+                        size="small" 
+                        color="warning"
+                        title="Patient über Online-Buchung erstellt - Stammdaten müssen vervollständigt werden"
+                        sx={{ 
+                          bgcolor: 'rgba(255, 193, 7, 0.3)', 
+                          color: 'inherit',
+                          fontWeight: 'bold'
+                        }}
+                      />
+                    )}
                     {patient.hasHint && (
                       <Chip 
                         icon={<Warning />}
                         label="Hinweis" 
                         size="small" 
                         color="warning"
-                        onClick={() => setHintDetailsDialogOpen(true)}
+                        onClick={() => {
+                          setHintTextEdit(patient.hintText || '');
+                          setHintEditMode(false);
+                          setHintDetailsDialogOpen(true);
+                        }}
                         sx={{ 
                           bgcolor: 'rgba(255, 193, 7, 0.3)', 
                           color: 'inherit',
@@ -2318,6 +2346,44 @@ const PatientOrganizer: React.FC = () => {
             </Box>
           </Box>
         </Paper>
+
+        {/* Alert für temporäre Patienten */}
+        {patient && patient.isTemporary && (
+          <Alert 
+            severity="warning"
+            icon={<Warning />}
+            sx={{ mb: 2 }}
+            action={
+              <Button 
+                size="small" 
+                variant="outlined"
+                onClick={() => {
+                  // Navigiere zu den Stammdaten, um den Patienten zu vervollständigen
+                  setActiveTab(0); // Stammdaten Tab
+                  setSnackbar({
+                    open: true,
+                    message: 'Bitte vervollständigen Sie die Stammdaten des Patienten.',
+                    severity: 'info'
+                  });
+                }}
+              >
+                Stammdaten vervollständigen
+              </Button>
+            }
+          >
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              ⚠️ Temporärer Patient
+            </Typography>
+            <Typography variant="body2">
+              Dieser Patient wurde über eine Online-Buchung erstellt. Bitte vervollständigen Sie die Stammdaten (Geschlecht, Versicherungsnummer, Adresse, etc.) bevor Sie mit der Behandlung fortfahren.
+            </Typography>
+            {patient.notes && (
+              <Typography variant="caption" display="block" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                Hinweis: {patient.notes}
+              </Typography>
+            )}
+          </Alert>
+        )}
 
         {/* Erweiterte Schwangerschafts-Alert-Meldung */}
         {pregnancyAlertInfo && pregnancyAlertInfo.shouldShow && (
@@ -2463,6 +2529,49 @@ const PatientOrganizer: React.FC = () => {
               }}
             >
               Leistungsabrechnung
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Warning />}
+              onClick={() => {
+                if (!patient) return;
+                if (patient.hasHint) {
+                  setHintTextEdit(patient.hintText || '');
+                  setHintEditMode(false);
+                } else {
+                  setHintTextEdit('');
+                  setHintEditMode(true);
+                }
+                setHintDetailsDialogOpen(true);
+              }}
+              disabled={!patient}
+              sx={{
+                borderColor: 'warning.main',
+                color: 'warning.main',
+                '&:hover': {
+                  borderColor: 'warning.dark',
+                  bgcolor: 'warning.light',
+                  color: 'warning.dark'
+                }
+              }}
+            >
+              {patient?.hasHint ? 'Hinweis bearbeiten' : 'Hinweis hinzufügen'}
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Description />}
+              onClick={() => {
+                if (!patient) return;
+                setNotesEdit(patient.notes || '');
+                setMedicalNotesEdit(patient.medicalNotes || '');
+                setOnlineBookingBlockedEdit(patient.onlineBookingBlocked || false);
+                setNotesDialogOpen(true);
+              }}
+              disabled={!patient}
+            >
+              Notizen
             </Button>
           </Stack>
         </Paper>
@@ -4687,7 +4796,11 @@ const PatientOrganizer: React.FC = () => {
       {/* Hinweis-Details Dialog */}
       <Dialog
         open={hintDetailsDialogOpen}
-        onClose={() => setHintDetailsDialogOpen(false)}
+        onClose={() => {
+          setHintDetailsDialogOpen(false);
+          setHintEditMode(false);
+          setHintTextEdit('');
+        }}
         maxWidth="sm"
         fullWidth
       >
@@ -4695,43 +4808,282 @@ const PatientOrganizer: React.FC = () => {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Warning color="warning" />
             <Typography variant="h6">
-              Hinweis für {patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'}
+              {hintEditMode ? 'Hinweis bearbeiten' : 'Hinweis für'} {patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'}
             </Typography>
           </Box>
           <IconButton
             size="small"
-            onClick={() => setHintDetailsDialogOpen(false)}
+            onClick={() => {
+              setHintDetailsDialogOpen(false);
+              setHintEditMode(false);
+              setHintTextEdit('');
+            }}
             sx={{ ml: 2 }}
           >
             <Close />
           </IconButton>
         </DialogTitle>
         <DialogContent>
-          {patient?.hintText ? (
-            <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>
-              {patient.hintText}
-            </Typography>
+          {hintEditMode ? (
+            <Box sx={{ mt: 2 }}>
+              <TextField
+                fullWidth
+                multiline
+                rows={6}
+                value={hintTextEdit}
+                onChange={(e) => setHintTextEdit(e.target.value)}
+                placeholder="Hinweistext eingeben..."
+                variant="outlined"
+                label="Hinweistext"
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={patient?.hasHint || false}
+                    onChange={async (e) => {
+                      if (!patient) return;
+                      try {
+                        const updatedPatient = {
+                          ...patient,
+                          hasHint: e.target.checked,
+                          hintText: e.target.checked ? hintTextEdit : ''
+                        };
+                        await dispatch(updatePatient({ 
+                          id: (patient._id || patient.id)!, 
+                          patientData: updatedPatient 
+                        }));
+                        setSnackbar({
+                          open: true,
+                          message: e.target.checked ? 'Hinweis wurde aktiviert' : 'Hinweis wurde deaktiviert',
+                          severity: 'success'
+                        });
+                      } catch (error) {
+                        console.error('Fehler beim Aktualisieren des Hinweises:', error);
+                      }
+                    }}
+                  />
+                }
+                label="Hinweis aktiviert"
+                sx={{ mt: 2 }}
+              />
+            </Box>
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              Dieser Patient hat einen Hinweis erhalten, aber es wurde noch kein Hinweistext eingegeben.
-            </Typography>
+            <>
+              {patient?.hintText ? (
+                <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', mt: 1 }}>
+                  {patient.hintText}
+                </Typography>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Dieser Patient hat einen Hinweis erhalten, aber es wurde noch kein Hinweistext eingegeben.
+                </Typography>
+              )}
+            </>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setHintDetailsDialogOpen(false)}>Schließen</Button>
-          {patient && (
-            <Button 
-              variant="outlined" 
-              startIcon={<Edit />}
-              onClick={() => {
+          {hintEditMode ? (
+            <>
+              <Button 
+                onClick={() => {
+                  setHintEditMode(false);
+                  setHintTextEdit('');
+                }}
+              >
+                Abbrechen
+              </Button>
+              <Button 
+                variant="contained" 
+                color="warning"
+                startIcon={<Save />}
+                onClick={async () => {
+                  if (!patient) return;
+                  try {
+                    const updatedPatient = {
+                      ...patient,
+                      hasHint: true,
+                      hintText: hintTextEdit.trim()
+                    };
+                    await dispatch(updatePatient({ 
+                      id: (patient._id || patient.id)!, 
+                      patientData: updatedPatient 
+                    }));
+                    setSnackbar({
+                      open: true,
+                      message: 'Hinweis wurde gespeichert',
+                      severity: 'success'
+                    });
+                    setHintEditMode(false);
+                    setHintTextEdit('');
+                    setHintDetailsDialogOpen(false);
+                  } catch (error) {
+                    console.error('Fehler beim Speichern des Hinweises:', error);
+                    setSnackbar({
+                      open: true,
+                      message: 'Fehler beim Speichern des Hinweises',
+                      severity: 'error'
+                    });
+                  }
+                }}
+              >
+                Speichern
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button onClick={() => {
                 setHintDetailsDialogOpen(false);
-                // Navigate to hint edit or open edit dialog
-                // You can add edit functionality here if needed
-              }}
-            >
-              Bearbeiten
-            </Button>
+                setHintEditMode(false);
+                setHintTextEdit('');
+              }}>
+                Schließen
+              </Button>
+              {patient && (
+                <Button 
+                  variant="outlined" 
+                  startIcon={<Edit />}
+                  onClick={() => {
+                    setHintTextEdit(patient.hintText || '');
+                    setHintEditMode(true);
+                  }}
+                >
+                  Bearbeiten
+                </Button>
+              )}
+            </>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Notizen Dialog */}
+      <Dialog
+        open={notesDialogOpen}
+        onClose={() => {
+          setNotesDialogOpen(false);
+          setNotesEdit('');
+          setMedicalNotesEdit('');
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Description />
+            <Typography variant="h6">
+              Notizen für {patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'}
+            </Typography>
+          </Box>
+          <IconButton
+            size="small"
+            onClick={() => {
+              setNotesDialogOpen(false);
+              setNotesEdit('');
+              setMedicalNotesEdit('');
+            }}
+            sx={{ ml: 2 }}
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+              Allgemeine Notizen
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={4}
+              value={notesEdit}
+              onChange={(e) => setNotesEdit(e.target.value)}
+              placeholder="Allgemeine Notizen zum Patienten eingeben..."
+              variant="outlined"
+              sx={{ mb: 3 }}
+            />
+            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+              Medizinische Notizen
+            </Typography>
+            <TextField
+              fullWidth
+              multiline
+              rows={6}
+              value={medicalNotesEdit}
+              onChange={(e) => setMedicalNotesEdit(e.target.value)}
+              placeholder="Medizinische Notizen zum Patienten eingeben..."
+              variant="outlined"
+            />
+            <Divider sx={{ my: 3 }} />
+            <Box>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                Online-Buchung
+              </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={onlineBookingBlockedEdit}
+                    onChange={(e) => setOnlineBookingBlockedEdit(e.target.checked)}
+                    color="warning"
+                  />
+                }
+                label="Online-Buchung für diesen Patienten blockieren"
+              />
+              {onlineBookingBlockedEdit && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  Dieser Patient kann keine Termine online buchen. Er muss sich telefonisch einen Termin vereinbaren.
+                </Alert>
+              )}
+            </Box>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setNotesDialogOpen(false);
+              setNotesEdit('');
+              setMedicalNotesEdit('');
+              setOnlineBookingBlockedEdit(false);
+            }}
+          >
+            Abbrechen
+          </Button>
+          <Button 
+            variant="contained"
+            startIcon={<Save />}
+            onClick={async () => {
+              if (!patient) return;
+              try {
+                const updatedPatient = {
+                  ...patient,
+                  notes: notesEdit.trim(),
+                  medicalNotes: medicalNotesEdit.trim(),
+                  onlineBookingBlocked: Boolean(onlineBookingBlockedEdit)
+                };
+                console.log('💾 Speichere Patient mit onlineBookingBlocked:', updatedPatient.onlineBookingBlocked);
+                await dispatch(updatePatient({ 
+                  id: (patient._id || patient.id)!, 
+                  patientData: updatedPatient 
+                }));
+                setSnackbar({
+                  open: true,
+                  message: 'Notizen und Einstellungen wurden gespeichert',
+                  severity: 'success'
+                });
+                setNotesDialogOpen(false);
+                setNotesEdit('');
+                setMedicalNotesEdit('');
+                setOnlineBookingBlockedEdit(false);
+              } catch (error) {
+                console.error('Fehler beim Speichern der Notizen:', error);
+                setSnackbar({
+                  open: true,
+                  message: 'Fehler beim Speichern der Notizen',
+                  severity: 'error'
+                });
+              }
+            }}
+          >
+            Speichern
+          </Button>
         </DialogActions>
       </Dialog>
 
