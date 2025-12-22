@@ -1,6 +1,8 @@
 const nodemailer = require('nodemailer');
 const fs = require('fs').promises;
 const path = require('path');
+const SystemSettings = require('../models/SystemSettings');
+const crypto = require('crypto');
 
 class EmailService {
   constructor() {
@@ -8,25 +10,107 @@ class EmailService {
     this.initializeTransporter();
   }
 
+  // Verschlüsselungs-Hilfsfunktionen
+  getEncryptionKey() {
+    let key = process.env.ENCRYPTION_KEY;
+    
+    if (!key) {
+      return null; // Kein Schlüssel = keine Verschlüsselung
+    }
+    
+    // Konvertiere Hex-String zu Buffer (32 Bytes)
+    if (key.length === 64) {
+      // Perfekt: 64 Hex-Zeichen = 32 Bytes
+      return Buffer.from(key, 'hex');
+    } else if (key.length > 64) {
+      // Zu lang: nimm die ersten 64 Zeichen
+      return Buffer.from(key.slice(0, 64), 'hex');
+    } else {
+      // Zu kurz: hashe den Schlüssel zu 32 Bytes
+      return crypto.createHash('sha256').update(key).digest();
+    }
+  }
+
+  decryptPassword(encryptedText) {
+    if (!encryptedText) return null;
+    try {
+      const key = this.getEncryptionKey();
+      if (!key) return null;
+      
+      const ALGORITHM = 'aes-256-cbc';
+      const parts = encryptedText.split(':');
+      if (parts.length !== 2) {
+        throw new Error('Ungültiges Verschlüsselungsformat');
+      }
+      const iv = Buffer.from(parts[0], 'hex');
+      const encrypted = parts[1];
+      const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (error) {
+      console.error('Fehler beim Entschlüsseln des Passworts:', error);
+      return null;
+    }
+  }
+
   async initializeTransporter() {
     try {
-      // Konfiguration aus Umgebungsvariablen
-      this.transporter = nodemailer.createTransporter({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: process.env.SMTP_PORT || 587,
-        secure: false, // true für 465, false für andere Ports
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        },
-        tls: {
-          rejectUnauthorized: false
+      // Versuche zuerst Settings aus Datenbank zu laden
+      let smtpConfig = null;
+      try {
+        const emailSettings = await SystemSettings.getCategorySettings('notifications');
+        if (emailSettings['email.smtp.host']) {
+          const decryptedPassword = emailSettings['email.smtp.password'] 
+            ? this.decryptPassword(emailSettings['email.smtp.password'])
+            : null;
+          
+          smtpConfig = {
+            host: emailSettings['email.smtp.host'],
+            port: emailSettings['email.smtp.port'] || 587,
+            secure: emailSettings['email.smtp.secure'] !== undefined 
+              ? emailSettings['email.smtp.secure'] 
+              : false,
+            auth: {
+              user: emailSettings['email.smtp.user'],
+              pass: decryptedPassword || process.env.SMTP_PASS || process.env.SMTP_PASSWORD
+            },
+            tls: {
+              rejectUnauthorized: false
+            }
+          };
         }
-      });
+      } catch (dbError) {
+        console.warn('⚠️ Konnte E-Mail-Settings nicht aus Datenbank laden, verwende Umgebungsvariablen:', dbError.message);
+      }
 
-      // Teste Verbindung
-      await this.transporter.verify();
-      console.log('✅ E-Mail-Service erfolgreich initialisiert');
+      // Fallback zu Umgebungsvariablen
+      if (!smtpConfig || !smtpConfig.auth.user) {
+        smtpConfig = {
+          host: process.env.SMTP_HOST || 'smtp.gmail.com',
+          port: process.env.SMTP_PORT || 587,
+          secure: false,
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS || process.env.SMTP_PASSWORD
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        };
+      }
+
+      // Erstelle Transporter nur wenn User vorhanden ist
+      if (smtpConfig.auth.user) {
+        this.transporter = nodemailer.createTransporter(smtpConfig);
+
+        // Teste Verbindung
+        await this.transporter.verify();
+        console.log('✅ E-Mail-Service erfolgreich initialisiert');
+      } else {
+        console.warn('⚠️ E-Mail-Service: Keine SMTP-Konfiguration gefunden');
+        this.transporter = null;
+      }
     } catch (error) {
       console.error('❌ E-Mail-Service Initialisierung fehlgeschlagen:', error.message);
       // Fallback für Entwicklung

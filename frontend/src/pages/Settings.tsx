@@ -17,8 +17,19 @@ import {
   Select,
   MenuItem,
   Chip,
-  Stack
+  Stack,
+  IconButton,
+  InputAdornment,
+  CircularProgress
 } from '@mui/material';
+import {
+  Visibility,
+  VisibilityOff,
+  Email,
+  Send,
+  CheckCircle,
+  Error as ErrorIcon
+} from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { useAppDispatch } from '../store/hooks';
 import { loadUser } from '../store/slices/authSlice';
@@ -41,6 +52,22 @@ const Settings: React.FC = () => {
   const [wahonlineEnabled, setWahonlineEnabled] = useState(false);
   const [wahonlineStatus, setWahonlineStatus] = useState<any>(null);
 
+  // E-Mail-Konfiguration State
+  const [emailLoading, setEmailLoading] = useState(false);
+  const [emailSuccess, setEmailSuccess] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailProvider, setEmailProvider] = useState<string>('custom');
+  const [smtpHost, setSmtpHost] = useState<string>('');
+  const [smtpPort, setSmtpPort] = useState<number>(587);
+  const [smtpSecure, setSmtpSecure] = useState<boolean>(false);
+  const [smtpUser, setSmtpUser] = useState<string>('');
+  const [smtpPassword, setSmtpPassword] = useState<string>('');
+  const [smtpFrom, setSmtpFrom] = useState<string>('');
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [testEmailAddress, setTestEmailAddress] = useState<string>('');
+  const [testEmailLoading, setTestEmailLoading] = useState<boolean>(false);
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // Lade aktuelle Einstellungen
   useEffect(() => {
     if (user?.profile?.preferences?.autoBillingEnabled !== undefined) {
@@ -60,7 +87,128 @@ const Settings: React.FC = () => {
     }
     loadELDAStatus();
     loadWAHonlineStatus();
+    loadEmailSettings();
   }, [user]);
+
+  const loadEmailSettings = async () => {
+    try {
+      const response = await api.get<{ success: boolean; data: any }>('/settings/email');
+      if (response.data.success && response.data.data) {
+        const config = response.data.data;
+        setEmailProvider(config.provider || 'custom');
+        setSmtpHost(config.smtp?.host || '');
+        setSmtpPort(config.smtp?.port || 587);
+        setSmtpSecure(config.smtp?.secure || false);
+        setSmtpUser(config.smtp?.user || '');
+        setSmtpPassword(config.smtp?.password === '***ENCRYPTED***' ? '' : (config.smtp?.password || ''));
+        setSmtpFrom(config.smtp?.from || '');
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Laden der E-Mail-Konfiguration:', error);
+    }
+  };
+
+  const handleProviderChange = (provider: string) => {
+    setEmailProvider(provider);
+    
+    // Setze Standardwerte basierend auf Anbieter
+    const providerConfigs: { [key: string]: { host: string; port: number; secure: boolean } } = {
+      gmail: { host: 'smtp.gmail.com', port: 587, secure: false },
+      apple: { host: 'smtp.mail.me.com', port: 587, secure: false },
+      outlook: { host: 'smtp-mail.outlook.com', port: 587, secure: false },
+      yahoo: { host: 'smtp.mail.yahoo.com', port: 587, secure: false },
+      custom: { host: '', port: 587, secure: false }
+    };
+
+    const config = providerConfigs[provider] || providerConfigs.custom;
+    setSmtpHost(config.host);
+    setSmtpPort(config.port);
+    setSmtpSecure(config.secure);
+  };
+
+  const handleSaveEmailSettings = async () => {
+    setEmailLoading(true);
+    setEmailError(null);
+    setEmailSuccess(false);
+
+    try {
+      const response = await api.put<{ success: boolean; message?: string; data?: any }>('/settings/email', {
+        provider: emailProvider,
+        smtp: {
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          user: smtpUser,
+          password: smtpPassword || '***ENCRYPTED***', // Wenn leer, behalte verschlüsseltes Passwort
+          from: smtpFrom
+        }
+      });
+
+      if (response.data.success) {
+        setEmailSuccess(true);
+        setSmtpPassword(''); // Leere Passwort-Feld nach erfolgreichem Speichern
+        setTimeout(() => setEmailSuccess(false), 3000);
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Speichern der E-Mail-Konfiguration:', error);
+      setEmailError(error.response?.data?.message || 'Fehler beim Speichern der E-Mail-Konfiguration');
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleSendTestEmail = async () => {
+    if (!testEmailAddress || !testEmailAddress.includes('@')) {
+      setTestEmailResult({ success: false, message: 'Bitte geben Sie eine gültige E-Mail-Adresse ein' });
+      return;
+    }
+
+    setTestEmailLoading(true);
+    setTestEmailResult(null);
+
+    try {
+      const response = await api.post<{ success: boolean; message?: string; data?: any }>('/settings/email/test', {
+        to: testEmailAddress
+      });
+
+      if (response.data.success) {
+        setTestEmailResult({ 
+          success: true, 
+          message: `Test-E-Mail erfolgreich an ${testEmailAddress} gesendet!` 
+        });
+        setTestEmailAddress('');
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Senden der Test-E-Mail:', error);
+      
+      // Prüfe auf Gmail-spezifische Authentifizierungsfehler
+      const errorMessage = error.response?.data?.message || error.message || 'Fehler beim Senden der Test-E-Mail';
+      const isGmailError = 
+        errorMessage.includes('BadCredentials') ||
+        errorMessage.includes('Username and Password not accepted') ||
+        errorMessage.includes('Invalid login') ||
+        (emailProvider === 'gmail' && errorMessage.toLowerCase().includes('password'));
+      
+      let userFriendlyMessage = errorMessage;
+      
+      if (isGmailError) {
+        userFriendlyMessage = `Gmail-Authentifizierung fehlgeschlagen. Für Gmail benötigen Sie ein App-Passwort (nicht Ihr normales Passwort).\n\n` +
+          `So erstellen Sie ein App-Passwort:\n` +
+          `1. Gehen Sie zu https://myaccount.google.com/apppasswords\n` +
+          `2. Wählen Sie "Mail" und "Andere (benutzerdefiniert)"\n` +
+          `3. Geben Sie "Ordinationssoftware" ein\n` +
+          `4. Kopieren Sie das 16-stellige Passwort\n` +
+          `5. Verwenden Sie dieses Passwort in der E-Mail-Konfiguration`;
+      }
+      
+      setTestEmailResult({ 
+        success: false, 
+        message: userFriendlyMessage
+      });
+    } finally {
+      setTestEmailLoading(false);
+    }
+  };
 
   const loadELDAStatus = async () => {
     try {
@@ -390,6 +538,217 @@ const Settings: React.FC = () => {
                   erfolgreicher Wahlarzt-Abrechnung.
                 </Typography>
               </Alert>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* E-Mail-Konfiguration */}
+        <Grid size={{ xs: 12 }}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                <Email sx={{ mr: 1, verticalAlign: 'middle' }} />
+                E-Mail-Konfiguration
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Konfigurieren Sie die E-Mail-Einstellungen für Benachrichtigungen über gebuchte Termine
+              </Typography>
+              <Divider sx={{ my: 2 }} />
+
+              {emailSuccess && (
+                <Alert severity="success" sx={{ mb: 2 }} onClose={() => setEmailSuccess(false)}>
+                  E-Mail-Konfiguration erfolgreich gespeichert
+                </Alert>
+              )}
+
+              {emailError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setEmailError(null)}>
+                  {emailError}
+                </Alert>
+              )}
+
+              <Grid container spacing={3}>
+                {/* Anbieter-Auswahl */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <FormControl fullWidth>
+                    <InputLabel id="email-provider-label">E-Mail-Anbieter</InputLabel>
+                    <Select
+                      labelId="email-provider-label"
+                      id="email-provider"
+                      value={emailProvider}
+                      label="E-Mail-Anbieter"
+                      onChange={(e) => handleProviderChange(e.target.value)}
+                    >
+                      <MenuItem value="gmail">Gmail</MenuItem>
+                      <MenuItem value="apple">Apple iCloud</MenuItem>
+                      <MenuItem value="outlook">Outlook / Hotmail</MenuItem>
+                      <MenuItem value="yahoo">Yahoo</MenuItem>
+                      <MenuItem value="custom">Eigener SMTP-Server</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* SMTP Host */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="SMTP Host"
+                    value={smtpHost}
+                    onChange={(e) => setSmtpHost(e.target.value)}
+                    required
+                    helperText="z.B. smtp.gmail.com"
+                  />
+                </Grid>
+
+                {/* SMTP Port */}
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="SMTP Port"
+                    type="number"
+                    value={smtpPort}
+                    onChange={(e) => setSmtpPort(parseInt(e.target.value) || 587)}
+                    required
+                    helperText="Standard: 587 (TLS) oder 465 (SSL)"
+                  />
+                </Grid>
+
+                {/* SSL/TLS */}
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <FormControlLabel
+                    control={
+                      <Switch
+                        checked={smtpSecure}
+                        onChange={(e) => setSmtpSecure(e.target.checked)}
+                        color="primary"
+                      />
+                    }
+                    label="SSL/TLS aktivieren"
+                  />
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                    Für Port 465 aktivieren
+                  </Typography>
+                </Grid>
+
+                {/* From-Adresse */}
+                <Grid size={{ xs: 12, md: 4 }}>
+                  <TextField
+                    fullWidth
+                    label="Absender-E-Mail"
+                    type="email"
+                    value={smtpFrom}
+                    onChange={(e) => setSmtpFrom(e.target.value)}
+                    helperText="E-Mail-Adresse für Absender"
+                  />
+                </Grid>
+
+                {/* Benutzername */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="Benutzername / E-Mail"
+                    type="email"
+                    value={smtpUser}
+                    onChange={(e) => setSmtpUser(e.target.value)}
+                    required
+                    helperText="Ihre E-Mail-Adresse für die Anmeldung"
+                  />
+                </Grid>
+
+                {/* Passwort */}
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <TextField
+                    fullWidth
+                    label="Passwort / App-Passwort"
+                    type={showPassword ? 'text' : 'password'}
+                    value={smtpPassword}
+                    onChange={(e) => setSmtpPassword(e.target.value)}
+                    helperText={emailProvider === 'gmail' ? 'Für Gmail: App-Passwort verwenden' : 'Ihr E-Mail-Passwort'}
+                    InputProps={{
+                      endAdornment: (
+                        <InputAdornment position="end">
+                          <IconButton
+                            onClick={() => setShowPassword(!showPassword)}
+                            edge="end"
+                          >
+                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                          </IconButton>
+                        </InputAdornment>
+                      )
+                    }}
+                  />
+                </Grid>
+
+                {/* Speichern Button */}
+                <Grid size={{ xs: 12 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveEmailSettings}
+                      disabled={emailLoading || !smtpHost || !smtpUser}
+                      startIcon={emailLoading ? <CircularProgress size={20} /> : <CheckCircle />}
+                    >
+                      {emailLoading ? 'Speichern...' : 'E-Mail-Konfiguration speichern'}
+                    </Button>
+                  </Box>
+                </Grid>
+
+                {/* Test-E-Mail */}
+                <Grid size={{ xs: 12 }}>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle1" gutterBottom>
+                    Test-E-Mail senden
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mt: 2 }}>
+                    <TextField
+                      label="Test-E-Mail-Adresse"
+                      type="email"
+                      value={testEmailAddress}
+                      onChange={(e) => setTestEmailAddress(e.target.value)}
+                      placeholder="test@example.com"
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={handleSendTestEmail}
+                      disabled={testEmailLoading || !testEmailAddress}
+                      startIcon={testEmailLoading ? <CircularProgress size={20} /> : <Send />}
+                      sx={{ minWidth: 150 }}
+                    >
+                      {testEmailLoading ? 'Senden...' : 'Test senden'}
+                    </Button>
+                  </Box>
+                  
+                  {testEmailResult && (
+                    <Alert
+                      severity={testEmailResult.success ? 'success' : 'error'}
+                      sx={{ mt: 2, whiteSpace: 'pre-line' }}
+                      icon={testEmailResult.success ? <CheckCircle /> : <ErrorIcon />}
+                      onClose={() => setTestEmailResult(null)}
+                    >
+                      <Typography component="div" variant="body2">
+                        {testEmailResult.message}
+                      </Typography>
+                    </Alert>
+                  )}
+                </Grid>
+
+                {/* Hinweise */}
+                <Grid size={{ xs: 12 }}>
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="body2" component="div">
+                      <strong>Hinweise:</strong>
+                      <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
+                        <li>Für Gmail: Verwenden Sie ein App-Passwort (nicht Ihr normales Passwort)</li>
+                        <li>Für Outlook: Möglicherweise müssen Sie 2FA aktivieren und ein App-Passwort erstellen</li>
+                        <li>Für Yahoo: App-Passwort erforderlich</li>
+                        <li>Die Konfiguration wird verschlüsselt gespeichert</li>
+                        <li>Nach dem Speichern wird die E-Mail-Verbindung automatisch getestet</li>
+                      </ul>
+                    </Typography>
+                  </Alert>
+                </Grid>
+              </Grid>
             </CardContent>
           </Card>
         </Grid>

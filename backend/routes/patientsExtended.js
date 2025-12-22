@@ -866,8 +866,98 @@ router.put('/:id', [
       updateData.onlineBookingBlocked = Boolean(req.body.onlineBookingBlocked === true || req.body.onlineBookingBlocked === 'true');
     }
     
+    // Prüfe ob Patient nicht mehr temporär sein sollte (wenn alle erforderlichen Felder ausgefüllt sind)
+    console.log('🔍 Prüfe isTemporary-Status für Patient:', req.params.id);
+    console.log('   - patient.isTemporary:', patient.isTemporary);
+    console.log('   - patient.isTemporary type:', typeof patient.isTemporary);
+    if (patient.isTemporary === true) {
+      console.log('   ✅ Patient ist temporär - prüfe Vollständigkeit der Daten...');
+      // Verwende die neuen Werte aus updateData, falls vorhanden, sonst die alten Werte aus patient
+      const finalGender = updateData.gender !== undefined ? updateData.gender : patient.gender;
+      const finalSocialSecurityNumber = updateData.socialSecurityNumber !== undefined ? updateData.socialSecurityNumber : patient.socialSecurityNumber;
+      
+      // Adresse: merge updateData.address mit patient.address
+      // Wichtig: Wenn updateData.address vorhanden ist, verwende es komplett (nicht nur einzelne Felder)
+      let finalAddress = patient.address || {};
+      if (updateData.address) {
+        // Wenn address als Objekt gesendet wurde, verwende es komplett
+        finalAddress = {
+          ...finalAddress,
+          ...updateData.address
+        };
+      } else if (req.body.address) {
+        // Falls address direkt im req.body ist (z.B. bei verschachtelten Updates)
+        finalAddress = {
+          ...finalAddress,
+          ...req.body.address
+        };
+      }
+      
+      // Normalisiere zipCode/postalCode (beide Felder werden unterstützt)
+      if (finalAddress.postalCode && !finalAddress.zipCode) {
+        finalAddress.zipCode = finalAddress.postalCode;
+      } else if (finalAddress.zipCode && !finalAddress.postalCode) {
+        finalAddress.postalCode = finalAddress.zipCode;
+      }
+      
+      // Prüfe ob alle erforderlichen Felder ausgefüllt sind
+      // Geschlecht: muss vorhanden sein (m, w oder d sind alle gültig)
+      const hasValidGender = finalGender && (finalGender === 'm' || finalGender === 'w' || finalGender === 'd');
+      
+      // SVNR: muss vorhanden sein und nicht der temporäre Wert sein
+      const hasValidSocialSecurityNumber = finalSocialSecurityNumber && 
+                                          finalSocialSecurityNumber !== '0000000000' && 
+                                          String(finalSocialSecurityNumber).trim() !== '' &&
+                                          String(finalSocialSecurityNumber).trim().length >= 10;
+      
+      // Adresse: alle Felder müssen vorhanden sein und nicht die temporären Werte sein
+      // Unterstützt sowohl zipCode als auch postalCode
+      const zipCodeValue = finalAddress.zipCode || finalAddress.postalCode || '';
+      const hasValidAddress = finalAddress && 
+                             finalAddress.street && 
+                             finalAddress.street !== 'Nicht angegeben' && 
+                             String(finalAddress.street).trim() !== '' &&
+                             finalAddress.city && 
+                             finalAddress.city !== 'Nicht angegeben' && 
+                             String(finalAddress.city).trim() !== '' &&
+                             zipCodeValue !== '0000' && 
+                             String(zipCodeValue).trim() !== '';
+      
+      // Wenn alle erforderlichen Felder ausgefüllt sind, markiere als nicht mehr temporär
+      if (hasValidGender && hasValidSocialSecurityNumber && hasValidAddress) {
+        updateData.isTemporary = false;
+        console.log('✅ Patient erfüllt alle Anforderungen - isTemporary wird auf false gesetzt');
+        console.log('   - Gender:', finalGender, '(valid:', hasValidGender, ')');
+        console.log('   - SVNR:', finalSocialSecurityNumber, '(valid:', hasValidSocialSecurityNumber, ')');
+        console.log('   - Adresse:', JSON.stringify(finalAddress, null, 2), '(valid:', hasValidAddress, ')');
+      } else {
+        console.log('⚠️ Patient erfüllt noch nicht alle Anforderungen - bleibt temporär');
+        console.log('   - Gender:', finalGender, '(valid:', hasValidGender, ')');
+        console.log('   - SVNR:', finalSocialSecurityNumber, '(valid:', hasValidSocialSecurityNumber, ')');
+        console.log('   - Adresse:', JSON.stringify(finalAddress, null, 2), '(valid:', hasValidAddress, ')');
+        console.log('   - Fehlende Felder:');
+        if (!hasValidGender) console.log('     ❌ Geschlecht fehlt oder ungültig');
+        if (!hasValidSocialSecurityNumber) console.log('     ❌ SVNR fehlt oder ist temporär (0000000000)');
+        if (!hasValidAddress) {
+          console.log('     ❌ Adresse unvollständig:');
+          const zipCodeValue = finalAddress?.zipCode || finalAddress?.postalCode || '';
+          if (!finalAddress?.street || finalAddress.street === 'Nicht angegeben' || String(finalAddress.street).trim() === '') {
+            console.log('       - Straße fehlt (aktuell:', finalAddress?.street || 'leer', ')');
+          }
+          if (!finalAddress?.city || finalAddress.city === 'Nicht angegeben' || String(finalAddress.city).trim() === '') {
+            console.log('       - Stadt fehlt (aktuell:', finalAddress?.city || 'leer', ')');
+          }
+          if (zipCodeValue === '0000' || String(zipCodeValue).trim() === '') {
+            console.log('       - PLZ fehlt (aktuell:', zipCodeValue || 'leer', ')');
+          }
+        }
+      }
+    }
+    
     console.log('📤 Update data infections:', JSON.stringify(updateData.infections, null, 2));
     console.log('📤 Update data onlineBookingBlocked:', updateData.onlineBookingBlocked);
+    console.log('📤 Update data isTemporary:', updateData.isTemporary);
+    console.log('📤 Final isTemporary value:', updateData.isTemporary !== undefined ? updateData.isTemporary : '(nicht gesetzt, bleibt:', patient.isTemporary, ')');
     
     const updatedPatient = await PatientExtended.findByIdAndUpdate(
       req.params.id,

@@ -900,6 +900,7 @@ router.post('/book', [
   body('patient.email').isEmail().normalizeEmail(),
   body('patient.phone').notEmpty().trim(),
   body('patient.dateOfBirth').isISO8601(),
+  body('patient.gender').notEmpty().isIn(['m', 'w', 'd']).withMessage('Geschlecht muss m, w oder d sein'),
   body('patient.address.street').optional().trim(),
   body('patient.address.zipCode').optional().trim(),
   body('patient.address.city').optional().trim(),
@@ -1241,7 +1242,7 @@ router.post('/book', [
         email: patient.email,
         phone: patient.phone,
         dateOfBirth: new Date(patient.dateOfBirth),
-        gender: 'd', // Standard: divers (kann später geändert werden)
+        gender: patient.gender || 'd', // Verwende das vom Benutzer angegebene Geschlecht
         socialSecurityNumber: patient.socialSecurityNumber || patient.insuranceNumber || '0000000000', // Temporärer Wert
         insuranceProvider: 'ÖGK (Österreichische Gesundheitskasse)', // Standard-Versicherung
         address: {

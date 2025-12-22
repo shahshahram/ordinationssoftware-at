@@ -156,6 +156,7 @@ interface BookingData {
     email: string;
     phone: string;
     dateOfBirth: string;
+    gender: string;
     socialSecurityNumber?: string;
     address?: {
       street: string;
@@ -231,6 +232,7 @@ const OnlineBooking: React.FC = () => {
       email: '',
       phone: '',
       dateOfBirth: '',
+      gender: '',
       socialSecurityNumber: '',
       address: {
         street: '',
@@ -887,6 +889,18 @@ const OnlineBooking: React.FC = () => {
         return;
       }
       
+      // Geschlecht-Validierung vor dem Absenden
+      if (!formData.patient.gender || formData.patient.gender === '') {
+        setSnackbar({
+          open: true,
+          message: 'Bitte wählen Sie ein Geschlecht aus',
+          severity: 'error'
+        });
+        // Gehe zurück zum Daten-Eingabe-Schritt
+        setActiveStep(5);
+        return;
+      }
+      
       setLoading(true);
       
       // Konvertiere Anamnese-Antworten in das erwartete Format
@@ -1508,6 +1522,20 @@ const OnlineBooking: React.FC = () => {
                     InputLabelProps={{ shrink: true }}
                     required
                   />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <FormControl fullWidth required>
+                    <InputLabel>Geschlecht</InputLabel>
+                    <Select
+                      value={formData.patient.gender}
+                      onChange={(e) => handleNestedFormChange('patient', 'gender', e.target.value)}
+                      label="Geschlecht"
+                    >
+                      <SelectMenuItem value="m">Männlich</SelectMenuItem>
+                      <SelectMenuItem value="w">Weiblich</SelectMenuItem>
+                      <SelectMenuItem value="d">Divers</SelectMenuItem>
+                    </Select>
+                  </FormControl>
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField

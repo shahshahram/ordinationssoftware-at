@@ -896,7 +896,7 @@ const PatientOrganizer: React.FC = () => {
         throw new Error('Patient ID nicht gefunden');
       }
 
-      await dispatch(updatePatient({ id: patientId, patientData: editData })).unwrap();
+      const updatedPatient = await dispatch(updatePatient({ id: patientId, patientData: editData })).unwrap();
       
       setSnackbar({
         open: true,
@@ -905,13 +905,43 @@ const PatientOrganizer: React.FC = () => {
       });
       
       setEditDialogOpen(false);
-      // Patientenliste neu laden
+      // Patientenliste neu laden, um sicherzustellen, dass alle Daten aktualisiert sind
       dispatch(fetchPatients(1));
     } catch (error: any) {
       console.error('Fehler beim Aktualisieren der Stammdaten:', error);
       setSnackbar({
         open: true,
         message: `Fehler beim Aktualisieren: ${error.message || 'Unbekannter Fehler'}`,
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleMarkAsComplete = async () => {
+    if (!patient) return;
+    
+    try {
+      const patientId = patient._id || patient.id;
+      if (!patientId) {
+        throw new Error('Patient ID nicht gefunden');
+      }
+
+      const updatedPatient = await dispatch(updatePatient({ id: patientId, patientData: { isTemporary: false } })).unwrap();
+      
+      setSnackbar({
+        open: true,
+        message: 'Patient wurde als vollständig markiert!',
+        severity: 'success'
+      });
+      
+      setEditDialogOpen(false);
+      // Patientenliste neu laden, um sicherzustellen, dass alle Daten aktualisiert sind
+      dispatch(fetchPatients(1));
+    } catch (error: any) {
+      console.error('Fehler beim Markieren als vollständig:', error);
+      setSnackbar({
+        open: true,
+        message: `Fehler: ${error.message || 'Unbekannter Fehler'}`,
         severity: 'error'
       });
     }
@@ -2358,13 +2388,8 @@ const PatientOrganizer: React.FC = () => {
                 size="small" 
                 variant="outlined"
                 onClick={() => {
-                  // Navigiere zu den Stammdaten, um den Patienten zu vervollständigen
-                  setActiveTab(0); // Stammdaten Tab
-                  setSnackbar({
-                    open: true,
-                    message: 'Bitte vervollständigen Sie die Stammdaten des Patienten.',
-                    severity: 'info'
-                  });
+                  // Öffne den Stammdaten-Dialog
+                  handleEditStammdaten();
                 }}
               >
                 Stammdaten vervollständigen
@@ -3729,6 +3754,16 @@ const PatientOrganizer: React.FC = () => {
           >
             Abbrechen
           </Button>
+          {patient?.isTemporary && (
+            <Button 
+              onClick={handleMarkAsComplete}
+              variant="outlined"
+              color="success"
+              sx={{ mr: 'auto' }}
+            >
+              Als vollständig markieren
+            </Button>
+          )}
           <Button 
             onClick={handleSaveStammdaten}
             variant="contained"

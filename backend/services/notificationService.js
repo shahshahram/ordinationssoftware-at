@@ -3,6 +3,8 @@
 const nodemailer = require('nodemailer');
 const InternalMessage = require('../models/InternalMessage');
 const User = require('../models/User');
+const SystemSettings = require('../models/SystemSettings');
+const crypto = require('crypto');
 
 class NotificationService {
   constructor() {
@@ -11,20 +13,94 @@ class NotificationService {
     this.initializeTransporter();
   }
 
+  // Verschlüsselungs-Hilfsfunktionen
+  getEncryptionKey() {
+    let key = process.env.ENCRYPTION_KEY;
+    
+    if (!key) {
+      return null; // Kein Schlüssel = keine Verschlüsselung
+    }
+    
+    // Konvertiere Hex-String zu Buffer (32 Bytes)
+    if (key.length === 64) {
+      // Perfekt: 64 Hex-Zeichen = 32 Bytes
+      return Buffer.from(key, 'hex');
+    } else if (key.length > 64) {
+      // Zu lang: nimm die ersten 64 Zeichen
+      return Buffer.from(key.slice(0, 64), 'hex');
+    } else {
+      // Zu kurz: hashe den Schlüssel zu 32 Bytes
+      return crypto.createHash('sha256').update(key).digest();
+    }
+  }
+
+  decryptPassword(encryptedText) {
+    if (!encryptedText) return null;
+    try {
+      const key = this.getEncryptionKey();
+      if (!key) return null;
+      
+      const ALGORITHM = 'aes-256-cbc';
+      const parts = encryptedText.split(':');
+      if (parts.length !== 2) {
+        throw new Error('Ungültiges Verschlüsselungsformat');
+      }
+      const iv = Buffer.from(parts[0], 'hex');
+      const encrypted = parts[1];
+      const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (error) {
+      console.error('Fehler beim Entschlüsseln des Passworts:', error);
+      return null;
+    }
+  }
+
   /**
    * Initialisiert E-Mail-Transporter
    */
-  initializeTransporter() {
+  async initializeTransporter() {
     try {
-      this.transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: parseInt(process.env.SMTP_PORT || '587'),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASSWORD
+      // Versuche zuerst Settings aus Datenbank zu laden
+      let smtpConfig = null;
+      try {
+        const emailSettings = await SystemSettings.getCategorySettings('notifications');
+        if (emailSettings['email.smtp.host']) {
+          const decryptedPassword = emailSettings['email.smtp.password'] 
+            ? this.decryptPassword(emailSettings['email.smtp.password'])
+            : null;
+          
+          smtpConfig = {
+            host: emailSettings['email.smtp.host'],
+            port: emailSettings['email.smtp.port'] || 587,
+            secure: emailSettings['email.smtp.secure'] !== undefined 
+              ? emailSettings['email.smtp.secure'] 
+              : false,
+            auth: {
+              user: emailSettings['email.smtp.user'],
+              pass: decryptedPassword || process.env.SMTP_PASSWORD
+            }
+          };
         }
-      });
+      } catch (error) {
+        console.warn('Fehler beim Laden der E-Mail-Settings aus DB:', error.message);
+      }
+
+      // Fallback zu Umgebungsvariablen
+      if (!smtpConfig) {
+        smtpConfig = {
+          host: process.env.SMTP_HOST || 'smtp.gmail.com',
+          port: parseInt(process.env.SMTP_PORT || '587'),
+          secure: process.env.SMTP_SECURE === 'true',
+          auth: {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASSWORD
+          }
+        };
+      }
+
+      this.transporter = nodemailer.createTransport(smtpConfig);
     } catch (error) {
       console.warn('E-Mail-Transporter konnte nicht initialisiert werden:', error.message);
       this.transporter = null;
