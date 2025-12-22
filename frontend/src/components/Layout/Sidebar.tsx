@@ -112,6 +112,7 @@ const menuItems = [
     path: '/documents',
     subItems: [
       { text: 'Dokumente', icon: <Description />, path: '/documents' },
+      { text: 'Briefvorlagen', icon: <Description />, path: '/letter-templates' },
       { text: 'Template Management', icon: <Description />, path: '/template-management' },
       { text: 'Dokument-Templates (Admin)', icon: <Build />, path: '/document-templates' },
       { text: 'Dekurs-Vorlagen (Admin)', icon: <Assignment />, path: '/dekurs-vorlagen' },

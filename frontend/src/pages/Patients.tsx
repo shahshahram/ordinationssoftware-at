@@ -4,6 +4,7 @@ import { fetchPatients, loadMorePatients, createPatient, updatePatient, clearErr
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
 import { useNavigate } from 'react-router-dom';
 import api from '../utils/api';
+import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { Person as PersonIcon } from '@mui/icons-material';
 import {
@@ -65,6 +66,7 @@ import {
   AccessTime,
   CalendarToday,
   Schedule,
+  Block,
 } from '@mui/icons-material';
 import AdditionalInsuranceForm from '../components/Billing/AdditionalInsuranceForm';
 import ECardValidation from '../components/ECardValidation';
@@ -98,6 +100,9 @@ const Patients: React.FC = () => {
     message: '', 
     severity: 'success' as 'success' | 'error' | 'warning' | 'info' 
   });
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [emergencyPhoneError, setEmergencyPhoneError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Patient>>({
     firstName: '',
     lastName: '',
@@ -159,12 +164,12 @@ const Patients: React.FC = () => {
   // Quick filter options
   const quickFilters = [
     { id: 'birthday', label: 'Heute Geburtstag', icon: <Cake />, color: 'primary' as const },
-    { id: 'overdue', label: 'Überfällige Rückrufe', icon: <Warning />, color: 'warning' as const },
     { id: 'unbilled', label: 'Unverrechnete', icon: <Receipt />, color: 'error' as const },
     { id: 'new', label: 'Neue Patienten', icon: <Person />, color: 'success' as const },
     { id: 'active', label: 'Aktive', icon: <HealthAndSafety />, color: 'info' as const },
     { id: 'appointment_today', label: 'Termin-Heute', icon: <CalendarToday />, color: 'secondary' as const },
     { id: 'appointment_tomorrow', label: 'Termin-Morgen', icon: <Schedule />, color: 'secondary' as const },
+    { id: 'online_booking_blocked', label: 'Online-Buchung blockiert', icon: <Block />, color: 'error' as const },
   ];
 
   // Helper functions
@@ -366,29 +371,66 @@ const Patients: React.FC = () => {
     return false;
   }, []);
 
+  // Helper function to extract patient ID from appointment
+  const getAppointmentPatientId = (appointment: any): string | null => {
+    if (!appointment.patient) return null;
+    if (typeof appointment.patient === 'string') {
+      return appointment.patient;
+    }
+    if (typeof appointment.patient === 'object' && appointment.patient !== null && '_id' in appointment.patient) {
+      return appointment.patient._id;
+    }
+    if (typeof appointment.patient === 'object' && appointment.patient !== null && 'id' in appointment.patient) {
+      return appointment.patient.id;
+    }
+    return null;
+  };
+
   // Helper functions for appointment filters
   const hasAppointmentToday = useCallback((patient: Patient) => {
     if (!appointments || appointments.length === 0) return false;
     
+    const patientId = patient._id || patient.id;
+    if (!patientId) return false;
+    
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD format
     
     return appointments.some(appointment => {
-      const appointmentDate = new Date(appointment.startTime).toISOString().split('T')[0];
-      return appointmentDate === todayStr && appointment.patient === (patient._id || patient.id);
+      if (!appointment.startTime) return false;
+      
+      const appointmentDate = new Date(appointment.startTime);
+      appointmentDate.setHours(0, 0, 0, 0);
+      const appointmentDateStr = appointmentDate.toISOString().split('T')[0];
+      
+      const appointmentPatientId = getAppointmentPatientId(appointment);
+      
+      return appointmentDateStr === todayStr && appointmentPatientId === patientId;
     });
   }, [appointments]);
 
   const hasAppointmentTomorrow = useCallback((patient: Patient) => {
     if (!appointments || appointments.length === 0) return false;
     
+    const patientId = patient._id || patient.id;
+    if (!patientId) return false;
+    
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
     const tomorrowStr = tomorrow.toISOString().split('T')[0]; // YYYY-MM-DD format
     
     return appointments.some(appointment => {
-      const appointmentDate = new Date(appointment.startTime).toISOString().split('T')[0];
-      return appointmentDate === tomorrowStr && appointment.patient === (patient._id || patient.id);
+      if (!appointment.startTime) return false;
+      
+      const appointmentDate = new Date(appointment.startTime);
+      appointmentDate.setHours(0, 0, 0, 0);
+      const appointmentDateStr = appointmentDate.toISOString().split('T')[0];
+      
+      const appointmentPatientId = getAppointmentPatientId(appointment);
+      
+      return appointmentDateStr === tomorrowStr && appointmentPatientId === patientId;
     });
   }, [appointments]);
 
@@ -449,6 +491,26 @@ const Patients: React.FC = () => {
       if (!formData.dateOfBirth) missingFields.push('Geburtsdatum');
       if (!formData.gender) missingFields.push('Geschlecht');
       if (!formData.phone) missingFields.push('Telefon');
+      if (formData.phone && !validatePhone(formData.phone)) {
+        setPhoneError(getPhoneErrorMessage());
+        setSnackbar({ 
+          open: true, 
+          message: `Bitte geben Sie eine gültige Telefonnummer im internationalen Format ein (${getPhoneErrorMessage()})`, 
+          severity: 'error' 
+        });
+        return;
+      }
+      
+      // E-Mail-Validierung vor dem Speichern
+      if (formData.email && !validateEmail(formData.email)) {
+        setEmailError(getEmailErrorMessage());
+        setSnackbar({ 
+          open: true, 
+          message: getEmailErrorMessage(), 
+          severity: 'error' 
+        });
+        return;
+      }
       if (!formData.address?.street) missingFields.push('Straße');
       if (!formData.address?.city) missingFields.push('Stadt');
       if (!formData.address?.zipCode) missingFields.push('PLZ');
@@ -495,9 +557,46 @@ const Patients: React.FC = () => {
   };
 
   const handleFormChange = (field: string, value: any) => {
+    // Telefonnummer-Validierung
+    if (field === 'phone') {
+      if (value && !validatePhone(value)) {
+        setPhoneError(getPhoneErrorMessage());
+      } else {
+        setPhoneError(null);
+      }
+    }
+    
+    // E-Mail-Validierung
+    if (field === 'email') {
+      if (value && !validateEmail(value)) {
+        setEmailError(getEmailErrorMessage());
+      } else {
+        setEmailError(null);
+      }
+    }
+    
     setFormData(prev => ({
       ...prev,
       [field]: value
+    }));
+  };
+  
+  const handleEmergencyContactChange = (field: string, value: any) => {
+    // Telefonnummer-Validierung für Notfallkontakt
+    if (field === 'phone') {
+      if (value && !validatePhone(value)) {
+        setEmergencyPhoneError(getPhoneErrorMessage());
+      } else {
+        setEmergencyPhoneError(null);
+      }
+    }
+    
+    setFormData(prev => ({
+      ...prev,
+      emergencyContact: {
+        ...(prev.emergencyContact || { name: '', phone: '', relationship: '' }),
+        [field]: value
+      }
     }));
   };
 
@@ -506,16 +605,6 @@ const Patients: React.FC = () => {
       ...prev,
       address: {
         ...prev.address!,
-        [field]: value
-      }
-    }));
-  };
-
-  const handleEmergencyContactChange = (field: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      emergencyContact: {
-        ...prev.emergencyContact!,
         [field]: value
       }
     }));
@@ -620,6 +709,9 @@ const Patients: React.FC = () => {
               break;
             case 'appointment_tomorrow':
               matches = hasAppointmentTomorrow(patient);
+              break;
+            case 'online_booking_blocked':
+              matches = patient.onlineBookingBlocked === true;
               break;
             default:
               matches = false; // Only show if explicitly matches a filter
@@ -726,6 +818,7 @@ const Patients: React.FC = () => {
     const isSonderklasse = hasSonderklasse(patient);
     const isPrivateInsurance = hasPrivateInsurance(patient);
     const age = getAge(patient.dateOfBirth);
+    const isFemale = patient.gender === 'w' || patient.gender === 'weiblich' || patient.gender?.toLowerCase().includes('weiblich');
 
     // Action handlers
     const handleCall = (e: React.MouseEvent) => {
@@ -776,6 +869,8 @@ const Patients: React.FC = () => {
             ? 'warning.light' 
             : isImportant 
             ? (isSonderklasse ? 'rgba(25, 118, 210, 0.05)' : isPrivateInsurance ? 'rgba(46, 125, 50, 0.05)' : 'rgba(255, 152, 0, 0.05)')
+            : isFemale
+            ? 'rgba(255, 182, 193, 0.15)' // Leicht rosa Hintergrund für weibliche Patienten
             : 'background.paper',
           '&:hover': {
             transform: 'translateY(-4px)',
@@ -1011,6 +1106,7 @@ const Patients: React.FC = () => {
     const healthStatus = getHealthStatus(patient);
     const lastVisit = getLastVisitDate(patient);
     const age = getAge(patient.dateOfBirth);
+    const isFemale = patient.gender === 'w' || patient.gender === 'weiblich' || patient.gender?.toLowerCase().includes('weiblich');
 
     // Action handlers for list view
     const handleCall = (e: React.MouseEvent) => {
@@ -1054,6 +1150,8 @@ const Patients: React.FC = () => {
           cursor: 'pointer',
           backgroundColor: isImportant 
             ? (isSonderklasse ? 'rgba(25, 118, 210, 0.05)' : isPrivateInsurance ? 'rgba(46, 125, 50, 0.05)' : 'rgba(255, 152, 0, 0.05)') 
+            : isFemale
+            ? 'rgba(255, 182, 193, 0.15)' // Leicht rosa Hintergrund für weibliche Patienten
             : 'transparent',
           '&:hover': {
             bgcolor: isImportant 
@@ -1601,6 +1699,16 @@ const Patients: React.FC = () => {
                     label="Telefon *"
                     value={formData.phone || ''}
                     onChange={(e) => handleFormChange('phone', e.target.value)}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      if (value && !validatePhone(value)) {
+                        setPhoneError(getPhoneErrorMessage());
+                      } else {
+                        setPhoneError(null);
+                      }
+                    }}
+                    error={!!phoneError}
+                    helperText={phoneError || getPhoneErrorMessage()}
                     disabled={dialogMode === 'view'}
                     required
                   />
@@ -1610,6 +1718,16 @@ const Patients: React.FC = () => {
                     type="email"
                     value={formData.email || ''}
                     onChange={(e) => handleFormChange('email', e.target.value)}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      if (value && !validateEmail(value)) {
+                        setEmailError(getEmailErrorMessage());
+                      } else {
+                        setEmailError(null);
+                      }
+                    }}
+                    error={!!emailError}
+                    helperText={emailError || ''}
                     disabled={dialogMode === 'view'}
                   />
                 </Box>
@@ -1752,6 +1870,16 @@ const Patients: React.FC = () => {
                     label="Telefon"
                     value={formData.emergencyContact?.phone || ''}
                     onChange={(e) => handleEmergencyContactChange('phone', e.target.value)}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      if (value && !validatePhone(value)) {
+                        setEmergencyPhoneError(getPhoneErrorMessage());
+                      } else {
+                        setEmergencyPhoneError(null);
+                      }
+                    }}
+                    error={!!emergencyPhoneError}
+                    helperText={emergencyPhoneError || getPhoneErrorMessage()}
                     disabled={dialogMode === 'view'}
                   />
                 </Box>

@@ -868,7 +868,7 @@ const Settings: React.FC = () => {
         </Grid>
 
         {/* SMS Konfiguration */}
-        <Grid item xs={12}>
+        <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
@@ -892,7 +892,7 @@ const Settings: React.FC = () => {
 
               <Grid container spacing={3}>
                 {/* Provider-Auswahl */}
-                <Grid item xs={12} md={6}>
+                <Grid size={{ xs: 12, md: 6 }}>
                   <FormControl fullWidth>
                     <InputLabel id="sms-provider-label">SMS-Provider</InputLabel>
                     <Select
@@ -912,7 +912,7 @@ const Settings: React.FC = () => {
                 {/* Seven.io Konfiguration */}
                 {smsProvider === 'seven' && (
                   <>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
                         label="Seven.io API Key"
@@ -935,7 +935,7 @@ const Settings: React.FC = () => {
                         }}
                       />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
                         label="Absender-Name"
@@ -950,7 +950,7 @@ const Settings: React.FC = () => {
                 {/* Twilio Konfiguration */}
                 {smsProvider === 'twilio' && (
                   <>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
                         label="Account SID"
@@ -960,7 +960,7 @@ const Settings: React.FC = () => {
                         helperText="Ihre Twilio Account SID"
                       />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
                         label="Auth Token"
@@ -983,7 +983,7 @@ const Settings: React.FC = () => {
                         }}
                       />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
                         label="Absender-Nummer"
@@ -999,7 +999,7 @@ const Settings: React.FC = () => {
                 {/* websms.at Konfiguration */}
                 {smsProvider === 'websms' && (
                   <>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
                         label="Benutzername"
@@ -1009,7 +1009,7 @@ const Settings: React.FC = () => {
                         helperText="Ihr websms.at Benutzername"
                       />
                     </Grid>
-                    <Grid item xs={12} md={6}>
+                    <Grid size={{ xs: 12, md: 6 }}>
                       <TextField
                         fullWidth
                         label="Passwort"
@@ -1036,7 +1036,7 @@ const Settings: React.FC = () => {
                 )}
 
                 {/* Speichern Button */}
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
                     <Button
                       variant="contained"
@@ -1050,7 +1050,7 @@ const Settings: React.FC = () => {
                 </Grid>
 
                 {/* Test-SMS */}
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Divider sx={{ my: 2 }} />
                   <Typography variant="subtitle1" gutterBottom>
                     Test-SMS senden
@@ -1090,7 +1090,7 @@ const Settings: React.FC = () => {
                 </Grid>
 
                 {/* Hinweise */}
-                <Grid item xs={12}>
+                <Grid size={{ xs: 12 }}>
                   <Alert severity="info" sx={{ mt: 2 }}>
                     <Typography variant="body2" component="div">
                       <strong>Hinweise:</strong>

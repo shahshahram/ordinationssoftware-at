@@ -87,6 +87,7 @@ import { fetchDocuments, Document as PatientDocument, createDocument } from '../
 import { fetchDocumentTemplates } from '../store/slices/documentTemplateSlice';
 import { fetchLocations, Location } from '../store/slices/locationSlice';
 import { apiRequest } from '../utils/api';
+import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import PatientSidebar from '../components/PatientSidebar';
 import DiagnosisManager from '../components/DiagnosisManager';
 import MedicationListInput, { convertMedicationsArrayToPatientFormat } from '../components/MedicationListInput';
@@ -113,6 +114,7 @@ import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, 
 import api from '../utils/api';
 import { Specialization } from '../types/ambulanzbefund';
 import PerformanceForm from '../components/PerformanceForm';
+import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
 
 
 // TabPanel Komponente
@@ -388,6 +390,10 @@ const PatientOrganizer: React.FC = () => {
   // State für Stammdaten-Bearbeitung
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editData, setEditData] = useState<Partial<Patient>>({});
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [emergencyPhoneError, setEmergencyPhoneError] = useState<string | null>(null);
+  const [primaryCarePhoneError, setPrimaryCarePhoneError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   
   // State für Stammdaten-Validierung
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
@@ -841,6 +847,23 @@ const PatientOrganizer: React.FC = () => {
   };
 
   const handleEditDataChange = (field: string, value: any) => {
+    // Telefonnummer-Validierung
+    if (field === 'phone') {
+      if (value && !validatePhone(value)) {
+        setPhoneError(getPhoneErrorMessage());
+      } else {
+        setPhoneError(null);
+      }
+    }
+    
+    // E-Mail-Validierung
+    if (field === 'email') {
+      if (value && !validateEmail(value)) {
+        setEmailError(getEmailErrorMessage());
+      } else {
+        setEmailError(null);
+      }
+    }
     setEditData(prev => ({
       ...prev,
       [field]: value
@@ -862,6 +885,15 @@ const PatientOrganizer: React.FC = () => {
   };
 
   const handleEmergencyContactChange = (field: string, value: string) => {
+    // Telefonnummer-Validierung für Notfallkontakt
+    if (field === 'phone') {
+      if (value && !validatePhone(value)) {
+        setEmergencyPhoneError(getPhoneErrorMessage());
+      } else {
+        setEmergencyPhoneError(null);
+      }
+    }
+    
     setEditData(prev => ({
       ...prev,
       emergencyContact: {
@@ -875,6 +907,15 @@ const PatientOrganizer: React.FC = () => {
   };
 
   const handlePrimaryCarePhysicianChange = (field: string, value: string) => {
+    // Telefonnummer-Validierung für Hausarzt
+    if (field === 'phone') {
+      if (value && !validatePhone(value)) {
+        setPrimaryCarePhoneError(getPhoneErrorMessage());
+      } else {
+        setPrimaryCarePhoneError(null);
+      }
+    }
+    
     setEditData(prev => ({
       ...prev,
       primaryCarePhysician: {
@@ -2027,26 +2068,26 @@ const PatientOrganizer: React.FC = () => {
     try {
       console.log('Starting document creation...');
       
-      // Platzhalter ersetzen
+      // Platzhalter ersetzen mit neuer Utility-Funktion (unterstützt beide Formate)
       let content = template.content || template.text || '';
       console.log('Template content:', content);
       
-      const placeholders = {
-        '{{patient.name}}': patient.firstName,
-        '{{patient.lastName}}': patient.lastName,
-        '{{patient.birthDate}}': patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('de-DE') : '',
-        '{{patient.address}}': patient.address || '',
-        '{{doctor.name}}': user.firstName ? `${user.firstName} ${user.lastName}` : 'Dr. med.',
-        '{{clinic.name}}': 'Ordinationssoftware Praxis',
-        '{{date}}': new Date().toLocaleDateString('de-DE'),
-        '{{time}}': new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
+      const selectedLocation = locations.find((loc: Location) => loc._id === (user as any)?.locationId) || locations[0] || currentLocation;
+      
+      const context: PlaceholderContext = {
+        patient: patient,
+        doctor: {
+          firstName: user.firstName,
+          lastName: user.lastName,
+          title: (user as any)?.title,
+          specialization: (user as any)?.specialization,
+          email: user.email,
+        },
+        location: selectedLocation,
+        date: new Date(),
       };
-
-      console.log('Placeholders:', placeholders);
-
-      Object.entries(placeholders).forEach(([placeholder, value]) => {
-        content = content.replace(new RegExp(placeholder, 'g'), value);
-      });
+      
+      content = replacePlaceholders(content, context);
 
       const documentData = {
         title: template.name,
@@ -3573,6 +3614,16 @@ const PatientOrganizer: React.FC = () => {
                 label="Telefonnummer"
                 value={editData.phone || ''}
                 onChange={(e) => handleEditDataChange('phone', e.target.value)}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validatePhone(value)) {
+                    setPhoneError(getPhoneErrorMessage());
+                  } else {
+                    setPhoneError(null);
+                  }
+                }}
+                error={!!phoneError}
+                helperText={phoneError || getPhoneErrorMessage()}
                 sx={{ minWidth: 200, flex: 1 }}
               />
               <TextField
@@ -3580,6 +3631,16 @@ const PatientOrganizer: React.FC = () => {
                 type="email"
                 value={editData.email || ''}
                 onChange={(e) => handleEditDataChange('email', e.target.value)}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validateEmail(value)) {
+                    setEmailError(getEmailErrorMessage());
+                  } else {
+                    setEmailError(null);
+                  }
+                }}
+                error={!!emailError}
+                helperText={emailError || ''}
                 sx={{ minWidth: 200, flex: 1 }}
               />
             </Box>
@@ -3658,6 +3719,16 @@ const PatientOrganizer: React.FC = () => {
                 label="Telefon"
                 value={editData.emergencyContact?.phone || ''}
                 onChange={(e) => handleEmergencyContactChange('phone', e.target.value)}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validatePhone(value)) {
+                    setEmergencyPhoneError(getPhoneErrorMessage());
+                  } else {
+                    setEmergencyPhoneError(null);
+                  }
+                }}
+                error={!!emergencyPhoneError}
+                helperText={emergencyPhoneError || getPhoneErrorMessage()}
                 sx={{ minWidth: 200, flex: 1 }}
               />
             </Box>
@@ -3691,6 +3762,16 @@ const PatientOrganizer: React.FC = () => {
                 label="Telefon"
                 value={editData.primaryCarePhysician?.phone || ''}
                 onChange={(e) => handlePrimaryCarePhysicianChange('phone', e.target.value)}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validatePhone(value)) {
+                    setPrimaryCarePhoneError(getPhoneErrorMessage());
+                  } else {
+                    setPrimaryCarePhoneError(null);
+                  }
+                }}
+                error={!!primaryCarePhoneError}
+                helperText={primaryCarePhoneError || getPhoneErrorMessage()}
                 sx={{ minWidth: 200, flex: 1 }}
               />
             </Box>

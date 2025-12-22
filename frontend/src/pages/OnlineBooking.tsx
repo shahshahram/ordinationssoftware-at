@@ -54,6 +54,7 @@ import {
 import api from '../utils/api';
 import { useAppDispatch } from '../store/hooks';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
+import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 
 interface Category {
   _id?: string | null;
@@ -216,6 +217,7 @@ const OnlineBooking: React.FC = () => {
   const [optInError, setOptInError] = useState<string | null>(null);
   const [gdprConsent, setGdprConsent] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
   
   // Service und Anamnese
   const [services, setServices] = useState<Service[]>([]);
@@ -755,13 +757,6 @@ const OnlineBooking: React.FC = () => {
     }));
   };
 
-  // E-Mail-Validierungsfunktion
-  const validateEmail = (email: string): boolean => {
-    if (!email) return false;
-    // RFC 5322 kompatible E-Mail-Validierung
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
 
   const handleNestedFormChange = (parent: string, field: string, value: any) => {
     // Spezielle Validierung für Datumsfelder
@@ -781,9 +776,18 @@ const OnlineBooking: React.FC = () => {
     // E-Mail-Validierung
     if (parent === 'patient' && field === 'email') {
       if (value && !validateEmail(value)) {
-        setEmailError('Bitte geben Sie eine gültige E-Mail-Adresse ein');
+        setEmailError(getEmailErrorMessage());
       } else {
         setEmailError(null);
+      }
+    }
+    
+    // Telefonnummer-Validierung
+    if (parent === 'patient' && field === 'phone') {
+      if (value && !validatePhone(value)) {
+        setPhoneError(getPhoneErrorMessage());
+      } else {
+        setPhoneError(null);
       }
     }
     
@@ -878,10 +882,23 @@ const OnlineBooking: React.FC = () => {
       
       // E-Mail-Validierung vor dem Absenden
       if (!formData.patient.email || !validateEmail(formData.patient.email)) {
-        setEmailError('Bitte geben Sie eine gültige E-Mail-Adresse ein');
+        setEmailError(getEmailErrorMessage());
         setSnackbar({
           open: true,
-          message: 'Bitte geben Sie eine gültige E-Mail-Adresse ein',
+          message: getEmailErrorMessage(),
+          severity: 'error'
+        });
+        // Gehe zurück zum Daten-Eingabe-Schritt
+        setActiveStep(5);
+        return;
+      }
+
+      // Telefonnummer-Validierung vor dem Absenden
+      if (!formData.patient.phone || !validatePhone(formData.patient.phone)) {
+        setPhoneError(getPhoneErrorMessage());
+        setSnackbar({
+          open: true,
+          message: `Bitte geben Sie eine gültige Telefonnummer im internationalen Format ein (${getPhoneErrorMessage()})`,
           severity: 'error'
         });
         // Gehe zurück zum Daten-Eingabe-Schritt
@@ -1493,9 +1510,11 @@ const OnlineBooking: React.FC = () => {
                     value={formData.patient.email}
                     onChange={(e) => handleNestedFormChange('patient', 'email', e.target.value)}
                     onBlur={(e) => {
-                      // Zusätzliche Validierung beim Verlassen des Felds
-                      if (e.target.value && !validateEmail(e.target.value)) {
-                        setEmailError('Bitte geben Sie eine gültige E-Mail-Adresse ein');
+                      const value = e.target.value;
+                      if (value && !validateEmail(value)) {
+                        setEmailError(getEmailErrorMessage());
+                      } else {
+                        setEmailError(null);
                       }
                     }}
                     error={!!emailError}
@@ -1509,6 +1528,16 @@ const OnlineBooking: React.FC = () => {
                     label="Telefon"
                     value={formData.patient.phone}
                     onChange={(e) => handleNestedFormChange('patient', 'phone', e.target.value)}
+                    onBlur={(e) => {
+                      const value = e.target.value;
+                      if (value && !validatePhone(value)) {
+                        setPhoneError(getPhoneErrorMessage());
+                      } else {
+                        setPhoneError(null);
+                      }
+                    }}
+                    error={!!phoneError}
+                    helperText={phoneError || getPhoneErrorMessage()}
                     required
                   />
                 </Grid>

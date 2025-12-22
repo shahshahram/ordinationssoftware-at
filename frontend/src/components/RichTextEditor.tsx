@@ -12,6 +12,7 @@ import {
   Undo,
   Redo
 } from '@mui/icons-material';
+import { removeLinksFromPlaceholders } from '../utils/placeholders';
 
 interface RichTextEditorProps {
   value: string;
@@ -26,22 +27,112 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
   placeholder = 'Beginnen Sie mit der Eingabe...',
   minHeight = 200
 }) => {
+
   const editor = useEditor({
-    extensions: [StarterKit, Underline],
-    content: value || '',
+    extensions: [
+      StarterKit.configure({
+        // Deaktiviere Link komplett aus StarterKit
+        link: false,
+      }),
+      Underline,
+    ],
+    content: value ? removeLinksFromPlaceholders(value) : '',
     onUpdate: ({ editor }) => {
-      onChange(editor.getHTML());
+      let html = editor.getHTML();
+      // Entferne Link-Formatierung von Platzhaltern beim Speichern
+      html = removeLinksFromPlaceholders(html);
+      onChange(html);
     },
     editorProps: {
       attributes: {
         class: 'rich-text-editor-content',
       },
+      // Transformiere HTML beim Einfügen, um Links aus Platzhaltern zu entfernen
+      transformPastedHTML: (html: string) => {
+        return removeLinksFromPlaceholders(html);
+      },
+      // Verhindere automatische Link-Erkennung beim Tippen
+      handleDOMEvents: {
+        // Verhindere, dass der Browser automatisch Links erstellt
+        beforeinput: (view, event) => {
+          // Erlaube normales Input-Verhalten
+          return false;
+        },
+      },
     },
   });
 
+  // MutationObserver, um Links aus Platzhaltern zu entfernen
   React.useEffect(() => {
-    if (editor && value !== editor.getHTML()) {
-      editor.commands.setContent(value || '');
+    if (!editor) return;
+
+    const editorElement = editor.view.dom;
+    
+    const cleanupLinks = () => {
+      // Prüfe, ob es Links gibt, die Platzhalter enthalten
+      const links = editorElement.querySelectorAll('a');
+      let needsUpdate = false;
+      
+      links.forEach((link) => {
+        const text = link.textContent || '';
+        const href = link.getAttribute('href') || '';
+        // Wenn der Link einen Platzhalter enthält (im Text oder href)
+        if ((text.includes('{{') && text.includes('}}')) || (href.includes('{{') && href.includes('}}'))) {
+          // Ersetze den Link durch seinen Textinhalt
+          const parent = link.parentNode;
+          if (parent) {
+            const textNode = document.createTextNode(text);
+            parent.replaceChild(textNode, link);
+            needsUpdate = true;
+          }
+        }
+      });
+      
+      // Wenn Links entfernt wurden, aktualisiere den Editor
+      if (needsUpdate) {
+        const html = editor.getHTML();
+        const cleaned = removeLinksFromPlaceholders(html);
+        if (cleaned !== html) {
+          // Verwende requestAnimationFrame, um sicherzustellen, dass die DOM-Änderungen abgeschlossen sind
+          requestAnimationFrame(() => {
+            editor.commands.setContent(cleaned);
+          });
+        }
+      }
+    };
+    
+    const observer = new MutationObserver(() => {
+      // Führe Cleanup mit einer kleinen Verzögerung aus, um Race Conditions zu vermeiden
+      setTimeout(cleanupLinks, 10);
+    });
+
+    // Beobachte Änderungen im Editor
+    observer.observe(editorElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ['href'],
+    });
+
+    // Führe auch direkt nach dem Mount einen Cleanup durch
+    cleanupLinks();
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [editor, removeLinksFromPlaceholders]);
+
+  React.useEffect(() => {
+    if (editor) {
+      // Entferne Link-Formatierung von Platzhaltern vor dem Setzen
+      const cleanedValue = removeLinksFromPlaceholders(value || '');
+      const currentHtml = editor.getHTML();
+      
+      // Nur aktualisieren, wenn sich der Inhalt wirklich geändert hat
+      if (cleanedValue !== currentHtml) {
+        editor.commands.setContent(cleanedValue);
+      }
     }
   }, [value, editor]);
 
@@ -163,6 +254,24 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
               color: '#adb5bd',
               pointerEvents: 'none',
               height: 0,
+            },
+            // Stelle sicher, dass Platzhalter nicht als Links formatiert werden
+            // Entferne Link-Formatierung für alle Links, die Platzhalter enthalten
+            '& a': {
+              // Prüfe, ob der Link einen Platzhalter enthält
+              '&:has-text("{{")': {
+                textDecoration: 'none !important',
+                color: 'inherit !important',
+                cursor: 'text !important',
+                pointerEvents: 'none !important',
+              },
+            },
+            // Zusätzliche CSS-Regel für Platzhalter in Links (falls :has-text nicht funktioniert)
+            '& a[href*="{{"]': {
+              textDecoration: 'none !important',
+              color: 'inherit !important',
+              cursor: 'text !important',
+              pointerEvents: 'none !important',
             },
           },
         }}

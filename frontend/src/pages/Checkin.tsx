@@ -18,6 +18,7 @@ import {
   CheckCircle,
   Error as ErrorIcon
 } from '@mui/icons-material';
+import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 
 const Checkin: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -33,6 +34,8 @@ const Checkin: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [patientInfo, setPatientInfo] = useState<any>(null);
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   const token = searchParams.get('token');
 
@@ -78,6 +81,25 @@ const Checkin: React.FC = () => {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
+    
+    // Telefonnummer-Validierung
+    if (name === 'phone') {
+      if (value && !validatePhone(value)) {
+        setPhoneError(getPhoneErrorMessage());
+      } else {
+        setPhoneError(null);
+      }
+    }
+    
+    // E-Mail-Validierung
+    if (name === 'email') {
+      if (value && !validateEmail(value)) {
+        setEmailError(getEmailErrorMessage());
+      } else {
+        setEmailError(null);
+      }
+    }
+    
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -87,6 +109,12 @@ const Checkin: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token) return;
+
+    // Telefonnummer-Validierung vor dem Absenden
+    if (!formData.phone || !validatePhone(formData.phone)) {
+      setPhoneError(getPhoneErrorMessage());
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -220,6 +248,16 @@ const Checkin: React.FC = () => {
                 name="phone"
                 value={formData.phone}
                 onChange={handleInputChange}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validatePhone(value)) {
+                    setPhoneError(getPhoneErrorMessage());
+                  } else {
+                    setPhoneError(null);
+                  }
+                }}
+                error={!!phoneError}
+                helperText={phoneError || getPhoneErrorMessage()}
                 required
                 InputProps={{
                   startAdornment: <Phone sx={{ mr: 1, color: 'action.active' }} />
@@ -233,6 +271,16 @@ const Checkin: React.FC = () => {
               type="email"
               value={formData.email}
               onChange={handleInputChange}
+              onBlur={(e) => {
+                const value = e.target.value;
+                if (value && !validateEmail(value)) {
+                  setEmailError(getEmailErrorMessage());
+                } else {
+                  setEmailError(null);
+                }
+              }}
+              error={!!emailError}
+              helperText={emailError || ''}
               InputProps={{
                 startAdornment: <Email sx={{ mr: 1, color: 'action.active' }} />
               }}

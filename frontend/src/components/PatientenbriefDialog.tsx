@@ -52,6 +52,7 @@ import Autocomplete from '@mui/material/Autocomplete';
 import RichTextEditor from './RichTextEditor';
 import DocumentSidebar from './DocumentSidebar';
 import DocumentDetailDialog from './DocumentDetailDialog';
+import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
 
 interface LetterSection {
   id: string;
@@ -1222,22 +1223,37 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
 
   // Handler für Vorlage auswählen
   const handleSelectTemplate = (template: any) => {
-    // Platzhalter ersetzen
-    let processedContent = template.content;
-    const doctorName = selectedDoctor 
-      ? `${selectedDoctor.title || ''} ${selectedDoctor.firstName || ''} ${selectedDoctor.lastName || ''}`.trim()
-      : (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : '');
-    const patientName = patient ? `${patient.firstName} ${patient.lastName}` : '';
-    const locationName = location?.name || '';
-    const currentDate = new Date().toLocaleDateString('de-DE');
-    const doctorTitle = selectedDoctor?.title || (user as any)?.title || '';
-
-    processedContent = processedContent
-      .replace(/\[Name\]/g, doctorName)
-      .replace(/\[Patient\]/g, patientName)
-      .replace(/\[Datum\]/g, currentDate)
-      .replace(/\[Standort\]/g, locationName)
-      .replace(/\[ArztTitel\]/g, doctorTitle);
+    console.log('🔍 Template ausgewählt:', template);
+    console.log('🔍 Template Content (vorher):', template.content);
+    console.log('🔍 Patient:', patient);
+    console.log('🔍 User:', user);
+    console.log('🔍 Location:', location);
+    
+    // Platzhalter ersetzen mit neuer Utility-Funktion (unterstützt beide Formate)
+    const context: PlaceholderContext = {
+      patient: patient || undefined,
+      doctor: selectedDoctor ? {
+        firstName: selectedDoctor.firstName,
+        lastName: selectedDoctor.lastName,
+        title: selectedDoctor.title,
+        specialization: selectedDoctor.specialization,
+        email: selectedDoctor.email,
+        phone: selectedDoctor.phone,
+      } : user ? {
+        firstName: user.firstName,
+        lastName: user.lastName,
+        title: (user as any)?.title,
+        specialization: (user as any)?.specialization,
+        email: user.email,
+      } : undefined,
+      location: location || undefined,
+      date: new Date(),
+    };
+    
+    console.log('🔍 Context:', context);
+    
+    const processedContent = replacePlaceholders(template.content, context);
+    console.log('🔍 Processed Content (nachher):', processedContent);
 
     const newSection: LetterSection = {
       id: `template-${Date.now()}-${Math.random()}`,

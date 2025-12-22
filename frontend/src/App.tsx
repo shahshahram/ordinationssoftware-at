@@ -21,6 +21,7 @@ import Appointments from './pages/Appointments';
 import Resources from './pages/Resources';
 import Billing from './pages/Billing';
 import Documents from './pages/Documents';
+import LetterTemplates from './pages/LetterTemplates';
 import OnlineBooking from './pages/OnlineBooking';
 import OnlineBookings from './pages/OnlineBookings';
 import PatientBooking from './pages/PatientBooking';
@@ -405,6 +406,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['documents.read']}>
                             <Documents />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/letter-templates" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                            <LetterTemplates />
                           </ProtectedRoute>
                         } 
                       />

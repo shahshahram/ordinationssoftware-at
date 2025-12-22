@@ -79,6 +79,7 @@ import {
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useTheme, useMediaQuery } from '@mui/material';
+import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import { createFilterOptions } from '@mui/material/Autocomplete';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -120,6 +121,9 @@ const AddressBook: React.FC = () => {
     message: '',
     severity: 'success' as 'success' | 'error' | 'warning' | 'info',
   });
+  const [phoneError, setPhoneError] = useState<string | null>(null);
+  const [mobileError, setMobileError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [formData, setFormData] = useState<Partial<Contact>>({
     type: 'external',
     firstName: '',
@@ -1158,7 +1162,25 @@ const AddressBook: React.FC = () => {
                 fullWidth
                 label="Telefon"
                 value={formData.phone || ''}
-                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData({ ...formData, phone: value });
+                  if (value && !validatePhone(value)) {
+                    setPhoneError(getPhoneErrorMessage());
+                  } else {
+                    setPhoneError(null);
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validatePhone(value)) {
+                    setPhoneError(getPhoneErrorMessage());
+                  } else {
+                    setPhoneError(null);
+                  }
+                }}
+                error={!!phoneError}
+                helperText={phoneError || getPhoneErrorMessage()}
                 disabled={dialogMode === 'view'}
                 InputProps={{
                   startAdornment: (
@@ -1172,7 +1194,25 @@ const AddressBook: React.FC = () => {
                 fullWidth
                 label="Mobil"
                 value={formData.mobile || ''}
-                onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData({ ...formData, mobile: value });
+                  if (value && !validatePhone(value)) {
+                    setMobileError(getPhoneErrorMessage());
+                  } else {
+                    setMobileError(null);
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validatePhone(value)) {
+                    setMobileError(getPhoneErrorMessage());
+                  } else {
+                    setMobileError(null);
+                  }
+                }}
+                error={!!mobileError}
+                helperText={mobileError || getPhoneErrorMessage()}
                 disabled={dialogMode === 'view'}
                 InputProps={{
                   startAdornment: (
@@ -1190,7 +1230,25 @@ const AddressBook: React.FC = () => {
                 label="E-Mail"
                 type="email"
                 value={formData.email || ''}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setFormData({ ...formData, email: value });
+                  if (value && !validateEmail(value)) {
+                    setEmailError(getEmailErrorMessage());
+                  } else {
+                    setEmailError(null);
+                  }
+                }}
+                onBlur={(e) => {
+                  const value = e.target.value;
+                  if (value && !validateEmail(value)) {
+                    setEmailError(getEmailErrorMessage());
+                  } else {
+                    setEmailError(null);
+                  }
+                }}
+                error={!!emailError}
+                helperText={emailError || ''}
                 disabled={dialogMode === 'view'}
                 InputProps={{
                   startAdornment: (
