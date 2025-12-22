@@ -20,6 +20,14 @@ const InternalMessage = require('../models/InternalMessage');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
+// SMS-Service (optional, falls konfiguriert)
+let smsService = null;
+try {
+  smsService = require('../services/smsService');
+} catch (err) {
+  console.warn('[OnlineBooking] SMS-Service nicht verfügbar');
+}
+
 // @route   GET /api/online-booking/availability
 // @desc    Get available time slots for a date
 // @access  Public
@@ -1571,8 +1579,12 @@ router.post('/book', [
     try {
       if (requiresDoubleOptIn) {
         await sendDoubleOptInEmail(booking);
+        // Sende auch SMS mit Code
+        await sendDoubleOptInSMS(booking);
       } else {
         await sendConfirmationEmail(booking);
+        // Sende auch SMS-Bestätigung
+        await sendConfirmationSMS(booking);
       }
     } catch (emailError) {
       console.error('[OnlineBooking] Error sending email (non-blocking):', emailError);
@@ -1779,9 +1791,10 @@ router.post('/verify-opt-in', [
       console.error('[OnlineBooking] Error sending staff notifications (non-blocking):', notificationError);
     }
 
-    // Sende Bestätigungs-E-Mail
+    // Sende Bestätigungs-E-Mail und SMS
     try {
       await sendConfirmationEmail(booking);
+      await sendConfirmationSMS(booking);
     } catch (emailError) {
       console.error('[OnlineBooking] Error sending confirmation email (non-blocking):', emailError);
     }
@@ -1866,12 +1879,13 @@ router.post('/resend-opt-in', [
 
     await booking.save();
 
-    // Sende neuen Code
+    // Sende neuen Code per E-Mail und SMS
     try {
       await sendDoubleOptInEmail(booking);
+      await sendDoubleOptInSMS(booking);
       res.json({
         success: true,
-        message: 'Neuer Code wurde an Ihre E-Mail gesendet.'
+        message: 'Neuer Code wurde an Ihre E-Mail und Telefonnummer gesendet.'
       });
     } catch (emailError) {
       console.error('[OnlineBooking] Error sending opt-in email:', emailError);
@@ -2205,6 +2219,103 @@ function calculateEndTimeWithBuffer(startTime, baseDuration, bufferBefore, buffe
   const endHours = Math.floor(totalMinutes / 60);
   const endMins = totalMinutes % 60;
   return `${endHours.toString().padStart(2, '0')}:${endMins.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Sendet SMS-Bestätigung für Online-Buchung
+ */
+async function sendConfirmationSMS(booking) {
+  if (!smsService) {
+    return;
+  }
+
+  try {
+    // Prüfe ob SMS-Benachrichtigungen aktiviert sind
+    const settings = await SystemSettings.getCategorySettings('onlineBooking');
+    const smsEnabled = settings['notifications.sms.enabled'] !== false; // Standard: aktiviert
+
+    if (!smsEnabled) {
+      console.log('[OnlineBooking] SMS-Benachrichtigungen sind deaktiviert');
+      return;
+    }
+
+    // Prüfe ob Patient eine Telefonnummer hat
+    if (!booking.patient.phone) {
+      console.log('[OnlineBooking] Keine Telefonnummer für SMS-Benachrichtigung verfügbar');
+      return;
+    }
+
+    // Initialisiere SMS-Service mit aktuellen Settings
+    await smsService.initializeConfig();
+
+    // Erstelle SMS-Text
+    const appointmentDate = new Date(booking.appointment.date);
+    const dateStr = appointmentDate.toLocaleDateString('de-AT', { 
+      weekday: 'short', 
+      day: '2-digit', 
+      month: '2-digit' 
+    });
+    
+    const smsText = `Terminbestätigung: ${dateStr} um ${booking.appointment.startTime} Uhr bei ${booking.doctor.name}. Buchungsnr: ${booking.bookingNumber}. ${process.env.FRONTEND_URL || ''}`;
+
+    // Sende SMS
+    const result = await smsService.sendSMS(booking.patient.phone, smsText);
+    console.log(`📱 Bestätigungs-SMS gesendet an: ${booking.patient.phone} (MessageID: ${result.messageId})`);
+    
+    return result;
+  } catch (error) {
+    console.error('[OnlineBooking] Fehler beim Senden der Bestätigungs-SMS:', error);
+    // SMS-Fehler sollte Buchung nicht verhindern
+  }
+}
+
+/**
+ * Sendet SMS mit Double Opt-In Code
+ */
+async function sendDoubleOptInSMS(booking) {
+  if (!smsService) {
+    return;
+  }
+
+  try {
+    // Prüfe ob SMS-Benachrichtigungen aktiviert sind
+    const settings = await SystemSettings.getCategorySettings('onlineBooking');
+    const smsEnabled = settings['notifications.sms.enabled'] !== false;
+
+    if (!smsEnabled) {
+      return;
+    }
+
+    // Prüfe ob Patient eine Telefonnummer hat
+    if (!booking.patient.phone) {
+      return;
+    }
+
+    // Initialisiere SMS-Service mit aktuellen Settings
+    await smsService.initializeConfig();
+
+    const optInCode = booking.doubleOptIn?.code || 'NICHT VERFÜGBAR';
+    const smsText = `Ihr Bestätigungscode: ${optInCode}. Bitte geben Sie diesen Code auf unserer Website ein. Buchungsnr: ${booking.bookingNumber}`;
+
+    // Sende SMS
+    const result = await smsService.sendSMS(booking.patient.phone, smsText);
+    console.log(`📱 Double Opt-In SMS gesendet an: ${booking.patient.phone} (MessageID: ${result.messageId})`);
+    
+    // Aktualisiere Booking-Status
+    if (booking.doubleOptIn) {
+      booking.doubleOptIn.smsSent = true;
+      await booking.save();
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('[OnlineBooking] Fehler beim Senden der Double Opt-In SMS:', error);
+    if (booking.doubleOptIn) {
+      booking.doubleOptIn.smsSent = false;
+      booking.doubleOptIn.smsError = error.message;
+      await booking.save().catch(() => {});
+    }
+  }
 }
 
 async function sendDoubleOptInEmail(booking) {

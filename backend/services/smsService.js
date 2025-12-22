@@ -1,4 +1,6 @@
 const axios = require('axios');
+const SystemSettings = require('../models/SystemSettings');
+const crypto = require('crypto');
 
 /**
  * SMS Service für Benachrichtigungen
@@ -24,6 +26,94 @@ class SMSService {
         apiUrl: 'https://api.websms.at/rest/sms'
       }
     };
+    this.initializeConfig();
+  }
+
+  /**
+   * Initialisiert Konfiguration aus SystemSettings oder Umgebungsvariablen
+   */
+  async initializeConfig() {
+    try {
+      const smsSettings = await SystemSettings.getCategorySettings('notifications');
+      
+      // Provider
+      if (smsSettings['sms.provider']) {
+        this.provider = smsSettings['sms.provider'];
+      }
+
+      // Seven.io Konfiguration
+      if (smsSettings['sms.seven.apiKey']) {
+        this.config.seven.apiKey = smsSettings['sms.seven.apiKey'];
+      }
+      if (smsSettings['sms.seven.from']) {
+        this.config.seven.from = smsSettings['sms.seven.from'];
+      }
+
+      // Twilio Konfiguration
+      if (smsSettings['sms.twilio.accountSid']) {
+        this.config.twilio.accountSid = smsSettings['sms.twilio.accountSid'];
+      }
+      if (smsSettings['sms.twilio.authToken']) {
+        const decryptedToken = this.decryptPassword(smsSettings['sms.twilio.authToken']);
+        this.config.twilio.authToken = decryptedToken || smsSettings['sms.twilio.authToken'];
+      }
+      if (smsSettings['sms.twilio.fromNumber']) {
+        this.config.twilio.fromNumber = smsSettings['sms.twilio.fromNumber'];
+      }
+
+      // websms.at Konfiguration
+      if (smsSettings['sms.websms.username']) {
+        this.config.websms.username = smsSettings['sms.websms.username'];
+      }
+      if (smsSettings['sms.websms.password']) {
+        const decryptedPassword = this.decryptPassword(smsSettings['sms.websms.password']);
+        this.config.websms.password = decryptedPassword || smsSettings['sms.websms.password'];
+      }
+    } catch (error) {
+      console.warn('Fehler beim Laden der SMS-Settings aus der Datenbank:', error.message);
+      // Fallback zu Umgebungsvariablen
+    }
+  }
+
+  /**
+   * Verschlüsselungs-Hilfsfunktionen (ähnlich wie in settings.js)
+   */
+  getEncryptionKey() {
+    let key = process.env.ENCRYPTION_KEY;
+    
+    if (!key) {
+      console.warn('⚠️ ENCRYPTION_KEY nicht gesetzt - verwende temporären Schlüssel');
+      key = crypto.randomBytes(32).toString('hex');
+      process.env.ENCRYPTION_KEY = key;
+    }
+    
+    if (key.length === 64) {
+      return Buffer.from(key, 'hex');
+    } else if (key.length > 64) {
+      return Buffer.from(key.slice(0, 64), 'hex');
+    } else {
+      return crypto.createHash('sha256').update(key).digest();
+    }
+  }
+
+  decryptPassword(encryptedText) {
+    if (!encryptedText) return null;
+    try {
+      const key = this.getEncryptionKey();
+      const parts = encryptedText.split(':');
+      if (parts.length !== 2) {
+        return null; // Nicht verschlüsselt, gib Original zurück
+      }
+      const iv = Buffer.from(parts[0], 'hex');
+      const encrypted = parts[1];
+      const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (error) {
+      console.error('Fehler beim Entschlüsseln des SMS-Passworts:', error);
+      return null;
+    }
   }
 
   /**

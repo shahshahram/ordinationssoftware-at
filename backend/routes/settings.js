@@ -6,6 +6,7 @@ const SystemSettings = require('../models/SystemSettings');
 const crypto = require('crypto');
 const emailService = require('../services/emailService');
 const notificationService = require('../services/notificationService');
+const smsService = require('../services/smsService');
 
 // @route   GET /api/settings
 // @desc    Get all settings
@@ -664,6 +665,268 @@ router.post('/email/test', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Senden der Test-E-Mail',
+      error: error.message
+    });
+  }
+});
+
+// ==================== SMS-Konfiguration ====================
+
+// @route   GET /api/settings/sms
+// @desc    Get SMS configuration
+// @access  Private (requires 'settings.read' permission)
+router.get('/sms', auth, async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.SETTINGS, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: `Zugriff verweigert - ${authResult.reason}`,
+        requiredPermission: 'settings.read'
+      });
+    }
+
+    const smsSettings = await SystemSettings.getCategorySettings('notifications');
+
+    const config = {
+      provider: smsSettings['sms.provider'] || process.env.SMS_PROVIDER || 'seven',
+      seven: {
+        apiKey: smsSettings['sms.seven.apiKey'] || process.env.SEVEN_API_KEY || '',
+        from: smsSettings['sms.seven.from'] || process.env.SEVEN_FROM || 'Ordination'
+      },
+      twilio: {
+        accountSid: smsSettings['sms.twilio.accountSid'] || process.env.TWILIO_ACCOUNT_SID || '',
+        authToken: smsSettings['sms.twilio.authToken'] ? '***ENCRYPTED***' : (process.env.TWILIO_AUTH_TOKEN ? '***ENCRYPTED***' : ''),
+        fromNumber: smsSettings['sms.twilio.fromNumber'] || process.env.TWILIO_FROM_NUMBER || ''
+      },
+      websms: {
+        username: smsSettings['sms.websms.username'] || process.env.WEBSMS_USERNAME || '',
+        password: smsSettings['sms.websms.password'] ? '***ENCRYPTED***' : (process.env.WEBSMS_PASSWORD ? '***ENCRYPTED***' : '')
+      },
+      isConfigured: !!(smsSettings['sms.provider'] || process.env.SMS_PROVIDER)
+    };
+
+    res.status(200).json({
+      success: true,
+      data: config,
+      message: 'SMS-Konfiguration erfolgreich geladen'
+    });
+  } catch (error) {
+    console.error('Error fetching SMS settings:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der SMS-Konfiguration',
+      error: error.message
+    });
+  }
+});
+
+// @route   PUT /api/settings/sms
+// @desc    Update SMS configuration
+// @access  Private (requires 'settings.write' permission)
+router.put('/sms', auth, async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.SETTINGS, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: `Zugriff verweigert - ${authResult.reason}`,
+        requiredPermission: 'settings.write'
+      });
+    }
+
+    const { provider, seven, twilio, websms } = req.body;
+
+    if (!provider) {
+      return res.status(400).json({
+        success: false,
+        message: 'SMS-Provider ist erforderlich'
+      });
+    }
+
+    // Speichere Provider
+    await SystemSettings.setSetting(
+      'notifications',
+      'sms.provider',
+      provider,
+      'string',
+      req.user.id
+    );
+
+    // Seven.io Konfiguration
+    if (seven) {
+      if (seven.apiKey) {
+        await SystemSettings.setSetting(
+          'notifications',
+          'sms.seven.apiKey',
+          seven.apiKey,
+          'string',
+          req.user.id
+        );
+      }
+      if (seven.from !== undefined) {
+        await SystemSettings.setSetting(
+          'notifications',
+          'sms.seven.from',
+          seven.from || 'Ordination',
+          'string',
+          req.user.id
+        );
+      }
+    }
+
+    // Twilio Konfiguration
+    if (twilio) {
+      if (twilio.accountSid) {
+        await SystemSettings.setSetting(
+          'notifications',
+          'sms.twilio.accountSid',
+          twilio.accountSid,
+          'string',
+          req.user.id
+        );
+      }
+      if (twilio.authToken && twilio.authToken !== '***ENCRYPTED***') {
+        const encryptedToken = encryptPassword(twilio.authToken);
+        await SystemSettings.setSetting(
+          'notifications',
+          'sms.twilio.authToken',
+          encryptedToken,
+          'string',
+          req.user.id
+        );
+      }
+      if (twilio.fromNumber) {
+        await SystemSettings.setSetting(
+          'notifications',
+          'sms.twilio.fromNumber',
+          twilio.fromNumber,
+          'string',
+          req.user.id
+        );
+      }
+    }
+
+    // websms.at Konfiguration
+    if (websms) {
+      if (websms.username) {
+        await SystemSettings.setSetting(
+          'notifications',
+          'sms.websms.username',
+          websms.username,
+          'string',
+          req.user.id
+        );
+      }
+      if (websms.password && websms.password !== '***ENCRYPTED***') {
+        const encryptedPassword = encryptPassword(websms.password);
+        await SystemSettings.setSetting(
+          'notifications',
+          'sms.websms.password',
+          encryptedPassword,
+          'string',
+          req.user.id
+        );
+      }
+    }
+
+    // Initialisiere SMS-Service neu
+    try {
+      await smsService.initializeConfig();
+      console.log('✅ SMS-Service erfolgreich aktualisiert');
+    } catch (smsError) {
+      console.error('⚠️ Fehler beim Aktualisieren des SMS-Services:', smsError.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'SMS-Konfiguration erfolgreich aktualisiert',
+      data: {
+        provider,
+        seven: seven ? { ...seven, apiKey: seven.apiKey ? '***ENCRYPTED***' : '' } : {},
+        twilio: twilio ? { ...twilio, authToken: '***ENCRYPTED***' } : {},
+        websms: websms ? { ...websms, password: '***ENCRYPTED***' } : {}
+      }
+    });
+  } catch (error) {
+    console.error('Error updating SMS settings:', error);
+    res.status(500).json({
+      success: false,
+      message: `Fehler beim Aktualisieren der SMS-Konfiguration: ${error.message}`,
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/settings/sms/test
+// @desc    Send test SMS
+// @access  Private (requires 'settings.write' permission)
+router.post('/sms/test', auth, async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.SETTINGS, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: `Zugriff verweigert - ${authResult.reason}`,
+        requiredPermission: 'settings.write'
+      });
+    }
+
+    const { to } = req.body;
+    if (!to || !to.includes('+')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Gültige Telefonnummer im internationalen Format erforderlich (z.B. +436641234567)'
+      });
+    }
+
+    // Initialisiere SMS-Service mit aktuellen Settings
+    await smsService.initializeConfig();
+
+    // Sende Test-SMS
+    const result = await smsService.sendSMS(to, 'Test-SMS von Ordinationssoftware - Ihre SMS-Konfiguration funktioniert korrekt!');
+
+    res.status(200).json({
+      success: true,
+      message: `Test-SMS erfolgreich an ${to} gesendet!`,
+      data: {
+        messageId: result.messageId,
+        recipient: to,
+        provider: result.provider,
+        timestamp: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Error sending test SMS:', error);
+    
+    let userFriendlyMessage = `Fehler beim Senden der Test-SMS: ${error.message}`;
+    
+    // Provider-spezifische Fehlermeldungen
+    if (error.message.includes('nicht konfiguriert') || error.message.includes('not configured')) {
+      userFriendlyMessage = `SMS-Provider nicht vollständig konfiguriert. Bitte überprüfen Sie Ihre API-Schlüssel und Credentials.`;
+    }
+
+    res.status(500).json({
+      success: false,
+      message: userFriendlyMessage,
       error: error.message
     });
   }

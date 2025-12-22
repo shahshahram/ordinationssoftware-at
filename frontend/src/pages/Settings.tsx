@@ -68,6 +68,23 @@ const Settings: React.FC = () => {
   const [testEmailLoading, setTestEmailLoading] = useState<boolean>(false);
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  // SMS-Konfiguration State
+  const [smsProvider, setSmsProvider] = useState<string>('seven');
+  const [sevenApiKey, setSevenApiKey] = useState<string>('');
+  const [sevenFrom, setSevenFrom] = useState<string>('Ordination');
+  const [twilioAccountSid, setTwilioAccountSid] = useState<string>('');
+  const [twilioAuthToken, setTwilioAuthToken] = useState<string>('');
+  const [twilioFromNumber, setTwilioFromNumber] = useState<string>('');
+  const [websmsUsername, setWebsmsUsername] = useState<string>('');
+  const [websmsPassword, setWebsmsPassword] = useState<string>('');
+  const [showSmsPassword, setShowSmsPassword] = useState<boolean>(false);
+  const [smsLoading, setSmsLoading] = useState<boolean>(false);
+  const [smsSuccess, setSmsSuccess] = useState<boolean>(false);
+  const [smsError, setSmsError] = useState<string | null>(null);
+  const [testSmsNumber, setTestSmsNumber] = useState<string>('');
+  const [testSmsLoading, setTestSmsLoading] = useState<boolean>(false);
+  const [testSmsResult, setTestSmsResult] = useState<{ success: boolean; message: string } | null>(null);
+
   // Lade aktuelle Einstellungen
   useEffect(() => {
     if (user?.profile?.preferences?.autoBillingEnabled !== undefined) {
@@ -88,6 +105,7 @@ const Settings: React.FC = () => {
     loadELDAStatus();
     loadWAHonlineStatus();
     loadEmailSettings();
+    loadSmsSettings();
   }, [user]);
 
   const loadEmailSettings = async () => {
@@ -105,6 +123,102 @@ const Settings: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Fehler beim Laden der E-Mail-Konfiguration:', error);
+    }
+  };
+
+  const loadSmsSettings = async () => {
+    try {
+      const response = await api.get<{ success: boolean; data: any }>('/settings/sms');
+      if (response.data.success && response.data.data) {
+        const config = response.data.data;
+        setSmsProvider(config.provider || 'seven');
+        setSevenApiKey(config.seven?.apiKey === '***ENCRYPTED***' ? '' : (config.seven?.apiKey || ''));
+        setSevenFrom(config.seven?.from || 'Ordination');
+        setTwilioAccountSid(config.twilio?.accountSid === '***ENCRYPTED***' ? '' : (config.twilio?.accountSid || ''));
+        setTwilioAuthToken(config.twilio?.authToken === '***ENCRYPTED***' ? '' : (config.twilio?.authToken || ''));
+        setTwilioFromNumber(config.twilio?.fromNumber || '');
+        setWebsmsUsername(config.websms?.username === '***ENCRYPTED***' ? '' : (config.websms?.username || ''));
+        setWebsmsPassword(config.websms?.password === '***ENCRYPTED***' ? '' : (config.websms?.password || ''));
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Laden der SMS-Konfiguration:', error);
+    }
+  };
+
+  const handleSaveSmsSettings = async () => {
+    setSmsLoading(true);
+    setSmsError(null);
+    setSmsSuccess(false);
+    try {
+      const smsConfig: any = {
+        provider: smsProvider,
+      };
+
+      if (smsProvider === 'seven') {
+        smsConfig.seven = {
+          apiKey: sevenApiKey,
+          from: sevenFrom,
+        };
+      } else if (smsProvider === 'twilio') {
+        smsConfig.twilio = {
+          accountSid: twilioAccountSid,
+          authToken: twilioAuthToken,
+          fromNumber: twilioFromNumber,
+        };
+      } else if (smsProvider === 'websms') {
+        smsConfig.websms = {
+          username: websmsUsername,
+          password: websmsPassword,
+        };
+      }
+
+      const response = await api.put<{ success: boolean; message: string }>('/settings/sms', smsConfig);
+
+      if (response.data.success) {
+        setSmsSuccess(true);
+        setTwilioAuthToken('');
+        setWebsmsPassword('');
+        setTimeout(() => setSmsSuccess(false), 3000);
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Speichern der SMS-Konfiguration:', error);
+      setSmsError(error.response?.data?.message || 'Fehler beim Speichern der SMS-Konfiguration.');
+    } finally {
+      setSmsLoading(false);
+    }
+  };
+
+  const handleSendTestSms = async () => {
+    if (!testSmsNumber || !testSmsNumber.includes('+')) {
+      setTestSmsResult({ success: false, message: 'Bitte geben Sie eine gültige Telefonnummer im internationalen Format ein (z.B. +436641234567)' });
+      return;
+    }
+
+    setTestSmsLoading(true);
+    setTestSmsResult(null);
+
+    try {
+      const response = await api.post<{ success: boolean; message: string }>('/settings/sms/test', { to: testSmsNumber });
+      if (response.data.success) {
+        setTestSmsResult({
+          success: true,
+          message: `Test-SMS erfolgreich an ${testSmsNumber} gesendet!`
+        });
+        setTestSmsNumber('');
+      } else {
+        setTestSmsResult({
+          success: false,
+          message: response.data.message || 'Fehler beim Senden der Test-SMS.'
+        });
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Senden der Test-SMS:', error);
+      setTestSmsResult({
+        success: false,
+        message: error.response?.data?.message || 'Fehler beim Senden der Test-SMS.'
+      });
+    } finally {
+      setTestSmsLoading(false);
     }
   };
 
@@ -744,6 +858,249 @@ const Settings: React.FC = () => {
                         <li>Für Yahoo: App-Passwort erforderlich</li>
                         <li>Die Konfiguration wird verschlüsselt gespeichert</li>
                         <li>Nach dem Speichern wird die E-Mail-Verbindung automatisch getestet</li>
+                      </ul>
+                    </Typography>
+                  </Alert>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* SMS Konfiguration */}
+        <Grid item xs={12}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" gutterBottom>
+                SMS Konfiguration
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Konfigurieren Sie SMS-Benachrichtigungen für Online-Buchungen
+              </Typography>
+              <Divider sx={{ my: 2 }} />
+
+              {smsSuccess && (
+                <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSmsSuccess(false)}>
+                  SMS-Einstellungen erfolgreich gespeichert!
+                </Alert>
+              )}
+              {smsError && (
+                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSmsError(null)}>
+                  {smsError}
+                </Alert>
+              )}
+
+              <Grid container spacing={3}>
+                {/* Provider-Auswahl */}
+                <Grid item xs={12} md={6}>
+                  <FormControl fullWidth>
+                    <InputLabel id="sms-provider-label">SMS-Provider</InputLabel>
+                    <Select
+                      labelId="sms-provider-label"
+                      id="sms-provider"
+                      value={smsProvider}
+                      label="SMS-Provider"
+                      onChange={(e) => setSmsProvider(e.target.value as string)}
+                    >
+                      <MenuItem value="seven">Seven.io</MenuItem>
+                      <MenuItem value="twilio">Twilio</MenuItem>
+                      <MenuItem value="websms">websms.at</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+
+                {/* Seven.io Konfiguration */}
+                {smsProvider === 'seven' && (
+                  <>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Seven.io API Key"
+                        type="password"
+                        value={sevenApiKey}
+                        onChange={(e) => setSevenApiKey(e.target.value)}
+                        required
+                        helperText="Ihr Seven.io API-Schlüssel"
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowSmsPassword(!showSmsPassword)}
+                                edge="end"
+                              >
+                                {showSmsPassword ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Absender-Name"
+                        value={sevenFrom}
+                        onChange={(e) => setSevenFrom(e.target.value)}
+                        helperText="Name der in der SMS angezeigt wird"
+                      />
+                    </Grid>
+                  </>
+                )}
+
+                {/* Twilio Konfiguration */}
+                {smsProvider === 'twilio' && (
+                  <>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Account SID"
+                        value={twilioAccountSid}
+                        onChange={(e) => setTwilioAccountSid(e.target.value)}
+                        required
+                        helperText="Ihre Twilio Account SID"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Auth Token"
+                        type="password"
+                        value={twilioAuthToken}
+                        onChange={(e) => setTwilioAuthToken(e.target.value)}
+                        required
+                        helperText="Ihr Twilio Auth Token"
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowSmsPassword(!showSmsPassword)}
+                                edge="end"
+                              >
+                                {showSmsPassword ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Absender-Nummer"
+                        value={twilioFromNumber}
+                        onChange={(e) => setTwilioFromNumber(e.target.value)}
+                        required
+                        helperText="Ihre Twilio Telefonnummer (z.B. +1234567890)"
+                      />
+                    </Grid>
+                  </>
+                )}
+
+                {/* websms.at Konfiguration */}
+                {smsProvider === 'websms' && (
+                  <>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Benutzername"
+                        value={websmsUsername}
+                        onChange={(e) => setWebsmsUsername(e.target.value)}
+                        required
+                        helperText="Ihr websms.at Benutzername"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <TextField
+                        fullWidth
+                        label="Passwort"
+                        type="password"
+                        value={websmsPassword}
+                        onChange={(e) => setWebsmsPassword(e.target.value)}
+                        required
+                        helperText="Ihr websms.at Passwort"
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                onClick={() => setShowSmsPassword(!showSmsPassword)}
+                                edge="end"
+                              >
+                                {showSmsPassword ? <VisibilityOff /> : <Visibility />}
+                              </IconButton>
+                            </InputAdornment>
+                          )
+                        }}
+                      />
+                    </Grid>
+                  </>
+                )}
+
+                {/* Speichern Button */}
+                <Grid item xs={12}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveSmsSettings}
+                      disabled={smsLoading || (smsProvider === 'seven' && !sevenApiKey) || (smsProvider === 'twilio' && (!twilioAccountSid || !twilioAuthToken || !twilioFromNumber)) || (smsProvider === 'websms' && (!websmsUsername || !websmsPassword))}
+                      startIcon={smsLoading ? <CircularProgress size={20} /> : <CheckCircle />}
+                    >
+                      {smsLoading ? 'Speichern...' : 'SMS-Konfiguration speichern'}
+                    </Button>
+                  </Box>
+                </Grid>
+
+                {/* Test-SMS */}
+                <Grid item xs={12}>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle1" gutterBottom>
+                    Test-SMS senden
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', mt: 2 }}>
+                    <TextField
+                      label="Test-Telefonnummer"
+                      value={testSmsNumber}
+                      onChange={(e) => setTestSmsNumber(e.target.value)}
+                      placeholder="+436641234567"
+                      helperText="Internationales Format erforderlich (z.B. +436641234567)"
+                      sx={{ flexGrow: 1 }}
+                    />
+                    <Button
+                      variant="outlined"
+                      onClick={handleSendTestSms}
+                      disabled={testSmsLoading || !testSmsNumber}
+                      startIcon={testSmsLoading ? <CircularProgress size={20} /> : <Send />}
+                      sx={{ minWidth: 150 }}
+                    >
+                      {testSmsLoading ? 'Senden...' : 'Test senden'}
+                    </Button>
+                  </Box>
+
+                  {testSmsResult && (
+                    <Alert
+                      severity={testSmsResult.success ? 'success' : 'error'}
+                      sx={{ mt: 2 }}
+                      icon={testSmsResult.success ? <CheckCircle /> : <ErrorIcon />}
+                      onClose={() => setTestSmsResult(null)}
+                    >
+                      <Typography component="div" variant="body2">
+                        {testSmsResult.message}
+                      </Typography>
+                    </Alert>
+                  )}
+                </Grid>
+
+                {/* Hinweise */}
+                <Grid item xs={12}>
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    <Typography variant="body2" component="div">
+                      <strong>Hinweise:</strong>
+                      <ul style={{ marginTop: 8, marginBottom: 0, paddingLeft: 20 }}>
+                        <li>SMS-Benachrichtigungen werden automatisch bei Online-Buchungen gesendet</li>
+                        <li>Für Seven.io: Registrieren Sie sich unter https://www.seven.io</li>
+                        <li>Für Twilio: Registrieren Sie sich unter https://www.twilio.com</li>
+                        <li>Für websms.at: Registrieren Sie sich unter https://www.websms.at</li>
+                        <li>Die Konfiguration wird verschlüsselt gespeichert</li>
+                        <li>Telefonnummern müssen im internationalen Format angegeben werden (z.B. +436641234567)</li>
                       </ul>
                     </Typography>
                   </Alert>
