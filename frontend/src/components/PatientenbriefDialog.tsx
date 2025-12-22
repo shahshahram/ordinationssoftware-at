@@ -16,9 +16,6 @@ import {
   Select,
   MenuItem,
   Paper,
-  FormGroup,
-  FormControlLabel,
-  Checkbox,
   CircularProgress,
   Alert,
   Tabs,
@@ -52,7 +49,9 @@ import Autocomplete from '@mui/material/Autocomplete';
 import RichTextEditor from './RichTextEditor';
 import DocumentSidebar from './DocumentSidebar';
 import DocumentDetailDialog from './DocumentDetailDialog';
+import DataSourceSelector from './DataSourceSelector';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
+import { Document } from '../store/slices/documentSlice';
 
 interface LetterSection {
   id: string;
@@ -126,6 +125,17 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
 
   // State für Dekurs-Übernahme
   const [latestDekursEntry, setLatestDekursEntry] = useState<DekursEntry | null>(null);
+  
+  // State für Datenquelle-Auswahl
+  const [dataSourceSelectorOpen, setDataSourceSelectorOpen] = useState(false);
+  const [selectedDataSource, setSelectedDataSource] = useState<'dekurs' | 'document' | 'manual'>('dekurs');
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [dataSourceInfo, setDataSourceInfo] = useState<{
+    type: 'dekurs' | 'document';
+    id: string;
+    date: Date;
+    modified: boolean;
+  } | null>(null);
 
   // State für Diagnosen und Medikamente
   const [linkedDiagnoses, setLinkedDiagnoses] = useState<LinkedDiagnosis[]>([]);
@@ -167,8 +177,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
 
   // State für zusätzliche Daten (Vitalwerte, Labor, DICOM, Termine, Fotos)
   const [vitalSigns, setVitalSigns] = useState<any[]>([]);
-  const [laborResults, setLaborResults] = useState<any[]>([]);
-  const [dicomStudies, setDicomStudies] = useState<any[]>([]);
+  const [_laborResults, setLaborResults] = useState<any[]>([]);
+  const [_dicomStudies, setDicomStudies] = useState<any[]>([]);
   const [appointments, setAppointments] = useState<any[]>([]);
   const [photos, setPhotos] = useState<any[]>([]);
   const [loadingAdditionalData, setLoadingAdditionalData] = useState(false);
@@ -249,110 +259,174 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     }
   }, [open, location]);
 
-  // Lade neuesten Dekurs und übernehme automatisch alle Daten
+  // Öffne Datenquelle-Auswahl beim Öffnen des Dialogs (wenn source nicht explizit gesetzt)
   useEffect(() => {
-    const loadDekurs = async () => {
+    if (open && patient?._id && source === undefined) {
+      setDataSourceSelectorOpen(true);
+    }
+  }, [open, patient, source]);
+
+  // Lade Daten basierend auf ausgewählter Datenquelle
+  useEffect(() => {
+    const loadData = async () => {
       if (!open || !patient?._id) return;
 
-      // Bei "Leer" keine Dekurs-Daten laden
-      if (source === 'leer') {
+      // Bei "Leer" keine Daten laden
+      if (source === 'leer' || selectedDataSource === 'manual') {
         setLatestDekursEntry(null);
         setLetterSections([]);
         setLinkedDiagnoses([]);
         setLinkedMedications([]);
+        setSelectedDocument(null);
         return;
       }
 
-      // Nur bei "aus Dekurs" laden
-      if (source !== 'dekurs') return;
+      // Bei "Dokument" als Datenquelle
+      if (selectedDataSource === 'document' && selectedDocument) {
+        await loadDataFromDocument(selectedDocument);
+        return;
+      }
 
-      try {
-        let entry: DekursEntry | null = null;
-        
-        // Wenn ein spezifischer Dekurs-Eintrag ausgewählt wurde, verwende diesen
-        if (selectedDekursEntry) {
-          entry = selectedDekursEntry;
-        } else {
-          // Sonst lade den neuesten Eintrag
-          // Versuche aus Redux Store
-          if (dekursEntries && dekursEntries.length > 0) {
-            const sorted = [...dekursEntries].sort((a, b) => 
-              new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime()
-            );
-            entry = sorted[0];
-          } else {
-            // Lade von API
-            const result = await dispatch(fetchDekursEntries({ 
-              patientId: patient._id, 
-              limit: 1 
-            })).unwrap();
-            
-            if (result.data && result.data.length > 0) {
-              entry = result.data[0];
-            }
-          }
-        }
-
-        if (entry) {
-          console.log('📋 Dekurs-Eintrag geladen:', entry);
-          setLatestDekursEntry(entry);
-          
-          // Automatische Übernahme aller Dekurs-Felder
-          const newSections: LetterSection[] = [];
-          dekursFields.forEach(field => {
-            const content = entry?.[field.key as keyof DekursEntry];
-            console.log(`🔍 Feld "${field.label}" (${field.key}):`, content, typeof content);
-            
-            // Prüfe verschiedene Datentypen
-            let contentString = '';
-            if (content !== null && content !== undefined) {
-              if (typeof content === 'string') {
-                contentString = content;
-              } else if (typeof content === 'object' && Array.isArray(content)) {
-                contentString = content.join(', ');
-              } else {
-                contentString = String(content);
-              }
-            }
-            
-            if (contentString && contentString.trim() !== '') {
-              console.log(`✅ Übernehme "${field.label}":`, contentString.substring(0, 50) + '...');
-              newSections.push({
-                id: `section-${field.key}-${Date.now()}`,
-                title: field.label,
-                content: contentString,
-                source: 'dekurs',
-                dekursField: field.key
-              });
-            }
-          });
-          
-          console.log('📝 Erstellte Sektionen:', newSections.length, newSections);
-          setLetterSections(newSections);
-          
-          // Automatische Übernahme von Diagnosen
-          if (entry.linkedDiagnoses && entry.linkedDiagnoses.length > 0) {
-            console.log('✅ Übernehme Diagnosen:', entry.linkedDiagnoses.length);
-            setLinkedDiagnoses([...entry.linkedDiagnoses]);
-          }
-          
-          // Automatische Übernahme von Medikamenten
-          if (entry.linkedMedications && entry.linkedMedications.length > 0) {
-            console.log('✅ Übernehme Medikamente:', entry.linkedMedications.length);
-            setLinkedMedications([...entry.linkedMedications]);
-          }
-        } else {
-          console.log('⚠️ Kein Dekurs-Eintrag gefunden');
-        }
-      } catch (error) {
-        console.error('Fehler beim Laden des Dekurs:', error);
+      // Bei "Dekurs" als Datenquelle (Standard)
+      if (selectedDataSource === 'dekurs' || source === 'dekurs') {
+        await loadDekurs();
       }
     };
 
-    if (open && patient) {
-      loadDekurs();
+    loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, patient, source, selectedDataSource, selectedDocument, selectedDekursEntry, dekursEntries, dispatch]);
+
+  // Lade Daten aus einem existierenden Dokument
+  const loadDataFromDocument = async (document: Document) => {
+    try {
+      // Extrahiere strukturierte Daten aus dem Dokument
+      if (document.content?.html) {
+        // Parse HTML und erstelle Sektionen
+        const htmlContent = document.content.html;
+        
+        // Erstelle eine Sektion aus dem Dokument-Content
+        const documentSection: LetterSection = {
+          id: `document-${document._id || Date.now()}`,
+          title: document.title || 'Dokument-Inhalt',
+          content: htmlContent,
+          source: 'document',
+          dataId: document._id
+        };
+        
+        setLetterSections([documentSection]);
+      }
+      
+      // Lade verknüpften Dekurs falls vorhanden
+      if (document.sourceDekurs?.dekursEntryId) {
+        try {
+          const dekursResponse: any = await apiRequest.get(`/dekurs/${document.sourceDekurs.dekursEntryId}`);
+          const dekursData = dekursResponse?.data || dekursResponse;
+          if (dekursData?.success && dekursData.data) {
+            setLatestDekursEntry(dekursData.data);
+            if (dekursData.data.linkedDiagnoses) {
+              setLinkedDiagnoses(dekursData.data.linkedDiagnoses);
+            }
+            if (dekursData.data.linkedMedications) {
+              setLinkedMedications(dekursData.data.linkedMedications);
+            }
+          }
+        } catch (dekursError) {
+          console.warn('Fehler beim Laden des verknüpften Dekurs:', dekursError);
+        }
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der Dokument-Daten:', error);
+      setError('Fehler beim Laden der Dokument-Daten');
     }
-  }, [open, patient, dispatch, dekursEntries, source, selectedDekursEntry]);
+  };
+
+  // Lade neuesten Dekurs und übernehme automatisch alle Daten
+  const loadDekurs = async () => {
+    if (!open || !patient?._id) return;
+
+    try {
+      let entry: DekursEntry | null = null;
+      
+      // Wenn ein spezifischer Dekurs-Eintrag ausgewählt wurde, verwende diesen
+      if (selectedDekursEntry) {
+        entry = selectedDekursEntry;
+      } else {
+        // Sonst lade den neuesten Eintrag
+        // Versuche aus Redux Store
+        if (dekursEntries && dekursEntries.length > 0) {
+          const sorted = [...dekursEntries].sort((a, b) => 
+            new Date(b.entryDate).getTime() - new Date(a.entryDate).getTime()
+          );
+          entry = sorted[0];
+        } else {
+          // Lade von API
+          const result = await dispatch(fetchDekursEntries({ 
+            patientId: patient._id, 
+            limit: 1 
+          })).unwrap();
+          
+          if (result.data && result.data.length > 0) {
+            entry = result.data[0];
+          }
+        }
+      }
+
+      if (entry) {
+        console.log('📋 Dekurs-Eintrag geladen:', entry);
+        setLatestDekursEntry(entry);
+        
+        // Automatische Übernahme aller Dekurs-Felder
+        const newSections: LetterSection[] = [];
+        dekursFields.forEach(field => {
+          const content = entry?.[field.key as keyof DekursEntry];
+          console.log(`🔍 Feld "${field.label}" (${field.key}):`, content, typeof content);
+          
+          // Prüfe verschiedene Datentypen
+          let contentString = '';
+          if (content !== null && content !== undefined) {
+            if (typeof content === 'string') {
+              contentString = content;
+            } else if (typeof content === 'object' && Array.isArray(content)) {
+              contentString = content.join(', ');
+            } else {
+              contentString = String(content);
+            }
+          }
+          
+          if (contentString && contentString.trim() !== '') {
+            console.log(`✅ Übernehme "${field.label}":`, contentString.substring(0, 50) + '...');
+            newSections.push({
+              id: `section-${field.key}-${Date.now()}`,
+              title: field.label,
+              content: contentString,
+              source: 'dekurs',
+              dekursField: field.key
+            });
+          }
+        });
+        
+        console.log('📝 Erstellte Sektionen:', newSections.length, newSections);
+        setLetterSections(newSections);
+        
+        // Automatische Übernahme von Diagnosen
+        if (entry.linkedDiagnoses && entry.linkedDiagnoses.length > 0) {
+          console.log('✅ Übernehme Diagnosen:', entry.linkedDiagnoses.length);
+          setLinkedDiagnoses([...entry.linkedDiagnoses]);
+        }
+        
+        // Automatische Übernahme von Medikamenten
+        if (entry.linkedMedications && entry.linkedMedications.length > 0) {
+          console.log('✅ Übernehme Medikamente:', entry.linkedMedications.length);
+          setLinkedMedications([...entry.linkedMedications]);
+        }
+      } else {
+        console.log('⚠️ Kein Dekurs-Eintrag gefunden');
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden des Dekurs:', error);
+    }
+  };
 
   // Lade zusätzliche Daten (Vitalwerte, Labor, DICOM, Termine, Fotos)
   useEffect(() => {
@@ -639,7 +713,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     if (open) {
       loadContacts();
     }
-  }, [open]);
+  }, [open, dispatch]);
 
 
   // Handler für Diagnosen hinzufügen
@@ -658,13 +732,6 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   // Handler für Medikamente hinzufügen (öffnet Dialog)
   const handleAddMedication = (medication: any) => {
     if (!medication) return;
-    
-    let medicationId: string | undefined = undefined;
-    if (medication._id) {
-      medicationId = typeof medication._id === 'string' ? medication._id : medication._id.toString();
-    } else if (medication.id) {
-      medicationId = typeof medication.id === 'string' ? medication.id : medication.id.toString();
-    }
     
     setSelectedMedication(medication);
     setEditingMedicationIndex(null);
@@ -1142,6 +1209,37 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     setAdditionalDataDialogOpen(false);
   };
 
+  // Handler für Datenquelle-Auswahl
+  const handleDataSourceSelect = (sourceType: 'dekurs' | 'document' | 'manual', data?: DekursEntry | Document) => {
+    setSelectedDataSource(sourceType);
+    setDataSourceSelectorOpen(false);
+    
+    if (sourceType === 'document' && data) {
+      setSelectedDocument(data as Document);
+      const doc = data as Document;
+      setDataSourceInfo({
+        type: 'document',
+        id: doc._id || '',
+        date: doc.createdAt ? new Date(doc.createdAt) : new Date(),
+        modified: doc.lastModifiedAt && doc.createdAt ? 
+          new Date(doc.lastModifiedAt).getTime() > new Date(doc.createdAt).getTime() : false
+      });
+    } else if (sourceType === 'dekurs' && data) {
+      setLatestDekursEntry(data as DekursEntry);
+      const dekurs = data as DekursEntry;
+      setDataSourceInfo({
+        type: 'dekurs',
+        id: dekurs._id || '',
+        date: dekurs.entryDate ? new Date(dekurs.entryDate) : new Date(),
+        modified: false
+      });
+    } else {
+      setSelectedDocument(null);
+      setLatestDekursEntry(null);
+      setDataSourceInfo(null);
+    }
+  };
+
   // Handler für Vorlage hinzufügen
   const handleAddTemplate = async () => {
     console.log('🔍 handleAddTemplate aufgerufen');
@@ -1248,6 +1346,12 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
       } : undefined,
       location: location || undefined,
       date: new Date(),
+      // NEU: Dekurs-Daten hinzufügen
+      dekurs: latestDekursEntry || undefined,
+      dekursSelected: latestDekursEntry || undefined,
+      document: selectedDocument || undefined,
+      dataSource: selectedDataSource,
+      dataSourceInfo: dataSourceInfo || undefined,
     };
     
     console.log('🔍 Context:', context);
@@ -2108,6 +2212,14 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
 
   return (
     <>
+    <DataSourceSelector
+      open={dataSourceSelectorOpen}
+      onClose={() => setDataSourceSelectorOpen(false)}
+      onSelect={handleDataSourceSelect}
+      patientId={patient?._id || ''}
+      documentType={documentType || 'patientenbrief'}
+      dekursEntryId={selectedDekursEntry?._id}
+    />
     <Dialog 
       open={open} 
       onClose={handleClose}

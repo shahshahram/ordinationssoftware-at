@@ -218,6 +218,36 @@ const DocumentSchema = new mongoose.Schema({
     required: false
   },
   
+  // Verknüpfung zu Dekurs-Einträgen (NEU)
+  sourceDekurs: {
+    dekursEntryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'DekursEntry',
+      index: true
+    },
+    dekursEntryDate: { type: Date },
+    // Welche Felder wurden aus Dekurs übernommen
+    fieldsUsed: [{
+      field: { type: String },  // z.B. 'clinicalObservations', 'findings'
+      fromDekurs: { type: Boolean, default: true },  // true = aus Dekurs, false = manuell bearbeitet
+      modified: { type: Boolean, default: false }  // Wurde nach Übernahme bearbeitet?
+    }]
+  },
+  
+  // Verknüpfung zu anderen Dokumenten (NEU)
+  relatedDocuments: [{
+    documentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Document'
+    },
+    relationship: {
+      type: String,
+      enum: ['based_on', 'revision_of', 'replaces', 'related_to'],
+      default: 'based_on'
+    },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  
   // Metadaten
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   lastModifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useImperativeHandle, forwardRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -19,20 +19,28 @@ interface RichTextEditorProps {
   onChange: (html: string) => void;
   placeholder?: string;
   minHeight?: number;
+  onPlaceholderInsert?: (placeholder: string) => void;
 }
 
-const RichTextEditor: React.FC<RichTextEditorProps> = ({
+export interface RichTextEditorRef {
+  insertPlaceholder: (placeholder: string) => void;
+}
+
+const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   value,
   onChange,
   placeholder = 'Beginnen Sie mit der Eingabe...',
-  minHeight = 200
-}) => {
+  minHeight = 200,
+  onPlaceholderInsert,
+}, ref) => {
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
         // Deaktiviere Link komplett aus StarterKit
         link: false,
+        // Deaktiviere underline aus StarterKit, da wir es separat hinzufügen
+        underline: false,
       }),
       Underline,
     ],
@@ -61,6 +69,58 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       },
     },
   });
+
+  // Drag & Drop Handler für Platzhalter
+  React.useEffect(() => {
+    if (!editor) return;
+
+    const editorElement = editor.view.dom;
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = 'copy';
+      }
+    };
+
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const placeholder = e.dataTransfer?.getData('text/plain') || e.dataTransfer?.getData('text/html');
+      
+      if (placeholder && placeholder.includes('{{')) {
+        // Setze Cursor-Position basierend auf Drop-Position
+        const { view } = editor;
+        const coordinates = view.posAtCoords({ left: e.clientX, top: e.clientY });
+        
+        if (coordinates) {
+          editor.commands.setTextSelection(coordinates.pos);
+          editor.commands.insertContent(placeholder);
+          
+          if (onPlaceholderInsert) {
+            onPlaceholderInsert(placeholder);
+          }
+        } else {
+          // Fallback: Einfügen an aktueller Position
+          editor.commands.insertContent(placeholder);
+          
+          if (onPlaceholderInsert) {
+            onPlaceholderInsert(placeholder);
+          }
+        }
+      }
+    };
+
+    editorElement.addEventListener('dragover', handleDragOver);
+    editorElement.addEventListener('drop', handleDrop);
+
+    return () => {
+      editorElement.removeEventListener('dragover', handleDragOver);
+      editorElement.removeEventListener('drop', handleDrop);
+    };
+  }, [editor, onPlaceholderInsert]);
 
   // MutationObserver, um Links aus Platzhaltern zu entfernen
   React.useEffect(() => {
@@ -121,7 +181,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
     return () => {
       observer.disconnect();
     };
-  }, [editor, removeLinksFromPlaceholders]);
+  }, [editor]);
 
   React.useEffect(() => {
     if (editor) {
@@ -135,6 +195,18 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       }
     }
   }, [value, editor]);
+
+  // Expose insertPlaceholder method via ref
+  useImperativeHandle(ref, () => ({
+    insertPlaceholder: (placeholder: string) => {
+      if (editor) {
+        editor.chain().focus().insertContent(placeholder).run();
+        if (onPlaceholderInsert) {
+          onPlaceholderInsert(placeholder);
+        }
+      }
+    },
+  }), [editor, onPlaceholderInsert]);
 
   if (!editor) {
     return null;
@@ -248,7 +320,7 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
             minHeight: `${minHeight}px`,
             padding: 2,
             outline: 'none',
-            '& p.is-editor-empty:first-child::before': {
+            '& p.is-editor-empty:first-of-type::before': {
               content: `"${placeholder}"`,
               float: 'left',
               color: '#adb5bd',
@@ -280,7 +352,9 @@ const RichTextEditor: React.FC<RichTextEditorProps> = ({
       </Box>
     </Paper>
   );
-};
+});
+
+RichTextEditor.displayName = 'RichTextEditor';
 
 export default RichTextEditor;
 

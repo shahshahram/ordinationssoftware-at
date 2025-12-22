@@ -81,6 +81,66 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/documents/patient/:patientId/existing
+// @desc    Finde existierende Dokumente für einen Patienten und Dokumenttyp (für Datenquelle-Auswahl)
+// @access  Private
+router.get('/patient/:patientId/existing', auth, async (req, res) => {
+  try {
+    const { patientId } = req.params;
+    const { documentType, dekursEntryId } = req.query;
+    
+    const filter = {
+      'patient.id': patientId,
+      status: { $in: ['draft', 'ready'] } // Nur aktive Dokumente
+    };
+    
+    if (documentType) {
+      filter.type = documentType;
+    }
+    
+    // Wenn Dekurs-ID bekannt, suche Dokumente die aus diesem Dekurs erstellt wurden
+    if (dekursEntryId) {
+      filter['sourceDekurs.dekursEntryId'] = dekursEntryId;
+    }
+    
+    const documents = await Document.find(filter)
+      .populate('sourceDekurs.dekursEntryId', 'entryDate clinicalObservations findings')
+      .populate('createdBy', 'firstName lastName')
+      .populate('lastModifiedBy', 'firstName lastName')
+      .sort({ createdAt: -1 })
+      .limit(10);
+    
+    // Bereite Daten für Frontend auf
+    const formattedDocuments = documents.map(doc => ({
+      _id: doc._id,
+      id: doc._id,
+      title: doc.title,
+      type: doc.type,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
+      lastModifiedAt: doc.lastModifiedAt,
+      modified: doc.lastModifiedAt && doc.lastModifiedAt > doc.createdAt,
+      content: doc.content,
+      sourceDekurs: doc.sourceDekurs,
+      createdBy: doc.createdBy,
+      lastModifiedBy: doc.lastModifiedBy
+    }));
+    
+    res.json({
+      success: true,
+      data: formattedDocuments,
+      count: formattedDocuments.length
+    });
+  } catch (error) {
+    console.error('Error finding existing documents:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Suchen nach existierenden Dokumenten',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
 // @route   GET /api/documents/statistics
 // @desc    Get document statistics
 // @access  Private

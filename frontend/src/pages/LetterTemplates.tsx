@@ -44,9 +44,11 @@ import {
   LocalHospital,
   CalendarToday,
   Info,
+  History,
 } from '@mui/icons-material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
-import RichTextEditor from '../components/RichTextEditor';
+import RichTextEditor, { RichTextEditorRef } from '../components/RichTextEditor';
+import PlaceholderChips from '../components/PlaceholderChips';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   fetchLocations,
@@ -96,6 +98,7 @@ const LetterTemplates: React.FC = () => {
     description: '',
     isActive: true
   });
+  const editorRef = React.useRef<RichTextEditorRef>(null);
   const [locationForm, setLocationForm] = useState({
     letterheadTemplates: {} as Record<string, 'template1' | 'template2' | 'template3' | 'custom'>
   });
@@ -543,7 +546,7 @@ const LetterTemplates: React.FC = () => {
       </Card>
 
       {/* Briefvorlagen-Dialog */}
-      <Dialog open={templateDialogOpen} onClose={() => setTemplateDialogOpen(false)} maxWidth="md" fullWidth>
+      <Dialog open={templateDialogOpen} onClose={() => setTemplateDialogOpen(false)} maxWidth="lg" fullWidth>
         <DialogTitle>
           {editingTemplateIndex !== null ? 'Vorlage bearbeiten' : 'Neue Vorlage'}
         </DialogTitle>
@@ -597,12 +600,31 @@ const LetterTemplates: React.FC = () => {
               <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
                 Vorlageninhalt *
               </Typography>
-              <RichTextEditor
-                value={templateForm.content}
-                onChange={(html) => setTemplateForm({ ...templateForm, content: html })}
-                placeholder="Beginnen Sie mit der Eingabe... Verwenden Sie Platzhalter wie {{patient.fullName}}, {{doctor.fullName}}, {{date}}, {{location.name}}"
-                minHeight={200}
-              />
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                <Box sx={{ flex: 1 }}>
+                  <RichTextEditor
+                    ref={editorRef}
+                    value={templateForm.content}
+                    onChange={(html) => setTemplateForm({ ...templateForm, content: html })}
+                    placeholder="Beginnen Sie mit der Eingabe... Ziehen Sie Platzhalter aus der rechten Sidebar oder klicken Sie darauf"
+                    minHeight={300}
+                    onPlaceholderInsert={(placeholder) => {
+                      console.log('Platzhalter eingefügt:', placeholder);
+                    }}
+                  />
+                </Box>
+                <Box sx={{ width: 350, flexShrink: 0 }}>
+                  <PlaceholderChips
+                    enableDrag={true}
+                    onPlaceholderClick={(placeholder) => {
+                      // Einfügen per Click
+                      if (editorRef.current) {
+                        editorRef.current.insertPlaceholder(placeholder);
+                      }
+                    }}
+                  />
+                </Box>
+              </Box>
             </Box>
             <Accordion>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -694,6 +716,29 @@ const LetterTemplates: React.FC = () => {
                         </Box>
                         
                         <Divider />
+                        
+                        {/* Dekurs Platzhalter */}
+                        {legend.dekurs && (
+                          <>
+                            <Box>
+                              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
+                                <History color="primary" />
+                                <Typography variant="h6" fontWeight="bold">Dekurs</Typography>
+                              </Stack>
+                              <Stack spacing={0.5}>
+                                {legend.dekurs.map((item, idx) => (
+                                  <Box key={idx} sx={{ pl: 2 }}>
+                                    <Typography variant="body2">
+                                      <strong>{item.placeholder}</strong> - {item.description}
+                                    </Typography>
+                                  </Box>
+                                ))}
+                              </Stack>
+                            </Box>
+                            
+                            <Divider />
+                          </>
+                        )}
                         
                         {/* Veraltete Platzhalter (für Rückwärtskompatibilität) */}
                         <Box>

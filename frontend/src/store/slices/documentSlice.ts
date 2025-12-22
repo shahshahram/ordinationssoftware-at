@@ -124,6 +124,22 @@ export interface Document {
   anonymizationDate?: string;
   createdAt?: string;
   updatedAt?: string;
+  // NEU: Verknüpfung zu Dekurs-Einträgen
+  sourceDekurs?: {
+    dekursEntryId?: string;
+    dekursEntryDate?: string;
+    fieldsUsed?: Array<{
+      field: string;
+      fromDekurs: boolean;
+      modified: boolean;
+    }>;
+  };
+  // NEU: Verknüpfung zu anderen Dokumenten
+  relatedDocuments?: Array<{
+    documentId?: string;
+    relationship?: 'based_on' | 'revision_of' | 'replaces' | 'related_to';
+    createdAt?: string;
+  }>;
 }
 
 

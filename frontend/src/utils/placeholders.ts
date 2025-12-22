@@ -5,6 +5,8 @@
 
 import { Patient } from '../store/slices/patientSlice';
 import { Location } from '../store/slices/locationSlice';
+import { DekursEntry } from '../store/slices/dekursSlice';
+import { Document } from '../store/slices/documentSlice';
 
 export interface PlaceholderContext {
   patient?: Patient;
@@ -18,6 +20,18 @@ export interface PlaceholderContext {
   };
   location?: Location;
   date?: Date;
+  // NEU: Dekurs-Datenquellen
+  dekurs?: DekursEntry;
+  dekursSelected?: DekursEntry;
+  document?: Document;  // Existierender Brief (bearbeitet)
+  // NEU: Datenquelle-Priorität
+  dataSource?: 'dekurs' | 'document' | 'manual' | 'mixed';
+  dataSourceInfo?: {
+    type: 'dekurs' | 'document';
+    id: string;
+    date: Date;
+    modified: boolean;
+  };
 }
 
 /**
@@ -32,10 +46,42 @@ const legacyPlaceholderMap: Record<string, string> = {
 };
 
 /**
+ * Extrahiert strukturierte Daten aus einem Dokument-HTML
+ * Versucht, Dekurs-Felder aus dem HTML-Content zu extrahieren
+ */
+const extractStructuredDataFromDocument = (document: Document): Partial<DekursEntry> => {
+  if (!document.content?.html) return {};
+  
+  const html = document.content.html;
+  const data: Partial<DekursEntry> = {};
+  
+  // Einfache Extraktion: Suche nach typischen Überschriften und Inhalten
+  // Dies ist eine einfache Implementierung - kann später erweitert werden
+  const patterns = {
+    clinicalObservations: /(?:Anamnese|Klinische Beobachtungen|Beobachtungen)[:\s]*([^<]+)/i,
+    findings: /(?:Befund|Status|Befunde)[:\s]*([^<]+)/i,
+    progressChecks: /(?:Verlauf|Verlaufskontrolle|Kontrolle)[:\s]*([^<]+)/i,
+    treatmentDetails: /(?:Behandlung|Therapie|Behandlungsdetails)[:\s]*([^<]+)/i,
+    medicationChanges: /(?:Medikation|Medikamente|Medikamentenänderungen)[:\s]*([^<]+)/i,
+    notes: /(?:Notizen|Bemerkungen|Anmerkungen)[:\s]*([^<]+)/i,
+    visitReason: /(?:Besuchsgrund|Grund|Anlass)[:\s]*([^<]+)/i,
+  };
+  
+  Object.entries(patterns).forEach(([key, pattern]) => {
+    const match = html.match(pattern);
+    if (match && match[1]) {
+      (data as any)[key] = match[1].trim();
+    }
+  });
+  
+  return data;
+};
+
+/**
  * Erstellt alle verfügbaren Platzhalter-Werte basierend auf dem Kontext
  */
 export const createPlaceholderValues = (context: PlaceholderContext): Record<string, string> => {
-  const { patient, doctor, location, date = new Date() } = context;
+  const { patient, doctor, location, date = new Date(), dekurs, dekursSelected, document, dataSource } = context;
   
   const values: Record<string, string> = {};
   
@@ -173,6 +219,141 @@ export const createPlaceholderValues = (context: PlaceholderContext): Record<str
   // Fallback für alte Platzhalter
   values['{{clinic.name}}'] = location?.name || 'Ordinationssoftware Praxis';
   
+  // PRIORITÄT 1: Bearbeiteter Brief (falls vorhanden und als Datenquelle gewählt)
+  if (document && dataSource === 'document') {
+    const documentData = extractStructuredDataFromDocument(document);
+    const dekursData = dekursSelected || dekurs;
+    
+    // Verwende bearbeitete Daten aus Brief, Fallback auf Dekurs
+    values['{{dekurs.visitReason}}'] = documentData.visitReason || dekursData?.visitReason || '';
+    values['{{dekurs.clinicalObservations}}'] = documentData.clinicalObservations || dekursData?.clinicalObservations || '';
+    values['{{dekurs.progressChecks}}'] = documentData.progressChecks || dekursData?.progressChecks || '';
+    values['{{dekurs.findings}}'] = documentData.findings || dekursData?.findings || '';
+    values['{{dekurs.medicationChanges}}'] = documentData.medicationChanges || dekursData?.medicationChanges || '';
+    values['{{dekurs.treatmentDetails}}'] = documentData.treatmentDetails || dekursData?.treatmentDetails || '';
+    values['{{dekurs.psychosocialFactors}}'] = documentData.psychosocialFactors || dekursData?.psychosocialFactors || '';
+    values['{{dekurs.notes}}'] = documentData.notes || dekursData?.notes || '';
+    values['{{dekurs.imagingFindings}}'] = dekursData?.imagingFindings || '';
+    values['{{dekurs.laboratoryFindings}}'] = dekursData?.laboratoryFindings || '';
+    
+    if (dekursData?.entryDate) {
+      const entryDate = new Date(dekursData.entryDate);
+      values['{{dekurs.entryDate}}'] = entryDate.toLocaleDateString('de-DE');
+      values['{{dekurs.entryDate.short}}'] = entryDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    } else {
+      values['{{dekurs.entryDate}}'] = '';
+      values['{{dekurs.entryDate.short}}'] = '';
+    }
+  }
+  // PRIORITÄT 2: Dekurs-Eintrag
+  else if (dekurs || dekursSelected) {
+    const dekursData = dekursSelected || dekurs;
+    
+    if (dekursData) {
+      values['{{dekurs.visitReason}}'] = dekursData.visitReason || '';
+      values['{{dekurs.clinicalObservations}}'] = dekursData.clinicalObservations || '';
+      values['{{dekurs.progressChecks}}'] = dekursData.progressChecks || '';
+      values['{{dekurs.findings}}'] = dekursData.findings || '';
+      values['{{dekurs.medicationChanges}}'] = dekursData.medicationChanges || '';
+      values['{{dekurs.treatmentDetails}}'] = dekursData.treatmentDetails || '';
+      values['{{dekurs.psychosocialFactors}}'] = dekursData.psychosocialFactors || '';
+      values['{{dekurs.notes}}'] = dekursData.notes || '';
+      values['{{dekurs.imagingFindings}}'] = dekursData.imagingFindings || '';
+      values['{{dekurs.laboratoryFindings}}'] = dekursData.laboratoryFindings || '';
+      
+      if (dekursData.entryDate) {
+        const entryDate = new Date(dekursData.entryDate);
+        values['{{dekurs.entryDate}}'] = entryDate.toLocaleDateString('de-DE');
+        values['{{dekurs.entryDate.short}}'] = entryDate.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+      } else {
+        values['{{dekurs.entryDate}}'] = '';
+        values['{{dekurs.entryDate.short}}'] = '';
+      }
+      
+      // Diagnosen formatieren
+      if (dekursData.linkedDiagnoses && dekursData.linkedDiagnoses.length > 0) {
+        const diagnosesList = dekursData.linkedDiagnoses
+          .map(d => `${d.icd10Code || ''} ${d.display || ''}`.trim())
+          .filter(Boolean)
+          .join(', ');
+        values['{{dekurs.diagnoses}}'] = diagnosesList;
+        values['{{dekurs.diagnoses.list}}'] = dekursData.linkedDiagnoses
+          .map(d => `• ${d.icd10Code || ''} - ${d.display || ''}`.trim())
+          .filter(Boolean)
+          .join('\n');
+        values['{{dekurs.diagnoses.codes}}'] = dekursData.linkedDiagnoses
+          .map(d => d.icd10Code)
+          .filter(Boolean)
+          .join(', ');
+        
+        // Hauptdiagnose
+        const primaryDiagnosis = dekursData.linkedDiagnoses.find(d => d.isPrimary) || dekursData.linkedDiagnoses[0];
+        if (primaryDiagnosis) {
+          values['{{dekurs.primaryDiagnosis}}'] = `${primaryDiagnosis.icd10Code || ''} - ${primaryDiagnosis.display || ''}`.trim();
+        } else {
+          values['{{dekurs.primaryDiagnosis}}'] = '';
+        }
+      } else {
+        values['{{dekurs.diagnoses}}'] = '';
+        values['{{dekurs.diagnoses.list}}'] = '';
+        values['{{dekurs.diagnoses.codes}}'] = '';
+        values['{{dekurs.primaryDiagnosis}}'] = '';
+      }
+      
+      // Medikamente formatieren
+      if (dekursData.linkedMedications && dekursData.linkedMedications.length > 0) {
+        const medicationsList = dekursData.linkedMedications
+          .map(m => `${m.name || ''} ${m.dosage || ''} ${m.frequency || ''}`.trim())
+          .filter(Boolean)
+          .join(', ');
+        values['{{dekurs.medications}}'] = medicationsList;
+        values['{{dekurs.medications.list}}'] = dekursData.linkedMedications
+          .map(m => `• ${m.name || ''} ${m.dosage || ''} ${m.frequency || ''} ${m.instructions || ''}`.trim())
+          .filter(Boolean)
+          .join('\n');
+        
+        // Nur geänderte Medikamente
+        const changedMeds = dekursData.linkedMedications.filter(m => 
+          m.changeType && m.changeType !== 'unchanged'
+        );
+        if (changedMeds.length > 0) {
+          values['{{dekurs.medications.changes}}'] = changedMeds
+            .map(m => `${m.changeType === 'added' ? '+' : m.changeType === 'discontinued' ? '-' : '~'} ${m.name || ''} ${m.dosage || ''}`.trim())
+            .filter(Boolean)
+            .join('\n');
+        } else {
+          values['{{dekurs.medications.changes}}'] = '';
+        }
+      } else {
+        values['{{dekurs.medications}}'] = '';
+        values['{{dekurs.medications.list}}'] = '';
+        values['{{dekurs.medications.changes}}'] = '';
+      }
+    }
+  }
+  // PRIORITÄT 3: Leer (keine Daten)
+  else {
+    values['{{dekurs.visitReason}}'] = '';
+    values['{{dekurs.clinicalObservations}}'] = '';
+    values['{{dekurs.progressChecks}}'] = '';
+    values['{{dekurs.findings}}'] = '';
+    values['{{dekurs.medicationChanges}}'] = '';
+    values['{{dekurs.treatmentDetails}}'] = '';
+    values['{{dekurs.psychosocialFactors}}'] = '';
+    values['{{dekurs.notes}}'] = '';
+    values['{{dekurs.imagingFindings}}'] = '';
+    values['{{dekurs.laboratoryFindings}}'] = '';
+    values['{{dekurs.entryDate}}'] = '';
+    values['{{dekurs.entryDate.short}}'] = '';
+    values['{{dekurs.diagnoses}}'] = '';
+    values['{{dekurs.diagnoses.list}}'] = '';
+    values['{{dekurs.diagnoses.codes}}'] = '';
+    values['{{dekurs.primaryDiagnosis}}'] = '';
+    values['{{dekurs.medications}}'] = '';
+    values['{{dekurs.medications.list}}'] = '';
+    values['{{dekurs.medications.changes}}'] = '';
+  }
+  
   return values;
 };
 
@@ -270,7 +451,7 @@ export const replacePlaceholders = (
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
       
-      const regex = new RegExp(oldPlaceholder.replace(/[\[\]]/g, '\\$&'), 'g');
+      const regex = new RegExp(oldPlaceholder.replace(/[[\]]/g, '\\$&'), 'g');
       const beforeReplace = processedContent;
       processedContent = processedContent.replace(regex, value);
       if (beforeReplace !== processedContent) {
@@ -362,6 +543,27 @@ export const getPlaceholderLegend = () => {
       { placeholder: '{{year}}', description: 'Aktuelles Jahr' },
       { placeholder: '{{month}}', description: 'Aktueller Monat (Zahl)' },
       { placeholder: '{{day}}', description: 'Aktueller Tag' },
+    ],
+    dekurs: [
+      { placeholder: '{{dekurs.visitReason}}', description: 'Besuchsgrund aus Dekurs' },
+      { placeholder: '{{dekurs.clinicalObservations}}', description: 'Klinische Beobachtungen (Anamnese)' },
+      { placeholder: '{{dekurs.progressChecks}}', description: 'Verlaufskontrollen' },
+      { placeholder: '{{dekurs.findings}}', description: 'Befund/Status' },
+      { placeholder: '{{dekurs.medicationChanges}}', description: 'Medikamentenänderungen' },
+      { placeholder: '{{dekurs.treatmentDetails}}', description: 'Behandlungsdetails' },
+      { placeholder: '{{dekurs.psychosocialFactors}}', description: 'Psychosoziale Faktoren' },
+      { placeholder: '{{dekurs.notes}}', description: 'Notizen' },
+      { placeholder: '{{dekurs.imagingFindings}}', description: 'Bildgebende Befunde' },
+      { placeholder: '{{dekurs.laboratoryFindings}}', description: 'Laborbefunde' },
+      { placeholder: '{{dekurs.entryDate}}', description: 'Datum des Dekurs-Eintrags (DD.MM.YYYY)' },
+      { placeholder: '{{dekurs.entryDate.short}}', description: 'Datum des Dekurs-Eintrags (DD.MM.YY)' },
+      { placeholder: '{{dekurs.diagnoses}}', description: 'Alle Diagnosen (kommagetrennt)' },
+      { placeholder: '{{dekurs.diagnoses.list}}', description: 'Alle Diagnosen (formatierte Liste)' },
+      { placeholder: '{{dekurs.diagnoses.codes}}', description: 'Nur ICD-10 Codes (kommagetrennt)' },
+      { placeholder: '{{dekurs.primaryDiagnosis}}', description: 'Hauptdiagnose (ICD-10 Code + Text)' },
+      { placeholder: '{{dekurs.medications}}', description: 'Alle Medikamente (kommagetrennt)' },
+      { placeholder: '{{dekurs.medications.list}}', description: 'Alle Medikamente (formatierte Liste)' },
+      { placeholder: '{{dekurs.medications.changes}}', description: 'Nur geänderte Medikamente' },
     ],
     legacy: [
       { placeholder: '[Name]', description: 'Arztname (veraltet, verwenden Sie {{doctor.fullName}})' },
