@@ -196,6 +196,11 @@ const DocumentSchema = new mongoose.Schema({
   version: { type: Number, default: 1 }, // Legacy - wird durch currentVersion.versionNumber ersetzt
   isTemplate: { type: Boolean, default: false },
   templateCategory: { type: String },
+  templateId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'DocumentTemplate',
+    index: true
+  },
   
   // Datenschutz
   isConfidential: { type: Boolean, default: false },

@@ -45,6 +45,11 @@ import {
   CalendarToday,
   Info,
   History,
+  CheckCircle,
+  Cancel,
+  Send,
+  Visibility,
+  Timeline,
 } from '@mui/icons-material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import RichTextEditor, { RichTextEditorRef } from '../components/RichTextEditor';
@@ -55,6 +60,20 @@ import {
   updateLocation,
   Location,
 } from '../store/slices/locationSlice';
+import {
+  fetchDocumentTemplates,
+  createDocumentTemplate,
+  updateDocumentTemplate,
+  deleteDocumentTemplate,
+  fetchStandaloneTemplates,
+  fetchTemplateRevisions,
+  createTemplateVersion,
+  submitTemplateForApproval,
+  approveTemplate,
+  rejectTemplate,
+  fetchMedicalSpecialties,
+  DocumentTemplate,
+} from '../store/slices/documentTemplateSlice';
 import api from '../utils/api';
 import { getPlaceholderLegend } from '../utils/placeholders';
 
@@ -89,6 +108,32 @@ const LetterTemplates: React.FC = () => {
   const [selectedLocationForTemplates, setSelectedLocationForTemplates] = useState<Location | null>(null);
   const [templateDialogOpen, setTemplateDialogOpen] = useState(false);
   const [editingTemplateIndex, setEditingTemplateIndex] = useState<number | null>(null);
+  
+  // State für DocumentTemplates
+  const { templates: documentTemplates, medicalSpecialties, loading: templatesLoading } = useAppSelector(state => state.documentTemplates);
+  const { user } = useAppSelector(state => state.auth);
+  const [documentTemplateDialogOpen, setDocumentTemplateDialogOpen] = useState(false);
+  const [editingDocumentTemplate, setEditingDocumentTemplate] = useState<DocumentTemplate | null>(null);
+  const [documentTemplateForm, setDocumentTemplateForm] = useState({
+    name: '',
+    description: '',
+    category: 'arztbrief',
+    content: '',
+    isStandaloneDocument: false,
+    documentType: 'sonstiges' as string,
+    defaultRecipientType: null as 'patient' | 'doctor' | 'organization' | 'contact' | null,
+    requiresRecipient: true,
+    medicalSpecialty: 'allgemeinmedizin',
+    approvalStatus: 'draft' as 'draft' | 'pending_approval' | 'approved' | 'rejected',
+    tags: [] as string[],
+  });
+  const [versionHistoryDialogOpen, setVersionHistoryDialogOpen] = useState(false);
+  const [selectedTemplateForHistory, setSelectedTemplateForHistory] = useState<DocumentTemplate | null>(null);
+  const [revisions, setRevisions] = useState<any[]>([]);
+  const [filterCategory, setFilterCategory] = useState<string>('');
+  const [filterSpecialty, setFilterSpecialty] = useState<string>('');
+  const [filterApprovalStatus, setFilterApprovalStatus] = useState<string>('');
+  const [filterStandalone, setFilterStandalone] = useState<boolean | null>(null);
   const [templateForm, setTemplateForm] = useState({
     name: '',
     type: 'custom' as 'greeting' | 'closing' | 'custom' | 'anrede',
@@ -108,6 +153,8 @@ const LetterTemplates: React.FC = () => {
 
   useEffect(() => {
     dispatch(fetchLocations());
+    dispatch(fetchDocumentTemplates({}));
+    dispatch(fetchMedicalSpecialties());
   }, [dispatch]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -181,6 +228,7 @@ const LetterTemplates: React.FC = () => {
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label="Briefkopfvorlagen" icon={<DescriptionIcon />} />
             <Tab label="Briefvorlagen" icon={<DescriptionIcon />} />
+            <Tab label="Dokumentvorlagen" icon={<DescriptionIcon />} />
           </Tabs>
         </Box>
 
@@ -543,6 +591,307 @@ const LetterTemplates: React.FC = () => {
             )}
           </Box>
         </TabPanel>
+
+        {/* Tab 3: Dokumentvorlagen */}
+        <TabPanel value={tabValue} index={2}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Typography variant="h6" gutterBottom>
+                Dokumentvorlagen verwalten
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setEditingDocumentTemplate(null);
+                  setDocumentTemplateForm({
+                    name: '',
+                    description: '',
+                    category: 'arztbrief',
+                    content: '',
+                    isStandaloneDocument: false,
+                    documentType: 'sonstiges',
+                    defaultRecipientType: null,
+                    requiresRecipient: true,
+                    medicalSpecialty: 'allgemeinmedizin',
+                    approvalStatus: 'draft',
+                    tags: [],
+                  });
+                  setDocumentTemplateDialogOpen(true);
+                }}
+              >
+                Neue Dokumentvorlage
+              </Button>
+            </Box>
+
+            {/* Filter */}
+            <Paper sx={{ p: 2 }}>
+              <Stack direction="row" spacing={2} flexWrap="wrap">
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Kategorie</InputLabel>
+                  <Select
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                    label="Kategorie"
+                  >
+                    <MenuItem value="">Alle</MenuItem>
+                    <MenuItem value="arztbrief">Arztbrief</MenuItem>
+                    <MenuItem value="ueberweisung">Überweisung</MenuItem>
+                    <MenuItem value="attest">Attest</MenuItem>
+                    <MenuItem value="befund">Befund</MenuItem>
+                    <MenuItem value="rezept">Rezept</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Fachrichtung</InputLabel>
+                    <Select
+                      value={filterSpecialty}
+                      onChange={(e) => setFilterSpecialty(e.target.value)}
+                      label="Fachrichtung"
+                    >
+                      <MenuItem value="">Alle</MenuItem>
+                      {medicalSpecialties.length > 0 ? (
+                        medicalSpecialties.map((spec) => (
+                          <MenuItem key={spec.value} value={spec.value}>
+                            {spec.label}
+                          </MenuItem>
+                        ))
+                      ) : (
+                        <MenuItem value="allgemeinmedizin">Allgemeinmedizin</MenuItem>
+                      )}
+                    </Select>
+                </FormControl>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Freigabestatus</InputLabel>
+                  <Select
+                    value={filterApprovalStatus}
+                    onChange={(e) => setFilterApprovalStatus(e.target.value)}
+                    label="Freigabestatus"
+                  >
+                    <MenuItem value="">Alle</MenuItem>
+                    <MenuItem value="draft">Entwurf</MenuItem>
+                    <MenuItem value="pending_approval">Zur Freigabe</MenuItem>
+                    <MenuItem value="approved">Freigegeben</MenuItem>
+                    <MenuItem value="rejected">Abgelehnt</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl sx={{ minWidth: 200 }}>
+                  <InputLabel>Typ</InputLabel>
+                  <Select
+                    value={filterStandalone === null ? '' : filterStandalone ? 'standalone' : 'text'}
+                    onChange={(e) => {
+                      const val = e.target.value as string;
+                      setFilterStandalone(val === '' ? null : val === 'standalone');
+                    }}
+                    label="Typ"
+                  >
+                    <MenuItem value="">Alle</MenuItem>
+                    <MenuItem value="standalone">Standalone-Dokument</MenuItem>
+                    <MenuItem value="text">Text-Vorlage</MenuItem>
+                  </Select>
+                </FormControl>
+              </Stack>
+            </Paper>
+
+            {/* Vorlagen-Liste */}
+            {templatesLoading ? (
+              <Box display="flex" justifyContent="center" p={3}>
+                <CircularProgress />
+              </Box>
+            ) : (
+              <TableContainer component={Paper}>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Name</TableCell>
+                      <TableCell>Kategorie</TableCell>
+                      <TableCell>Fachrichtung</TableCell>
+                      <TableCell>Typ</TableCell>
+                      <TableCell>Version</TableCell>
+                      <TableCell>Status</TableCell>
+                      <TableCell>Aktionen</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {documentTemplates
+                      .filter((t) => {
+                        if (filterCategory && t.category !== filterCategory) return false;
+                        if (filterSpecialty && t.medicalSpecialty !== filterSpecialty) return false;
+                        if (filterApprovalStatus && t.approvalStatus !== filterApprovalStatus) return false;
+                        if (filterStandalone !== null && (t.isStandaloneDocument || false) !== filterStandalone) return false;
+                        return true;
+                      })
+                      .map((template) => (
+                        <TableRow key={template._id}>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="medium">
+                              {template.name}
+                            </Typography>
+                            {template.description && (
+                              <Typography variant="caption" color="text.secondary">
+                                {template.description}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>{template.category}</TableCell>
+                          <TableCell>
+                            {template.medicalSpecialty ? (
+                              medicalSpecialties.find(s => s.value === template.medicalSpecialty)?.label || template.medicalSpecialty
+                            ) : '-'}
+                          </TableCell>
+                          <TableCell>
+                            {template.isStandaloneDocument ? (
+                              <Chip label="Standalone" color="primary" size="small" />
+                            ) : (
+                              <Chip label="Text" color="default" size="small" />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Chip label={`v${template.version}`} size="small" variant="outlined" />
+                          </TableCell>
+                          <TableCell>
+                            {template.approvalStatus === 'approved' && (
+                              <Chip icon={<CheckCircle />} label="Freigegeben" color="success" size="small" />
+                            )}
+                            {template.approvalStatus === 'pending_approval' && (
+                              <Chip icon={<Send />} label="Zur Freigabe" color="warning" size="small" />
+                            )}
+                            {template.approvalStatus === 'draft' && (
+                              <Chip label="Entwurf" color="default" size="small" />
+                            )}
+                            {template.approvalStatus === 'rejected' && (
+                              <Chip icon={<Cancel />} label="Abgelehnt" color="error" size="small" />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Stack direction="row" spacing={1}>
+                              <IconButton
+                                size="small"
+                                onClick={() => {
+                                  setEditingDocumentTemplate(template);
+                                  setDocumentTemplateForm({
+                                    name: template.name,
+                                    description: template.description || '',
+                                    category: template.category,
+                                    content: template.content,
+                                    isStandaloneDocument: template.isStandaloneDocument || false,
+                                    documentType: (template.documentType && ['rezept', 'ueberweisung', 'arztbrief', 'befund', 'formular', 'rechnung', 'sonstiges', 'attest', 'konsiliarbericht', 'zuweisung', 'rueckueberweisung', 'operationsbericht', 'heilmittelverordnung', 'krankenstandsbestaetigung', 'bildgebende_zuweisung', 'impfbestaetigung', 'patientenaufklaerung', 'therapieplan', 'verlaufsdokumentation', 'pflegebrief', 'kostenuebernahmeantrag', 'gutachten'].includes(template.documentType)) 
+                                      ? template.documentType 
+                                      : 'sonstiges',
+                                    defaultRecipientType: template.defaultRecipientType || null,
+                                    requiresRecipient: template.requiresRecipient !== false,
+                                    medicalSpecialty: template.medicalSpecialty || 'allgemeinmedizin',
+                                    approvalStatus: template.approvalStatus || 'draft',
+                                    tags: template.tags || [],
+                                  });
+                                  setDocumentTemplateDialogOpen(true);
+                                }}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                onClick={async () => {
+                                  setSelectedTemplateForHistory(template);
+                                  try {
+                                    const result = await dispatch(fetchTemplateRevisions(template._id)).unwrap();
+                                    setRevisions(result);
+                                    setVersionHistoryDialogOpen(true);
+                                  } catch (error) {
+                                    console.error('Fehler beim Laden der Versionshistorie:', error);
+                                  }
+                                }}
+                                title="Versionshistorie"
+                              >
+                                <Timeline />
+                              </IconButton>
+                              {template.approvalStatus === 'draft' && (
+                                <IconButton
+                                  size="small"
+                                  color="primary"
+                                  onClick={async () => {
+                                    if (window.confirm('Möchten Sie diese Vorlage zur Freigabe einreichen?')) {
+                                      try {
+                                        await dispatch(submitTemplateForApproval(template._id)).unwrap();
+                                        await dispatch(fetchDocumentTemplates({}));
+                                        alert('Vorlage erfolgreich zur Freigabe eingereicht!');
+                                      } catch (error: any) {
+                                        alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                                      }
+                                    }
+                                  }}
+                                  title="Zur Freigabe einreichen"
+                                >
+                                  <Send />
+                                </IconButton>
+                              )}
+                              {user?.role === 'admin' && template.approvalStatus === 'pending_approval' && (
+                                <>
+                                  <IconButton
+                                    size="small"
+                                    color="success"
+                                    onClick={async () => {
+                                      if (window.confirm('Möchten Sie diese Vorlage freigeben?')) {
+                                        try {
+                                          await dispatch(approveTemplate({ id: template._id })).unwrap();
+                                          await dispatch(fetchDocumentTemplates({}));
+                                          alert('Vorlage erfolgreich freigegeben!');
+                                        } catch (error: any) {
+                                          alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                                        }
+                                      }
+                                    }}
+                                    title="Freigeben"
+                                  >
+                                    <CheckCircle />
+                                  </IconButton>
+                                  <IconButton
+                                    size="small"
+                                    color="error"
+                                    onClick={async () => {
+                                      const reason = prompt('Ablehnungsgrund eingeben:');
+                                      if (reason) {
+                                        try {
+                                          await dispatch(rejectTemplate({ id: template._id, reason })).unwrap();
+                                          await dispatch(fetchDocumentTemplates({}));
+                                          alert('Vorlage abgelehnt!');
+                                        } catch (error: any) {
+                                          alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                                        }
+                                      }
+                                    }}
+                                    title="Ablehnen"
+                                  >
+                                    <Cancel />
+                                  </IconButton>
+                                </>
+                              )}
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={async () => {
+                                  if (window.confirm('Möchten Sie diese Vorlage wirklich löschen?')) {
+                                    try {
+                                      await dispatch(deleteDocumentTemplate(template._id)).unwrap();
+                                      await dispatch(fetchDocumentTemplates({}));
+                                    } catch (error: any) {
+                                      alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                                    }
+                                  }
+                                }}
+                              >
+                                <DeleteIcon />
+                              </IconButton>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </Box>
+        </TabPanel>
       </Card>
 
       {/* Briefvorlagen-Dialog */}
@@ -795,6 +1144,327 @@ const LetterTemplates: React.FC = () => {
           >
             Speichern
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* DocumentTemplate Dialog */}
+      <Dialog open={documentTemplateDialogOpen} onClose={() => setDocumentTemplateDialogOpen(false)} maxWidth="lg" fullWidth>
+        <GradientDialogTitle
+          title={editingDocumentTemplate ? 'Dokumentvorlage bearbeiten' : 'Neue Dokumentvorlage'}
+          onClose={() => setDocumentTemplateDialogOpen(false)}
+        />
+        <DialogContent>
+          <Box sx={{ mt: 1 }}>
+            <Stack direction="row" spacing={2} sx={{ alignItems: 'flex-start' }}>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Stack spacing={2}>
+                <TextField
+                  fullWidth
+                  label="Name *"
+                  value={documentTemplateForm.name}
+                  onChange={(e) => setDocumentTemplateForm({ ...documentTemplateForm, name: e.target.value })}
+                  required
+                />
+                <TextField
+                  fullWidth
+                  label="Beschreibung"
+                  value={documentTemplateForm.description}
+                  onChange={(e) => setDocumentTemplateForm({ ...documentTemplateForm, description: e.target.value })}
+                  multiline
+                  rows={2}
+                />
+                <FormControl fullWidth>
+                  <InputLabel>Kategorie *</InputLabel>
+                  <Select
+                    value={documentTemplateForm.category}
+                    onChange={(e) => setDocumentTemplateForm({ ...documentTemplateForm, category: e.target.value })}
+                    label="Kategorie *"
+                  >
+                    <MenuItem value="arztbrief">Arztbrief</MenuItem>
+                    <MenuItem value="ueberweisung">Überweisung</MenuItem>
+                    <MenuItem value="attest">Attest</MenuItem>
+                    <MenuItem value="befund">Befund</MenuItem>
+                    <MenuItem value="rezept">Rezept</MenuItem>
+                    <MenuItem value="konsiliarbericht">Konsiliarbericht</MenuItem>
+                    <MenuItem value="zuweisung">Zuweisung</MenuItem>
+                    <MenuItem value="rueckueberweisung">Rücküberweisung</MenuItem>
+                    <MenuItem value="operationsbericht">Operationsbericht</MenuItem>
+                    <MenuItem value="heilmittelverordnung">Heilmittelverordnung</MenuItem>
+                    <MenuItem value="krankenstandsbestaetigung">Krankenstandsbestätigung</MenuItem>
+                    <MenuItem value="bildgebende_zuweisung">Bildgebende Zuweisung</MenuItem>
+                    <MenuItem value="impfbestaetigung">Impfbestätigung</MenuItem>
+                    <MenuItem value="patientenaufklaerung">Patientenaufklärung</MenuItem>
+                    <MenuItem value="therapieplan">Therapieplan</MenuItem>
+                    <MenuItem value="verlaufsdokumentation">Verlaufsdokumentation</MenuItem>
+                    <MenuItem value="pflegebrief">Pflegebrief</MenuItem>
+                    <MenuItem value="kostenuebernahmeantrag">Kostenübernahmeantrag</MenuItem>
+                    <MenuItem value="gutachten">Gutachten</MenuItem>
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth>
+                  <InputLabel>Fachrichtung *</InputLabel>
+                  <Select
+                    value={documentTemplateForm.medicalSpecialty || 'allgemeinmedizin'}
+                    onChange={(e) => setDocumentTemplateForm({ ...documentTemplateForm, medicalSpecialty: e.target.value })}
+                    label="Fachrichtung *"
+                  >
+                    {medicalSpecialties.length > 0 ? (
+                      medicalSpecialties.map((spec) => (
+                        <MenuItem key={spec.value} value={spec.value}>
+                          {spec.label}
+                        </MenuItem>
+                      ))
+                    ) : (
+                      <MenuItem value="allgemeinmedizin">Allgemeinmedizin</MenuItem>
+                    )}
+                  </Select>
+                </FormControl>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={documentTemplateForm.isStandaloneDocument}
+                      onChange={(e) => setDocumentTemplateForm({ ...documentTemplateForm, isStandaloneDocument: e.target.checked })}
+                    />
+                  }
+                  label="Als Standalone-Dokument verwenden"
+                />
+                {documentTemplateForm.isStandaloneDocument && (
+                  <>
+                    <FormControl fullWidth>
+                      <InputLabel>Dokumenttyp *</InputLabel>
+                      <Select
+                        value={documentTemplateForm.documentType && ['rezept', 'ueberweisung', 'arztbrief', 'befund', 'formular', 'rechnung', 'sonstiges', 'attest', 'konsiliarbericht', 'zuweisung', 'rueckueberweisung', 'operationsbericht', 'heilmittelverordnung', 'krankenstandsbestaetigung', 'bildgebende_zuweisung', 'impfbestaetigung', 'patientenaufklaerung', 'therapieplan', 'verlaufsdokumentation', 'pflegebrief', 'kostenuebernahmeantrag', 'gutachten'].includes(documentTemplateForm.documentType) 
+                          ? documentTemplateForm.documentType 
+                          : 'sonstiges'}
+                        onChange={(e) => setDocumentTemplateForm({ ...documentTemplateForm, documentType: e.target.value })}
+                        label="Dokumenttyp *"
+                      >
+                        <MenuItem value="rezept">Rezept</MenuItem>
+                        <MenuItem value="ueberweisung">Überweisung</MenuItem>
+                        <MenuItem value="arztbrief">Arztbrief</MenuItem>
+                        <MenuItem value="befund">Befund</MenuItem>
+                        <MenuItem value="attest">Attest</MenuItem>
+                        <MenuItem value="konsiliarbericht">Konsiliarbericht</MenuItem>
+                        <MenuItem value="zuweisung">Zuweisung</MenuItem>
+                        <MenuItem value="rueckueberweisung">Rücküberweisung</MenuItem>
+                        <MenuItem value="operationsbericht">Operationsbericht</MenuItem>
+                        <MenuItem value="heilmittelverordnung">Heilmittelverordnung</MenuItem>
+                        <MenuItem value="krankenstandsbestaetigung">Krankenstandsbestätigung</MenuItem>
+                        <MenuItem value="bildgebende_zuweisung">Bildgebende Zuweisung</MenuItem>
+                        <MenuItem value="impfbestaetigung">Impfbestätigung</MenuItem>
+                        <MenuItem value="patientenaufklaerung">Patientenaufklärung</MenuItem>
+                        <MenuItem value="therapieplan">Therapieplan</MenuItem>
+                        <MenuItem value="verlaufsdokumentation">Verlaufsdokumentation</MenuItem>
+                        <MenuItem value="pflegebrief">Pflegebrief</MenuItem>
+                        <MenuItem value="kostenuebernahmeantrag">Kostenübernahmeantrag</MenuItem>
+                        <MenuItem value="gutachten">Gutachten</MenuItem>
+                        <MenuItem value="sonstiges">Sonstiges</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <FormControl fullWidth>
+                      <InputLabel>Standard-Empfänger</InputLabel>
+                      <Select
+                        value={documentTemplateForm.defaultRecipientType || ''}
+                        onChange={(e) => setDocumentTemplateForm({ 
+                          ...documentTemplateForm, 
+                          defaultRecipientType: e.target.value || null 
+                        })}
+                        label="Standard-Empfänger"
+                      >
+                        <MenuItem value="">Keine</MenuItem>
+                        <MenuItem value="patient">Patient</MenuItem>
+                        <MenuItem value="doctor">Arzt</MenuItem>
+                        <MenuItem value="organization">Organisation</MenuItem>
+                        <MenuItem value="contact">Kontakt</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={documentTemplateForm.requiresRecipient}
+                          onChange={(e) => setDocumentTemplateForm({ ...documentTemplateForm, requiresRecipient: e.target.checked })}
+                        />
+                      }
+                      label="Empfänger erforderlich"
+                    />
+                  </>
+                )}
+                <Box>
+                  <Typography variant="body2" sx={{ mb: 1, fontWeight: 'medium' }}>
+                    Vorlageninhalt *
+                  </Typography>
+                  <RichTextEditor
+                    ref={editorRef}
+                    value={documentTemplateForm.content}
+                    onChange={(html) => setDocumentTemplateForm({ ...documentTemplateForm, content: html })}
+                    placeholder="Beginnen Sie mit der Eingabe... Verwenden Sie Platzhalter wie {{patient.fullName}}, {{doctor.fullName}}, {{date}}, {{location.name}}"
+                    minHeight={300}
+                    onPlaceholderInsert={(placeholder) => {
+                      if (editorRef.current) {
+                        editorRef.current.insertPlaceholder(placeholder);
+                      }
+                    }}
+                  />
+                </Box>
+                {editingDocumentTemplate && (
+                  <Alert severity="info">
+                    Aktuelle Version: {editingDocumentTemplate.version}. 
+                    {editingDocumentTemplate.approvalStatus === 'approved' && ' Um Änderungen vorzunehmen, erstellen Sie eine neue Version.'}
+                  </Alert>
+                )}
+              </Stack>
+              </Box>
+              <Box sx={{ width: 350, flexShrink: 0 }}>
+                <PlaceholderChips
+                  onPlaceholderClick={(placeholder) => {
+                    if (editorRef.current) {
+                      editorRef.current.insertPlaceholder(placeholder);
+                    }
+                  }}
+                />
+              </Box>
+            </Stack>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDocumentTemplateDialogOpen(false)}>Abbrechen</Button>
+          {editingDocumentTemplate && editingDocumentTemplate.approvalStatus === 'approved' && (
+            <Button
+              variant="outlined"
+              onClick={async () => {
+                const changeNotes = prompt('Änderungsnotizen für die neue Version:');
+                try {
+                  await dispatch(createTemplateVersion({
+                    id: editingDocumentTemplate._id,
+                    templateData: documentTemplateForm,
+                    changeNotes: changeNotes || ''
+                  })).unwrap();
+                  await dispatch(fetchDocumentTemplates({}));
+                  setDocumentTemplateDialogOpen(false);
+                  alert('Neue Version erfolgreich erstellt!');
+                } catch (error: any) {
+                  alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                }
+              }}
+            >
+              Neue Version erstellen
+            </Button>
+          )}
+          <Button
+            variant="contained"
+            onClick={async () => {
+              try {
+                if (editingDocumentTemplate) {
+                  await dispatch(updateDocumentTemplate({
+                    id: editingDocumentTemplate._id,
+                    templateData: documentTemplateForm
+                  })).unwrap();
+                } else {
+                  await dispatch(createDocumentTemplate(documentTemplateForm)).unwrap();
+                }
+                await dispatch(fetchDocumentTemplates({}));
+                setDocumentTemplateDialogOpen(false);
+                alert('Vorlage erfolgreich gespeichert!');
+              } catch (error: any) {
+                alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+              }
+            }}
+          >
+            Speichern
+          </Button>
+          {(!editingDocumentTemplate || editingDocumentTemplate.approvalStatus === 'draft' || editingDocumentTemplate.approvalStatus === 'rejected') && (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<Send />}
+              onClick={async () => {
+                try {
+                  let templateId: string;
+                  if (editingDocumentTemplate) {
+                    // Aktualisiere zuerst
+                    const updated = await dispatch(updateDocumentTemplate({
+                      id: editingDocumentTemplate._id,
+                      templateData: documentTemplateForm
+                    })).unwrap();
+                    templateId = updated._id || editingDocumentTemplate._id;
+                  } else {
+                    // Erstelle neue Vorlage
+                    const created = await dispatch(createDocumentTemplate(documentTemplateForm)).unwrap();
+                    templateId = created._id || '';
+                  }
+                  
+                  // Reiche dann zur Freigabe ein
+                  await dispatch(submitTemplateForApproval(templateId)).unwrap();
+                  await dispatch(fetchDocumentTemplates({}));
+                  setDocumentTemplateDialogOpen(false);
+                  alert('Vorlage erfolgreich gespeichert und zur Freigabe eingereicht!');
+                } catch (error: any) {
+                  alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
+                }
+              }}
+            >
+              Speichern & zur Freigabe einreichen
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Versionshistorie Dialog */}
+      <Dialog open={versionHistoryDialogOpen} onClose={() => setVersionHistoryDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          Versionshistorie: {selectedTemplateForHistory?.name}
+        </DialogTitle>
+        <DialogContent>
+          {revisions.length === 0 ? (
+            <Alert severity="info">Keine Versionshistorie verfügbar</Alert>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Version</TableCell>
+                    <TableCell>Datum</TableCell>
+                    <TableCell>Benutzer</TableCell>
+                    <TableCell>Aktion</TableCell>
+                    <TableCell>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {revisions.map((revision) => (
+                    <TableRow key={revision._id}>
+                      <TableCell>
+                        <Chip label={`v${revision.version}`} size="small" />
+                      </TableCell>
+                      <TableCell>
+                        {new Date(revision.performedAt).toLocaleString('de-DE')}
+                      </TableCell>
+                      <TableCell>
+                        {revision.performedBy?.firstName} {revision.performedBy?.lastName}
+                      </TableCell>
+                      <TableCell>{revision.action}</TableCell>
+                      <TableCell>
+                        {revision.approvalStatus === 'approved' && (
+                          <Chip label="Freigegeben" color="success" size="small" />
+                        )}
+                        {revision.approvalStatus === 'pending_approval' && (
+                          <Chip label="Zur Freigabe" color="warning" size="small" />
+                        )}
+                        {revision.approvalStatus === 'draft' && (
+                          <Chip label="Entwurf" color="default" size="small" />
+                        )}
+                        {revision.approvalStatus === 'rejected' && (
+                          <Chip label="Abgelehnt" color="error" size="small" />
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setVersionHistoryDialogOpen(false)}>Schließen</Button>
         </DialogActions>
       </Dialog>
     </Box>

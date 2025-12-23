@@ -72,6 +72,52 @@ router.get('/categories', auth, async (req, res) => {
   }
 });
 
+// @route   GET /api/document-templates/medical-specialties/list
+// @desc    Get list of medical specialties
+// @access  Private
+router.get('/medical-specialties/list', auth, async (req, res) => {
+  try {
+    const specialties = [
+      { value: 'allgemeinmedizin', label: 'Allgemeinmedizin' },
+      { value: 'innere_medizin', label: 'Innere Medizin' },
+      { value: 'chirurgie', label: 'Chirurgie' },
+      { value: 'orthopaedie', label: 'Orthopädie' },
+      { value: 'neurologie', label: 'Neurologie' },
+      { value: 'psychiatrie', label: 'Psychiatrie' },
+      { value: 'dermatologie', label: 'Dermatologie' },
+      { value: 'augenheilkunde', label: 'Augenheilkunde' },
+      { value: 'hno', label: 'HNO' },
+      { value: 'gynaekologie', label: 'Gynäkologie' },
+      { value: 'urologie', label: 'Urologie' },
+      { value: 'kardiologie', label: 'Kardiologie' },
+      { value: 'pneumologie', label: 'Pneumologie' },
+      { value: 'gastroenterologie', label: 'Gastroenterologie' },
+      { value: 'endokrinologie', label: 'Endokrinologie' },
+      { value: 'rheumatologie', label: 'Rheumatologie' },
+      { value: 'onkologie', label: 'Onkologie' },
+      { value: 'radiologie', label: 'Radiologie' },
+      { value: 'laboratoriumsmedizin', label: 'Laboratoriumsmedizin' },
+      { value: 'pathologie', label: 'Pathologie' },
+      { value: 'anesthesiologie', label: 'Anästhesiologie' },
+      { value: 'notfallmedizin', label: 'Notfallmedizin' },
+      { value: 'sportmedizin', label: 'Sportmedizin' },
+      { value: 'arbeitsmedizin', label: 'Arbeitsmedizin' },
+      { value: 'sonstiges', label: 'Sonstiges' }
+    ];
+    
+    res.json({
+      success: true,
+      specialties
+    });
+  } catch (error) {
+    console.error('Error fetching medical specialties:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Fachrichtungen'
+    });
+  }
+});
+
 // @route   GET /api/document-templates/:id
 // @desc    Get single document template
 // @access  Private
@@ -191,6 +237,12 @@ router.put('/:id', [
     // Update template
     Object.assign(template, req.body);
     template.lastModifiedBy = req.user.id;
+    
+    // Stelle sicher, dass isActive auf true gesetzt ist, wenn nicht explizit auf false gesetzt
+    if (req.body.isActive === undefined) {
+      template.isActive = true;
+    }
+    
     template.version += 1;
     await template.save();
 
@@ -276,6 +328,273 @@ router.get('/:id/revisions', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Versionshistorie'
+    });
+  }
+});
+
+// @route   GET /api/document-templates/standalone/list
+// @desc    Get all standalone document templates (approved only)
+// @access  Private
+router.get('/standalone/list', auth, async (req, res) => {
+  try {
+    const { medicalSpecialty, documentType, search } = req.query;
+    
+    const filters = {};
+    if (medicalSpecialty) {
+      filters.medicalSpecialty = medicalSpecialty;
+    }
+    if (documentType) {
+      filters.documentType = documentType;
+    }
+    
+    // Debug: Prüfe alle Vorlagen mit isStandaloneDocument
+    const allStandalone = await DocumentTemplate.find({ isStandaloneDocument: true });
+    console.log(`[DEBUG] Total standalone templates: ${allStandalone.length}`);
+    allStandalone.forEach(t => {
+      console.log(`[DEBUG] Template: "${t.name}", isActive: ${t.isActive}, approvalStatus: ${t.approvalStatus}, isStandaloneDocument: ${t.isStandaloneDocument}`);
+    });
+    
+    // Debug: Prüfe alle Vorlagen mit approvalStatus 'approved'
+    const allApproved = await DocumentTemplate.find({ approvalStatus: 'approved' });
+    console.log(`[DEBUG] Total approved templates: ${allApproved.length}`);
+    allApproved.forEach(t => {
+      console.log(`[DEBUG] Approved Template: "${t.name}", isActive: ${t.isActive}, isStandaloneDocument: ${t.isStandaloneDocument}, approvalStatus: ${t.approvalStatus}`);
+    });
+    
+    let templates = await DocumentTemplate.findStandaloneTemplates(filters);
+    console.log(`[DEBUG] Found ${templates.length} templates matching all criteria (isActive: true, isStandaloneDocument: true, approvalStatus: 'approved')`);
+    
+    // Debug: Prüfe spezifisch die "Überweisung" Vorlage
+    const ueberweisungTemplate = await DocumentTemplate.findOne({ name: { $regex: /überweisung/i } });
+    if (ueberweisungTemplate) {
+      console.log(`[DEBUG] Überweisung Template Details:`, {
+        _id: ueberweisungTemplate._id,
+        name: ueberweisungTemplate.name,
+        isActive: ueberweisungTemplate.isActive,
+        isStandaloneDocument: ueberweisungTemplate.isStandaloneDocument,
+        approvalStatus: ueberweisungTemplate.approvalStatus,
+        documentType: ueberweisungTemplate.documentType
+      });
+    } else {
+      console.log(`[DEBUG] Keine "Überweisung" Vorlage gefunden`);
+    }
+    
+    // Client-side search if provided
+    if (search) {
+      const searchRegex = new RegExp(search, 'i');
+      templates = templates.filter(t => 
+        t.name.match(searchRegex) || 
+        (t.description && t.description.match(searchRegex))
+      );
+    }
+    
+    res.json({
+      success: true,
+      templates: templates.map(t => t.getTemplateWithPlaceholders())
+    });
+  } catch (error) {
+    console.error('Error fetching standalone templates:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Standalone-Vorlagen'
+    });
+  }
+});
+
+// @route   GET /api/document-templates/standalone/:id
+// @desc    Get single standalone document template
+// @access  Private
+router.get('/standalone/:id', auth, async (req, res) => {
+  try {
+    const template = await DocumentTemplate.findOne({
+      _id: req.params.id,
+      isStandaloneDocument: true,
+      isActive: true
+    })
+      .populate('createdBy', 'firstName lastName')
+      .populate('lastModifiedBy', 'firstName lastName')
+      .populate('approvedBy', 'firstName lastName');
+
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standalone-Vorlage nicht gefunden'
+      });
+    }
+
+    res.json({
+      success: true,
+      template: template.getTemplateWithPlaceholders()
+    });
+  } catch (error) {
+    console.error('Error fetching standalone template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Standalone-Vorlage'
+    });
+  }
+});
+
+// @route   POST /api/document-templates/:id/versions
+// @desc    Create new version of template
+// @access  Private (Admin/Doctor)
+router.post('/:id/versions', [
+  auth,
+  body('changeNotes').optional().isString()
+], async (req, res) => {
+  try {
+    const template = await DocumentTemplate.findById(req.params.id);
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dokumentvorlage nicht gefunden'
+      });
+    }
+
+    const { changeNotes, ...updateData } = req.body;
+    
+    // Erstelle neue Version
+    template.createNewVersion(req.user.id, changeNotes);
+    
+    // Aktualisiere Template-Daten
+    if (Object.keys(updateData).length > 0) {
+      Object.assign(template, updateData);
+      template.lastModifiedBy = req.user.id;
+    }
+    
+    await template.save();
+
+    res.json({
+      success: true,
+      message: 'Neue Version erfolgreich erstellt',
+      template: template.getTemplateWithPlaceholders()
+    });
+  } catch (error) {
+    console.error('Error creating template version:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen der neuen Version'
+    });
+  }
+});
+
+// @route   POST /api/document-templates/:id/submit-for-approval
+// @desc    Submit template for approval
+// @access  Private (Admin/Doctor)
+router.post('/:id/submit-for-approval', auth, async (req, res) => {
+  try {
+    const template = await DocumentTemplate.findById(req.params.id);
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dokumentvorlage nicht gefunden'
+      });
+    }
+
+    template.submitForApproval(req.user.id);
+    await template.save();
+
+    res.json({
+      success: true,
+      message: 'Vorlage zur Freigabe eingereicht',
+      template: template.getTemplateWithPlaceholders()
+    });
+  } catch (error) {
+    console.error('Error submitting template for approval:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Einreichen zur Freigabe'
+    });
+  }
+});
+
+// @route   POST /api/document-templates/:id/approve
+// @desc    Approve template
+// @access  Private (Admin)
+router.post('/:id/approve', [
+  auth,
+  body('notes').optional().isString()
+], async (req, res) => {
+  try {
+    // Prüfe ob User Admin ist
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Vorlagen freigeben'
+      });
+    }
+
+    const template = await DocumentTemplate.findById(req.params.id);
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dokumentvorlage nicht gefunden'
+      });
+    }
+
+    template.approve(req.user.id, req.body.notes);
+    await template.save();
+
+    res.json({
+      success: true,
+      message: 'Vorlage erfolgreich freigegeben',
+      template: template.getTemplateWithPlaceholders()
+    });
+  } catch (error) {
+    console.error('Error approving template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Freigeben der Vorlage'
+    });
+  }
+});
+
+// @route   POST /api/document-templates/:id/reject
+// @desc    Reject template
+// @access  Private (Admin)
+router.post('/:id/reject', [
+  auth,
+  body('reason').notEmpty().withMessage('Ablehnungsgrund ist erforderlich')
+], async (req, res) => {
+  try {
+    // Prüfe ob User Admin ist
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Nur Administratoren können Vorlagen ablehnen'
+      });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const template = await DocumentTemplate.findById(req.params.id);
+    if (!template) {
+      return res.status(404).json({
+        success: false,
+        message: 'Dokumentvorlage nicht gefunden'
+      });
+    }
+
+    template.reject(req.user.id, req.body.reason);
+    await template.save();
+
+    res.json({
+      success: true,
+      message: 'Vorlage abgelehnt',
+      template: template.getTemplateWithPlaceholders()
+    });
+  } catch (error) {
+    console.error('Error rejecting template:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Ablehnen der Vorlage'
     });
   }
 });

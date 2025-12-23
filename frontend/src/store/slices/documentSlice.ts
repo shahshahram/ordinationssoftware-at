@@ -15,7 +15,7 @@ export interface Document {
   _id?: string;
   id?: string;
   title: string;
-  type: 'rezept' | 'ueberweisung' | 'arztbrief' | 'befund' | 'formular' | 'rechnung' | 'sonstiges';
+  type: 'rezept' | 'ueberweisung' | 'arztbrief' | 'befund' | 'formular' | 'rechnung' | 'sonstiges' | 'attest' | 'konsiliarbericht' | 'zuweisung' | 'rueckueberweisung' | 'operationsbericht' | 'heilmittelverordnung' | 'krankenstandsbestaetigung' | 'bildgebende_zuweisung' | 'impfbestaetigung' | 'patientenaufklaerung' | 'therapieplan' | 'verlaufsdokumentation' | 'pflegebrief' | 'kostenuebernahmeantrag' | 'gutachten';
   category?: string;
   patient: {
     id: string;
@@ -118,6 +118,7 @@ export interface Document {
   }>;
   isTemplate: boolean;
   templateCategory?: string;
+  templateId?: string;
   locationId?: string;
   isConfidential: boolean;
   retentionPeriod: number;

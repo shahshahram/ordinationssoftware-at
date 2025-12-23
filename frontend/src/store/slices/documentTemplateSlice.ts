@@ -31,6 +31,33 @@ export interface DocumentTemplate {
   metadata?: any;
   createdAt: string;
   updatedAt: string;
+  // NEU: Standalone-Dokument-Funktionalität
+  isStandaloneDocument?: boolean;
+  documentType?: string;
+  defaultRecipientType?: 'patient' | 'doctor' | 'organization' | 'contact' | null;
+  requiresRecipient?: boolean;
+  medicalSpecialty?: string;
+  approvalStatus?: 'draft' | 'pending_approval' | 'approved' | 'rejected';
+  approvedBy?: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+  };
+  approvedAt?: string;
+  rejectionReason?: string;
+  versionHistory?: Array<{
+    version: number;
+    content: string;
+    placeholders: any[];
+    changedBy: {
+      _id: string;
+      firstName: string;
+      lastName: string;
+    };
+    changedAt: string;
+    changeNotes?: string;
+    approvalStatus: string;
+  }>;
 }
 
 export interface DocumentRevision {
@@ -60,9 +87,11 @@ export interface DocumentRevision {
 
 interface DocumentTemplateState {
   templates: DocumentTemplate[];
+  standaloneTemplates: DocumentTemplate[];
   currentTemplate: DocumentTemplate | null;
   revisions: DocumentRevision[];
   categories: string[];
+  medicalSpecialties: Array<{ value: string; label: string }>;
   loading: boolean;
   error: string | null;
   pagination: {
@@ -74,9 +103,11 @@ interface DocumentTemplateState {
 
 const initialState: DocumentTemplateState = {
   templates: [],
+  standaloneTemplates: [],
   currentTemplate: null,
   revisions: [],
   categories: [],
+  medicalSpecialties: [],
   loading: false,
   error: null,
   pagination: {
@@ -151,6 +182,85 @@ export const fetchCategories = createAsyncThunk(
   async () => {
     const response = await api.get<{ success: boolean; categories: string[] }>('/document-templates/categories');
     return response.data.categories;
+  }
+);
+
+// NEU: Standalone-Dokument-Funktionalität
+export const fetchStandaloneTemplates = createAsyncThunk(
+  'documentTemplates/fetchStandaloneTemplates',
+  async (filters: { medicalSpecialty?: string; documentType?: string; search?: string } = {}) => {
+    const queryParams = new URLSearchParams();
+    if (filters.medicalSpecialty) queryParams.append('medicalSpecialty', filters.medicalSpecialty);
+    if (filters.documentType) queryParams.append('documentType', filters.documentType);
+    if (filters.search) queryParams.append('search', filters.search);
+
+    const response = await api.get<{ success: boolean; templates: DocumentTemplate[] }>(
+      `/document-templates/standalone/list?${queryParams.toString()}`
+    );
+    return response.data.templates;
+  }
+);
+
+export const fetchStandaloneTemplate = createAsyncThunk(
+  'documentTemplates/fetchStandaloneTemplate',
+  async (id: string) => {
+    const response = await api.get<{ success: boolean; template: DocumentTemplate }>(
+      `/document-templates/standalone/${id}`
+    );
+    return response.data.template;
+  }
+);
+
+export const createTemplateVersion = createAsyncThunk(
+  'documentTemplates/createVersion',
+  async ({ id, templateData, changeNotes }: { id: string; templateData?: Partial<DocumentTemplate>; changeNotes?: string }) => {
+    const response = await api.post<{ success: boolean; template: DocumentTemplate }>(
+      `/document-templates/${id}/versions`,
+      { ...templateData, changeNotes }
+    );
+    return response.data.template;
+  }
+);
+
+export const submitTemplateForApproval = createAsyncThunk(
+  'documentTemplates/submitForApproval',
+  async (id: string) => {
+    const response = await api.post<{ success: boolean; template: DocumentTemplate }>(
+      `/document-templates/${id}/submit-for-approval`
+    );
+    return response.data.template;
+  }
+);
+
+export const approveTemplate = createAsyncThunk(
+  'documentTemplates/approveTemplate',
+  async ({ id, notes }: { id: string; notes?: string }) => {
+    const response = await api.post<{ success: boolean; template: DocumentTemplate }>(
+      `/document-templates/${id}/approve`,
+      { notes }
+    );
+    return response.data.template;
+  }
+);
+
+export const rejectTemplate = createAsyncThunk(
+  'documentTemplates/rejectTemplate',
+  async ({ id, reason }: { id: string; reason: string }) => {
+    const response = await api.post<{ success: boolean; template: DocumentTemplate }>(
+      `/document-templates/${id}/reject`,
+      { reason }
+    );
+    return response.data.template;
+  }
+);
+
+export const fetchMedicalSpecialties = createAsyncThunk(
+  'documentTemplates/fetchMedicalSpecialties',
+  async () => {
+    const response = await api.get<{ success: boolean; specialties: Array<{ value: string; label: string }> }>(
+      '/document-templates/medical-specialties/list'
+    );
+    return response.data.specialties;
   }
 );
 
@@ -311,6 +421,101 @@ const documentTemplateSlice = createSlice({
       .addCase(fetchCategories.fulfilled, (state, action) => {
         if (action.payload) {
           state.categories = action.payload;
+        }
+      })
+
+      // Fetch standalone templates
+      .addCase(fetchStandaloneTemplates.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchStandaloneTemplates.fulfilled, (state, action) => {
+        state.loading = false;
+        if (action.payload) {
+          state.standaloneTemplates = action.payload;
+        }
+      })
+      .addCase(fetchStandaloneTemplates.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Fehler beim Laden der Standalone-Vorlagen';
+      })
+
+      // Fetch standalone template
+      .addCase(fetchStandaloneTemplate.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchStandaloneTemplate.fulfilled, (state, action) => {
+        state.loading = false;
+        if (action.payload) {
+          state.currentTemplate = action.payload;
+        }
+      })
+      .addCase(fetchStandaloneTemplate.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Fehler beim Laden der Standalone-Vorlage';
+      })
+
+      // Create template version
+      .addCase(createTemplateVersion.fulfilled, (state, action) => {
+        if (action.payload) {
+          const index = state.templates.findIndex(t => t._id === action.payload._id);
+          if (index !== -1) {
+            state.templates[index] = action.payload;
+          }
+          if (state.currentTemplate?._id === action.payload._id) {
+            state.currentTemplate = action.payload;
+          }
+        }
+      })
+
+      // Submit for approval
+      .addCase(submitTemplateForApproval.fulfilled, (state, action) => {
+        if (action.payload) {
+          const index = state.templates.findIndex(t => t._id === action.payload._id);
+          if (index !== -1) {
+            state.templates[index] = action.payload;
+          }
+          if (state.currentTemplate?._id === action.payload._id) {
+            state.currentTemplate = action.payload;
+          }
+        }
+      })
+
+      // Approve template
+      .addCase(approveTemplate.fulfilled, (state, action) => {
+        if (action.payload) {
+          const index = state.templates.findIndex(t => t._id === action.payload._id);
+          if (index !== -1) {
+            state.templates[index] = action.payload;
+          }
+          const standaloneIndex = state.standaloneTemplates.findIndex(t => t._id === action.payload._id);
+          if (standaloneIndex !== -1) {
+            state.standaloneTemplates[standaloneIndex] = action.payload;
+          }
+          if (state.currentTemplate?._id === action.payload._id) {
+            state.currentTemplate = action.payload;
+          }
+        }
+      })
+
+      // Reject template
+      .addCase(rejectTemplate.fulfilled, (state, action) => {
+        if (action.payload) {
+          const index = state.templates.findIndex(t => t._id === action.payload._id);
+          if (index !== -1) {
+            state.templates[index] = action.payload;
+          }
+          if (state.currentTemplate?._id === action.payload._id) {
+            state.currentTemplate = action.payload;
+          }
+        }
+      })
+
+      // Fetch medical specialties
+      .addCase(fetchMedicalSpecialties.fulfilled, (state, action) => {
+        if (action.payload) {
+          state.medicalSpecialties = action.payload;
         }
       })
 

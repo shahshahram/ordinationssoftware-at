@@ -2,7 +2,8 @@ import React, { useImperativeHandle, forwardRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
-import { Box, Paper, Stack, IconButton, Divider } from '@mui/material';
+import { TextStyle, FontFamily } from '@tiptap/extension-text-style';
+import { Box, Paper, Stack, IconButton, Divider, Select, MenuItem, FormControl } from '@mui/material';
 import {
   FormatBold,
   FormatItalic,
@@ -26,6 +27,25 @@ export interface RichTextEditorRef {
   insertPlaceholder: (placeholder: string) => void;
 }
 
+// Verfügbare Schriftarten
+const FONT_FAMILIES = [
+  { value: '', label: 'Standard' },
+  { value: 'Arial', label: 'Arial' },
+  { value: 'Helvetica', label: 'Helvetica' },
+  { value: 'Times New Roman', label: 'Times New Roman' },
+  { value: 'Courier New', label: 'Courier New' },
+  { value: 'Verdana', label: 'Verdana' },
+  { value: 'Georgia', label: 'Georgia' },
+  { value: 'Palatino', label: 'Palatino' },
+  { value: 'Garamond', label: 'Garamond' },
+  { value: 'Comic Sans MS', label: 'Comic Sans MS' },
+  { value: 'Trebuchet MS', label: 'Trebuchet MS' },
+  { value: 'Impact', label: 'Impact' },
+  { value: 'Lucida Console', label: 'Lucida Console' },
+  { value: 'Tahoma', label: 'Tahoma' },
+  { value: 'Calibri', label: 'Calibri' },
+];
+
 const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   value,
   onChange,
@@ -41,6 +61,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
         link: false,
         // Deaktiviere underline aus StarterKit, da wir es separat hinzufügen
         underline: false,
+      }),
+      TextStyle,
+      FontFamily.configure({
+        types: ['textStyle'],
       }),
       Underline,
     ],
@@ -278,6 +302,34 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
           <FormatUnderlined />
         </IconButton>
         <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+        <FormControl size="small" sx={{ minWidth: 140, mx: 0.5 }}>
+          <Select
+            value={editor.getAttributes('textStyle').fontFamily || ''}
+            onChange={(e) => {
+              const fontFamily = e.target.value;
+              if (fontFamily) {
+                editor.chain().focus().setFontFamily(fontFamily).run();
+              } else {
+                editor.chain().focus().unsetFontFamily().run();
+              }
+            }}
+            displayEmpty
+            sx={{
+              fontSize: '0.875rem',
+              height: '32px',
+              '& .MuiSelect-select': {
+                py: 0.5,
+              },
+            }}
+          >
+            {FONT_FAMILIES.map((font) => (
+              <MenuItem key={font.value || 'default'} value={font.value} sx={{ fontSize: '0.875rem' }}>
+                <span style={{ fontFamily: font.value || 'inherit' }}>{font.label}</span>
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
         <IconButton
           size="small"
           onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -320,6 +372,10 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
             minHeight: `${minHeight}px`,
             padding: 2,
             outline: 'none',
+            // Unterstütze verschiedene Schriftarten
+            '& [style*="font-family"]': {
+              fontFamily: 'inherit',
+            },
             '& p.is-editor-empty:first-of-type::before': {
               content: `"${placeholder}"`,
               float: 'left',

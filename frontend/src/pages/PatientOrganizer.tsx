@@ -84,7 +84,7 @@ import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import { fetchDocuments, Document as PatientDocument, createDocument } from '../store/slices/documentSlice';
 // Removed imports for deleted files
-import { fetchDocumentTemplates } from '../store/slices/documentTemplateSlice';
+import { fetchDocumentTemplates, fetchStandaloneTemplates, DocumentTemplate } from '../store/slices/documentTemplateSlice';
 import { fetchLocations, Location } from '../store/slices/locationSlice';
 import { apiRequest } from '../utils/api';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
@@ -97,6 +97,7 @@ import DekursHistory from '../components/DekursHistory';
 import DekursDialog from '../components/DekursDialog';
 import DekursQuickEntry from '../components/DekursQuickEntry';
 import PatientenbriefDialog from '../components/PatientenbriefDialog';
+import StandaloneDocumentDialog from '../components/StandaloneDocumentDialog';
 import PatientPhotoGallery from '../components/PatientPhotoGallery';
 import LaborResults from '../components/LaborResults';
 import DicomUpload from '../components/DicomUpload';
@@ -369,6 +370,13 @@ const PatientOrganizer: React.FC = () => {
   // State für Template-Dialog
   const [templateMenuAnchor, setTemplateMenuAnchor] = useState<null | HTMLElement>(null);
   const [isCreatingDocument, setIsCreatingDocument] = useState(false);
+  
+  // State für Standalone-Dokumente
+  const [standaloneDocumentDialogOpen, setStandaloneDocumentDialogOpen] = useState(false);
+  const [selectedStandaloneTemplateId, setSelectedStandaloneTemplateId] = useState<string | null>(null);
+  const [standaloneTemplates, setStandaloneTemplates] = useState<DocumentTemplate[]>([]);
+  const [loadingStandaloneTemplates, setLoadingStandaloneTemplates] = useState(false);
+  const [standaloneTemplateDialogOpen, setStandaloneTemplateDialogOpen] = useState(false);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set([
     'Bescheinigungen', 'Überweisungen', 'Rezepte', 'Labor', 'Berichte', 'Notfall', 'Impfungen', 'Anamnese'
   ]));
@@ -1780,6 +1788,24 @@ const PatientOrganizer: React.FC = () => {
     setTemplateMenuAnchor(null);
   };
 
+  // Lade Standalone-Vorlagen
+  const loadStandaloneTemplates = async () => {
+    setLoadingStandaloneTemplates(true);
+    try {
+      const result = await dispatch(fetchStandaloneTemplates({})).unwrap();
+      setStandaloneTemplates(result);
+    } catch (error) {
+      console.error('Fehler beim Laden der Standalone-Vorlagen:', error);
+      setSnackbar({
+        open: true,
+        message: 'Fehler beim Laden der Vorlagen',
+        severity: 'error'
+      });
+    } finally {
+      setLoadingStandaloneTemplates(false);
+    }
+  };
+
   // Handler für manuellen Export eines Ambulanzbefunds
   const handleExportAmbulanzbefund = async (ambefundId: string, event?: React.MouseEvent) => {
     if (event) {
@@ -2546,6 +2572,27 @@ const PatientOrganizer: React.FC = () => {
               disabled={!patient || isCreatingDocument}
             >
               Dokument
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Description />}
+              onClick={() => {
+                if (!patient) return;
+                setStandaloneTemplateDialogOpen(true);
+                loadStandaloneTemplates();
+              }}
+              disabled={!patient || isCreatingDocument}
+              sx={{
+                borderColor: 'success.main',
+                color: 'success.main',
+                '&:hover': {
+                  borderColor: 'success.dark',
+                  bgcolor: 'success.light'
+                }
+              }}
+            >
+              Aus Vorlage
             </Button>
             <Button
               variant="outlined"
@@ -4906,6 +4953,82 @@ const PatientOrganizer: React.FC = () => {
           setSelectedDocumentType(null);
           setSelectedSource(null);
           setSelectedDekursForLetter(null);
+        }}
+      />
+
+      {/* Standalone-Vorlagen-Auswahl Dialog */}
+      <Dialog
+        open={standaloneTemplateDialogOpen}
+        onClose={() => setStandaloneTemplateDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Vorlage auswählen</DialogTitle>
+        <DialogContent>
+          {loadingStandaloneTemplates ? (
+            <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
+              <CircularProgress />
+            </Box>
+          ) : standaloneTemplates.length === 0 ? (
+            <Alert severity="info">Keine freigegebenen Vorlagen verfügbar</Alert>
+          ) : (
+            <List>
+              {standaloneTemplates.map((template) => (
+                <ListItemButton
+                  key={template._id}
+                  onClick={() => {
+                    setSelectedStandaloneTemplateId(template._id);
+                    setStandaloneTemplateDialogOpen(false);
+                    setStandaloneDocumentDialogOpen(true);
+                  }}
+                >
+                  <ListItemText
+                    primary={template.name}
+                    secondary={
+                      <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
+                        {template.description && (
+                          <Typography variant="caption" color="text.secondary">
+                            {template.description}
+                          </Typography>
+                        )}
+                        {template.documentType && (
+                          <Chip label={template.documentType} size="small" />
+                        )}
+                        {template.medicalSpecialty && (
+                          <Chip label={template.medicalSpecialty} size="small" variant="outlined" />
+                        )}
+                      </Stack>
+                    }
+                  />
+                </ListItemButton>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setStandaloneTemplateDialogOpen(false)}>Abbrechen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Standalone-Dokument Dialog */}
+      <StandaloneDocumentDialog
+        open={standaloneDocumentDialogOpen}
+        onClose={() => {
+          setStandaloneDocumentDialogOpen(false);
+          setSelectedStandaloneTemplateId(null);
+        }}
+        patient={patient || null}
+        location={currentLocation || null}
+        templateId={selectedStandaloneTemplateId}
+        onSaveSuccess={() => {
+          setActiveTab(7);
+          handleTabNavigation(7, true);
+          setSnackbar({
+            open: true,
+            message: 'Dokument erfolgreich erstellt. Sie finden es im Tab "Dokumente".',
+            severity: 'success'
+          });
+          setSelectedStandaloneTemplateId(null);
         }}
       />
 
