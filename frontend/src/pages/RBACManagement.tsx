@@ -283,7 +283,14 @@ const RBACManagement: React.FC = () => {
   const [testResource, setTestResource] = useState('');
   
   // New role form
-  const [newRole, setNewRole] = useState({
+  const [newRole, setNewRole] = useState<{
+    name?: string;
+    value?: string;
+    label: string;
+    description: string;
+    level: number;
+    permissions: Record<string, string[]>;
+  }>({
     name: '',
     label: '',
     description: '',
@@ -308,11 +315,46 @@ const RBACManagement: React.FC = () => {
     loadData();
   }, []);
 
+  // Lade gespeicherte Rollen-Permissions aus localStorage
+  const loadCustomRolePermissions = (): Record<string, any> => {
+    try {
+      const stored = localStorage.getItem('rbac_custom_role_permissions');
+      return stored ? JSON.parse(stored) : {};
+    } catch (error) {
+      console.error('Error loading custom role permissions:', error);
+      return {};
+    }
+  };
+
+  // Speichere geänderte Rollen-Permissions in localStorage
+  const saveCustomRolePermissions = (roleValue: string, permissions: any) => {
+    try {
+      const customPermissions = loadCustomRolePermissions();
+      customPermissions[roleValue] = permissions;
+      localStorage.setItem('rbac_custom_role_permissions', JSON.stringify(customPermissions));
+    } catch (error) {
+      console.error('Error saving custom role permissions:', error);
+    }
+  };
+
   const loadData = async () => {
     setLoading(true);
     try {
-      // System-integrierte Rollen und Permissions verwenden
-      setRoles(systemRoles);
+      // Lade gespeicherte Custom-Permissions
+      const customPermissions = loadCustomRolePermissions();
+      
+      // Merge System-Rollen mit Custom-Permissions
+      const mergedRoles = systemRoles.map(role => {
+        if (customPermissions[role.value]) {
+          return {
+            ...role,
+            permissions: customPermissions[role.value]
+          };
+        }
+        return role;
+      });
+      
+      setRoles(mergedRoles);
       setPermissions(systemPermissions);
       
       // Nur Benutzer von der API laden
@@ -408,12 +450,25 @@ const RBACManagement: React.FC = () => {
   const handleCreateRole = async () => {
     try {
       // Prüfe ob es sich um eine system-integrierte Rolle handelt
-      const isSystemRole = systemRoles.some(role => role.value === newRole.name);
+      const roleValue = newRole.value || newRole.name;
+      const isSystemRole = systemRoles.some(role => role.value === roleValue);
       
+      // Wenn es eine bestehende Rolle ist (Update)
+      if (selectedRole) {
+        // System-Rollen können aktualisiert werden, aber nicht gelöscht werden
+        const roleValue = newRole.value || newRole.name || selectedRole;
+        await handleUpdateRole(roleValue, newRole);
+        setNewRoleDialog(false);
+        setSelectedRole('');
+        setNewRole({ name: '', label: '', description: '', level: 1, permissions: {} as Record<string, string[]> });
+        return;
+      }
+      
+      // Beim Erstellen neuer Rollen: System-Rollen können nicht neu erstellt werden
       if (isSystemRole) {
         setSnackbar({ 
           open: true, 
-          message: 'System-Rollen können nicht geändert werden', 
+          message: 'System-Rollen können nicht neu erstellt werden. Verwenden Sie "Bearbeiten" um bestehende System-Rollen zu ändern.', 
           severity: 'warning' 
         });
         return;
@@ -422,7 +477,7 @@ const RBACManagement: React.FC = () => {
       await api.post('/rbac/roles', newRole);
       setSnackbar({ open: true, message: 'Rolle erfolgreich erstellt', severity: 'success' });
       setNewRoleDialog(false);
-      setNewRole({ name: '', label: '', description: '', level: 1, permissions: {} });
+      setNewRole({ name: '', label: '', description: '', level: 1, permissions: {} as Record<string, string[]> });
       loadData();
     } catch (error) {
       console.error('Error creating role:', error);
@@ -432,9 +487,27 @@ const RBACManagement: React.FC = () => {
 
   const handleUpdateRole = async (roleId: string, updates: any) => {
     try {
-      await api.put(`/rbac/roles/${roleId}`, updates);
-      setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert', severity: 'success' });
-      loadData();
+      // Für System-Rollen: Speichere die geänderten Permissions im localStorage
+      const isSystemRole = systemRoles.some(sr => sr.value === roleId || sr.value === updates.value || sr.value === updates.name);
+      
+      if (isSystemRole) {
+        // Speichere Custom-Permissions für System-Rolle
+        const roleValue = updates.value || updates.name || roleId;
+        saveCustomRolePermissions(roleValue, updates.permissions);
+        setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert (Änderungen lokal gespeichert)', severity: 'success' });
+        loadData();
+      } else {
+        // Für benutzerdefinierte Rollen: Versuche Backend-Update (falls Endpoint existiert)
+        try {
+          await api.put(`/rbac/roles/${roleId}`, updates);
+          setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert', severity: 'success' });
+        } catch (apiError) {
+          // Falls Backend-Endpoint nicht existiert, speichere lokal
+          saveCustomRolePermissions(roleId, updates.permissions);
+          setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert (lokal gespeichert)', severity: 'success' });
+        }
+        loadData();
+      }
     } catch (error) {
       console.error('Error updating role:', error);
       setSnackbar({ open: true, message: 'Fehler beim Aktualisieren der Rolle', severity: 'error' });
@@ -592,11 +665,11 @@ const RBACManagement: React.FC = () => {
             </Button>
           </Box>
           
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 3 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 3 }}>
             {roles.map((role) => (
               <Box key={role.value}>
-                <Card>
-                  <CardContent>
+                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+                  <CardContent sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center' }}>
                         <Chip 
@@ -617,41 +690,43 @@ const RBACManagement: React.FC = () => {
                         )}
                       </Box>
                       <Box>
+                        <Tooltip title="Rolle bearbeiten">
+                            <IconButton 
+                              size="small" 
+                              onClick={() => {
+                                setSelectedRole(role.value || role.name);
+                                setNewRole(role);
+                                setNewRoleDialog(true);
+                              }}
+                            >
+                            <Edit />
+                          </IconButton>
+                        </Tooltip>
                         {!systemRoles.some(sr => sr.value === role.value) && (
-                          <>
-                            <Tooltip title="Rolle bearbeiten">
-                              <IconButton 
-                                size="small" 
-                                onClick={() => {
-                                  setSelectedRole(role);
-                                  setNewRole(role);
-                                  setNewRoleDialog(true);
-                                }}
-                              >
-                                <Edit />
-                              </IconButton>
-                            </Tooltip>
-                            <Tooltip title="Rolle löschen">
-                              <IconButton 
-                                size="small" 
-                                color="error"
-                                onClick={() => {
-                                  if (window.confirm(`Rolle "${role.label}" wirklich löschen?`)) {
-                                    handleDeleteRole(role.value);
-                                  }
-                                }}
-                              >
-                                <Delete />
-                              </IconButton>
-                            </Tooltip>
-                          </>
+                          <Tooltip title="Rolle löschen">
+                            <IconButton 
+                              size="small" 
+                              color="error"
+                              onClick={() => {
+                                if (window.confirm(`Rolle "${role.label}" wirklich löschen?`)) {
+                                  handleDeleteRole(role.value);
+                                }
+                              }}
+                            >
+                              <Delete />
+                            </IconButton>
+                          </Tooltip>
                         )}
                         {systemRoles.some(sr => sr.value === role.value) && (
-                          <Tooltip title="System-Rolle (nicht bearbeitbar)">
+                          <Tooltip title="System-Rolle (kann bearbeitet, aber nicht gelöscht werden)">
                             <span>
-                              <IconButton size="small" disabled>
-                                <Security />
-                              </IconButton>
+                              <Chip 
+                                label="System" 
+                                size="small" 
+                                color="primary" 
+                                variant="outlined"
+                                sx={{ ml: 1 }}
+                              />
                             </span>
                           </Tooltip>
                         )}
@@ -665,18 +740,45 @@ const RBACManagement: React.FC = () => {
                     </Typography>
                     
                     {/* Permissions für diese Rolle anzeigen */}
-                    <Box sx={{ mt: 2 }}>
+                    <Box sx={{ mt: 2, maxHeight: 400, overflowY: 'auto' }}>
                       <Typography variant="subtitle2" gutterBottom>
                         Berechtigungen:
                       </Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                         {Object.entries(role.permissions || {}).map(([resource, actions]) => (
-                          <Chip
+                          <Box 
                             key={resource}
-                            label={`${resource}: ${(actions as string[]).join(', ')}`}
-                            size="small"
-                            variant="outlined"
-                          />
+                            sx={{ 
+                              p: 1.5, 
+                              bgcolor: 'background.default', 
+                              borderRadius: 1,
+                              border: '1px solid',
+                              borderColor: 'divider'
+                            }}
+                          >
+                            <Typography 
+                              variant="caption" 
+                              sx={{ 
+                                fontWeight: 600, 
+                                display: 'block',
+                                mb: 0.5,
+                                color: 'primary.main'
+                              }}
+                            >
+                              {resource}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                              {(actions as string[]).map((action) => (
+                                <Chip
+                                  key={action}
+                                  label={action}
+                                  size="small"
+                                  variant="outlined"
+                                  sx={{ fontSize: '0.7rem' }}
+                                />
+                              ))}
+                            </Box>
+                          </Box>
                         ))}
                       </Box>
                     </Box>

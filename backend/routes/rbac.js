@@ -277,6 +277,189 @@ router.get('/permissions', auth, rbacMiddleware.requireAdmin, async (req, res) =
 });
 
 /**
+ * @route   POST /api/rbac/users/:userId/permissions
+ * @desc    Einfache Permission für einen Benutzer zuweisen
+ * @access  Private (Admin)
+ */
+router.post('/users/:userId/permissions', auth, rbacMiddleware.requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { permission, resource, resourceId, reason } = req.body;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Benutzer nicht gefunden'
+      });
+    }
+
+    // Wenn permission ein String ist (z.B. "create"), parsen wir es
+    let parsedResource = resource || 'system';
+    let parsedActions = [];
+    
+    if (typeof permission === 'string') {
+      // Einfaches Format: "create", "read", etc.
+      if (Object.values(ACTIONS).includes(permission)) {
+        parsedActions = [permission];
+      } else if (permission.includes('.')) {
+        // Format: "resource.action" oder "action"
+        const parts = permission.split('.');
+        if (parts.length === 2) {
+          parsedResource = parts[0];
+          parsedActions = [parts[1]];
+        } else {
+          parsedActions = [parts[0]];
+        }
+      } else {
+        parsedActions = [permission];
+      }
+    } else if (Array.isArray(permission)) {
+      parsedActions = permission;
+    }
+
+    // Validiere Actions
+    const validActions = parsedActions.filter(action => Object.values(ACTIONS).includes(action));
+    if (validActions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine gültigen Actions angegeben'
+      });
+    }
+
+    // Füge Custom Permission hinzu
+    if (!user.rbac) {
+      user.rbac = {
+        customPermissions: [],
+        resourceRoles: [],
+        permissionHistory: []
+      };
+    }
+
+    user.rbac.customPermissions.push({
+      resource: parsedResource,
+      resourceId: resourceId || null,
+      actions: validActions,
+      conditions: {},
+      grantedBy: req.user.id,
+      expiresAt: null
+    });
+
+    // Logge Änderung
+    user.rbac.permissionHistory.push({
+      action: 'granted',
+      permission: `${parsedResource}:${validActions.join(',')}`,
+      resource: parsedResource,
+      resourceId: resourceId || null,
+      changedBy: req.user.id,
+      reason: reason || 'Permission zugewiesen'
+    });
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Permission erfolgreich zugewiesen',
+      data: {
+        userId,
+        resource: parsedResource,
+        resourceId: resourceId || null,
+        actions: validActions
+      }
+    });
+  } catch (error) {
+    console.error('Error assigning permission:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Zuweisen der Permission'
+    });
+  }
+});
+
+/**
+ * @route   DELETE /api/rbac/users/:userId/permissions/:permission
+ * @desc    Permission von einem Benutzer entfernen
+ * @access  Private (Admin)
+ */
+router.delete('/users/:userId/permissions/:permission', auth, rbacMiddleware.requireAdmin, async (req, res) => {
+  try {
+    const { userId, permission } = req.params;
+    
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'Benutzer nicht gefunden'
+      });
+    }
+
+    if (!user.rbac || !user.rbac.customPermissions) {
+      return res.status(404).json({
+        success: false,
+        message: 'Keine Custom Permissions gefunden'
+      });
+    }
+
+    // Parse permission (kann "resource.action" oder nur "action" sein)
+    let resourceToRemove = null;
+    let actionToRemove = null;
+    
+    if (permission.includes('.')) {
+      const parts = permission.split('.');
+      resourceToRemove = parts[0];
+      actionToRemove = parts[1];
+    } else {
+      actionToRemove = permission;
+    }
+
+    // Entferne Permission
+    const initialLength = user.rbac.customPermissions.length;
+    user.rbac.customPermissions = user.rbac.customPermissions.filter(cp => {
+      if (resourceToRemove && cp.resource !== resourceToRemove) {
+        return true;
+      }
+      if (actionToRemove && !cp.actions.includes(actionToRemove)) {
+        return true;
+      }
+      // Wenn beide übereinstimmen, entfernen wir die Permission
+      return false;
+    });
+
+    if (user.rbac.customPermissions.length === initialLength) {
+      return res.status(404).json({
+        success: false,
+        message: 'Permission nicht gefunden'
+      });
+    }
+
+    // Logge Änderung
+    user.rbac.permissionHistory.push({
+      action: 'revoked',
+      permission: permission,
+      changedBy: req.user.id,
+      reason: 'Permission entfernt'
+    });
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Permission erfolgreich entfernt',
+      data: {
+        userId,
+        permission
+      }
+    });
+  } catch (error) {
+    console.error('Error revoking permission:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Entfernen der Permission'
+    });
+  }
+});
+
+/**
  * @route   POST /api/rbac/users/:userId/custom-permissions
  * @desc    Custom Permissions für einen Benutzer erstellen
  * @access  Private (Admin)
