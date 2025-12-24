@@ -16,14 +16,18 @@ import {
   TableRow,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  ToggleButton,
+  ToggleButtonGroup
 } from '@mui/material';
 import {
   CompareArrows,
   ExpandMore,
   Add,
   Remove,
-  Edit
+  Edit,
+  ViewSidebar,
+  List
 } from '@mui/icons-material';
 import api from '../utils/api';
 
@@ -61,16 +65,30 @@ const DocumentVersionComparison: React.FC<DocumentVersionComparisonProps> = ({
   onClose
 }) => {
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
+  const [version1Data, setVersion1Data] = useState<any | null>(null);
+  const [version2Data, setVersion2Data] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'side-by-side' | 'changes'>('side-by-side');
 
   useEffect(() => {
     const loadComparison = async () => {
       try {
         setLoading(true);
         setError(null);
-        const response: any = await api.get(`/documents/${documentId}/comparison/${version1}/${version2}`);
-        setComparison(response.data?.data);
+        
+        // Lade Vergleichsdaten
+        const comparisonResponse: any = await api.get(`/documents/${documentId}/comparison/${version1}/${version2}`);
+        setComparison(comparisonResponse.data?.data);
+        
+        // Lade beide Versionen für Side-by-Side Ansicht
+        const [v1Response, v2Response] = await Promise.all([
+          api.get(`/documents/${documentId}/versions/${version1}`),
+          api.get(`/documents/${documentId}/versions/${version2}`)
+        ]);
+        
+        setVersion1Data((v1Response as any).data?.data || (v1Response as any).data);
+        setVersion2Data((v2Response as any).data?.data || (v2Response as any).data);
       } catch (err: any) {
         setError(err.message || 'Fehler beim Laden des Vergleichs');
       } finally {
@@ -111,11 +129,32 @@ const DocumentVersionComparison: React.FC<DocumentVersionComparisonProps> = ({
 
   return (
     <Paper sx={{ p: 3 }}>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-        <CompareArrows />
-        <Typography variant="h6">
-          Vergleich: Version {version1} ↔ Version {version2}
-        </Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 3 }}>
+        <Stack direction="row" alignItems="center" spacing={2}>
+          <CompareArrows />
+          <Typography variant="h6">
+            Vergleich: Version {version1} ↔ Version {version2}
+          </Typography>
+        </Stack>
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={(_, newMode) => {
+            if (newMode !== null) {
+              setViewMode(newMode);
+            }
+          }}
+          size="small"
+        >
+          <ToggleButton value="side-by-side">
+            <ViewSidebar sx={{ mr: 1 }} />
+            Nebeneinander
+          </ToggleButton>
+          <ToggleButton value="changes">
+            <List sx={{ mr: 1 }} />
+            Änderungen
+          </ToggleButton>
+        </ToggleButtonGroup>
       </Stack>
 
       {/* Versions-Info */}
@@ -140,12 +179,77 @@ const DocumentVersionComparison: React.FC<DocumentVersionComparisonProps> = ({
 
       <Divider sx={{ mb: 3 }} />
 
-      {/* Änderungen */}
-      {changes.added.length === 0 && changes.modified.length === 0 && changes.removed.length === 0 ? (
-        <Alert severity="info">
-          Keine Änderungen zwischen diesen Versionen gefunden.
-        </Alert>
-      ) : (
+      {/* Side-by-Side Ansicht */}
+      {viewMode === 'side-by-side' && version1Data && version2Data && (
+        <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+          {/* Version 1 */}
+          <Box sx={{ flex: 1, border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}>
+            <Typography variant="subtitle1" gutterBottom sx={{ borderBottom: 1, borderColor: 'divider', pb: 1, mb: 2 }}>
+              Version {version1}
+              {version1Data.versionStatus === 'released' && (
+                <Chip label="Freigegeben" color="success" size="small" sx={{ ml: 1 }} />
+              )}
+            </Typography>
+            {version1Data.documentSnapshot?.content?.html ? (
+              <Box
+                sx={{
+                  p: 2,
+                  bgcolor: 'background.paper',
+                  borderRadius: 1,
+                  maxHeight: '60vh',
+                  overflow: 'auto',
+                  '& p': {
+                    marginBottom: '0.5em'
+                  }
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: version1Data.documentSnapshot.content.html
+                }}
+              />
+            ) : (
+              <Alert severity="info">Kein Inhalt verfügbar</Alert>
+            )}
+          </Box>
+
+          {/* Version 2 */}
+          <Box sx={{ flex: 1, border: 1, borderColor: 'divider', borderRadius: 1, p: 2 }}>
+            <Typography variant="subtitle1" gutterBottom sx={{ borderBottom: 1, borderColor: 'divider', pb: 1, mb: 2 }}>
+              Version {version2}
+              {version2Data.versionStatus === 'released' && (
+                <Chip label="Freigegeben" color="success" size="small" sx={{ ml: 1 }} />
+              )}
+            </Typography>
+            {version2Data.documentSnapshot?.content?.html ? (
+              <Box
+                sx={{
+                  p: 2,
+                  bgcolor: 'background.paper',
+                  borderRadius: 1,
+                  maxHeight: '60vh',
+                  overflow: 'auto',
+                  '& p': {
+                    marginBottom: '0.5em'
+                  }
+                }}
+                dangerouslySetInnerHTML={{
+                  __html: version2Data.documentSnapshot.content.html
+                }}
+              />
+            ) : (
+              <Alert severity="info">Kein Inhalt verfügbar</Alert>
+            )}
+          </Box>
+        </Stack>
+      )}
+
+      {/* Änderungen-Ansicht */}
+      {viewMode === 'changes' && (
+        <>
+          {changes.added.length === 0 && changes.modified.length === 0 && changes.removed.length === 0 ? (
+            <Alert severity="info">
+              Keine Änderungen zwischen diesen Versionen gefunden.
+            </Alert>
+          ) : (
         <Stack spacing={2}>
           {/* Hinzugefügte Felder */}
           {changes.added.length > 0 && (
@@ -299,6 +403,8 @@ const DocumentVersionComparison: React.FC<DocumentVersionComparisonProps> = ({
             </Accordion>
           )}
         </Stack>
+          )}
+        </>
       )}
     </Paper>
   );

@@ -28,7 +28,8 @@ import {
   Save,
   Delete,
   Edit,
-  Add
+  Add,
+  CheckCircle
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { createDocument, updateDocument } from '../store/slices/documentSlice';
@@ -38,11 +39,13 @@ import { Location } from '../store/slices/locationSlice';
 import { Patient } from '../store/slices/patientSlice';
 import { fetchContacts, Contact } from '../store/slices/contactSlice';
 import { apiRequest } from '../utils/api';
+import api from '../utils/api';
 import RichTextEditor from './RichTextEditor';
 import DataSourceSelector from './DataSourceSelector';
 import DocumentVersionHistory from './DocumentVersionHistory';
+import DocumentVersionComparison from './DocumentVersionComparison';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
-import { Document, createNewVersion } from '../store/slices/documentSlice';
+import { Document, createNewVersion, getDocumentVersion, compareVersions } from '../store/slices/documentSlice';
 import { DocumentTemplate, fetchStandaloneTemplate } from '../store/slices/documentTemplateSlice';
 
 interface StandaloneDocumentDialogProps {
@@ -143,6 +146,12 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
   // State für Status und Priorität (nur im Bearbeitungsmodus)
   const [documentStatus, setDocumentStatus] = useState<'draft' | 'ready' | 'sent' | 'received' | 'archived' | 'under_review' | 'released' | 'withdrawn'>('draft');
   const [documentPriority, setDocumentPriority] = useState<'niedrig' | 'normal' | 'hoch' | 'dringend'>('normal');
+
+  // State für Versions-Anzeige und Vergleich
+  const [viewVersionDialogOpen, setViewVersionDialogOpen] = useState(false);
+  const [viewingVersion, setViewingVersion] = useState<any | null>(null);
+  const [compareVersionsDialogOpen, setCompareVersionsDialogOpen] = useState(false);
+  const [comparingVersions, setComparingVersions] = useState<[string | null, string | null]>([null, null]);
 
   // Lade Dokument im Bearbeitungsmodus
   useEffect(() => {
@@ -252,6 +261,14 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     
     loadDocument();
   }, [open, documentId, isEditMode, initialDocument, dispatch]);
+
+  // Synchronisiere documentStatus mit editingDocument.status
+  useEffect(() => {
+    if (editingDocument?.status) {
+      console.log('[StandaloneDocumentDialog] Synchronisiere documentStatus mit editingDocument.status:', editingDocument.status);
+      setDocumentStatus(editingDocument.status);
+    }
+  }, [editingDocument?.status]);
 
   // Lade Template (nur wenn nicht im Bearbeitungsmodus)
   useEffect(() => {
@@ -779,6 +796,286 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     return html;
   };
 
+  // Dokument erstellen und direkt freigeben
+  const handleCreateAndRelease = async () => {
+    if (!patient || !user || !template || !location) return;
+
+    // Bestätigung
+    if (!window.confirm('Möchten Sie dieses Dokument erstellen und direkt freigeben?')) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Logo-URL mit vollständigem Pfad
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      let logoUrl: string | null = null;
+      
+      if (location?.logo?.filename) {
+        logoUrl = `${apiUrl}/uploads/location-logos/${location.logo.filename}`;
+      } else if (location?.logo?.path) {
+        const cleanPath = location.logo.path.replace(/^\.\//, '').replace(/^\/+/, '');
+        logoUrl = `${apiUrl}/${cleanPath}`;
+      }
+      
+      const selectedTemplate = getSelectedTemplate();
+      const letterhead = generateLetterhead(logoUrl, selectedTemplate);
+      
+      // Entferne ALLE vorhandenen Briefköpfe und Datumszeilen
+      const contentWithoutLetterhead = removeLetterheadAndDates(documentContent);
+      
+      // Füge Briefkopf zum Content hinzu
+      const contentWithLetterhead = letterhead + contentWithoutLetterhead;
+
+      const documentData: Partial<Document> = {
+        type: (template.documentType || 'sonstiges') as Document['type'],
+        title: `${template.name} für ${patient.firstName} ${patient.lastName}`,
+        content: {
+          text: contentWithLetterhead.replace(/<[^>]*>/g, ''),
+          html: contentWithLetterhead
+        },
+        patient: {
+          id: patient._id || patient.id || '',
+          name: `${patient.firstName} ${patient.lastName}`,
+          dateOfBirth: patient.dateOfBirth || '',
+          socialSecurityNumber: patient.socialSecurityNumber
+        },
+        doctor: {
+          id: selectedDoctor?._id || user?._id || user?.id || '',
+          name: selectedDoctor ? `${selectedDoctor.title || ''} ${selectedDoctor.firstName || ''} ${selectedDoctor.lastName || ''}`.trim() : (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : ''),
+          title: selectedDoctor?.title || undefined,
+          specialization: selectedDoctor?.specialization || undefined
+        },
+        recipient: recipient || undefined,
+        status: 'draft' as const, // Erst als Entwurf erstellen
+        priority: documentPriority,
+        templateId: template._id
+      };
+
+      // Erstelle das Dokument
+      console.log('[StandaloneDocumentDialog] Erstelle Dokument mit handleCreateAndRelease...');
+      const result: any = await dispatch(createDocument(documentData)).unwrap();
+      console.log('[StandaloneDocumentDialog] Dokument erstellt, result:', JSON.stringify(result, null, 2));
+      
+      // Die Response-Struktur kann sein: { success: true, data: {...} } oder direkt das Dokument
+      const document = result.data || result;
+      const createdDocId = document._id || document.id;
+      console.log('[StandaloneDocumentDialog] createdDocId:', createdDocId, 'document:', document);
+
+      if (createdDocId) {
+        console.log('[StandaloneDocumentDialog] Rufe Release-Route auf für Dokument:', createdDocId);
+        // Rufe direkt die Release-Route auf
+        const releaseResponse: any = await api.post(`/documents/${createdDocId}/release`, { comment: 'Direkt nach Erstellung freigegeben' });
+        
+        console.log('[StandaloneDocumentDialog] Release Response (vollständig):', JSON.stringify(releaseResponse, null, 2));
+        
+        // Die API-Antwort-Struktur ist: { data: { success: true, data: document, message: "..." }, success: true, message: "..." }
+        // Oder möglicherweise: { data: { success: true, data: document } }
+        let releasedDoc = null;
+        
+        if (releaseResponse?.data?.success && releaseResponse?.data?.data) {
+          // Standard-Struktur: releaseResponse.data.data
+          releasedDoc = releaseResponse.data.data;
+        } else if (releaseResponse?.data && releaseResponse?.data?.status) {
+          // Alternative: Das Dokument ist direkt in releaseResponse.data
+          releasedDoc = releaseResponse.data;
+        } else if (releaseResponse?.success && releaseResponse?.data) {
+          // Alternative: releaseResponse.data direkt
+          releasedDoc = releaseResponse.data;
+        }
+        
+        if (!releasedDoc) {
+          console.error('[StandaloneDocumentDialog] Freigabe fehlgeschlagen - Dokument nicht in Response gefunden:', releaseResponse);
+          setError('Fehler beim Freigeben des Dokuments. Bitte versuchen Sie es erneut.');
+          return;
+        }
+        
+        console.log('[StandaloneDocumentDialog] Dokument nach Freigabe:', {
+          id: releasedDoc._id || releasedDoc.id,
+          status: releasedDoc.status,
+          isReleased: releasedDoc.isReleased,
+          currentVersion: releasedDoc.currentVersion
+        });
+        
+        // Stelle sicher, dass der Status "released" ist
+        const finalReleasedDoc = {
+          ...releasedDoc,
+          status: 'released' as const,
+          isReleased: true
+        };
+        
+        console.log('[StandaloneDocumentDialog] Setze editingDocument mit Status "released"');
+        
+        // Setze editingDocument, damit das Dokument sofort als freigegeben markiert ist
+        // und nicht mehr bearbeitet werden kann
+        setEditingDocument(finalReleasedDoc);
+        setDocumentStatus('released');
+        
+        // Zeige Erfolgsmeldung
+        setError(null);
+        
+        // Rufe onSaveSuccess auf, um die Dokumentenliste zu aktualisieren
+        // WICHTIG: Dies muss NACH setEditingDocument passieren, damit der Status korrekt ist
+        if (onSaveSuccess) {
+          console.log('[StandaloneDocumentDialog] Rufe onSaveSuccess auf');
+          onSaveSuccess();
+        }
+        
+        // Dialog bleibt offen, damit der Benutzer das freigegebene Dokument sehen kann
+        // Der Editor ist jetzt read-only, da editingDocument.status === 'released'
+      } else {
+        console.error('[StandaloneDocumentDialog] createdDocId ist leer oder undefined:', { result, createdDocId });
+        setError('Fehler: Dokument wurde erstellt, aber die ID konnte nicht ermittelt werden.');
+      }
+    } catch (err: any) {
+      console.error('[StandaloneDocumentDialog] Fehler in handleCreateAndRelease:', err);
+      setError(err.message || err.response?.data?.message || 'Fehler beim Erstellen und Freigeben des Dokuments');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Dokument freigeben (nur im Bearbeitungsmodus)
+  const handleRelease = async () => {
+    if (!patient || !user || !template || !location) return;
+    
+    if (!isEditMode || !editingDocument) {
+      setError('Nur vorhandene Dokumente können freigegeben werden.');
+      return;
+    }
+
+    if (editingDocument.status === 'released') {
+      setError('Das Dokument ist bereits freigegeben.');
+      return;
+    }
+
+    // Bestätigung
+    if (!window.confirm('Möchten Sie dieses Dokument wirklich freigeben? Nach der Freigabe kann es nicht mehr direkt bearbeitet werden.')) {
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      // Zuerst speichern wir die aktuellen Änderungen
+      // Logo-URL mit vollständigem Pfad
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      let logoUrl: string | null = null;
+      
+      if (location?.logo?.filename) {
+        logoUrl = `${apiUrl}/uploads/location-logos/${location.logo.filename}`;
+      } else if (location?.logo?.path) {
+        const cleanPath = location.logo.path.replace(/^\.\//, '').replace(/^\/+/, '');
+        logoUrl = `${apiUrl}/${cleanPath}`;
+      }
+      
+      const selectedTemplate = getSelectedTemplate();
+      const letterhead = generateLetterhead(logoUrl, selectedTemplate);
+      
+      // Entferne ALLE vorhandenen Briefköpfe und Datumszeilen
+      const contentWithoutLetterhead = removeLetterheadAndDates(documentContent);
+      
+      // Füge Briefkopf zum Content hinzu
+      const contentWithLetterhead = letterhead + contentWithoutLetterhead;
+
+      const documentData: Partial<Document> = {
+        type: (template.documentType || 'sonstiges') as Document['type'],
+        title: editingDocument.title || `${template.name} für ${patient.firstName} ${patient.lastName}`,
+        content: {
+          text: contentWithLetterhead.replace(/<[^>]*>/g, ''),
+          html: contentWithLetterhead
+        },
+        patient: {
+          id: patient._id || patient.id || '',
+          name: `${patient.firstName} ${patient.lastName}`,
+          dateOfBirth: patient.dateOfBirth || '',
+          socialSecurityNumber: patient.socialSecurityNumber
+        },
+        doctor: {
+          id: selectedDoctor?._id || user?._id || user?.id || '',
+          name: selectedDoctor ? `${selectedDoctor.title || ''} ${selectedDoctor.firstName || ''} ${selectedDoctor.lastName || ''}`.trim() : (user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : ''),
+          title: selectedDoctor?.title || undefined,
+          specialization: selectedDoctor?.specialization || undefined
+        },
+        recipient: recipient || undefined,
+        status: documentStatus, // Behalte aktuellen Status beim Speichern
+        priority: documentPriority,
+        templateId: template._id
+      };
+
+      const docId = editingDocument._id || editingDocument.id || documentId;
+      if (docId) {
+        // Speichere zuerst die Änderungen
+        await dispatch(updateDocument({ 
+          id: docId, 
+          documentData: documentData,
+          expectedVersion: editingDocument.optimisticLockVersion
+        })).unwrap();
+
+        // Dann rufe die Release-Route auf
+        const releaseResponse: any = await api.post(`/documents/${docId}/release`, { comment: '' });
+        
+        console.log('[StandaloneDocumentDialog] Release Response (vollständig):', JSON.stringify(releaseResponse, null, 2));
+        
+        // Die API-Antwort-Struktur ist: { data: { success: true, data: document, message: "..." }, success: true, message: "..." }
+        let releasedDoc = null;
+        
+        if (releaseResponse?.data?.success && releaseResponse?.data?.data) {
+          // Standard-Struktur: releaseResponse.data.data
+          releasedDoc = releaseResponse.data.data;
+        } else if (releaseResponse?.data && releaseResponse?.data?.status) {
+          // Alternative: Das Dokument ist direkt in releaseResponse.data
+          releasedDoc = releaseResponse.data;
+        } else if (releaseResponse?.success && releaseResponse?.data) {
+          // Alternative: releaseResponse.data direkt
+          releasedDoc = releaseResponse.data;
+        }
+        
+        if (!releasedDoc) {
+          // Fallback: Dokument neu laden
+          console.log('[StandaloneDocumentDialog] Dokument nicht in Response gefunden, lade neu...');
+          const updatedDoc: any = await api.get(`/documents/${docId}`);
+          releasedDoc = updatedDoc.data?.data || updatedDoc.data;
+        }
+        
+        if (releasedDoc) {
+          // Stelle sicher, dass der Status "released" ist
+          const finalReleasedDoc = {
+            ...releasedDoc,
+            status: 'released' as const,
+            isReleased: true
+          };
+          
+          console.log('[StandaloneDocumentDialog] Setze editingDocument mit Status "released"');
+          
+          // Aktualisiere editingDocument sofort, damit der Editor read-only wird
+          setEditingDocument(finalReleasedDoc);
+          setDocumentStatus('released');
+          
+          console.log('[StandaloneDocumentDialog] Dokument nach Freigabe aktualisiert:', {
+            id: docId,
+            status: finalReleasedDoc.status,
+            isReleased: finalReleasedDoc.isReleased
+          });
+        } else {
+          console.error('[StandaloneDocumentDialog] Konnte Dokument nach Freigabe nicht laden');
+          setError('Fehler beim Freigeben des Dokuments. Bitte versuchen Sie es erneut.');
+        }
+
+        if (onSaveSuccess) {
+          onSaveSuccess();
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || err.response?.data?.message || 'Fehler beim Freigeben des Dokuments');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Speichern
   const handleSave = async (finalize: boolean = false) => {
     if (!patient || !user || !template || !location) return;
@@ -865,7 +1162,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
           specialization: selectedDoctor?.specialization || undefined
         },
         recipient: recipient || undefined,
-        status: isEditMode ? documentStatus : (finalize ? 'ready' : 'draft') as 'ready' | 'draft',
+        status: isEditMode ? documentStatus : 'draft' as const, // Immer "draft" beim Erstellen, Release-Route setzt es auf "released"
         priority: isEditMode ? documentPriority : 'normal',
         templateId: template._id
       };
@@ -1259,6 +1556,56 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
                   return (
                     <DocumentVersionHistory
                       documentId={docId}
+                      onViewVersion={async (version) => {
+                        try {
+                          const docId = editingDocument?._id || editingDocument?.id || documentId || '';
+                          console.log('[StandaloneDocumentDialog] Loading version:', {
+                            documentId: docId,
+                            versionNumber: version.versionNumber,
+                            version: version
+                          });
+                          
+                          if (!docId) {
+                            console.error('[StandaloneDocumentDialog] Keine Dokument-ID gefunden');
+                            setError('Dokument-ID nicht gefunden');
+                            return;
+                          }
+                          
+                          // Lade Version direkt über API (verwende api wie in DocumentVersionHistory)
+                          const response: any = await api.get(`/documents/${docId}/versions/${version.versionNumber}`);
+                          console.log('[StandaloneDocumentDialog] API Response:', response);
+                          
+                          const versionData = response.data?.data || response.data;
+                          
+                          console.log('[StandaloneDocumentDialog] Version loaded:', {
+                            versionNumber: versionData?.versionNumber,
+                            hasSnapshot: !!versionData?.documentSnapshot,
+                            hasContent: !!versionData?.documentSnapshot?.content,
+                            versionData: versionData
+                          });
+                          
+                          if (versionData) {
+                            setViewingVersion(versionData);
+                            setViewVersionDialogOpen(true);
+                            console.log('[StandaloneDocumentDialog] Dialog sollte jetzt geöffnet sein');
+                          } else {
+                            console.error('[StandaloneDocumentDialog] Keine Versionsdaten erhalten');
+                            setError('Version konnte nicht geladen werden');
+                          }
+                        } catch (error: any) {
+                          console.error('[StandaloneDocumentDialog] Fehler beim Laden der Version:', error);
+                          console.error('[StandaloneDocumentDialog] Error details:', {
+                            message: error.message,
+                            response: error.response,
+                            stack: error.stack
+                          });
+                          setError(error.response?.data?.message || error.message || 'Fehler beim Laden der Version');
+                        }
+                      }}
+                      onCompareVersions={(version1, version2) => {
+                        setComparingVersions([version1, version2]);
+                        setCompareVersionsDialogOpen(true);
+                      }}
                     />
                   );
                 })()}
@@ -1336,7 +1683,12 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
               Neue Version erstellen
             </Button>
           )}
-          {!isEditMode || (editingDocument && editingDocument.status !== 'released') ? (
+          {/* Buttons ausblenden, wenn Dokument freigegeben ist */}
+          {editingDocument && editingDocument.status === 'released' ? (
+            <Alert severity="success" sx={{ width: '100%' }}>
+              Dokument wurde erfolgreich freigegeben und kann nicht mehr bearbeitet werden.
+            </Alert>
+          ) : !isEditMode || (editingDocument && editingDocument.status !== 'released') ? (
             <>
               <Button onClick={() => handleSave(false)} variant="outlined" startIcon={<Save />} disabled={saving}>
                 Entwurf speichern
@@ -1344,6 +1696,18 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
               <Button onClick={() => handleSave(true)} variant="contained" startIcon={<Save />} disabled={saving}>
                 {saving ? <CircularProgress size={20} /> : 'Speichern'}
               </Button>
+              {/* Freigeben-Button: Im Erstellungsmodus oder wenn Status "draft" oder "under_review" */}
+              {(!isEditMode || (editingDocument && (editingDocument.status === 'draft' || editingDocument.status === 'under_review'))) && (
+                <Button 
+                  onClick={!isEditMode ? handleCreateAndRelease : handleRelease} 
+                  variant="contained" 
+                  color="success"
+                  startIcon={<CheckCircle />} 
+                  disabled={saving}
+                >
+                  {saving ? <CircularProgress size={20} /> : (!isEditMode ? 'Erstellen & Freigeben' : 'Freigeben')}
+                </Button>
+              )}
             </>
           ) : (
             <Button onClick={() => handleSave(false)} variant="contained" startIcon={<Save />} disabled={saving}>
@@ -1371,6 +1735,146 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
           }}
         />
       )}
+
+      {/* Dialog: Version anzeigen */}
+      <Dialog 
+        open={viewVersionDialogOpen} 
+        onClose={() => {
+          console.log('[StandaloneDocumentDialog] Closing version dialog');
+          setViewVersionDialogOpen(false);
+          setViewingVersion(null);
+        }} 
+        maxWidth="lg" 
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Typography variant="h6">
+              Version {viewingVersion?.versionNumber || 'Laden...'}
+            </Typography>
+            {viewingVersion?.versionStatus && (
+              <Chip
+                label={viewingVersion.versionStatus === 'released' ? 'Freigegeben' : 
+                       viewingVersion.versionStatus === 'draft' ? 'Entwurf' : 
+                       viewingVersion.versionStatus === 'under_review' ? 'In Prüfung' : 
+                       viewingVersion.versionStatus}
+                color={viewingVersion.versionStatus === 'released' ? 'success' : 
+                       viewingVersion.versionStatus === 'draft' ? 'default' : 
+                       viewingVersion.versionStatus === 'under_review' ? 'warning' : 'default'}
+                size="small"
+              />
+            )}
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          {!viewingVersion ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box>
+              <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+                {viewingVersion.createdAt && (
+                  <Typography variant="body2" color="text.secondary">
+                    Erstellt: {new Date(viewingVersion.createdAt).toLocaleString('de-DE')}
+                  </Typography>
+                )}
+                {viewingVersion.createdBy && (
+                  <Typography variant="body2" color="text.secondary">
+                    Von: {viewingVersion.createdBy.firstName || ''} {viewingVersion.createdBy.lastName || ''}
+                  </Typography>
+                )}
+                {viewingVersion.releasedAt && (
+                  <Typography variant="body2" color="success.main">
+                    Freigegeben: {new Date(viewingVersion.releasedAt).toLocaleString('de-DE')}
+                  </Typography>
+                )}
+              </Stack>
+              
+              {viewingVersion.changeReason && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Grund:</strong> {viewingVersion.changeReason}
+                  </Typography>
+                </Alert>
+              )}
+              
+              {viewingVersion.documentSnapshot?.content?.html ? (
+                <Box 
+                  sx={{ 
+                    mt: 2, 
+                    p: 3, 
+                    border: 1, 
+                    borderColor: 'divider', 
+                    borderRadius: 1,
+                    bgcolor: 'background.paper',
+                    maxHeight: '70vh',
+                    overflow: 'auto',
+                    '& p': {
+                      marginBottom: '0.5em'
+                    },
+                    '& strong': {
+                      fontWeight: 'bold'
+                    }
+                  }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: viewingVersion.documentSnapshot.content.html 
+                  }}
+                />
+              ) : (
+                <Alert severity="warning">
+                  Kein Inhalt für diese Version verfügbar.
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            console.log('[StandaloneDocumentDialog] Closing version dialog via button');
+            setViewVersionDialogOpen(false);
+            setViewingVersion(null);
+          }}>
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog: Versionen vergleichen */}
+      <Dialog 
+        open={compareVersionsDialogOpen} 
+        onClose={() => {
+          setCompareVersionsDialogOpen(false);
+          setComparingVersions([null, null]);
+        }} 
+        maxWidth="lg" 
+        fullWidth
+      >
+        <DialogTitle>
+          Versionen vergleichen: {comparingVersions[0]} ↔ {comparingVersions[1]}
+        </DialogTitle>
+        <DialogContent>
+          {comparingVersions[0] && comparingVersions[1] && (
+            <DocumentVersionComparison
+              documentId={editingDocument?._id || editingDocument?.id || documentId || ''}
+              version1={comparingVersions[0]}
+              version2={comparingVersions[1]}
+              onClose={() => {
+                setCompareVersionsDialogOpen(false);
+                setComparingVersions([null, null]);
+              }}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setCompareVersionsDialogOpen(false);
+            setComparingVersions([null, null]);
+          }}>
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

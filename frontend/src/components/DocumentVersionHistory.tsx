@@ -187,8 +187,8 @@ const DocumentVersionHistory: React.FC<DocumentVersionHistoryProps> = ({
               >
                 <ListItemText
                   primary={
-                    <Stack direction="row" spacing={1} alignItems="center">
-                      <Typography variant="subtitle1" fontWeight="bold">
+                    <Stack direction="row" spacing={1} alignItems="center" component="span">
+                      <Typography variant="subtitle1" fontWeight="bold" component="span">
                         Version {version.versionNumber}
                       </Typography>
                       <Chip
@@ -204,36 +204,37 @@ const DocumentVersionHistory: React.FC<DocumentVersionHistoryProps> = ({
                             <Schedule fontSize="small" />
                           )
                         }
+                        sx={{ display: 'inline-flex' }}
                       />
                     </Stack>
                   }
                   secondary={
-                    <Box sx={{ mt: 1 }}>
-                      <Stack direction="row" spacing={2} flexWrap="wrap">
-                        <Typography variant="caption" color="text.secondary">
+                    <Box component="span" sx={{ display: 'block', mt: 1 }}>
+                      <Stack direction="row" spacing={2} flexWrap="wrap" component="span" sx={{ display: 'inline-flex' }}>
+                        <Typography variant="caption" color="text.secondary" component="span">
                           <Schedule fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
                           {format(new Date(version.createdAt), 'dd.MM.yyyy HH:mm', { locale: de })}
                         </Typography>
                         {version.createdBy && (
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary" component="span">
                             <Person fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
                             {version.createdBy.firstName} {version.createdBy.lastName}
                           </Typography>
                         )}
                         {version.releasedAt && (
-                          <Typography variant="caption" color="success.main">
+                          <Typography variant="caption" color="success.main" component="span">
                             <CheckCircle fontSize="small" sx={{ verticalAlign: 'middle', mr: 0.5 }} />
                             Freigegeben: {format(new Date(version.releasedAt), 'dd.MM.yyyy HH:mm', { locale: de })}
                           </Typography>
                         )}
                       </Stack>
                       {version.changeReason && (
-                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary" component="span" display="block" sx={{ mt: 0.5 }}>
                           Grund: {version.changeReason}
                         </Typography>
                       )}
                       {version.changesFromPreviousVersion?.summary && (
-                        <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary" component="span" display="block" sx={{ mt: 0.5 }}>
                           {version.changesFromPreviousVersion.summary}
                         </Typography>
                       )}
@@ -246,7 +247,19 @@ const DocumentVersionHistory: React.FC<DocumentVersionHistoryProps> = ({
                       <IconButton
                         edge="end"
                         size="small"
-                        onClick={() => onViewVersion?.(version)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          console.log('[DocumentVersionHistory] View version clicked:', {
+                            version,
+                            hasCallback: !!onViewVersion,
+                            versionNumber: version.versionNumber
+                          });
+                          if (onViewVersion) {
+                            onViewVersion(version);
+                          } else {
+                            console.warn('[DocumentVersionHistory] onViewVersion callback is not defined');
+                          }
+                        }}
                       >
                         <Visibility />
                       </IconButton>

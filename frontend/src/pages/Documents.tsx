@@ -917,10 +917,13 @@ const Documents: React.FC = () => {
                         label="Status"
                       >
                         <SelectMenuItem value="draft">Entwurf</SelectMenuItem>
+                        <SelectMenuItem value="under_review">In Prüfung</SelectMenuItem>
+                        <SelectMenuItem value="released">Freigegeben</SelectMenuItem>
                         <SelectMenuItem value="ready">Bereit</SelectMenuItem>
                         <SelectMenuItem value="sent">Versendet</SelectMenuItem>
                         <SelectMenuItem value="received">Empfangen</SelectMenuItem>
                         <SelectMenuItem value="archived">Archiviert</SelectMenuItem>
+                        <SelectMenuItem value="withdrawn">Zurückgezogen</SelectMenuItem>
                       </Select>
                     </FormControl>
                   </Box>

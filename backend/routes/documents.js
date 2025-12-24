@@ -613,10 +613,21 @@ router.get('/:id/versions', auth, async (req, res) => {
   try {
     const { limit = 50, sort = 'desc' } = req.query;
     
+    console.log(`[GET /documents/:id/versions] Loading versions for document: ${req.params.id}`);
+    
     const versions = await documentVersionService.getDocumentVersions(req.params.id, {
       limit: parseInt(limit),
       sort: sort === 'asc' ? { createdAt: 1 } : { createdAt: -1 }
     });
+
+    console.log(`[GET /documents/:id/versions] Found ${versions.length} versions:`, 
+      versions.map(v => ({
+        versionNumber: v.versionNumber,
+        versionStatus: v.versionStatus,
+        createdAt: v.createdAt,
+        _id: v._id
+      }))
+    );
 
     res.json({
       success: true,

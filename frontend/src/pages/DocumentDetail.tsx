@@ -1,5 +1,5 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Box, 
   Paper, 
@@ -25,7 +25,8 @@ import {
   Send,
   CheckCircle,
   Cancel,
-  Edit
+  Edit,
+  ArrowBack
 } from '@mui/icons-material';
 import api from '../utils/api';
 import DocumentStatusWarning from '../components/DocumentStatusWarning';
@@ -34,6 +35,7 @@ import DocumentVersionComparison from '../components/DocumentVersionComparison';
 
 const DocumentDetail: React.FC = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [data, setData] = React.useState<any>(null);
@@ -47,6 +49,8 @@ const DocumentDetail: React.FC = () => {
   const [changeReason, setChangeReason] = React.useState('');
   const [releaseDialogOpen, setReleaseDialogOpen] = React.useState(false);
   const [releaseComment, setReleaseComment] = React.useState('');
+  const [viewVersionDialogOpen, setViewVersionDialogOpen] = React.useState(false);
+  const [viewingVersion, setViewingVersion] = React.useState<any>(null);
 
   React.useEffect(() => {
     let active = true;
@@ -125,6 +129,35 @@ const DocumentDetail: React.FC = () => {
     setActiveTab(2); // Wechsel zu Vergleichs-Tab
   };
 
+  const handleViewVersion = async (version: any) => {
+    try {
+      if (!id) {
+        setError('Dokument-ID nicht gefunden');
+        return;
+      }
+      
+      console.log('[DocumentDetail] Loading version:', {
+        documentId: id,
+        versionNumber: version.versionNumber,
+        version: version
+      });
+      
+      // Lade Version direkt über API
+      const response: any = await api.get(`/documents/${id}/versions/${version.versionNumber}`);
+      console.log('[DocumentDetail] API Response:', response);
+      
+      const versionData = response.data?.data || response.data;
+      console.log('[DocumentDetail] Version data:', versionData);
+      
+      setViewingVersion(versionData);
+      setViewVersionDialogOpen(true);
+      console.log('[DocumentDetail] Dialog sollte jetzt geöffnet sein');
+    } catch (err: any) {
+      console.error('[DocumentDetail] Error loading version:', err);
+      setError(err.message || 'Fehler beim Laden der Version');
+    }
+  };
+
   const getStatusColor = (status?: string) => {
     switch (status) {
       case 'released': return 'success';
@@ -148,6 +181,14 @@ const DocumentDetail: React.FC = () => {
   return (
     <Box sx={{ p: 2 }}>
       <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
+        <Button
+          startIcon={<ArrowBack />}
+          onClick={() => navigate('/documents')}
+          variant="outlined"
+          size="small"
+        >
+          Zur Dokumentenverwaltung
+        </Button>
         <Typography variant="h5">Dokument-Details</Typography>
         {data?.currentVersion?.versionNumber && (
           <Chip 
@@ -197,9 +238,14 @@ const DocumentDetail: React.FC = () => {
                 value={edit.status || ''}
                 onChange={(e) => setEdit(prev => ({ ...prev, status: e.target.value }))}
               >
-                {['draft','ready','sent','received','archived'].map(s => (
-                  <MenuItem key={s} value={s}>{s}</MenuItem>
-                ))}
+                <MenuItem value="draft">Entwurf</MenuItem>
+                <MenuItem value="under_review">In Prüfung</MenuItem>
+                <MenuItem value="released">Freigegeben</MenuItem>
+                <MenuItem value="ready">Bereit</MenuItem>
+                <MenuItem value="sent">Versendet</MenuItem>
+                <MenuItem value="received">Empfangen</MenuItem>
+                <MenuItem value="archived">Archiviert</MenuItem>
+                <MenuItem value="withdrawn">Zurückgezogen</MenuItem>
               </TextField>
               <Stack direction="row" spacing={1}>
                 <Button
@@ -321,6 +367,7 @@ const DocumentDetail: React.FC = () => {
             <Box sx={{ p: 2 }}>
               <DocumentVersionHistory
                 documentId={id}
+                onViewVersion={handleViewVersion}
                 onCompareVersions={handleCompareVersions}
               />
             </Box>
@@ -400,6 +447,108 @@ const DocumentDetail: React.FC = () => {
             startIcon={<CheckCircle />}
           >
             {saving ? <CircularProgress size={20} /> : 'Freigeben'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog: Version anzeigen */}
+      <Dialog 
+        open={viewVersionDialogOpen} 
+        onClose={() => {
+          setViewVersionDialogOpen(false);
+          setViewingVersion(null);
+        }} 
+        maxWidth="lg" 
+        fullWidth
+      >
+        <DialogTitle>
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Typography variant="h6">
+              Version {viewingVersion?.versionNumber || '—'}
+            </Typography>
+            {viewingVersion?.versionStatus && (
+              <Chip
+                label={viewingVersion.versionStatus === 'released' ? 'Freigegeben' : 
+                       viewingVersion.versionStatus === 'draft' ? 'Entwurf' : 
+                       viewingVersion.versionStatus === 'under_review' ? 'In Prüfung' : 
+                       viewingVersion.versionStatus}
+                color={viewingVersion.versionStatus === 'released' ? 'success' : 
+                       viewingVersion.versionStatus === 'draft' ? 'default' : 
+                       viewingVersion.versionStatus === 'under_review' ? 'warning' : 'default'}
+                size="small"
+              />
+            )}
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          {!viewingVersion ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <Box>
+              <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+                {viewingVersion.createdAt && (
+                  <Typography variant="body2" color="text.secondary">
+                    Erstellt: {new Date(viewingVersion.createdAt).toLocaleString('de-DE')}
+                  </Typography>
+                )}
+                {viewingVersion.createdBy && (
+                  <Typography variant="body2" color="text.secondary">
+                    Von: {viewingVersion.createdBy.firstName || ''} {viewingVersion.createdBy.lastName || ''}
+                  </Typography>
+                )}
+                {viewingVersion.releasedAt && (
+                  <Typography variant="body2" color="success.main">
+                    Freigegeben: {new Date(viewingVersion.releasedAt).toLocaleString('de-DE')}
+                  </Typography>
+                )}
+              </Stack>
+              
+              {viewingVersion.changeReason && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Grund:</strong> {viewingVersion.changeReason}
+                  </Typography>
+                </Alert>
+              )}
+              
+              {viewingVersion.documentSnapshot?.content?.html ? (
+                <Box 
+                  sx={{ 
+                    mt: 2, 
+                    p: 3, 
+                    border: 1, 
+                    borderColor: 'divider', 
+                    borderRadius: 1,
+                    bgcolor: 'background.paper',
+                    maxHeight: '70vh',
+                    overflow: 'auto',
+                    '& p': {
+                      marginBottom: '0.5em'
+                    },
+                    '& strong': {
+                      fontWeight: 'bold'
+                    }
+                  }}
+                  dangerouslySetInnerHTML={{ 
+                    __html: viewingVersion.documentSnapshot.content.html 
+                  }}
+                />
+              ) : (
+                <Alert severity="warning">
+                  Kein Inhalt für diese Version verfügbar.
+                </Alert>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setViewVersionDialogOpen(false);
+            setViewingVersion(null);
+          }}>
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

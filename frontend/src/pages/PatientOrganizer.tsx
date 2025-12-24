@@ -5212,6 +5212,13 @@ const PatientOrganizer: React.FC = () => {
         location={currentLocation || null}
         templateId={selectedStandaloneTemplateId}
         onSaveSuccess={() => {
+          // Lade Dokumente neu, um den aktualisierten Status zu sehen
+          // Lade sowohl patientenspezifische als auch alle Dokumente (für Dokumentenverwaltung)
+          if (patient?._id || patient?.id) {
+            dispatch(fetchDocuments({ patientId: patient._id || patient.id }));
+          }
+          // Lade auch alle Dokumente, um sicherzustellen, dass die Dokumentenverwaltung aktualisiert wird
+          dispatch(fetchDocuments({}));
           setActiveTab(7);
           handleTabNavigation(7, true);
           setSnackbar({

@@ -114,6 +114,36 @@ class DocumentVersionService {
       }
     }
 
+    // WICHTIG: Füge auch die neue Version zur Historie hinzu
+    const existingNewVersionEntry = oldDocument.versionHistory.find(
+      h => h.versionId && h.versionId.toString() === newVersion._id.toString()
+    );
+    
+    if (!existingNewVersionEntry) {
+      oldDocument.versionHistory.push({
+        versionNumber: newVersion.versionNumber,
+        versionId: newVersion._id,
+        status: newVersion.versionStatus,
+        createdAt: newVersion.createdAt,
+        createdBy: newVersion.createdBy
+      });
+      console.log(`[DocumentVersionService] Neue Version ${newVersion.versionNumber} zur Historie hinzugefügt`);
+    } else {
+      console.log(`[DocumentVersionService] Version ${newVersion.versionNumber} bereits in Historie vorhanden`);
+    }
+
+    // Debug: Log Versionshistorie
+    console.log(`[DocumentVersionService] Versionshistorie nach createNewVersion:`, {
+      documentId: oldDocument._id,
+      versionHistoryCount: oldDocument.versionHistory.length,
+      versions: oldDocument.versionHistory.map(h => ({
+        versionNumber: h.versionNumber,
+        versionId: h.versionId?.toString(),
+        status: h.status,
+        createdAt: h.createdAt
+      }))
+    });
+
     await oldDocument.save();
 
     // Audit Trail
