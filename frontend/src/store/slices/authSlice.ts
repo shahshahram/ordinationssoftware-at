@@ -2,28 +2,30 @@ import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
 import api from '../../utils/api';
 
-// Axios interceptor for debugging
-axios.interceptors.request.use(
-  (config) => {
-    console.log('Making request:', config.method?.toUpperCase(), config.url, config.data);
-    return config;
-  },
-  (error) => {
-    console.error('Request error:', error);
-    return Promise.reject(error);
-  }
-);
+// Axios interceptor for debugging - nur setzen wenn axios verfügbar ist
+if (axios && axios.interceptors) {
+  axios.interceptors.request.use(
+    (config) => {
+      console.log('Making request:', config.method?.toUpperCase(), config.url, config.data);
+      return config;
+    },
+    (error) => {
+      console.error('Request error:', error);
+      return Promise.reject(error);
+    }
+  );
 
-axios.interceptors.response.use(
-  (response) => {
-    console.log('Response received:', response.status, response.data);
-    return response;
-  },
-  (error) => {
-    console.error('Response error:', error.response?.status, error.message);
-    return Promise.reject(error);
-  }
-);
+  axios.interceptors.response.use(
+    (response) => {
+      console.log('Response received:', response.status, response.data);
+      return response;
+    },
+    (error) => {
+      console.error('Response error:', error.response?.status, error.message);
+      return Promise.reject(error);
+    }
+  );
+}
 
 // Types
 interface User {

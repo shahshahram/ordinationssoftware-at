@@ -36,7 +36,8 @@ import {
   useTheme,
   useMediaQuery,
   Switch,
-  FormControlLabel
+  FormControlLabel,
+  InputAdornment
 } from '@mui/material';
 import { 
   Add, 
@@ -73,7 +74,9 @@ import {
   Email,
   Phone,
   BugReport,
-  CloudDownload as CloudDownloadIcon
+  CloudDownload as CloudDownloadIcon,
+  Search,
+  FilterList
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -116,7 +119,6 @@ import api from '../utils/api';
 import { Specialization } from '../types/ambulanzbefund';
 import PerformanceForm from '../components/PerformanceForm';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
-
 
 // TabPanel Komponente
 interface TabPanelProps {
@@ -377,6 +379,9 @@ const PatientOrganizer: React.FC = () => {
   const [standaloneTemplates, setStandaloneTemplates] = useState<DocumentTemplate[]>([]);
   const [loadingStandaloneTemplates, setLoadingStandaloneTemplates] = useState(false);
   const [standaloneTemplateDialogOpen, setStandaloneTemplateDialogOpen] = useState(false);
+  const [templateSearchQuery, setTemplateSearchQuery] = useState<string>('');
+  const [templateFilterCategory, setTemplateFilterCategory] = useState<string>('all');
+  const [templateFilterSpecialty, setTemplateFilterSpecialty] = useState<string>('all');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set([
     'Bescheinigungen', 'Überweisungen', 'Rezepte', 'Labor', 'Berichte', 'Notfall', 'Impfungen', 'Anamnese'
   ]));
@@ -843,6 +848,7 @@ const PatientOrganizer: React.FC = () => {
       email: patient.email,
       socialSecurityNumber: patient.socialSecurityNumber,
       insuranceProvider: patient.insuranceProvider,
+      insuranceNumber: patient.insuranceNumber,
       address: patient.address,
       status: patient.status,
       emergencyContact: patient.emergencyContact,
@@ -1018,6 +1024,7 @@ const PatientOrganizer: React.FC = () => {
         phone: patient.phone,
         address: patient.address,
         insuranceProvider: patient.insuranceProvider,
+        insuranceNumber: patient.insuranceNumber,
         socialSecurityNumber: patient.socialSecurityNumber,
         // Medizinische Daten
         bloodType: patient.bloodType,
@@ -1793,7 +1800,12 @@ const PatientOrganizer: React.FC = () => {
     setLoadingStandaloneTemplates(true);
     try {
       const result = await dispatch(fetchStandaloneTemplates({})).unwrap();
-      setStandaloneTemplates(result);
+      // Normalisiere Templates: Stelle sicher, dass _id vorhanden ist
+      const normalizedTemplates = result.map((template: any) => ({
+        ...template,
+        _id: template._id || template.id
+      }));
+      setStandaloneTemplates(normalizedTemplates);
     } catch (error) {
       console.error('Fehler beim Laden der Standalone-Vorlagen:', error);
       setSnackbar({
@@ -2163,10 +2175,9 @@ const PatientOrganizer: React.FC = () => {
     <Box sx={{ 
       position: 'relative', 
       minHeight: '100vh',
-      // CSS-Optimierungen für bessere Scroll-Performance
       contain: 'layout style paint',
       willChange: 'auto',
-      transform: 'translateZ(0)', // GPU-Beschleunigung
+      transform: 'translateZ(0)',
       overflowX: 'hidden'
     }}>
       {/* Floating Action Button für Sidebar */}
@@ -3720,6 +3731,13 @@ const PatientOrganizer: React.FC = () => {
                   <MenuItem value="Selbstzahler">Selbstzahler</MenuItem>
                 </Select>
               </FormControl>
+              <TextField
+                label="Versicherungsnummer"
+                value={editData.insuranceNumber || ''}
+                onChange={(e) => handleEditDataChange('insuranceNumber', e.target.value)}
+                placeholder="Versicherungsnummer"
+                sx={{ minWidth: 200, flex: 1 }}
+              />
             </Box>
 
             {/* Adressdaten */}
@@ -4959,54 +4977,227 @@ const PatientOrganizer: React.FC = () => {
       {/* Standalone-Vorlagen-Auswahl Dialog */}
       <Dialog
         open={standaloneTemplateDialogOpen}
-        onClose={() => setStandaloneTemplateDialogOpen(false)}
-        maxWidth="md"
+        onClose={() => {
+          setStandaloneTemplateDialogOpen(false);
+          setTemplateSearchQuery('');
+          setTemplateFilterCategory('all');
+          setTemplateFilterSpecialty('all');
+        }}
+        maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: { height: '80vh', display: 'flex', flexDirection: 'column' }
+        }}
       >
-        <DialogTitle>Vorlage auswählen</DialogTitle>
-        <DialogContent>
-          {loadingStandaloneTemplates ? (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
-              <CircularProgress />
-            </Box>
-          ) : standaloneTemplates.length === 0 ? (
-            <Alert severity="info">Keine freigegebenen Vorlagen verfügbar</Alert>
-          ) : (
-            <List>
-              {standaloneTemplates.map((template) => (
-                <ListItemButton
-                  key={template._id}
-                  onClick={() => {
-                    setSelectedStandaloneTemplateId(template._id);
-                    setStandaloneTemplateDialogOpen(false);
-                    setStandaloneDocumentDialogOpen(true);
-                  }}
+        <DialogTitle>
+          <Stack direction="row" justifyContent="space-between" alignItems="center">
+            <Typography variant="h6">Vorlage auswählen</Typography>
+            <IconButton
+              onClick={() => {
+                setStandaloneTemplateDialogOpen(false);
+                setTemplateSearchQuery('');
+                setTemplateFilterCategory('all');
+                setTemplateFilterSpecialty('all');
+              }}
+              size="small"
+            >
+              <Close />
+            </IconButton>
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers sx={{ p: 2, flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {/* Such- und Filter-Bereich */}
+          <Stack spacing={2} sx={{ mb: 2 }}>
+            <TextField
+              fullWidth
+              placeholder="Vorlagen durchsuchen..."
+              value={templateSearchQuery}
+              onChange={(e) => setTemplateSearchQuery(e.target.value)}
+              size="small"
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <Stack direction="row" spacing={2} flexWrap="wrap">
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>Kategorie</InputLabel>
+                <Select
+                  value={templateFilterCategory}
+                  label="Kategorie"
+                  onChange={(e) => setTemplateFilterCategory(e.target.value)}
                 >
-                  <ListItemText
-                    primary={template.name}
-                    secondary={
-                      <Stack direction="row" spacing={1} sx={{ mt: 0.5 }}>
-                        {template.description && (
-                          <Typography variant="caption" color="text.secondary">
-                            {template.description}
-                          </Typography>
-                        )}
-                        {template.documentType && (
-                          <Chip label={template.documentType} size="small" />
-                        )}
-                        {template.medicalSpecialty && (
-                          <Chip label={template.medicalSpecialty} size="small" variant="outlined" />
-                        )}
-                      </Stack>
-                    }
-                  />
-                </ListItemButton>
-              ))}
-            </List>
-          )}
+                  <MenuItem value="all">Alle Kategorien</MenuItem>
+                  <MenuItem value="ueberweisung">Überweisung</MenuItem>
+                  <MenuItem value="arztbrief">Arztbrief</MenuItem>
+                  <MenuItem value="rezept">Rezept</MenuItem>
+                  <MenuItem value="attest">Attest</MenuItem>
+                  <MenuItem value="befund">Befund</MenuItem>
+                  <MenuItem value="sonstiges">Sonstiges</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>Fachrichtung</InputLabel>
+                <Select
+                  value={templateFilterSpecialty}
+                  label="Fachrichtung"
+                  onChange={(e) => setTemplateFilterSpecialty(e.target.value)}
+                >
+                  <MenuItem value="all">Alle Fachrichtungen</MenuItem>
+                  <MenuItem value="allgemeinmedizin">Allgemeinmedizin</MenuItem>
+                  <MenuItem value="innere_medizin">Innere Medizin</MenuItem>
+                  <MenuItem value="chirurgie">Chirurgie</MenuItem>
+                  <MenuItem value="paediatrie">Pädiatrie</MenuItem>
+                  <MenuItem value="gynaekologie">Gynäkologie</MenuItem>
+                  <MenuItem value="dermatologie">Dermatologie</MenuItem>
+                  <MenuItem value="neurologie">Neurologie</MenuItem>
+                  <MenuItem value="psychiatrie">Psychiatrie</MenuItem>
+                  <MenuItem value="orthopaedie">Orthopädie</MenuItem>
+                  <MenuItem value="andere">Andere</MenuItem>
+                </Select>
+              </FormControl>
+            </Stack>
+          </Stack>
+
+          {/* Vorlagen-Liste */}
+          <Box sx={{ flex: 1, overflowY: 'auto', pr: 1 }}>
+            {loadingStandaloneTemplates ? (
+              <Box display="flex" justifyContent="center" alignItems="center" minHeight={200}>
+                <CircularProgress />
+              </Box>
+            ) : (() => {
+              // Filtere Vorlagen
+              let filteredTemplates = standaloneTemplates;
+              
+              // Suchfilter
+              if (templateSearchQuery) {
+                const query = templateSearchQuery.toLowerCase();
+                filteredTemplates = filteredTemplates.filter(t => 
+                  t.name.toLowerCase().includes(query) ||
+                  (t.description && t.description.toLowerCase().includes(query)) ||
+                  (t.documentType && t.documentType.toLowerCase().includes(query))
+                );
+              }
+              
+              // Kategorie-Filter
+              if (templateFilterCategory !== 'all') {
+                filteredTemplates = filteredTemplates.filter(t => 
+                  t.category === templateFilterCategory || t.documentType === templateFilterCategory
+                );
+              }
+              
+              // Fachrichtungs-Filter
+              if (templateFilterSpecialty !== 'all') {
+                filteredTemplates = filteredTemplates.filter(t => 
+                  t.medicalSpecialty === templateFilterSpecialty
+                );
+              }
+
+              if (filteredTemplates.length === 0) {
+                return (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    {standaloneTemplates.length === 0 
+                      ? 'Keine freigegebenen Vorlagen verfügbar'
+                      : 'Keine Vorlagen gefunden, die den Filterkriterien entsprechen'}
+                  </Alert>
+                );
+              }
+
+              return (
+                <Box sx={{ 
+                  display: 'grid', 
+                  gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' },
+                  gap: 2
+                }}>
+                  {filteredTemplates.map((template) => {
+                    const templateId = template._id || (template as any).id;
+                    return (
+                      <Card
+                        key={templateId}
+                        sx={{
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          height: '100%',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          '&:hover': {
+                            transform: 'translateY(-4px)',
+                            boxShadow: 4
+                          }
+                        }}
+                        onClick={() => {
+                          if (!templateId) {
+                            console.error('[PatientOrganizer] Template has no _id!', template);
+                            alert('Fehler: Vorlage hat keine ID');
+                            return;
+                          }
+                          setSelectedStandaloneTemplateId(templateId);
+                          setStandaloneTemplateDialogOpen(false);
+                          setStandaloneDocumentDialogOpen(true);
+                          setTemplateSearchQuery('');
+                          setTemplateFilterCategory('all');
+                          setTemplateFilterSpecialty('all');
+                        }}
+                      >
+                        <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                          <Stack spacing={1} sx={{ flex: 1 }}>
+                            <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
+                              {template.name}
+                            </Typography>
+                            {template.description && (
+                              <Typography variant="body2" color="text.secondary" sx={{ 
+                                display: '-webkit-box',
+                                WebkitLineClamp: 3,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                flex: 1
+                              }}>
+                                {template.description}
+                              </Typography>
+                            )}
+                            <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 'auto', pt: 1 }}>
+                              {template.documentType && (
+                                <Chip 
+                                  label={template.documentType} 
+                                  size="small" 
+                                  color="primary"
+                                  sx={{ fontSize: '0.7rem' }}
+                                />
+                              )}
+                              {template.medicalSpecialty && (
+                                <Chip 
+                                  label={template.medicalSpecialty} 
+                                  size="small" 
+                                  variant="outlined"
+                                  sx={{ fontSize: '0.7rem' }}
+                                />
+                              )}
+                            </Stack>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Box>
+              );
+            })()}
+          </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setStandaloneTemplateDialogOpen(false)}>Abbrechen</Button>
+          <Button 
+            onClick={() => {
+              setStandaloneTemplateDialogOpen(false);
+              setTemplateSearchQuery('');
+              setTemplateFilterCategory('all');
+              setTemplateFilterSpecialty('all');
+            }}
+          >
+            Abbrechen
+          </Button>
         </DialogActions>
       </Dialog>
 

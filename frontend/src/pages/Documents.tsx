@@ -18,6 +18,8 @@ import {
 } from '../store/slices/documentTemplateSlice';
 import { fetchPatients, Patient } from '../store/slices/patientSlice';
 import PatientTimeline from '../components/PatientTimeline';
+import StandaloneDocumentDialog from '../components/StandaloneDocumentDialog';
+import { apiRequest } from '../utils/api';
 import {
   Box,
   Typography,
@@ -108,6 +110,9 @@ const Documents: React.FC = () => {
   });
   const [timelineDialogOpen, setTimelineDialogOpen] = useState(false);
   const [selectedPatientForTimeline, setSelectedPatientForTimeline] = useState<Patient | null>(null);
+  const [standaloneDialogOpen, setStandaloneDialogOpen] = useState(false);
+  const [standaloneDialogDocument, setStandaloneDialogDocument] = useState<Document | null>(null);
+  const [standaloneDialogPatient, setStandaloneDialogPatient] = useState<Patient | null>(null);
   const [formData, setFormData] = useState<Partial<Document>>({
     title: '',
     type: 'rezept',
@@ -163,11 +168,62 @@ const Documents: React.FC = () => {
     setOpenDialog(true);
   };
 
-  const handleEdit = (document: Document) => {
-    setFormData(document);
-    setDialogMode('edit');
-    setActiveTab(0);
-    setOpenDialog(true);
+  const handleEdit = async (document: Document) => {
+    // Prüfe, ob das Dokument aus einer Vorlage erstellt wurde
+    if (document.templateId) {
+      // Öffne StandaloneDocumentDialog für Dokumente aus Vorlagen
+      setStandaloneDialogDocument(document);
+      
+      // Lade Patient, falls nicht bereits geladen
+      if (document.patient?.id) {
+        const patientId = document.patient.id;
+        // Suche Patient in bereits geladenen Patienten
+        const foundPatient = patients.find((p: Patient) => 
+          (p._id || p.id) === patientId
+        );
+        
+        if (foundPatient) {
+          setStandaloneDialogPatient(foundPatient);
+        } else {
+          // Lade Patient von API
+          try {
+            const response: any = await apiRequest.get(`/patients-extended/${patientId}`);
+            const patientData = response.data?.data || response.data;
+            if (patientData) {
+              setStandaloneDialogPatient(patientData);
+            }
+          } catch (error) {
+            console.error('Fehler beim Laden des Patienten:', error);
+            // Fallback: Erstelle Patient-Objekt aus Dokument-Daten
+            setStandaloneDialogPatient({
+              _id: document.patient.id,
+              id: document.patient.id,
+              firstName: document.patient.name.split(' ')[0] || '',
+              lastName: document.patient.name.split(' ').slice(1).join(' ') || '',
+              dateOfBirth: document.patient.dateOfBirth || '',
+              socialSecurityNumber: document.patient.socialSecurityNumber || '',
+              phone: '',
+              email: '',
+              address: {
+                street: '',
+                city: '',
+                country: 'Österreich'
+              },
+              gender: '',
+              status: 'active'
+            } as Patient);
+          }
+        }
+      }
+      
+      setStandaloneDialogOpen(true);
+    } else {
+      // Normales Dokument: Verwende Standard-Dialog
+      setFormData(document);
+      setDialogMode('edit');
+      setActiveTab(0);
+      setOpenDialog(true);
+    }
   };
 
   const handleView = (document: Document) => {
@@ -751,12 +807,11 @@ const Documents: React.FC = () => {
           <Visibility sx={{ mr: 1 }} />
           Anzeigen
         </MenuItem>
-        {selectedDocument?.status !== 'under_review' && selectedDocument?.status !== 'released' && (
-          <MenuItem onClick={() => { handleEdit(selectedDocument!); setAnchorEl(null); }}>
-            <Edit sx={{ mr: 1 }} />
-            Bearbeiten
-          </MenuItem>
-        )}
+        {/* Bearbeiten-Button: Immer anzeigen, auch für freigegebene Dokumente (dann wird neue Version erstellt) */}
+        <MenuItem onClick={() => { handleEdit(selectedDocument!); setAnchorEl(null); }}>
+          <Edit sx={{ mr: 1 }} />
+          Bearbeiten
+        </MenuItem>
         <MenuItem onClick={() => { handleNavigateToPatient(selectedDocument!); setAnchorEl(null); }}>
           <Person sx={{ mr: 1 }} />
           Zum Patient-Organizer
@@ -1044,6 +1099,32 @@ const Documents: React.FC = () => {
           )}
         </DialogActions>
       </Dialog>
+
+      {/* StandaloneDocumentDialog für Dokumente aus Vorlagen */}
+      {standaloneDialogOpen && standaloneDialogDocument && standaloneDialogPatient && (
+        <StandaloneDocumentDialog
+          open={standaloneDialogOpen}
+          onClose={() => {
+            setStandaloneDialogOpen(false);
+            setStandaloneDialogDocument(null);
+            setStandaloneDialogPatient(null);
+          }}
+          patient={standaloneDialogPatient}
+          location={currentLocation}
+          templateId={standaloneDialogDocument.templateId || null}
+          documentId={standaloneDialogDocument._id || standaloneDialogDocument.id || null}
+          document={standaloneDialogDocument}
+          onSaveSuccess={() => {
+            dispatch(fetchDocuments({}));
+            setSnackbar({ 
+              open: true, 
+              message: 'Dokument erfolgreich aktualisiert', 
+              severity: 'success', 
+              autoHideDuration: 6000 
+            });
+          }}
+        />
+      )}
     </Box>
   );
 };

@@ -122,7 +122,22 @@ export const createPlaceholderValues = (context: PlaceholderContext): Record<str
     values['{{patient.gender}}'] = patient.gender === 'm' ? 'männlich' : patient.gender === 'w' ? 'weiblich' : patient.gender === 'd' ? 'divers' : patient.gender || '';
     values['{{patient.phone}}'] = patient.phone || '';
     values['{{patient.email}}'] = patient.email || '';
+    // SVNR: Maskiert (für Datenschutz)
     values['{{patient.socialSecurityNumber}}'] = patient.socialSecurityNumber ? patient.socialSecurityNumber.substring(0, 3) + '***' + patient.socialSecurityNumber.substring(patient.socialSecurityNumber.length - 2) : '';
+    // SVNR: Vollständig (für medizinische Dokumente)
+    values['{{patient.svnr}}'] = patient.socialSecurityNumber || '';
+    values['{{patient.socialSecurityNumber.full}}'] = patient.socialSecurityNumber || '';
+    
+    // Debug: Log SVNR-Werte
+    if (patient.socialSecurityNumber) {
+      console.log('🔍 SVNR Platzhalter-Werte erstellt:', {
+        '{{patient.socialSecurityNumber}}': values['{{patient.socialSecurityNumber}}'],
+        '{{patient.svnr}}': values['{{patient.svnr}}'],
+        '{{patient.socialSecurityNumber.full}}': values['{{patient.socialSecurityNumber.full}}']
+      });
+    } else {
+      console.warn('⚠️ Patient hat keine SVNR!', patient);
+    }
     
     // Adresse
     if (patient.address) {
@@ -139,6 +154,14 @@ export const createPlaceholderValues = (context: PlaceholderContext): Record<str
     values['{{patient.insuranceProvider}}'] = patient.insuranceProvider || '';
     values['{{patient.insuranceNumber}}'] = patient.insuranceNumber || '';
     values['{{patient.ecardNumber}}'] = patient.ecard?.cardNumber ? patient.ecard.cardNumber.substring(0, 4) + '***' + patient.ecard.cardNumber.substring(patient.ecard.cardNumber.length - 4) : '';
+    
+    // Debug: Log Versicherungsdaten
+    if (patient.insuranceNumber || patient.insuranceProvider) {
+      console.log('🔍 Versicherungs-Platzhalter-Werte erstellt:', {
+        '{{patient.insuranceProvider}}': values['{{patient.insuranceProvider}}'],
+        '{{patient.insuranceNumber}}': values['{{patient.insuranceNumber}}']
+      });
+    }
     
     // Medizinische Daten
     values['{{patient.height}}'] = patient.height ? `${patient.height} cm` : '';
@@ -312,22 +335,49 @@ export const createPlaceholderValues = (context: PlaceholderContext): Record<str
           .filter(Boolean)
           .join('\n');
         
-        // Nur geänderte Medikamente
+        // Nur geänderte Medikamente (nicht 'unchanged')
+        // HINWEIS: {{dekurs.medications.changes}} zeigt nur Medikamente mit changeType !== 'unchanged'
+        // Für "Aktuelle Medikation" sollten {{dekurs.medications}} oder {{dekurs.medications.list}} verwendet werden
+        // ÄNDERUNG: Wenn alle Medikamente 'added' haben (was oft der Fall ist bei Übernahme aus Dekurs),
+        // dann zeige sie ohne "+" Zeichen, da sie als "Aktuelle Medikation" verwendet werden
         const changedMeds = dekursData.linkedMedications.filter(m => 
           m.changeType && m.changeType !== 'unchanged'
         );
+        
+        // Prüfe, ob alle Medikamente 'added' haben (typisch für Übernahme aus Dekurs)
+        const allAdded = changedMeds.length > 0 && changedMeds.every(m => m.changeType === 'added');
+        
         if (changedMeds.length > 0) {
-          values['{{dekurs.medications.changes}}'] = changedMeds
-            .map(m => `${m.changeType === 'added' ? '+' : m.changeType === 'discontinued' ? '-' : '~'} ${m.name || ''} ${m.dosage || ''}`.trim())
-            .filter(Boolean)
-            .join('\n');
+          if (allAdded && changedMeds.length === dekursData.linkedMedications.length) {
+            // Wenn alle Medikamente 'added' sind und es alle Medikamente sind, zeige sie ohne "+"
+            // (wird wahrscheinlich für "Aktuelle Medikation" verwendet)
+            values['{{dekurs.medications.changes}}'] = changedMeds
+              .map(m => `${m.name || ''} ${m.dosage || ''} ${m.dosageUnit || ''} ${m.frequency || ''}`.trim())
+              .filter(Boolean)
+              .join(', ');
+          } else {
+            // Normale Darstellung mit +, -, ~ Zeichen für tatsächliche Änderungen
+            values['{{dekurs.medications.changes}}'] = changedMeds
+              .map(m => `${m.changeType === 'added' ? '+' : m.changeType === 'discontinued' ? '-' : '~'} ${m.name || ''} ${m.dosage || ''} ${m.dosageUnit || ''}`.trim())
+              .filter(Boolean)
+              .join('\n');
+          }
         } else {
           values['{{dekurs.medications.changes}}'] = '';
         }
+        
+        // Zusätzlich: Format für "Aktuelle Medikation" ohne "+" Zeichen
+        // Dies ist für den Fall, dass die Vorlage {{dekurs.medications.changes}} verwendet,
+        // aber eigentlich alle Medikamente ohne "+" anzeigen soll
+        values['{{dekurs.medications.current}}'] = dekursData.linkedMedications
+          .map(m => `${m.name || ''} ${m.dosage || ''} ${m.dosageUnit || ''} ${m.frequency || ''}`.trim())
+          .filter(Boolean)
+          .join(', ');
       } else {
         values['{{dekurs.medications}}'] = '';
         values['{{dekurs.medications.list}}'] = '';
         values['{{dekurs.medications.changes}}'] = '';
+        values['{{dekurs.medications.current}}'] = '';
       }
     }
   }
@@ -352,6 +402,7 @@ export const createPlaceholderValues = (context: PlaceholderContext): Record<str
     values['{{dekurs.medications}}'] = '';
     values['{{dekurs.medications.list}}'] = '';
     values['{{dekurs.medications.changes}}'] = '';
+    values['{{dekurs.medications.current}}'] = '';
   }
   
   return values;
@@ -369,36 +420,45 @@ export const removeLinksFromPlaceholders = (html: string): string => {
   // Pattern 1: Komplexer Fall - Platzhalter durch mehrere Tags aufgeteilt
   // z.B. <strong>{{</strong><a href="http://patient.name"><strong>patient.name</strong></a><strong>}}</strong>
   // Dies muss ZUERST behandelt werden, bevor andere Patterns angewendet werden
+  // Unterstützt jetzt auch Platzhalter mit Punkten wie {{patient.socialSecurityNumber.full}}
   cleaned = cleaned.replace(/<strong>\{\{<\/strong><a[^>]*><strong>([^<]+)<\/strong><\/a><strong>\}\}<\/strong>/gi, '{{$1}}');
   cleaned = cleaned.replace(/<strong>\{\{<\/strong><a[^>]*>([^<]+)<\/a><strong>\}\}<\/strong>/gi, '{{$1}}');
   cleaned = cleaned.replace(/<strong>\{\{<\/strong><a[^>]*href="[^"]*"[^>]*><strong>([^<]+)<\/strong><\/a><strong>\}\}<\/strong>/gi, '{{$1}}');
   
-  // Pattern 2: Platzhalter in href-Attribut (z.B. href="{{patient.name}}")
-  cleaned = cleaned.replace(/<a[^>]*href="({{[^}]+}})"[^>]*>.*?<\/a>/gi, '$1');
+  // Pattern 2: Platzhalter in href-Attribut (z.B. href="{{patient.name}}" oder href="{{patient.socialSecurityNumber.full}}")
+  // Unterstützt jetzt auch Platzhalter mit Punkten
+  cleaned = cleaned.replace(/<a[^>]*href="({{[^}]+(?:\.[^}]+)*}})"[^>]*>.*?<\/a>/gi, '$1');
   
   // Pattern 3: <a href="...">{{...}}</a> - Platzhalter als einziger Inhalt
-  cleaned = cleaned.replace(/<a[^>]*href="[^"]*"[^>]*>({{[^}]+}})<\/a>/gi, '$1');
+  // Unterstützt jetzt auch Platzhalter mit Punkten
+  cleaned = cleaned.replace(/<a[^>]*href="[^"]*"[^>]*>({{[^}]+(?:\.[^}]+)*}})<\/a>/gi, '$1');
   
   // Pattern 4: <a>{{...}}</a> (ohne href) - Platzhalter als einziger Inhalt
-  cleaned = cleaned.replace(/<a[^>]*>({{[^}]+}})<\/a>/gi, '$1');
+  // Unterstützt jetzt auch Platzhalter mit Punkten
+  cleaned = cleaned.replace(/<a[^>]*>({{[^}]+(?:\.[^}]+)*}})<\/a>/gi, '$1');
   
   // Pattern 5: Platzhalter innerhalb von Link-Text (kann auch anderen Text enthalten)
-  cleaned = cleaned.replace(/<a[^>]*>([^<]*{{[^}]+}}[^<]*)<\/a>/gi, '$1');
+  // Unterstützt jetzt auch Platzhalter mit Punkten
+  cleaned = cleaned.replace(/<a[^>]*>([^<]*{{[^}]+(?:\.[^}]+)*}}[^<]*)<\/a>/gi, '$1');
   
   // Pattern 6: Mehrere Platzhalter in einem Link
-  cleaned = cleaned.replace(/<a[^>]*>([^<]*(?:{{[^}]+}}[^<]*)+)<\/a>/gi, '$1');
+  // Unterstützt jetzt auch Platzhalter mit Punkten
+  cleaned = cleaned.replace(/<a[^>]*>([^<]*(?:{{[^}]+(?:\.[^}]+)*}}[^<]*)+)<\/a>/gi, '$1');
   
   // Pattern 7: Platzhalter mit Whitespace
-  cleaned = cleaned.replace(/<a[^>]*>\s*({{[^}]+}})\s*<\/a>/gi, '$1');
+  // Unterstützt jetzt auch Platzhalter mit Punkten
+  cleaned = cleaned.replace(/<a[^>]*>\s*({{[^}]+(?:\.[^}]+)*}})\s*<\/a>/gi, '$1');
   
   // Pattern 8: Entferne alle <a> Tags, die nur Platzhalter-Teile enthalten
-  // Finde Links, die Teil eines Platzhalters sein könnten (z.B. href="http://patient.name")
+  // Finde Links, die Teil eines Platzhalters sein könnten (z.B. href="http://patient.name" oder href="http://patient.socialSecurityNumber.full")
+  // Unterstützt jetzt auch Platzhalter mit Punkten
   cleaned = cleaned.replace(/<a[^>]*href="[^"]*patient\.name[^"]*"[^>]*>([^<]+)<\/a>/gi, '$1');
   cleaned = cleaned.replace(/<a[^>]*href="[^"]*patient\.[^"]*"[^>]*>([^<]+)<\/a>/gi, '$1');
   
   // Pattern 9: Allgemeiner Fall - Links, die nur Platzhalter-Teile enthalten (ohne {{}})
   // z.B. <a href="http://patient.name">patient.name</a> zwischen {{ und }}
   // Finde alle Links, die zwischen {{ und }} stehen könnten
+  // Unterstützt jetzt auch Platzhalter mit Punkten wie {{patient.socialSecurityNumber.full}}
   cleaned = cleaned.replace(/\{\{([^}]*?)<a[^>]*>([^<]+)<\/a>([^}]*?)\}\}/gi, '{{$1$2$3}}');
   
   return cleaned;
@@ -432,12 +492,25 @@ export const replacePlaceholders = (
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#39;');
     
-    const escapedPlaceholder = placeholder.replace(/[{}]/g, '\\$&');
+    // Escape alle Regex-Sonderzeichen im Platzhalter (nicht nur {})
+    // Punkte, Klammern, etc. müssen escaped werden
+    const escapedPlaceholder = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escapedPlaceholder, 'g');
     const beforeReplace = processedContent;
     processedContent = processedContent.replace(regex, escapedValue);
     if (beforeReplace !== processedContent) {
       console.log(`🔄 Replaced ${placeholder} with ${String(value).substring(0, 50)}...`);
+    } else if (placeholder.includes('svnr') || placeholder.includes('insuranceNumber') || placeholder.includes('socialSecurityNumber')) {
+      // Debug für SVNR und insuranceNumber Platzhalter
+      console.log(`⚠️ Platzhalter ${placeholder} wurde NICHT gefunden im Content. Wert: "${value}"`);
+      console.log(`   Content enthält Platzhalter: ${processedContent.includes(placeholder)}`);
+      // Prüfe, ob Platzhalter durch HTML-Tags verdeckt ist
+      const placeholderInContent = processedContent.match(new RegExp(placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      if (!placeholderInContent) {
+        console.log(`   ⚠️ Platzhalter ${placeholder} existiert nicht im Content!`);
+      } else {
+        console.log(`   ✓ Platzhalter ${placeholder} wurde gefunden, aber nicht ersetzt.`);
+      }
     }
   });
   
@@ -479,6 +552,8 @@ export const getPlaceholderLegend = () => {
       { placeholder: '{{patient.phone}}', description: 'Telefonnummer' },
       { placeholder: '{{patient.email}}', description: 'E-Mail-Adresse' },
       { placeholder: '{{patient.socialSecurityNumber}}', description: 'SVNR (gekürzt/verschlüsselt)' },
+      { placeholder: '{{patient.svnr}}', description: 'SVNR (vollständig)' },
+      { placeholder: '{{patient.socialSecurityNumber.full}}', description: 'SVNR (vollständig)' },
       { placeholder: '{{patient.address}}', description: 'Vollständige Adresse (eine Zeile)' },
       { placeholder: '{{patient.address.street}}', description: 'Straße' },
       { placeholder: '{{patient.address.city}}', description: 'Stadt' },
@@ -563,7 +638,8 @@ export const getPlaceholderLegend = () => {
       { placeholder: '{{dekurs.primaryDiagnosis}}', description: 'Hauptdiagnose (ICD-10 Code + Text)' },
       { placeholder: '{{dekurs.medications}}', description: 'Alle Medikamente (kommagetrennt)' },
       { placeholder: '{{dekurs.medications.list}}', description: 'Alle Medikamente (formatierte Liste)' },
-      { placeholder: '{{dekurs.medications.changes}}', description: 'Nur geänderte Medikamente' },
+      { placeholder: '{{dekurs.medications.changes}}', description: 'Nur geänderte Medikamente (mit +, -, ~ Zeichen)' },
+      { placeholder: '{{dekurs.medications.current}}', description: 'Aktuelle Medikamente (ohne +, -, ~ Zeichen)' },
     ],
     legacy: [
       { placeholder: '[Name]', description: 'Arztname (veraltet, verwenden Sie {{doctor.fullName}})' },

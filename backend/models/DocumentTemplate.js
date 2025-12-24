@@ -55,6 +55,16 @@ const DocumentTemplateSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  // NEU: Briefkopf-Vorlage für diese spezifische Vorlage (optional, überschreibt Standort-Einstellung)
+  letterheadTemplate: {
+    type: String,
+    enum: {
+      values: ['template1', 'template2', 'template3', 'custom'],
+      message: 'Briefkopf-Vorlage muss einer der erlaubten Werte sein'
+    },
+    default: null,
+    required: false
+  },
   // NEU: Kategorisierung nach Fachrichtung
   medicalSpecialty: {
     type: String,
@@ -208,7 +218,8 @@ DocumentTemplateSchema.virtual('usageCount', {
 // Method to get template with placeholders
 DocumentTemplateSchema.methods.getTemplateWithPlaceholders = function() {
   return {
-    id: this._id,
+    _id: this._id,
+    id: this._id, // Für Rückwärtskompatibilität
     name: this.name,
     description: this.description,
     category: this.category,
@@ -216,7 +227,24 @@ DocumentTemplateSchema.methods.getTemplateWithPlaceholders = function() {
     placeholders: this.placeholders,
     version: this.version,
     tags: this.tags,
-    metadata: this.metadata
+    metadata: this.metadata,
+    isActive: this.isActive,
+    createdBy: this.createdBy,
+    lastModifiedBy: this.lastModifiedBy,
+    createdAt: this.createdAt,
+    updatedAt: this.updatedAt,
+    // Standalone-Dokument-Felder
+    isStandaloneDocument: this.isStandaloneDocument,
+    documentType: this.documentType,
+    defaultRecipientType: this.defaultRecipientType,
+    requiresRecipient: this.requiresRecipient,
+    letterheadTemplate: this.letterheadTemplate !== undefined ? this.letterheadTemplate : null,
+    medicalSpecialty: this.medicalSpecialty,
+    approvalStatus: this.approvalStatus,
+    approvedBy: this.approvedBy,
+    approvedAt: this.approvedAt,
+    rejectionReason: this.rejectionReason,
+    versionHistory: this.versionHistory
   };
 };
 

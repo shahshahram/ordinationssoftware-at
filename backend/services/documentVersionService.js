@@ -30,16 +30,21 @@ class DocumentVersionService {
     // Alte Version als Snapshot speichern (wenn bereits eine Version existiert)
     let oldVersion = null;
     if (oldDocument.currentVersion && oldDocument.currentVersion.versionId) {
-      // Bestehende Version aktualisieren (Status auf released setzen falls nötig)
+      // Lade bestehende Version
       oldVersion = await DocumentVersion.findById(oldDocument.currentVersion.versionId);
-      if (oldVersion && oldVersion.versionStatus !== 'released' && oldDocument.status === 'released') {
-        oldVersion.versionStatus = 'released';
-        oldVersion.releasedAt = oldDocument.currentVersion.releasedAt;
-        oldVersion.releasedBy = oldDocument.currentVersion.releasedBy;
-        await oldVersion.save();
+      if (oldVersion) {
+        // Stelle sicher, dass die alte Version als released markiert ist, wenn das Dokument freigegeben war
+        if (oldDocument.status === 'released' && oldVersion.versionStatus !== 'released') {
+          oldVersion.versionStatus = 'released';
+          oldVersion.releasedAt = oldDocument.currentVersion.releasedAt || new Date();
+          oldVersion.releasedBy = oldDocument.currentVersion.releasedBy;
+          await oldVersion.save();
+        }
+        // WICHTIG: Die alte Version bleibt unverändert in der Datenbank (IMMUTABLE)
+        // Sie wird NICHT gelöscht oder überschrieben
       }
     } else {
-      // Erstelle erste Version-Snapshot
+      // Erstelle erste Version-Snapshot aus dem aktuellen Dokument
       oldVersion = await DocumentVersion.createFromDocument(oldDocument, {
         versionNumber: oldDocument.currentVersion.versionNumber,
         versionStatus: oldDocument.status === 'released' ? 'released' : oldDocument.status,
@@ -90,15 +95,23 @@ class DocumentVersionService {
     // Version-ID im Dokument speichern
     oldDocument.currentVersion.versionId = newVersion._id;
 
-    // Versions-Historie aktualisieren (nur wenn oldVersion existiert)
+    // Versions-Historie aktualisieren - WICHTIG: Alte Version bleibt erhalten
     if (oldVersion) {
-      oldDocument.versionHistory.push({
-        versionNumber: oldVersion.versionNumber,
-        versionId: oldVersion._id,
-        status: oldVersion.versionStatus,
-        createdAt: oldVersion.createdAt,
-        createdBy: oldVersion.createdBy
-      });
+      // Prüfe ob diese Version bereits in der Historie ist
+      const existingHistoryEntry = oldDocument.versionHistory.find(
+        h => h.versionId && h.versionId.toString() === oldVersion._id.toString()
+      );
+      
+      if (!existingHistoryEntry) {
+        // Füge alte Version zur Historie hinzu (wenn noch nicht vorhanden)
+        oldDocument.versionHistory.push({
+          versionNumber: oldVersion.versionNumber,
+          versionId: oldVersion._id,
+          status: oldVersion.versionStatus,
+          createdAt: oldVersion.createdAt,
+          createdBy: oldVersion.createdBy
+        });
+      }
     }
 
     await oldDocument.save();
@@ -156,8 +169,9 @@ class DocumentVersionService {
     Object.assign(document, updates);
     document.lastModifiedBy = user._id;
 
-    // Aktuelle Version aktualisieren (falls vorhanden)
+    // Versionsverwaltung: Erstelle oder aktualisiere Version
     if (document.currentVersion && document.currentVersion.versionId) {
+      // Version existiert bereits: Aktualisiere sie (nur bei DRAFT)
       const currentVersion = await DocumentVersion.findById(document.currentVersion.versionId);
       if (currentVersion && currentVersion.versionStatus === 'draft') {
         // Version-Snapshot aktualisieren
@@ -165,7 +179,7 @@ class DocumentVersionService {
           versionNumber: document.currentVersion.versionNumber,
           versionStatus: 'draft',
           createdBy: currentVersion.createdBy,
-          changeReason: 'Draft aktualisiert'
+          changeReason: options.reason || 'Draft aktualisiert'
         });
         
         // Alte Version löschen (nur bei DRAFT)
@@ -175,6 +189,18 @@ class DocumentVersionService {
         await updatedVersion.save();
         document.currentVersion.versionId = updatedVersion._id;
       }
+    } else if (document.currentVersion && document.currentVersion.versionNumber) {
+      // Version existiert noch nicht, aber currentVersion ist initialisiert: Erstelle erste Version
+      const initialVersion = await DocumentVersion.createFromDocument(document, {
+        versionNumber: document.currentVersion.versionNumber,
+        versionStatus: document.status || 'draft',
+        createdBy: user._id,
+        changeReason: options.reason || 'Erste Version nach Update',
+        ipAddress: options.ipAddress,
+        userAgent: options.userAgent
+      });
+      await initialVersion.save();
+      document.currentVersion.versionId = initialVersion._id;
     }
 
     await document.save();

@@ -1432,7 +1432,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     // Briefkopf
     html += '<div style="display: flex; justify-content: space-between; margin-bottom: 30px;">';
     if (location?.logo?.filename) {
-      html += `<img src="/api/uploads/location-logos/${location.logo.filename}" alt="${location.name}" style="max-height: 80px;" onerror="this.style.display='none';" />`;
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      html += `<img src="${apiUrl}/uploads/location-logos/${location.logo.filename}" alt="${location.name}" style="max-height: 80px;" onerror="console.error('Failed to load logo:', this.src); this.style.display='none';" />`;
     } else {
       html += `<h2>${location?.name || ''}</h2>`;
     }
@@ -1506,9 +1507,51 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     return html;
   };
 
+  // Hilfsfunktion: Konvertiere Logo-URL zu Base64 für Print-Preview
+  const convertLogoToBase64 = async (logoUrl: string): Promise<string | null> => {
+    try {
+      const response = await fetch(logoUrl);
+      if (!response.ok) {
+        console.warn('[PatientenbriefDialog] Logo konnte nicht geladen werden:', logoUrl);
+        return null;
+      }
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64String = reader.result as string;
+          resolve(base64String);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('[PatientenbriefDialog] Fehler beim Konvertieren des Logos zu Base64:', error);
+      return null;
+    }
+  };
+
   // Druck-Funktion
-  const handlePrint = () => {
-    const printContent = generatePrintHtml();
+  const handlePrint = async () => {
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+    let logoUrl: string | null = null;
+    
+    if (location?.logo?.filename) {
+      logoUrl = `${apiUrl}/uploads/location-logos/${location.logo.filename}`;
+    } else if (location?.logo?.path) {
+      const cleanPath = location.logo.path.replace(/^\.\//, '').replace(/^\/+/, '');
+      logoUrl = `${apiUrl}/${cleanPath}`;
+    }
+    
+    // Konvertiere Logo zu Base64 für Print-Preview
+    let logoBase64: string | null = null;
+    if (logoUrl) {
+      logoBase64 = await convertLogoToBase64(logoUrl);
+      console.log('[PatientenbriefDialog handlePrint] Logo Base64:', logoBase64 ? 'erfolgreich konvertiert' : 'konnte nicht konvertiert werden');
+    }
+    
+    // Generiere Print-HTML mit Base64-Logo
+    const printContent = generatePrintHtml(logoBase64 || logoUrl);
     
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -1548,7 +1591,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   };
 
   // Template-spezifische Briefkopf-Generierung
-  const generateLetterhead = (logoUrl: string | null, template: 'template1' | 'template2' | 'template3' | 'custom'): string => {
+  const generateLetterhead = (logoUrlOrBase64: string | null, template: 'template1' | 'template2' | 'template3' | 'custom'): string => {
     const doctorName = selectedDoctor 
       ? `${selectedDoctor.title || ''} ${selectedDoctor.firstName || ''} ${selectedDoctor.lastName || ''}`.trim()
       : user 
@@ -1568,8 +1611,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
         // Vorlage 1: Logo links, Arzt rechts
         html += '<div class="letterhead-top" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">';
         html += '<div class="logo-container" style="flex:0 0 auto;">';
-        if (logoUrl) {
-          html += `<img src="${logoUrl}" alt="${location?.name || ''}" onerror="this.style.display='none';" style="max-height:100px; max-width:250px;" />`;
+        if (logoUrlOrBase64) {
+          html += `<img src="${logoUrlOrBase64}" alt="${location?.name || ''}" onerror="console.error('Failed to load logo:', this.src); this.style.display='none';" style="max-height:100px; max-width:250px;" />`;
         } else if (location?.name) {
           html += `<h2 style="margin:0; font-size:18pt; color:#2c3e50;">${location.name}</h2>`;
         }
@@ -1602,8 +1645,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
         if (website) html += `<div class="contact-info" style="font-size:10pt; margin:2px 0;">Web: ${website}</div>`;
         html += '</div>';
         html += '<div class="logo-container" style="flex:0 0 auto; text-align:right;">';
-        if (logoUrl) {
-          html += `<img src="${logoUrl}" alt="${location?.name || ''}" onerror="this.style.display='none';" style="max-height:100px; max-width:250px;" />`;
+        if (logoUrlOrBase64) {
+          html += `<img src="${logoUrlOrBase64}" alt="${location?.name || ''}" onerror="console.error('Failed to load logo:', this.src); this.style.display='none';" style="max-height:100px; max-width:250px;" />`;
         } else if (location?.name) {
           html += `<h2 style="margin:0; font-size:18pt; color:#2c3e50; text-align:right;">${location.name}</h2>`;
         }
@@ -1616,8 +1659,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
         // Vorlage 3: Drei-Spalten-Layout
         html += '<div class="letterhead-top" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">';
         html += '<div style="flex:1; margin-right:15px;">';
-        if (logoUrl) {
-          html += `<img src="${logoUrl}" alt="${location?.name || ''}" onerror="this.style.display='none';" style="max-height:80px; max-width:200px;" />`;
+        if (logoUrlOrBase64) {
+          html += `<img src="${logoUrlOrBase64}" alt="${location?.name || ''}" onerror="this.style.display='none';" style="max-height:80px; max-width:200px;" />`;
         } else if (location?.name) {
           html += `<h3 style="margin:0; font-size:16pt; color:#2c3e50;">${location.name}</h3>`;
         }
@@ -1642,8 +1685,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
         // Custom/Standard: Wie template1
         html += '<div class="letterhead-top" style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">';
         html += '<div class="logo-container" style="flex:0 0 auto;">';
-        if (logoUrl) {
-          html += `<img src="${logoUrl}" alt="${location?.name || ''}" onerror="this.style.display='none';" style="max-height:100px; max-width:250px;" />`;
+        if (logoUrlOrBase64) {
+          html += `<img src="${logoUrlOrBase64}" alt="${location?.name || ''}" onerror="console.error('Failed to load logo:', this.src); this.style.display='none';" style="max-height:100px; max-width:250px;" />`;
         } else if (location?.name) {
           html += `<h2 style="margin:0; font-size:18pt; color:#2c3e50;">${location.name}</h2>`;
         }
@@ -1667,18 +1710,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   };
 
   // Print-HTML-Generierung
-  const generatePrintHtml = (): string => {
-    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-    // Logo-Pfad: Logos werden in ./uploads/location-logos gespeichert und unter /uploads serviert
-    let logoUrl: string | null = null;
-    if (location?.logo?.filename) {
-      // Versuche verschiedene mögliche Pfade
-      logoUrl = `${apiUrl}/uploads/location-logos/${location.logo.filename}`;
-    } else if (location?.logo?.path) {
-      // Falls path direkt gesetzt ist
-      const path = location.logo.path.replace(/^\.\//, '').replace(/^uploads\//, '');
-      logoUrl = `${apiUrl}/uploads/${path}`;
-    }
+  const generatePrintHtml = (logoUrlOrBase64: string | null = null): string => {
 
     return `
       <!DOCTYPE html>
@@ -1881,18 +1913,18 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
           </style>
         </head>
         <body>
-          ${generatePrintBody(logoUrl)}
+          ${generatePrintBody(logoUrlOrBase64)}
         </body>
       </html>
     `;
   };
 
-  const generatePrintBody = (logoUrl: string | null): string => {
+  const generatePrintBody = (logoUrlOrBase64: string | null): string => {
     const template = getSelectedTemplate();
     let html = '<div class="letter-container">';
     
     // Briefkopf mit Template
-    html += generateLetterhead(logoUrl, template);
+    html += generateLetterhead(logoUrlOrBase64, template);
     
     // Empfänger-Adresse (falls vorhanden)
     if (recipient && recipient.type && recipient.type !== 'patient') {
@@ -2261,7 +2293,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
             <Box>
               {location?.logo?.filename ? (
                 <img 
-                  src={`${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/api/uploads/location-logos/${location.logo.filename}`} 
+                  src={`${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/uploads/location-logos/${location.logo.filename}`} 
                   alt={location.name}
                   style={{ maxHeight: '80px', maxWidth: '200px' }}
                   onError={(e) => {

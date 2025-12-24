@@ -216,6 +216,7 @@ router.get('/templates', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const DocumentLock = require('../models/DocumentLock');
+    const DocumentVersion = require('../models/DocumentVersion');
     
     const document = await Document.findById(req.params.id)
       .populate('patient', 'firstName lastName dateOfBirth')
@@ -228,12 +229,33 @@ router.get('/:id', auth, async (req, res) => {
       });
     }
 
+    // Wenn Dokument freigegeben ist, lade Inhalt aus der Version
+    const documentData = document.toObject();
+    if (document.isReleased && document.status === 'released' && document.currentVersion?.versionId) {
+      try {
+        const releasedVersion = await DocumentVersion.findById(document.currentVersion.versionId);
+        if (releasedVersion && releasedVersion.documentSnapshot) {
+          // Verwende Inhalt aus der freigegebenen Version
+          if (releasedVersion.documentSnapshot.content) {
+            documentData.content = releasedVersion.documentSnapshot.content;
+          }
+          // Stelle sicher, dass andere wichtige Felder auch aus der Version kommen
+          if (releasedVersion.documentSnapshot.title) {
+            documentData.title = releasedVersion.documentSnapshot.title;
+          }
+        }
+      } catch (versionError) {
+        console.error('Fehler beim Laden der freigegebenen Version:', versionError);
+        // Fallback: Verwende Inhalt aus Hauptdokument
+      }
+    }
+
     // Prüfe ob Dokument gesperrt ist
     const lock = await DocumentLock.checkLock(req.params.id);
     
     const response = {
       success: true,
-      data: document.toObject()
+      data: documentData
     };
 
     // Füge Lock-Informationen hinzu
@@ -296,6 +318,28 @@ router.post('/', auth, [
     });
 
     await document.save();
+    
+    // Erstelle initiale Version für Dokumente aus Vorlagen (templateId vorhanden)
+    if (document.templateId && document.currentVersion && document.currentVersion.versionNumber) {
+      const DocumentVersion = require('../models/DocumentVersion');
+      try {
+        const initialVersion = await DocumentVersion.createFromDocument(document, {
+          versionNumber: document.currentVersion.versionNumber,
+          versionStatus: document.status || 'draft',
+          createdBy: req.user._id,
+          changeReason: 'Initiale Version beim Erstellen',
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent')
+        });
+        await initialVersion.save();
+        document.currentVersion.versionId = initialVersion._id;
+        await document.save();
+      } catch (error) {
+        console.error('Fehler beim Erstellen der initialen Version:', error);
+        // Fehler nicht weiterwerfen, Dokument wurde bereits erstellt
+      }
+    }
+    
     await document.populate('patient', 'firstName lastName dateOfBirth');
     await document.populate('doctor', 'firstName lastName');
 

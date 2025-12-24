@@ -21,6 +21,7 @@ interface RichTextEditorProps {
   placeholder?: string;
   minHeight?: number;
   onPlaceholderInsert?: (placeholder: string) => void;
+  readOnly?: boolean;
 }
 
 export interface RichTextEditorRef {
@@ -52,6 +53,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
   placeholder = 'Beginnen Sie mit der Eingabe...',
   minHeight = 200,
   onPlaceholderInsert,
+  readOnly = false,
 }, ref) => {
 
   const editor = useEditor({
@@ -69,7 +71,9 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       Underline,
     ],
     content: value ? removeLinksFromPlaceholders(value) : '',
+    editable: !readOnly,
     onUpdate: ({ editor }) => {
+      if (readOnly) return; // Verhindere Updates im Read-Only-Modus
       let html = editor.getHTML();
       // Entferne Link-Formatierung von Platzhaltern beim Speichern
       html = removeLinksFromPlaceholders(html);

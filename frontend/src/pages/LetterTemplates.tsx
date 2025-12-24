@@ -123,6 +123,7 @@ const LetterTemplates: React.FC = () => {
     documentType: 'sonstiges' as string,
     defaultRecipientType: null as 'patient' | 'doctor' | 'organization' | 'contact' | null,
     requiresRecipient: true,
+    letterheadTemplate: null as 'template1' | 'template2' | 'template3' | 'custom' | null,
     medicalSpecialty: 'allgemeinmedizin',
     approvalStatus: 'draft' as 'draft' | 'pending_approval' | 'approved' | 'rejected',
     tags: [] as string[],
@@ -176,19 +177,34 @@ const LetterTemplates: React.FC = () => {
         const locations = await dispatch(fetchLocations()).unwrap();
         const updatedLocation = locations.find((loc: Location) => loc._id === selectedLocationForLetterhead._id);
         if (updatedLocation?.logo) {
+          console.log('[LetterTemplates handleLogoUpload] Logo data after upload:', {
+            hasLogo: !!updatedLocation.logo,
+            filename: updatedLocation.logo.filename,
+            path: updatedLocation.logo.path,
+            fullLogo: updatedLocation.logo
+          });
+          
+          const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
           let logoUrl = null;
-          if (updatedLocation.logo.path) {
+          
+          if (updatedLocation.logo.filename) {
+            logoUrl = `${apiUrl}/uploads/location-logos/${updatedLocation.logo.filename}`;
+            console.log('[LetterTemplates handleLogoUpload] Logo URL (from filename):', logoUrl);
+          } else if (updatedLocation.logo.path) {
             if (updatedLocation.logo.path.startsWith('http')) {
               logoUrl = updatedLocation.logo.path;
             } else if (updatedLocation.logo.path.startsWith('/')) {
-              logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}${updatedLocation.logo.path}`;
+              logoUrl = `${apiUrl}${updatedLocation.logo.path}`;
             } else {
-              logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/api/${updatedLocation.logo.path}`;
+              // Pfad ohne führenden Slash: direkt unter uploads
+              const cleanPath = updatedLocation.logo.path.replace(/^\.\//, '').replace(/^uploads\//, '');
+              logoUrl = `${apiUrl}/uploads/${cleanPath}`;
             }
-          } else if (updatedLocation.logo.filename) {
-            logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/api/uploads/location-logos/${updatedLocation.logo.filename}`;
+            console.log('[LetterTemplates handleLogoUpload] Logo URL (from path):', logoUrl);
           }
+          
           setLogoPreview(logoUrl);
+          console.log('[LetterTemplates handleLogoUpload] Final logoPreview:', logoUrl);
         }
       }
     } catch (error) {
@@ -253,19 +269,34 @@ const LetterTemplates: React.FC = () => {
                   if (location) {
                     // Setze Logo-Preview wenn vorhanden
                     if (location.logo) {
+                      console.log('[LetterTemplates] Logo data when selecting location:', {
+                        hasLogo: !!location.logo,
+                        filename: location.logo.filename,
+                        path: location.logo.path,
+                        fullLogo: location.logo
+                      });
+                      
+                      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
                       let logoUrl = null;
-                      if (location.logo.path) {
+                      
+                      if (location.logo.filename) {
+                        logoUrl = `${apiUrl}/uploads/location-logos/${location.logo.filename}`;
+                        console.log('[LetterTemplates] Logo URL (from filename):', logoUrl);
+                      } else if (location.logo.path) {
                         if (location.logo.path.startsWith('http')) {
                           logoUrl = location.logo.path;
                         } else if (location.logo.path.startsWith('/')) {
-                          logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}${location.logo.path}`;
+                          logoUrl = `${apiUrl}${location.logo.path}`;
                         } else {
-                          logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/api/${location.logo.path}`;
+                          // Pfad ohne führenden Slash: direkt unter uploads
+                          const cleanPath = location.logo.path.replace(/^\.\//, '').replace(/^uploads\//, '');
+                          logoUrl = `${apiUrl}/uploads/${cleanPath}`;
                         }
-                      } else if (location.logo.filename) {
-                        logoUrl = `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/api/uploads/location-logos/${location.logo.filename}`;
+                        console.log('[LetterTemplates] Logo URL (from path):', logoUrl);
                       }
+                      
                       setLogoPreview(logoUrl);
+                      console.log('[LetterTemplates] Final logoPreview:', logoUrl);
                     } else {
                       setLogoPreview(null);
                     }
@@ -613,6 +644,7 @@ const LetterTemplates: React.FC = () => {
                     documentType: 'sonstiges',
                     defaultRecipientType: null,
                     requiresRecipient: true,
+                    letterheadTemplate: null,
                     medicalSpecialty: 'allgemeinmedizin',
                     approvalStatus: 'draft',
                     tags: [],
@@ -768,6 +800,14 @@ const LetterTemplates: React.FC = () => {
                               <IconButton
                                 size="small"
                                 onClick={() => {
+                                  // Debug: Log template data before loading
+                                  console.log('[LetterTemplates] Loading template for edit:', {
+                                    id: template._id,
+                                    letterheadTemplate: template.letterheadTemplate,
+                                    letterheadTemplateType: typeof template.letterheadTemplate,
+                                    allTemplateFields: Object.keys(template)
+                                  });
+                                  
                                   setEditingDocumentTemplate(template);
                                   setDocumentTemplateForm({
                                     name: template.name,
@@ -780,10 +820,17 @@ const LetterTemplates: React.FC = () => {
                                       : 'sonstiges',
                                     defaultRecipientType: template.defaultRecipientType || null,
                                     requiresRecipient: template.requiresRecipient !== false,
+                                    letterheadTemplate: (template.letterheadTemplate !== undefined && template.letterheadTemplate !== null) ? template.letterheadTemplate : null,
                                     medicalSpecialty: template.medicalSpecialty || 'allgemeinmedizin',
                                     approvalStatus: template.approvalStatus || 'draft',
                                     tags: template.tags || [],
                                   });
+                                  
+                                  // Debug: Log form data after setting
+                                  console.log('[LetterTemplates] Form data set:', {
+                                    letterheadTemplate: (template.letterheadTemplate !== undefined && template.letterheadTemplate !== null) ? template.letterheadTemplate : null
+                                  });
+                                  
                                   setDocumentTemplateDialogOpen(true);
                                 }}
                               >
@@ -1287,6 +1334,26 @@ const LetterTemplates: React.FC = () => {
                       }
                       label="Empfänger erforderlich"
                     />
+                    <FormControl fullWidth>
+                      <InputLabel>Briefkopf-Vorlage (optional)</InputLabel>
+                      <Select
+                        value={documentTemplateForm.letterheadTemplate || ''}
+                        onChange={(e) => setDocumentTemplateForm({ 
+                          ...documentTemplateForm, 
+                          letterheadTemplate: e.target.value || null 
+                        })}
+                        label="Briefkopf-Vorlage (optional)"
+                      >
+                        <MenuItem value="">Standard (vom Standort/Dokumenttyp)</MenuItem>
+                        <MenuItem value="template1">Vorlage 1: Logo links, Arzt rechts</MenuItem>
+                        <MenuItem value="template2">Vorlage 2: Kontaktdaten links, Logo rechts</MenuItem>
+                        <MenuItem value="template3">Vorlage 3: Drei-Spalten-Layout</MenuItem>
+                        <MenuItem value="custom">Individuelle Gestaltung</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: -1, mb: 1, display: 'block' }}>
+                      Wenn keine Vorlage ausgewählt wird, wird die Standard-Vorlage des Standorts für diesen Dokumenttyp verwendet.
+                    </Typography>
                   </>
                 )}
                 <Box>
@@ -1354,6 +1421,14 @@ const LetterTemplates: React.FC = () => {
             variant="contained"
             onClick={async () => {
               try {
+                // Debug: Log form data before saving
+                console.log('[LetterTemplates] Saving template:', {
+                  id: editingDocumentTemplate?._id,
+                  letterheadTemplate: documentTemplateForm.letterheadTemplate,
+                  documentType: documentTemplateForm.documentType,
+                  allFields: Object.keys(documentTemplateForm)
+                });
+                
                 if (editingDocumentTemplate) {
                   await dispatch(updateDocumentTemplate({
                     id: editingDocumentTemplate._id,

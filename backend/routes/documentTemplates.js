@@ -35,9 +35,12 @@ router.get('/', auth, async (req, res) => {
 
     const total = await DocumentTemplate.countDocuments(query);
 
+    // Verwende getTemplateWithPlaceholders() um sicherzustellen, dass alle Felder (inkl. letterheadTemplate) zurückgegeben werden
+    const templatesWithPlaceholders = templates.map(template => template.getTemplateWithPlaceholders());
+
     res.json({
       success: true,
-      templates,
+      templates: templatesWithPlaceholders,
       pagination: {
         current: parseInt(page),
         pages: Math.ceil(total / limit),
@@ -166,13 +169,32 @@ router.post('/', [
       });
     }
 
+    // Debug: Log incoming data
+    console.log('[DocumentTemplate POST] Incoming data:', {
+      letterheadTemplate: req.body.letterheadTemplate,
+      documentType: req.body.documentType,
+      allFields: Object.keys(req.body)
+    });
+
+    // Behandle letterheadTemplate explizit, da null-Werte möglicherweise nicht korrekt gesetzt werden
     const templateData = {
       ...req.body,
       createdBy: req.user.id,
       lastModifiedBy: req.user.id
     };
+    
+    if (templateData.letterheadTemplate === '' || templateData.letterheadTemplate === undefined) {
+      templateData.letterheadTemplate = null;
+    }
 
     const template = new DocumentTemplate(templateData);
+    
+    // Debug: Log before save
+    console.log('[DocumentTemplate POST] Before save:', {
+      letterheadTemplate: template.letterheadTemplate,
+      documentType: template.documentType
+    });
+    
     await template.save();
 
     // Create initial revision
@@ -234,8 +256,21 @@ router.put('/:id', [
     const oldContent = template.content;
     const oldPlaceholders = template.placeholders;
 
+    // Debug: Log incoming data
+    console.log('[DocumentTemplate PUT] Incoming data:', {
+      letterheadTemplate: req.body.letterheadTemplate,
+      documentType: req.body.documentType,
+      allFields: Object.keys(req.body)
+    });
+
     // Update template
-    Object.assign(template, req.body);
+    // Behandle letterheadTemplate explizit, da null-Werte möglicherweise nicht über Object.assign gesetzt werden
+    const updateData = { ...req.body };
+    if (updateData.letterheadTemplate === '' || updateData.letterheadTemplate === undefined) {
+      updateData.letterheadTemplate = null;
+    }
+    
+    Object.assign(template, updateData);
     template.lastModifiedBy = req.user.id;
     
     // Stelle sicher, dass isActive auf true gesetzt ist, wenn nicht explizit auf false gesetzt
@@ -244,7 +279,23 @@ router.put('/:id', [
     }
     
     template.version += 1;
+    
+    // Debug: Log before save
+    console.log('[DocumentTemplate PUT] Before save:', {
+      letterheadTemplate: template.letterheadTemplate,
+      letterheadTemplateType: typeof template.letterheadTemplate,
+      documentType: template.documentType
+    });
+    
     await template.save();
+    
+    // Debug: Log after save
+    const savedTemplate = await DocumentTemplate.findById(template._id);
+    console.log('[DocumentTemplate PUT] After save:', {
+      letterheadTemplate: savedTemplate?.letterheadTemplate,
+      letterheadTemplateType: typeof savedTemplate?.letterheadTemplate,
+      documentType: savedTemplate?.documentType
+    });
 
     // Create revision for changes
     await DocumentRevision.createRevision({
@@ -406,22 +457,40 @@ router.get('/standalone/list', auth, async (req, res) => {
 // @access  Private
 router.get('/standalone/:id', auth, async (req, res) => {
   try {
+    const templateId = req.params.id;
+    console.log(`[DEBUG] Fetching standalone template with ID: ${templateId}`);
+    
+    // Prüfe zuerst, ob die Vorlage überhaupt existiert
+    const anyTemplate = await DocumentTemplate.findById(templateId);
+    if (!anyTemplate) {
+      console.log(`[DEBUG] Template with ID ${templateId} does not exist`);
+      return res.status(404).json({
+        success: false,
+        message: 'Standalone-Vorlage nicht gefunden'
+      });
+    }
+    
+    console.log(`[DEBUG] Template found: "${anyTemplate.name}", isStandaloneDocument: ${anyTemplate.isStandaloneDocument}, isActive: ${anyTemplate.isActive}, approvalStatus: ${anyTemplate.approvalStatus}`);
+    
     const template = await DocumentTemplate.findOne({
-      _id: req.params.id,
+      _id: templateId,
       isStandaloneDocument: true,
-      isActive: true
+      isActive: true,
+      approvalStatus: 'approved' // Nur freigegebene Vorlagen
     })
       .populate('createdBy', 'firstName lastName')
       .populate('lastModifiedBy', 'firstName lastName')
       .populate('approvedBy', 'firstName lastName');
 
     if (!template) {
+      console.log(`[DEBUG] Template exists but does not match criteria (isStandaloneDocument: ${anyTemplate.isStandaloneDocument}, isActive: ${anyTemplate.isActive})`);
       return res.status(404).json({
         success: false,
         message: 'Standalone-Vorlage nicht gefunden'
       });
     }
 
+    console.log(`[DEBUG] Successfully found and returning template: "${template.name}"`);
     res.json({
       success: true,
       template: template.getTemplateWithPlaceholders()

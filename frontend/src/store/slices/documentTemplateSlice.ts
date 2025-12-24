@@ -36,6 +36,7 @@ export interface DocumentTemplate {
   documentType?: string;
   defaultRecipientType?: 'patient' | 'doctor' | 'organization' | 'contact' | null;
   requiresRecipient?: boolean;
+  letterheadTemplate?: 'template1' | 'template2' | 'template3' | 'custom' | null;
   medicalSpecialty?: string;
   approvalStatus?: 'draft' | 'pending_approval' | 'approved' | 'rejected';
   approvedBy?: {
