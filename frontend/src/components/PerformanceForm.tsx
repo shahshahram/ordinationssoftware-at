@@ -364,7 +364,7 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
                   <MenuItem value="">
                     <em>Kein Termin</em>
                   </MenuItem>
-                  {appointments.map((appointment: any) => (
+                  {(appointments || []).map((appointment: any) => (
                     <MenuItem key={appointment._id} value={appointment._id}>
                       {new Date(appointment.startTime).toLocaleDateString('de-DE')} - 
                       {appointment.patient ? `${appointment.patient.firstName || ''} ${appointment.patient.lastName || ''}`.trim() || 'Unbekannter Patient' : 'Unbekannter Patient'}

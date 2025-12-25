@@ -43,27 +43,39 @@ const MedicationAutocomplete: React.FC<MedicationAutocompleteProps> = ({
   const searchMedications = async (searchTerm: string) => {
     setLoading(true);
     try {
+      console.log('🔍 Suche Medikamente:', searchTerm);
       const response = await api.get<{ success: boolean; data: Medication[]; count?: number }>(
         '/medications/search',
         { q: searchTerm, limit: 20 }
       );
 
+      console.log('📦 API Response:', response);
+      
       // Die API-Utility wrappt die Antwort: response.data ist das Backend-Response-Objekt
       // Das Backend-Response hat die Struktur: { success: true, data: Medication[], count: number }
       const backendResponse = response.data as any;
       
+      console.log('📦 Backend Response:', backendResponse);
+      
       // Prüfe ob backendResponse selbst die Daten enthält oder ob sie in backendResponse.data sind
       if (backendResponse?.success && backendResponse?.data) {
+        console.log('✅ Medikamente gefunden:', backendResponse.data.length);
         setOptions(backendResponse.data);
       } else if (Array.isArray(backendResponse)) {
         // Falls die Antwort direkt ein Array ist
+        console.log('✅ Medikamente gefunden (Array):', backendResponse.length);
         setOptions(backendResponse);
       } else {
-        console.warn('Unerwartete Antwort vom Backend:', backendResponse);
+        console.warn('⚠️ Unerwartete Antwort vom Backend:', backendResponse);
         setOptions([]);
       }
     } catch (error: any) {
-      console.error('Medikamenten-Suche fehlgeschlagen:', error);
+      console.error('❌ Medikamenten-Suche fehlgeschlagen:', error);
+      console.error('❌ Error details:', {
+        message: error?.message,
+        response: error?.response,
+        status: error?.response?.status
+      });
       if (error.message) {
         console.error('Fehler-Message:', error.message);
         if (error.message.includes('401') || error.message.includes('Unauthorized')) {

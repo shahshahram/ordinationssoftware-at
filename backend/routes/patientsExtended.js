@@ -290,27 +290,71 @@ router.get('/', auth, async (req, res) => {
     } = req.query;
 
     // Build query - show all patients for admin/super_admin users, or filter by userId for regular users
-    const query = (req.user.role === 'admin' || req.user.role === 'super_admin') ? {} : { userId: req.user.id };
+    // ZUSÄTZLICH: Normale Benutzer sehen auch Patienten mit Status "self-checkin"
+    let query = {};
     
-    if (search) {
+    if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      // Für normale Benutzer: eigene Patienten ODER Patienten mit Status "self-checkin"
       query.$or = [
-        { firstName: { $regex: search, $options: 'i' } },
-        { lastName: { $regex: search, $options: 'i' } },
-        { socialSecurityNumber: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { userId: req.user.id },
+        { status: 'self-checkin' }
       ];
     }
     
+    // Suchfilter
+    if (search) {
+      const searchConditions = {
+        $or: [
+          { firstName: { $regex: search, $options: 'i' } },
+          { lastName: { $regex: search, $options: 'i' } },
+          { socialSecurityNumber: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ]
+      };
+      
+      // Wenn bereits $or vorhanden (für normale Benutzer), kombiniere mit $and
+      if (query.$or) {
+        query.$and = [
+          { $or: query.$or },
+          searchConditions
+        ];
+        delete query.$or;
+      } else {
+        query = { ...query, ...searchConditions };
+      }
+    }
+    
+    // Status-Filter (nur wenn gesetzt)
     if (status) {
-      query.status = status;
+      // Wenn bereits $and vorhanden, füge status hinzu
+      if (query.$and) {
+        query.$and.push({ status: status });
+      } else if (query.$or) {
+        // Wenn $or vorhanden, kombiniere mit $and
+        query.$and = [
+          { $or: query.$or },
+          { status: status }
+        ];
+        delete query.$or;
+      } else {
+        query.status = status;
+      }
     }
     
     if (insuranceProvider) {
-      query.insuranceProvider = insuranceProvider;
+      if (query.$and) {
+        query.$and.push({ insuranceProvider: insuranceProvider });
+      } else {
+        query.insuranceProvider = insuranceProvider;
+      }
     }
     
     if (zipCode) {
-      query['address.zipCode'] = zipCode;
+      if (query.$and) {
+        query.$and.push({ 'address.zipCode': zipCode });
+      } else {
+        query['address.zipCode'] = zipCode;
+      }
     }
 
     // Build sort
@@ -385,11 +429,29 @@ router.get('/validate/:id', async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     // Admin and super_admin users can see all patients, regular users only their own
-    const query = (req.user.role === 'admin' || req.user.role === 'super_admin')
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user.id };
+    // ZUSÄTZLICH: Normale Benutzer können auch Patienten mit Status "self-checkin" sehen
+    let query;
+    if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+      query = { _id: req.params.id };
+    } else {
+      // Für normale Benutzer: erst versuchen, Patient mit userId zu finden
+      query = { _id: req.params.id, userId: req.user.id };
+    }
       
-    const patient = await PatientExtended.findOne(query).populate('createdBy', 'firstName lastName');
+    let patient = await PatientExtended.findOne(query).populate('createdBy', 'firstName lastName');
+
+    // Wenn Patient nicht gefunden wurde und Benutzer kein Admin ist,
+    // prüfe ob es ein Patient mit Status "self-checkin" ist (darf von allen gesehen werden)
+    if (!patient && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      const selfCheckInPatient = await PatientExtended.findOne({
+        _id: req.params.id,
+        status: 'self-checkin'
+      }).populate('createdBy', 'firstName lastName');
+      
+      if (selfCheckInPatient) {
+        patient = selfCheckInPatient;
+      }
+    }
 
     if (!patient) {
       return res.status(404).json({
@@ -792,11 +854,29 @@ router.put('/:id', [
     }
 
     // Admin and super_admin users can update all patients, regular users only their own
-    const query = (req.user.role === 'admin' || req.user.role === 'super_admin')
-      ? { _id: req.params.id }
-      : { _id: req.params.id, userId: req.user.id };
+    // ZUSÄTZLICH: Normale Benutzer können auch Patienten mit Status "self-checkin" bearbeiten
+    let query;
+    if (req.user.role === 'admin' || req.user.role === 'super_admin') {
+      query = { _id: req.params.id };
+    } else {
+      // Für normale Benutzer: erst versuchen, Patient mit userId zu finden
+      query = { _id: req.params.id, userId: req.user.id };
+    }
       
-    const patient = await PatientExtended.findOne(query);
+    let patient = await PatientExtended.findOne(query);
+
+    // Wenn Patient nicht gefunden wurde und Benutzer kein Admin ist,
+    // prüfe ob es ein Patient mit Status "self-checkin" ist (darf von allen bearbeitet werden)
+    if (!patient && req.user.role !== 'admin' && req.user.role !== 'super_admin') {
+      const selfCheckInPatient = await PatientExtended.findOne({
+        _id: req.params.id,
+        status: 'self-checkin'
+      });
+      
+      if (selfCheckInPatient) {
+        patient = selfCheckInPatient;
+      }
+    }
 
     if (!patient) {
       return res.status(404).json({
@@ -958,6 +1038,16 @@ router.put('/:id', [
     console.log('📤 Update data onlineBookingBlocked:', updateData.onlineBookingBlocked);
     console.log('📤 Update data isTemporary:', updateData.isTemporary);
     console.log('📤 Final isTemporary value:', updateData.isTemporary !== undefined ? updateData.isTemporary : '(nicht gesetzt, bleibt:', patient.isTemporary, ')');
+    
+    // Stelle sicher, dass createdBy nicht überschrieben wird, wenn es nicht gesendet wurde
+    // und dass es vorhanden ist, wenn der Patient keines hat
+    if (!updateData.createdBy && !patient.createdBy) {
+      // Wenn Patient kein createdBy hat, setze es auf den aktuellen Benutzer
+      updateData.createdBy = req.user.id;
+    } else if (!updateData.createdBy) {
+      // Wenn createdBy nicht im Update ist, entferne es aus updateData, damit es nicht überschrieben wird
+      delete updateData.createdBy;
+    }
     
     const updatedPatient = await PatientExtended.findByIdAndUpdate(
       req.params.id,
@@ -1354,7 +1444,13 @@ router.get('/:id/photos', auth, async (req, res) => {
     }
 
     // Prüfe Berechtigung
-    if (req.user.role !== 'admin' && req.user.role !== 'super_admin' && patient.userId?.toString() !== req.user.id?.toString()) {
+    // Patienten mit Status "self-checkin" können von allen Benutzern bearbeitet werden
+    const canEdit = req.user.role === 'admin' || 
+                    req.user.role === 'super_admin' || 
+                    patient.userId?.toString() === req.user.id?.toString() ||
+                    patient.status === 'self-checkin';
+    
+    if (!canEdit) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für diesen Patienten'
@@ -1853,7 +1949,13 @@ router.delete('/:id/photos/:photoId', auth, async (req, res) => {
     }
 
     // Prüfe Berechtigung
-    if (req.user.role !== 'admin' && req.user.role !== 'super_admin' && patient.userId?.toString() !== req.user.id?.toString()) {
+    // Patienten mit Status "self-checkin" können von allen Benutzern bearbeitet werden
+    const canEdit = req.user.role === 'admin' || 
+                    req.user.role === 'super_admin' || 
+                    patient.userId?.toString() === req.user.id?.toString() ||
+                    patient.status === 'self-checkin';
+    
+    if (!canEdit) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für diesen Patienten'

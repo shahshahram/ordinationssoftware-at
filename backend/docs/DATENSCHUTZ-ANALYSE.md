@@ -298,3 +298,4 @@ Diese Analyse ersetzt **nicht** eine rechtliche Beratung. Für vollständige Com
 - ArztG (Ärztegesetz) - Aufbewahrungsfristen
 - UGB (Unternehmensgesetzbuch) - Abrechnungsdaten
 
+

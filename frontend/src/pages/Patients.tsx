@@ -82,7 +82,7 @@ const Patients: React.FC = () => {
   const [lastVisitCache, setLastVisitCache] = useState<{ [patientId: string]: Date }>({});
   
   // View and UI state
-  const [viewMode, setViewMode] = useState<'cards' | 'list'>('cards');
+  const [viewMode, setViewMode] = useState<'cards' | 'list'>('list');
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'name' | 'lastVisit' | 'birthday' | 'status'>('name');
@@ -859,13 +859,17 @@ const Patients: React.FC = () => {
           cursor: 'pointer',
           transition: 'all 0.3s ease-in-out',
           borderRadius: 3,
-          border: patient.hasHint || isImportant ? '3px solid' : '1px solid',
-          borderColor: patient.hasHint 
+          border: patient.hasHint || patient.onlineBookingBlocked || isImportant ? '3px solid' : '1px solid',
+          borderColor: patient.onlineBookingBlocked
+            ? 'error.main'
+            : patient.hasHint 
             ? 'warning.main' 
             : isImportant 
             ? (isSonderklasse ? 'primary.main' : isPrivateInsurance ? 'success.main' : 'warning.main')
             : 'divider',
-          bgcolor: patient.hasHint 
+          bgcolor: patient.onlineBookingBlocked
+            ? 'error.light'
+            : patient.hasHint 
             ? 'warning.light' 
             : isImportant 
             ? (isSonderklasse ? 'rgba(25, 118, 210, 0.05)' : isPrivateInsurance ? 'rgba(46, 125, 50, 0.05)' : 'rgba(255, 152, 0, 0.05)')
@@ -874,7 +878,9 @@ const Patients: React.FC = () => {
             : 'background.paper',
           '&:hover': {
             transform: 'translateY(-4px)',
-            boxShadow: patient.hasHint 
+            boxShadow: patient.onlineBookingBlocked
+              ? '0 8px 25px rgba(211, 47, 47, 0.3)'
+              : patient.hasHint 
               ? '0 8px 25px rgba(255, 152, 0, 0.3)' 
               : isImportant
               ? (isSonderklasse ? '0 8px 25px rgba(25, 118, 210, 0.3)' : isPrivateInsurance ? '0 8px 25px rgba(46, 125, 50, 0.3)' : '0 8px 25px rgba(255, 152, 0, 0.3)')
@@ -915,6 +921,17 @@ const Patients: React.FC = () => {
                           '50%': { opacity: 0.5 },
                           '100%': { opacity: 1 },
                         },
+                      }} 
+                    />
+                  </Tooltip>
+                )}
+                {patient.onlineBookingBlocked && (
+                  <Tooltip title="Online-Buchung für diesen Patienten blockiert">
+                    <Block 
+                      color="error" 
+                      sx={{ 
+                        fontSize: 20,
+                        ml: 0.5
                       }} 
                     />
                   </Tooltip>
@@ -1198,12 +1215,36 @@ const Patients: React.FC = () => {
                 color={patient.status === 'aktiv' ? 'success' : patient.status === 'wartend' ? 'warning' : 'default'}
                 size="small"
               />
+              {patient.hasHint && (
+                <Tooltip title="Patient hat einen Hinweis">
+                  <Chip
+                    icon={<Warning />}
+                    label="Hinweis"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ fontWeight: 'bold' }}
+                  />
+                </Tooltip>
+              )}
               {patient.isTemporary && (
                 <Tooltip title="Temporärer Patient - Stammdaten müssen vervollständigt werden">
                   <Chip
                     label="Temporär"
                     size="small"
                     color="warning"
+                    variant="outlined"
+                    sx={{ fontWeight: 'bold' }}
+                  />
+                </Tooltip>
+              )}
+              {patient.onlineBookingBlocked && (
+                <Tooltip title="Online-Buchung für diesen Patienten blockiert">
+                  <Chip
+                    icon={<Block />}
+                    label="Online-Buchung blockiert"
+                    size="small"
+                    color="error"
                     variant="outlined"
                     sx={{ fontWeight: 'bold' }}
                   />

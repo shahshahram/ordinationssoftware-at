@@ -116,3 +116,4 @@ echo "- Erstellen Sie ein Backup des Key-Files!"
 echo "- Ohne Key-File können verschlüsselte Daten nicht mehr entschlüsselt werden!"
 echo ""
 
+

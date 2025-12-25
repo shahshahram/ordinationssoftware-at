@@ -51,6 +51,7 @@ const locationWeeklySchedulesRoutes = require('./routes/locationWeeklySchedules'
 const collisionDetectionRoutes = require('./routes/collisionDetection');
 const icd10Routes = require('./routes/icd10');
 const diagnosesRoutes = require('./routes/diagnoses');
+const medicationsRoutes = require('./routes/medications');
 const icd10CatalogRoutes = require('./routes/icd10Catalog');
 const elgaValuesetsRoutes = require('./routes/elgaValuesets');
 const icd10PersonalListsRoutes = require('./routes/icd10PersonalLists');
@@ -61,6 +62,7 @@ const pdfGenerationRoutes = require('./routes/pdfGeneration');
 const oneClickBillingRoutes = require('./routes/oneClickBilling');
 const patientsExtendedRoutes = require('./routes/patientsExtended');
 const medicationCatalogRoutes = require('./routes/medicationCatalog');
+const prescriptionsRoutes = require('./routes/prescriptions');
 const rbacRoutes = require('./routes/rbac');
 const rbacDiscoveryRoutes = require('./routes/rbacDiscovery');
 const inventoryRoutes = require('./routes/inventory');
@@ -298,6 +300,9 @@ function registerStaticRoutes(app) {
   app.use('/api/collision-detection', collisionDetectionRoutes);
   app.use('/api/icd10', icd10Routes);
   app.use('/api/diagnoses', diagnosesRoutes);
+  app.use('/api/medications', medicationCatalogRoutes); // Zuerst MedicationCatalog (für /search)
+  app.use('/api/medications', medicationsRoutes); // Dann PatientMedications
+  app.use('/api/prescriptions', prescriptionsRoutes); // e-Rezept-Routen
   app.use('/api/icd10-catalog', icd10CatalogRoutes);
   app.use('/api/icd10/personal-lists', icd10PersonalListsRoutes);
   app.use('/api/elga-valuesets', elgaValuesetsRoutes);
@@ -312,7 +317,6 @@ function registerStaticRoutes(app) {
   app.use('/api/inventory', inventoryRoutes);
   app.use('/api/setup', setupRoutes);
   app.use('/api/settings', settingsRoutes);
-  app.use('/api/medications', medicationCatalogRoutes);
   app.use('/api/ambulanzbefunde', ambulanzbefundeRoutes);
   app.use('/api/dashboard-widgets', dashboardWidgetsRoutes);
   app.use('/api/dekurs', dekursRoutes);

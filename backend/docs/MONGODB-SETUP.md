@@ -216,3 +216,4 @@ Bei weiteren Problemen:
 2. MongoDB Status prüfen: `brew services list` (macOS)
 3. MongoDB Shell testen: `mongosh`
 
+

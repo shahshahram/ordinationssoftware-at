@@ -194,10 +194,23 @@ const DiagnosisManager: React.FC<DiagnosisManagerProps> = ({
 
   // Handle primary toggle
   const handlePrimaryToggle = async (diagnosis: PatientDiagnosis) => {
-    const updateData: UpdateDiagnosisData = {
-      isPrimary: !diagnosis.isPrimary
-    };
-    await dispatch(updateDiagnosis({ id: diagnosis._id, data: updateData }));
+    try {
+      const updateData: UpdateDiagnosisData = {
+        isPrimary: !diagnosis.isPrimary
+      };
+      await dispatch(updateDiagnosis({ id: diagnosis._id, data: updateData })).unwrap();
+      
+      // Lade Diagnosen neu, um sicherzustellen, dass alle Änderungen sichtbar sind
+      if (patientId) {
+        await dispatch(fetchPatientDiagnoses({ patientId }));
+      }
+      if (encounterId) {
+        await dispatch(fetchEncounterDiagnoses(encounterId));
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Setzen der Hauptdiagnose:', error);
+      // Fehler wird bereits im Redux-State gespeichert und kann dort angezeigt werden
+    }
   };
 
   // Reset form

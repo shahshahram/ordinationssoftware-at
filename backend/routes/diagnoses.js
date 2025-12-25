@@ -47,16 +47,23 @@ router.get('/patient/:patientId', optionalAuth, async (req, res) => {
       PatientDiagnosis.countDocuments(query)
     ]);
 
-    // Audit-Log
-    const AuditLog = require('../models/AuditLog');
-    await AuditLog.create({
-      userId: req.user._id,
-      userEmail: req.user.email,
-      userRole: req.user.role,
-      action: 'diagnoses.read',
-      description: 'Patient-Diagnosen abgerufen',
-      details: { patientId, options: { status, encounterId, isPrimary } }
-    });
+    // Audit-Log (nur wenn User vorhanden)
+    if (req.user) {
+      try {
+        const AuditLog = require('../models/AuditLog');
+        await AuditLog.create({
+          userId: req.user._id || req.user.id,
+          userEmail: req.user.email,
+          userRole: req.user.role,
+          action: 'diagnoses.read',
+          description: 'Patient-Diagnosen abgerufen',
+          details: { patientId, options: { status, encounterId, isPrimary } }
+        });
+      } catch (auditError) {
+        // Audit-Log-Fehler sollten die Hauptfunktion nicht blockieren
+        console.error('Audit-Log-Fehler:', auditError);
+      }
+    }
 
     res.json({
       success: true,
@@ -226,17 +233,45 @@ router.patch('/:id', auth, async (req, res) => {
 
     // Wenn Hauptdiagnose geändert wird
     if (updateData.isPrimary !== undefined && updateData.isPrimary !== diagnosis.isPrimary) {
-      if (updateData.isPrimary && diagnosis.encounterId) {
-        await PatientDiagnosis.updateMany(
-          { encounterId: diagnosis.encounterId, isPrimary: true, _id: { $ne: id } },
-          { isPrimary: false }
-        );
+      if (updateData.isPrimary) {
+        // Wenn Diagnose eine encounterId hat: setze andere Hauptdiagnosen dieses Termins auf false
+        if (diagnosis.encounterId) {
+          await PatientDiagnosis.updateMany(
+            { encounterId: diagnosis.encounterId, isPrimary: true, _id: { $ne: id } },
+            { isPrimary: false }
+          );
+        } else {
+          // Wenn Diagnose keine encounterId hat: setze andere Hauptdiagnosen ohne encounterId dieses Patienten auf false
+          await PatientDiagnosis.updateMany(
+            { 
+              patientId: diagnosis.patientId, 
+              encounterId: { $in: [null, undefined] },
+              isPrimary: true, 
+              _id: { $ne: id } 
+            },
+            { isPrimary: false }
+          );
+        }
       }
     }
 
-    Object.assign(diagnosis, updateData);
-    diagnosis.lastModifiedBy = req.user._id;
-    await diagnosis.save();
+    // Jetzt können wir die Diagnose sicher aktualisieren
+    // Verwende findByIdAndUpdate statt save(), um das Pre-save Middleware zu umgehen
+    // (da wir bereits die anderen Hauptdiagnosen aktualisiert haben)
+    const updatedDiagnosis = await PatientDiagnosis.findByIdAndUpdate(
+      id,
+      { ...updateData, lastModifiedBy: req.user._id, updatedAt: new Date() },
+      { new: true, runValidators: false } // runValidators: false, da wir die Validierung bereits manuell durchgeführt haben
+    );
+    
+    if (!updatedDiagnosis) {
+      return res.status(404).json({
+        success: false,
+        message: 'Diagnose nicht gefunden'
+      });
+    }
+    
+    diagnosis = updatedDiagnosis;
 
     // Audit-Log
     const AuditLog = require('../models/AuditLog');
@@ -440,25 +475,46 @@ router.put('/:id', optionalAuth, async (req, res) => {
       }
     });
 
-    // Prüfe Hauptdiagnose-Konflikt
-    if (updates.isPrimary && diagnosis.encounterId) {
-      const existingPrimary = await PatientDiagnosis.findOne({
-        encounterId: diagnosis.encounterId,
-        isPrimary: true,
-        _id: { $ne: id }
-      });
-      if (existingPrimary) {
-        return res.status(400).json({
-          success: false,
-          message: 'Es existiert bereits eine Hauptdiagnose für diesen Termin'
-        });
+    // Wenn Hauptdiagnose gesetzt wird, setze andere Hauptdiagnosen auf false
+    // WICHTIG: Dies muss VOR dem save() passieren, damit das Pre-save Middleware keine Konflikte findet
+    if (updates.isPrimary !== undefined && updates.isPrimary && updates.isPrimary !== diagnosis.isPrimary) {
+      if (diagnosis.encounterId) {
+        // Wenn Diagnose eine encounterId hat: setze andere Hauptdiagnosen dieses Termins auf false
+        const updateResult = await PatientDiagnosis.updateMany(
+          { encounterId: diagnosis.encounterId, isPrimary: true, _id: { $ne: id } },
+          { isPrimary: false }
+        );
+        console.log(`✅ Setze ${updateResult.modifiedCount} andere Hauptdiagnosen des Termins auf false`);
+      } else {
+        // Wenn Diagnose keine encounterId hat: setze andere Hauptdiagnosen ohne encounterId dieses Patienten auf false
+        const updateResult = await PatientDiagnosis.updateMany(
+          { 
+            patientId: diagnosis.patientId, 
+            encounterId: { $in: [null, undefined] },
+            isPrimary: true, 
+            _id: { $ne: id } 
+          },
+          { isPrimary: false }
+        );
+        console.log(`✅ Setze ${updateResult.modifiedCount} andere Hauptdiagnosen ohne Termin auf false`);
       }
     }
 
-    Object.assign(diagnosis, updates);
-    diagnosis.lastModifiedBy = req.user._id;
-
-    await diagnosis.save();
+    // Jetzt können wir die Diagnose sicher aktualisieren
+    // Verwende findByIdAndUpdate statt save(), um das Pre-save Middleware zu umgehen
+    // (da wir bereits die anderen Hauptdiagnosen aktualisiert haben)
+    const updatedDiagnosis = await PatientDiagnosis.findByIdAndUpdate(
+      id,
+      { ...updates, lastModifiedBy: req.user._id, updatedAt: new Date() },
+      { new: true, runValidators: false } // runValidators: false, da wir die Validierung bereits manuell durchgeführt haben
+    );
+    
+    if (!updatedDiagnosis) {
+      return res.status(404).json({
+        success: false,
+        message: 'Diagnose nicht gefunden'
+      });
+    }
 
     // Audit-Log
     const AuditLog = require('../models/AuditLog');
@@ -476,7 +532,7 @@ router.put('/:id', optionalAuth, async (req, res) => {
 
     res.json({
       success: true,
-      data: diagnosis,
+      data: updatedDiagnosis,
       message: 'Diagnose erfolgreich aktualisiert'
     });
   } catch (error) {

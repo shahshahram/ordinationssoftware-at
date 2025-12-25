@@ -330,16 +330,45 @@ const diagnosisSlice = createSlice({
         state.loading = false;
         const updatedDiagnosis = action.payload.data;
         
-        // Update in patient diagnoses
-        const patientIndex = state.patientDiagnoses.findIndex(d => d._id === updatedDiagnosis._id);
-        if (patientIndex !== -1) {
-          state.patientDiagnoses[patientIndex] = updatedDiagnosis;
-        }
-        
-        // Update in encounter diagnoses
-        const encounterIndex = state.encounterDiagnoses.findIndex(d => d._id === updatedDiagnosis._id);
-        if (encounterIndex !== -1) {
-          state.encounterDiagnoses[encounterIndex] = updatedDiagnosis;
+        // Wenn isPrimary auf true gesetzt wurde, setze alle anderen Diagnosen des gleichen Patienten/Encounter auf false
+        if (updatedDiagnosis.isPrimary) {
+          // Update in patient diagnoses
+          state.patientDiagnoses = state.patientDiagnoses.map(d => {
+            if (d._id === updatedDiagnosis._id) {
+              return updatedDiagnosis;
+            }
+            // Wenn Diagnose die gleiche encounterId hat (oder beide keine haben), setze isPrimary auf false
+            const sameEncounter = (d.encounterId === updatedDiagnosis.encounterId) || 
+                                  (!d.encounterId && !updatedDiagnosis.encounterId);
+            if (sameEncounter && d.patientId === updatedDiagnosis.patientId && d.isPrimary) {
+              return { ...d, isPrimary: false };
+            }
+            return d;
+          });
+          
+          // Update in encounter diagnoses
+          state.encounterDiagnoses = state.encounterDiagnoses.map(d => {
+            if (d._id === updatedDiagnosis._id) {
+              return updatedDiagnosis;
+            }
+            // Wenn Diagnose die gleiche encounterId hat, setze isPrimary auf false
+            if (d.encounterId === updatedDiagnosis.encounterId && d.isPrimary) {
+              return { ...d, isPrimary: false };
+            }
+            return d;
+          });
+        } else {
+          // Normales Update ohne isPrimary-Änderung
+          const patientIndex = state.patientDiagnoses.findIndex(d => d._id === updatedDiagnosis._id);
+          if (patientIndex !== -1) {
+            state.patientDiagnoses[patientIndex] = updatedDiagnosis;
+          }
+          
+          // Update in encounter diagnoses
+          const encounterIndex = state.encounterDiagnoses.findIndex(d => d._id === updatedDiagnosis._id);
+          if (encounterIndex !== -1) {
+            state.encounterDiagnoses[encounterIndex] = updatedDiagnosis;
+          }
         }
         
         // Update selected diagnosis

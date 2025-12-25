@@ -11,6 +11,7 @@ import locationWeeklyScheduleReducer from './slices/locationWeeklyScheduleSlice'
 import weeklyScheduleReducer from './slices/weeklyScheduleSlice';
 import icd10Reducer from './slices/icd10Slice';
 import diagnosisReducer from './slices/diagnosisSlice';
+import medicationReducer from './slices/medicationSlice';
 import icd10PersonalListsReducer from './slices/icd10PersonalListsSlice';
 import slotReservationReducer from './slices/slotReservationSlice';
 import documentTemplateReducer from './slices/documentTemplateSlice';
@@ -39,6 +40,7 @@ export const store = configureStore({
     weeklySchedules: weeklyScheduleReducer,
     icd10: icd10Reducer,
     diagnoses: diagnosisReducer,
+    medications: medicationReducer,
     icd10PersonalLists: icd10PersonalListsReducer,
     slotReservations: slotReservationReducer,
     documentTemplates: documentTemplateReducer,

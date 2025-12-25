@@ -42,3 +42,4 @@ node backend/scripts/migrate-permissions.js --user-id=USER_ID
 - Das neue System (`rbac.customPermissions`) hat Priorität
 - Alte Permissions werden weiterhin als Fallback unterstützt
 
+

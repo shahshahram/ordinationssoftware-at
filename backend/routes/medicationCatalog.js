@@ -127,9 +127,11 @@ router.get('/search', auth, async (req, res) => {
 
     // Escape Regex-Sonderzeichen im Suchbegriff
     const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const escapedSearchTermStart = escapedSearchTerm;
-
-    // MongoDB Text Search mit Regex für bessere Performance
+    
+    // EINFACHE LOGIK wie bei ICD10: Hole alle Ergebnisse, sortiere nach Relevanz
+    const searchLimit = Math.max(parseInt(limit) * 5, 200);
+    
+    // Einfache Query: Alle Medikamente, die den Suchbegriff enthalten
     const query = {
       $or: [
         { name: { $regex: escapedSearchTerm, $options: 'i' } },
@@ -139,51 +141,106 @@ router.get('/search', auth, async (req, res) => {
         { searchText: { $regex: escapedSearchTerm, $options: 'i' } }
       ]
     };
-
-    // Erweiterte Suche: Aggregation Pipeline für bessere Sortierung
-    // Priorisiert: 1. Name, 2. Wirkstoff, 3. Bezeichnung, 4. ATC-Code
-    const medications = await MedicationCatalog.aggregate([
-      { $match: query },
-      {
-        $addFields: {
-          // Relevanz-Score: Höhere Priorität für exakte Treffer
-          relevanceScore: {
-            $add: [
-              // Name-Treffer: 100 Punkte
-              { $cond: [{ $regexMatch: { input: '$name', regex: escapedSearchTerm, options: 'i' } }, 100, 0] },
-              // Wirkstoff-Treffer: 80 Punkte (hohe Priorität)
-              { $cond: [{ $regexMatch: { input: '$activeIngredient', regex: escapedSearchTerm, options: 'i' } }, 80, 0] },
-              // Bezeichnung-Treffer: 60 Punkte
-              { $cond: [{ $regexMatch: { input: '$designation', regex: escapedSearchTerm, options: 'i' } }, 60, 0] },
-              // ATC-Code-Treffer: 40 Punkte
-              { $cond: [{ $regexMatch: { input: '$atcCode', regex: escapedSearchTerm, options: 'i' } }, 40, 0] },
-              // Name beginnt mit Suchbegriff: Bonus 20 Punkte
-              { $cond: [{ $regexMatch: { input: '$name', regex: `^${escapedSearchTermStart}`, options: 'i' } }, 20, 0] },
-              // Wirkstoff beginnt mit Suchbegriff: Bonus 15 Punkte
-              { $cond: [{ $regexMatch: { input: '$activeIngredient', regex: `^${escapedSearchTermStart}`, options: 'i' } }, 15, 0] }
-            ]
-          }
+    
+    // Hole alle relevanten Ergebnisse
+    let medications = await MedicationCatalog.find(query)
+      .select('_id name designation activeIngredient strength strengthUnit form atcCode requiresPrescription')
+      .limit(searchLimit)
+      .lean();
+    
+    // Sortierung nach Relevanz: Name beginnt mit Suchbegriff hat höchste Priorität
+    const searchLower = searchTerm.toLowerCase();
+    
+    medications = medications.map(med => {
+      const nameLower = (med.name || '').toLowerCase();
+      let priority = 999; // Default: niedrigste Priorität
+      
+      // Priorität 1: Name beginnt EXAKT mit Suchbegriff (z.B. "nova" -> "Novalgin" wenn es mit "nova" beginnt)
+      if (nameLower.startsWith(searchLower)) {
+        priority = 1;
+      }
+      // Priorität 2: Name beginnt mit ersten 3 Zeichen (z.B. "nov" für "nova" -> "Novalgin")
+      else if (searchLower.length >= 3) {
+        const first3 = searchLower.substring(0, 3);
+        if (nameLower.startsWith(first3)) {
+          priority = 2;
         }
-      },
-      {
-        $project: {
-          _id: 1,
-          name: 1,
-          designation: 1,
-          activeIngredient: 1,
-          strength: 1,
-          strengthUnit: 1,
-          form: 1,
-          atcCode: 1,
-          requiresPrescription: 1,
-          relevanceScore: 1
+      }
+      // Priorität 3: Name beginnt mit ersten 2 Zeichen
+      if (priority === 999 && searchLower.length >= 2) {
+        const first2 = searchLower.substring(0, 2);
+        if (nameLower.startsWith(first2)) {
+          priority = 3;
         }
-      },
-      { $sort: { relevanceScore: -1, name: 1 } },
-      { $limit: parseInt(limit) }
-    ]);
+      }
+      // Priorität 4-6: Name enthält Suchbegriff, beginnt aber nicht damit
+      if (priority === 999 && nameLower.includes(searchLower)) {
+        const index = nameLower.indexOf(searchLower);
+        if (index < 3) {
+          priority = 4;
+        } else if (index < 6) {
+          priority = 5;
+        } else {
+          priority = 6;
+        }
+      }
+      // Priorität 7: Andere Treffer (Wirkstoff, Bezeichnung, etc.) - bleibt bei 999
+      
+      return { ...med, priority, nameLower };
+    });
 
-    console.log(`Medikamenten-Suche: ${medications.length} Ergebnisse gefunden`);
+    // Sortieren: Zuerst nach Priorität, dann nach Name
+    medications.sort((a, b) => {
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
+      // Bei gleicher Priorität: Kürzere Namen zuerst, dann alphabetisch
+      if (a.nameLower.length !== b.nameLower.length) {
+        return a.nameLower.length - b.nameLower.length;
+      }
+      return a.nameLower.localeCompare(b.nameLower);
+    });
+
+    // Debug: Zeige die ersten 10 Ergebnisse mit Priorität
+    console.log(`\n=== MEDIKAMENTEN-SUCHE DEBUG ===`);
+    console.log(`Suchbegriff: "${searchTerm}" (lowercase: "${searchLower}")`);
+    console.log(`Ergebnisse gefunden: ${medications.length} (vor Limit)`);
+    
+    // Suche speziell nach "Novalgin" in den Ergebnissen
+    const novalgin = medications.find(m => (m.nameLower || '').includes('novalgin'));
+    if (novalgin) {
+      console.log(`\n✅ "Novalgin" gefunden:`);
+      console.log(`  Name: ${novalgin.name}`);
+      console.log(`  Priority: ${novalgin.priority}`);
+      console.log(`  nameLower: ${novalgin.nameLower}`);
+      console.log(`  startsWith "${searchLower}": ${novalgin.nameLower.startsWith(searchLower)}`);
+      if (searchLower.length >= 3) {
+        console.log(`  startsWith "${searchLower.substring(0, 3)}": ${novalgin.nameLower.startsWith(searchLower.substring(0, 3))}`);
+      }
+    } else {
+      console.log(`\n❌ "Novalgin" NICHT in den Ergebnissen gefunden!`);
+    }
+    
+    const top10 = medications.slice(0, 10).map(m => ({
+      name: m.name,
+      priority: m.priority,
+      nameLower: m.nameLower,
+      startsWithExact: (m.nameLower || '').startsWith(searchLower),
+      startsWith3: searchLower.length >= 3 ? (m.nameLower || '').startsWith(searchLower.substring(0, 3)) : false
+    }));
+    console.log(`\nTop 10 Ergebnisse:`);
+    top10.forEach((m, i) => {
+      console.log(`  ${i + 1}. ${m.name} (Priority: ${m.priority}, startsWithExact: ${m.startsWithExact}, startsWith3: ${m.startsWith3})`);
+    });
+    console.log(`=== ENDE DEBUG ===\n`);
+
+    // Entferne priority und nameLower vor der Rückgabe
+    medications = medications.map(({ priority, nameLower, ...med }) => med);
+
+    // Jetzt erst auf das gewünschte Limit reduzieren
+    medications = medications.slice(0, parseInt(limit));
+
+    console.log(`Medikamenten-Suche: ${medications.length} finale Ergebnisse`);
     
     res.json({
       success: true,

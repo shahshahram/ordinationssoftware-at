@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { 
   Box, 
   Paper, 
@@ -76,7 +76,8 @@ import {
   BugReport,
   CloudDownload as CloudDownloadIcon,
   Search,
-  FilterList
+  FilterList,
+  Block
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -93,6 +94,7 @@ import { apiRequest } from '../utils/api';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import PatientSidebar from '../components/PatientSidebar';
 import DiagnosisManager from '../components/DiagnosisManager';
+import MedicationManager from '../components/MedicationManager';
 import MedicationListInput, { convertMedicationsArrayToPatientFormat } from '../components/MedicationListInput';
 import CDADocumentViewer from '../components/CDADocumentViewer';
 import PatientVisitHistory from '../components/PatientVisitHistory';
@@ -427,6 +429,14 @@ const PatientOrganizer: React.FC = () => {
   // State für GINA-Box
   const [ginaBoxPatientFound, setGinaBoxPatientFound] = useState<any>(null);
   const [ginaBoxDialogOpen, setGinaBoxDialogOpen] = useState(false);
+  
+  // State für Medikamenten-Manager Dialog
+  const [medicationManagerDialogOpen, setMedicationManagerDialogOpen] = useState(false);
+  
+  // Callback für Medikamenten-Änderungen (stabilisiert mit useCallback)
+  const handleMedicationChange = useCallback((medications: any[]) => {
+    console.log('Medikamente aktualisiert:', medications.length);
+  }, []);
   
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -2319,103 +2329,223 @@ const PatientOrganizer: React.FC = () => {
                       />
                     )}
                     {patient.isTemporary && (
-                      <Chip 
-                        icon={<Warning />}
-                        label="Temporär" 
-                        size="small" 
-                        color="warning"
+                      <Tooltip
                         title="Patient über Online-Buchung erstellt - Stammdaten müssen vervollständigt werden"
-                        sx={{ 
-                          bgcolor: 'rgba(255, 193, 7, 0.9)', 
-                          color: 'rgba(0, 0, 0, 0.87)',
-                          fontWeight: 'bold'
-                        }}
-                      />
+                        arrow
+                        placement="top"
+                      >
+                        <Chip 
+                          icon={<Warning />}
+                          label="Temporär" 
+                          size="small" 
+                          color="warning"
+                          sx={{ 
+                            bgcolor: 'rgba(255, 193, 7, 0.9)', 
+                            color: 'rgba(0, 0, 0, 0.87)',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      </Tooltip>
                     )}
                     {patient.hasHint && (
-                      <Chip 
-                        icon={<Warning />}
-                        label="Hinweis" 
-                        size="small" 
-                        color="warning"
-                        onClick={() => {
-                          setHintTextEdit(patient.hintText || '');
-                          setHintEditMode(false);
-                          setHintDetailsDialogOpen(true);
-                        }}
-                        sx={{ 
-                          bgcolor: 'rgba(255, 193, 7, 0.9)', 
-                          color: 'rgba(0, 0, 0, 0.87)',
-                          cursor: 'pointer',
-                          fontWeight: 500,
-                          '&:hover': {
-                            bgcolor: 'rgba(255, 193, 7, 1)'
-                          }
-                        }}
-                      />
+                      <Tooltip 
+                        title={patient.hintText ? patient.hintText : 'Hinweis vorhanden (kein Text eingegeben)'}
+                        arrow
+                        placement="top"
+                      >
+                        <Chip 
+                          icon={<Warning />}
+                          label="Hinweis" 
+                          size="small" 
+                          color="warning"
+                          onClick={() => {
+                            setHintTextEdit(patient.hintText || '');
+                            setOnlineBookingBlockedEdit(patient.onlineBookingBlocked || false);
+                            setHintEditMode(false);
+                            setHintDetailsDialogOpen(true);
+                          }}
+                          sx={{ 
+                            bgcolor: 'rgba(255, 193, 7, 0.9)', 
+                            color: 'rgba(0, 0, 0, 0.87)',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            '&:hover': {
+                              bgcolor: 'rgba(255, 193, 7, 1)'
+                            }
+                          }}
+                        />
+                      </Tooltip>
+                    )}
+                    {patient.onlineBookingBlocked && (
+                      <Tooltip 
+                        title="Dieser Patient kann keine Termine online buchen. Er muss sich telefonisch einen Termin vereinbaren."
+                        arrow
+                        placement="top"
+                      >
+                        <Chip 
+                          icon={<Block />}
+                          label="Online-Buchung blockiert" 
+                          size="small" 
+                          color="error"
+                          onClick={() => {
+                            setHintTextEdit(patient.hintText || '');
+                            setOnlineBookingBlockedEdit(patient.onlineBookingBlocked || false);
+                            setHintEditMode(false);
+                            setHintDetailsDialogOpen(true);
+                          }}
+                          sx={{ 
+                            bgcolor: 'rgba(211, 47, 47, 0.9)', 
+                            color: 'white',
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            '&:hover': {
+                              bgcolor: 'rgba(211, 47, 47, 1)'
+                            }
+                          }}
+                        />
+                      </Tooltip>
                     )}
                     {patient.isPregnant && (patient.gender === 'w' || patient.gender === 'f') && (
-                      <Chip 
-                        icon={<PregnantWoman />}
-                        label={(() => {
-                          // Berechne Schwangerschaftswoche falls nicht vorhanden
-                          let week = patient.pregnancyWeek;
-                          if (!week) {
-                            const calculatedWeek = calculatePregnancyWeek(
-                              (patient as any).lastMenstrualPeriod,
-                              patient.pregnancyDueDate
-                            );
-                            week = calculatedWeek;
-                          }
-                          return week ? `Schwanger (${week}. Woche)` : 'Schwanger';
-                        })()}
-                        size="small" 
-                        color="secondary"
-                        sx={{ 
-                          bgcolor: 'rgba(156, 39, 176, 0.9)', 
-                          color: 'white',
-                          fontWeight: 600
-                        }}
-                      />
+                      <Tooltip
+                        title={
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                              Schwangerschaft
+                            </Typography>
+                            {(() => {
+                              let week = patient.pregnancyWeek;
+                              if (!week) {
+                                const calculatedWeek = calculatePregnancyWeek(
+                                  (patient as any).lastMenstrualPeriod,
+                                  patient.pregnancyDueDate
+                                );
+                                week = calculatedWeek;
+                              }
+                              return week ? (
+                                <Typography variant="body2" sx={{ mb: 0.25 }}>
+                                  Woche: {week}
+                                </Typography>
+                              ) : null;
+                            })()}
+                            {patient.pregnancyDueDate && (
+                              <Typography variant="body2" sx={{ mb: 0.25 }}>
+                                Entbindungstermin: {new Date(patient.pregnancyDueDate).toLocaleDateString('de-DE')}
+                              </Typography>
+                            )}
+                            {patient.isBreastfeeding && (
+                              <Typography variant="body2">
+                                Stillend
+                              </Typography>
+                            )}
+                          </Box>
+                        }
+                        arrow
+                        placement="top"
+                      >
+                        <Chip 
+                          icon={<PregnantWoman />}
+                          label={(() => {
+                            // Berechne Schwangerschaftswoche falls nicht vorhanden
+                            let week = patient.pregnancyWeek;
+                            if (!week) {
+                              const calculatedWeek = calculatePregnancyWeek(
+                                (patient as any).lastMenstrualPeriod,
+                                patient.pregnancyDueDate
+                              );
+                              week = calculatedWeek;
+                            }
+                            return week ? `Schwanger (${week}. Woche)` : 'Schwanger';
+                          })()}
+                          size="small" 
+                          color="secondary"
+                          sx={{ 
+                            bgcolor: 'rgba(156, 39, 176, 0.9)', 
+                            color: 'white',
+                            fontWeight: 600
+                          }}
+                        />
+                      </Tooltip>
                     )}
                     {patient.allergies && patient.allergies.length > 0 && (
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                        {patient.allergies.map((allergy, index) => {
-                          const allergyLabel = typeof allergy === 'string' ? allergy : (allergy.description || allergy.type || 'Allergie');
-                          return (
-                            <Chip
-                              key={index}
-                              icon={<Warning />}
-                              label={`Allergie: ${allergyLabel}`}
-                              size="small"
-                              color="error"
-                              sx={{ 
-                                bgcolor: 'rgba(211, 47, 47, 0.9)',
-                                color: 'white',
-                                fontWeight: 600
-                              }}
-                            />
-                          );
-                        })}
-                      </Box>
+                      <Tooltip
+                        title={
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                              Allergien:
+                            </Typography>
+                            {patient.allergies.map((allergy, idx) => {
+                              const allergyLabel = typeof allergy === 'string' 
+                                ? allergy 
+                                : `${allergy.type || 'Allergie'}${allergy.description ? `: ${allergy.description}` : ''}${allergy.severity ? ` (${allergy.severity})` : ''}`;
+                              return (
+                                <Typography key={idx} variant="body2" sx={{ mb: 0.25 }}>
+                                  • {allergyLabel}
+                                </Typography>
+                              );
+                            })}
+                          </Box>
+                        }
+                        arrow
+                        placement="top"
+                      >
+                        <Chip
+                          icon={<Warning />}
+                          label={`Allergie${patient.allergies.length > 1 ? 'n' : ''} (${patient.allergies.length})`}
+                          size="small"
+                          color="error"
+                          sx={{ 
+                            bgcolor: 'rgba(211, 47, 47, 0.9)',
+                            color: 'white',
+                            fontWeight: 600
+                          }}
+                        />
+                      </Tooltip>
                     )}
                     {patient.infections && patient.infections.length > 0 && patient.infections.some(inf => inf.status === 'active') && (
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                         {patient.infections.filter(inf => inf.status === 'active').map((infection, index) => {
                           const isMRSAOrMRGN = infection.type?.toUpperCase().includes('MRSA') || infection.type?.toUpperCase().includes('MRGN');
+                          const tooltipContent = (
+                            <Box>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                                {infection.type || 'Infektion'}
+                              </Typography>
+                              {infection.location && (
+                                <Typography variant="body2" sx={{ mb: 0.25 }}>
+                                  Ort: {infection.location}
+                                </Typography>
+                              )}
+                              {infection.detectedDate && (
+                                <Typography variant="body2" sx={{ mb: 0.25 }}>
+                                  Erkannt: {new Date(infection.detectedDate).toLocaleDateString('de-DE')}
+                                </Typography>
+                              )}
+                              {infection.status && (
+                                <Typography variant="body2">
+                                  Status: {infection.status === 'active' ? 'Aktiv' : infection.status === 'resolved' ? 'Abgeklungen' : infection.status === 'colonized' ? 'Kolonisiert' : infection.status}
+                                </Typography>
+                              )}
+                            </Box>
+                          );
                           return (
-                            <Chip
+                            <Tooltip
                               key={index}
-                              icon={<BugReport />}
-                              label={infection.type || 'Infektion'}
-                              size="small"
-                              color={isMRSAOrMRGN ? 'error' : 'success'}
-                              sx={{ 
-                                bgcolor: isMRSAOrMRGN ? 'rgba(211, 47, 47, 0.9)' : 'rgba(46, 125, 50, 0.9)',
-                                color: 'white',
-                                fontWeight: 600
-                              }}
-                            />
+                              title={tooltipContent}
+                              arrow
+                              placement="top"
+                            >
+                              <Chip
+                                icon={<BugReport />}
+                                label={infection.type || 'Infektion'}
+                                size="small"
+                                color={isMRSAOrMRGN ? 'error' : 'success'}
+                                sx={{ 
+                                  bgcolor: isMRSAOrMRGN ? 'rgba(211, 47, 47, 0.9)' : 'rgba(46, 125, 50, 0.9)',
+                                  color: 'white',
+                                  fontWeight: 600
+                                }}
+                              />
+                            </Tooltip>
                           );
                         })}
                       </Box>
@@ -2629,6 +2759,25 @@ const PatientOrganizer: React.FC = () => {
               Patienten-/Arztbrief
             </Button>
             <Button
+              variant="contained"
+              size="small"
+              startIcon={<Medication />}
+              onClick={() => {
+                if (!patient) return;
+                setMedicationManagerDialogOpen(true);
+              }}
+              disabled={!patient}
+              sx={{
+                bgcolor: '#E8F5E9',
+                color: 'text.primary',
+                '&:hover': {
+                  bgcolor: '#A5D6A7'
+                }
+              }}
+            >
+              Medikamente
+            </Button>
+            <Button
               variant="outlined"
               size="small"
               startIcon={<Description />}
@@ -2706,9 +2855,11 @@ const PatientOrganizer: React.FC = () => {
                 if (!patient) return;
                 if (patient.hasHint) {
                   setHintTextEdit(patient.hintText || '');
+                  setOnlineBookingBlockedEdit(patient.onlineBookingBlocked || false);
                   setHintEditMode(false);
                 } else {
                   setHintTextEdit('');
+                  setOnlineBookingBlockedEdit(patient.onlineBookingBlocked || false);
                   setHintEditMode(true);
                 }
                 setHintDetailsDialogOpen(true);
@@ -2734,7 +2885,6 @@ const PatientOrganizer: React.FC = () => {
                 if (!patient) return;
                 setNotesEdit(patient.notes || '');
                 setMedicalNotesEdit(patient.medicalNotes || '');
-                setOnlineBookingBlockedEdit(patient.onlineBookingBlocked || false);
                 setNotesDialogOpen(true);
               }}
               disabled={!patient}
@@ -5295,6 +5445,7 @@ const PatientOrganizer: React.FC = () => {
           setHintDetailsDialogOpen(false);
           setHintEditMode(false);
           setHintTextEdit('');
+          setOnlineBookingBlockedEdit(false);
         }}
         maxWidth="sm"
         fullWidth
@@ -5312,6 +5463,7 @@ const PatientOrganizer: React.FC = () => {
               setHintDetailsDialogOpen(false);
               setHintEditMode(false);
               setHintTextEdit('');
+              setOnlineBookingBlockedEdit(false);
             }}
             sx={{ ml: 2 }}
           >
@@ -5339,7 +5491,6 @@ const PatientOrganizer: React.FC = () => {
                       if (!patient) return;
                       try {
                         const updatedPatient = {
-                          ...patient,
                           hasHint: e.target.checked,
                           hintText: e.target.checked ? hintTextEdit : ''
                         };
@@ -5361,6 +5512,27 @@ const PatientOrganizer: React.FC = () => {
                 label="Hinweis aktiviert"
                 sx={{ mt: 2 }}
               />
+              <Divider sx={{ my: 3 }} />
+              <Box>
+                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                  Online-Buchung
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={onlineBookingBlockedEdit}
+                      onChange={(e) => setOnlineBookingBlockedEdit(e.target.checked)}
+                      color="warning"
+                    />
+                  }
+                  label="Online-Buchung für diesen Patienten blockieren"
+                />
+                {onlineBookingBlockedEdit && (
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    Dieser Patient kann keine Termine online buchen. Er muss sich telefonisch einen Termin vereinbaren.
+                  </Alert>
+                )}
+              </Box>
             </Box>
           ) : (
             <>
@@ -5395,9 +5567,9 @@ const PatientOrganizer: React.FC = () => {
                   if (!patient) return;
                   try {
                     const updatedPatient = {
-                      ...patient,
                       hasHint: true,
-                      hintText: hintTextEdit.trim()
+                      hintText: hintTextEdit.trim(),
+                      onlineBookingBlocked: Boolean(onlineBookingBlockedEdit)
                     };
                     await dispatch(updatePatient({ 
                       id: (patient._id || patient.id)!, 
@@ -5405,11 +5577,12 @@ const PatientOrganizer: React.FC = () => {
                     }));
                     setSnackbar({
                       open: true,
-                      message: 'Hinweis wurde gespeichert',
+                      message: 'Hinweis und Einstellungen wurden gespeichert',
                       severity: 'success'
                     });
                     setHintEditMode(false);
                     setHintTextEdit('');
+                    setOnlineBookingBlockedEdit(false);
                     setHintDetailsDialogOpen(false);
                   } catch (error) {
                     console.error('Fehler beim Speichern des Hinweises:', error);
@@ -5430,6 +5603,7 @@ const PatientOrganizer: React.FC = () => {
                 setHintDetailsDialogOpen(false);
                 setHintEditMode(false);
                 setHintTextEdit('');
+                setOnlineBookingBlockedEdit(false);
               }}>
                 Schließen
               </Button>
@@ -5439,6 +5613,7 @@ const PatientOrganizer: React.FC = () => {
                   startIcon={<Edit />}
                   onClick={() => {
                     setHintTextEdit(patient.hintText || '');
+                    setOnlineBookingBlockedEdit(patient.onlineBookingBlocked || false);
                     setHintEditMode(true);
                   }}
                 >
@@ -5507,27 +5682,6 @@ const PatientOrganizer: React.FC = () => {
               placeholder="Medizinische Notizen zum Patienten eingeben..."
               variant="outlined"
             />
-            <Divider sx={{ my: 3 }} />
-            <Box>
-              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-                Online-Buchung
-              </Typography>
-              <FormControlLabel
-                control={
-                  <Switch
-                    checked={onlineBookingBlockedEdit}
-                    onChange={(e) => setOnlineBookingBlockedEdit(e.target.checked)}
-                    color="warning"
-                  />
-                }
-                label="Online-Buchung für diesen Patienten blockieren"
-              />
-              {onlineBookingBlockedEdit && (
-                <Alert severity="warning" sx={{ mt: 2 }}>
-                  Dieser Patient kann keine Termine online buchen. Er muss sich telefonisch einen Termin vereinbaren.
-                </Alert>
-              )}
-            </Box>
           </Box>
         </DialogContent>
         <DialogActions>
@@ -5536,7 +5690,6 @@ const PatientOrganizer: React.FC = () => {
               setNotesDialogOpen(false);
               setNotesEdit('');
               setMedicalNotesEdit('');
-              setOnlineBookingBlockedEdit(false);
             }}
           >
             Abbrechen
@@ -5548,25 +5701,21 @@ const PatientOrganizer: React.FC = () => {
               if (!patient) return;
               try {
                 const updatedPatient = {
-                  ...patient,
                   notes: notesEdit.trim(),
-                  medicalNotes: medicalNotesEdit.trim(),
-                  onlineBookingBlocked: Boolean(onlineBookingBlockedEdit)
+                  medicalNotes: medicalNotesEdit.trim()
                 };
-                console.log('💾 Speichere Patient mit onlineBookingBlocked:', updatedPatient.onlineBookingBlocked);
                 await dispatch(updatePatient({ 
                   id: (patient._id || patient.id)!, 
                   patientData: updatedPatient 
                 }));
                 setSnackbar({
                   open: true,
-                  message: 'Notizen und Einstellungen wurden gespeichert',
+                  message: 'Notizen wurden gespeichert',
                   severity: 'success'
                 });
                 setNotesDialogOpen(false);
                 setNotesEdit('');
                 setMedicalNotesEdit('');
-                setOnlineBookingBlockedEdit(false);
               } catch (error) {
                 console.error('Fehler beim Speichern der Notizen:', error);
                 setSnackbar({
@@ -5624,6 +5773,32 @@ const PatientOrganizer: React.FC = () => {
         patientDiagnoses={patientDiagnoses?.data || patientDiagnoses || []}
       />
       </Box>
+
+      {/* Medikamenten-Manager Dialog */}
+      <Dialog
+        open={medicationManagerDialogOpen}
+        onClose={() => setMedicationManagerDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
+        <DialogTitle>
+          Medikamente verwalten - {patient ? `${patient.firstName} ${patient.lastName}` : 'Patient'}
+        </DialogTitle>
+        <DialogContent>
+          {patient && (
+            <MedicationManager
+              patientId={patient._id || patient.id}
+              allowEdit={true}
+              onMedicationChange={handleMedicationChange}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setMedicationManagerDialogOpen(false)}>
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };
