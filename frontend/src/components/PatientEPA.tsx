@@ -57,7 +57,11 @@ import {
   Favorite,
   Healing,
   UnfoldMore,
-  UnfoldLess
+  UnfoldLess,
+  CheckCircle,
+  Schedule,
+  Person,
+  Psychology
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointmentsByPatientId } from '../store/slices/appointmentSlice';
@@ -116,6 +120,7 @@ interface EPADateCardProps {
   getTypeIcon: (type: string) => React.ReactNode;
   getTypeLabel: (type: string) => string;
   getTypeColor: (type: string) => "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning";
+  onDekursPreview?: (dekursEntry: any) => void;
 }
 
 const EPADateCard = memo(({ 
@@ -129,7 +134,8 @@ const EPADateCard = memo(({
   onTabChange,
   getTypeIcon,
   getTypeLabel,
-  getTypeColor
+  getTypeColor,
+  onDekursPreview
 }: EPADateCardProps) => {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -213,8 +219,16 @@ const EPADateCard = memo(({
                         tabIndex = 8;
                         break;
                       case 'dekurs':
-                        tabIndex = 1;
-                        break;
+                        // Öffne Vorschau-Dialog für Dekurs-Einträge statt zu navigieren
+                        if (groupedEntry.entries && groupedEntry.entries.length > 0 && groupedEntry.entries[0].metadata) {
+                          if (onDekursPreview) {
+                            onDekursPreview(groupedEntry.entries[0].metadata);
+                          }
+                        }
+                        return; // Verhindere Navigation
+                      // case 'dekurs':
+                      //   tabIndex = 1;
+                      //   break;
                       case 'diagnosis':
                         tabIndex = 3;
                         break;
@@ -360,9 +374,11 @@ const EPADateCard = memo(({
                             />
                           )}
                         </Stack>
-                        <Typography variant="body2" fontWeight="medium" sx={{ mt: 0.5 }}>
-                          {groupedEntry.title}
-                        </Typography>
+                        {groupedEntry.title && groupedEntry.title.trim() && (
+                          <Typography variant="body2" fontWeight="medium" sx={{ mt: 0.5 }}>
+                            {groupedEntry.title}
+                          </Typography>
+                        )}
                         {groupedEntry.description && (
                           <Box sx={{ mt: 0.5 }}>
                             {groupedEntry.isGrouped ? (
@@ -867,6 +883,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const [patient, setPatient] = useState<any>(null);
   const [vitalSignsChartOpen, setVitalSignsChartOpen] = useState(false);
   const [visibleDatesCount, setVisibleDatesCount] = useState(20); // Zeige initial 20 Datum-Karten für bessere UX
+  const [dekursPreviewOpen, setDekursPreviewOpen] = useState(false);
+  const [previewDekursEntry, setPreviewDekursEntry] = useState<any>(null);
 
   // Hilfsfunktion zum Extrahieren der Patient-ID aus einem Appointment
   const getAppointmentPatientId = React.useCallback((apt: any): string | null => {
@@ -877,6 +895,24 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     if (apt.patient && typeof apt.patient === 'object' && apt.patient.id) return String(apt.patient.id);
     return null;
   }, []);
+
+  // WICHTIG: Lade Dekurs-Einträge immer neu, wenn die Komponente sichtbar wird
+  // Dies stellt sicher, dass neue Dekurs-Einträge auch nach Tab-Wechseln angezeigt werden
+  useEffect(() => {
+    if (!patientId) return;
+    
+    // Lade Dekurs-Einträge neu, um sicherzustellen, dass alle neuen Einträge verfügbar sind
+    // Verwende einen kleinen Delay, um sicherzustellen, dass die Komponente vollständig gerendert ist
+    const loadDekursTimeout = setTimeout(() => {
+      dispatch(fetchDekursEntries({ patientId, limit: 1000 })).catch((error: any) => {
+        console.warn('Fehler beim Neuladen der Dekurs-Einträge:', error);
+      });
+    }, 100);
+    
+    return () => {
+      clearTimeout(loadDekursTimeout);
+    };
+  }, [patientId, dispatch]);
 
   // Lade alle Daten - OPTIMIERT: Prüfe Redux Store zuerst, lade nur wenn nötig
   useEffect(() => {
@@ -892,8 +928,18 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           patientDiagnoses.some((diag: any) => diag.patientId === patientId || (diag.patient && (typeof diag.patient === 'string' ? diag.patient === patientId : diag.patient._id === patientId)));
         const hasDocuments = documents && documents.length > 0 && 
           documents.some((doc: any) => doc.patientId === patientId);
-        const hasDekurs = dekursEntries && dekursEntries.length > 0 && 
-          dekursEntries.some((entry: any) => entry.patientId === patientId);
+        // Hilfsfunktion zum Extrahieren der patientId aus einem Dekurs-Eintrag (für Prüfung)
+        const getDekursPatientIdForCheck = (dekurs: any): string | null => {
+          if (dekurs.patientId) return String(dekurs.patientId);
+          if (dekurs.patient && typeof dekurs.patient === 'string') return String(dekurs.patient);
+          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient._id) return String(dekurs.patient._id);
+          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient.id) return String(dekurs.patient.id);
+          return null;
+        };
+        
+        // WICHTIG: Dekurs-Einträge immer neu laden, um sicherzustellen, dass neue Einträge verfügbar sind
+        // Die Prüfung auf hasDekurs wird entfernt, damit Dekurs-Einträge immer geladen werden
+        const hasDekurs = false; // Immer false, damit Dekurs-Einträge immer neu geladen werden
         const hasVitalSigns = vitalSigns && vitalSigns.length > 0 && 
           vitalSigns.some((vs: any) => vs.patientId === patientId);
 
@@ -933,9 +979,10 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         if (!hasDocuments) {
           importantPromises.push(dispatch(fetchDocuments({ patientId })).catch(() => {}));
         }
-        if (!hasDekurs) {
-          importantPromises.push(dispatch(fetchDekursEntries({ patientId, limit: 50 })).catch(() => {}));
-        }
+        // WICHTIG: Dekurs-Einträge immer neu laden, um sicherzustellen, dass neue Einträge verfügbar sind
+        // Dies wird auch durch den separaten useEffect oben unterstützt, aber hier als Fallback
+        // Verwende limit: 1000, um alle Einträge zu laden
+        importantPromises.push(dispatch(fetchDekursEntries({ patientId, limit: 1000 })).catch(() => {}));
         if (!hasVitalSigns) {
           importantPromises.push(dispatch(fetchVitalSigns(patientId)).catch(() => {}));
         }
@@ -1149,18 +1196,99 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
   // Erstelle EPA-Einträge aus allen Datenquellen
   // OPTIMIERT: Verwende requestIdleCallback für nicht-kritische Verarbeitung
+  // Ref für Debounce-Mechanismus
+  const processTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastProcessedDataRef = useRef<string>('');
+  // Ref für aktuelle EPA-Einträge, um Stale-Closure-Probleme zu vermeiden
+  const currentEpaEntriesRef = useRef<EPAEntry[]>([]);
+
   useEffect(() => {
     if (!patientId) {
+      // Clear any pending timeout
+      if (processTimeoutRef.current) {
+        clearTimeout(processTimeoutRef.current);
+        processTimeoutRef.current = null;
+      }
       startTransition(() => {
         setEpaEntries([]);
+        currentEpaEntriesRef.current = [];
       });
+      lastProcessedDataRef.current = '';
       return;
     }
 
-    // OPTIMIERT: Verarbeite alle Daten auf einmal, aber nur einmal
-    const processEntries = () => {
+    // Erstelle einen Hash der aktuellen Daten für Change Detection
+    const currentDataHash = JSON.stringify({
+      patientId,
+      appointmentsCount: appointments?.length || 0,
+      dekursCount: dekursEntries?.length || 0,
+      diagnosesCount: patientDiagnoses?.length || 0,
+      documentsCount: documents?.length || 0,
+      vitalSignsCount: vitalSigns?.length || 0,
+      laborCount: laborResults?.length || 0,
+      dicomCount: dicomStudies?.length || 0,
+      photosCount: photos?.length || 0,
+      patientUpdatedAt: patient?.updatedAt || null,
+      // Wichtig: Füge auch die IDs der letzten Einträge hinzu, um echte Änderungen zu erkennen
+      lastDekursId: dekursEntries && dekursEntries.length > 0 ? dekursEntries[dekursEntries.length - 1]?._id : null,
+      lastAppointmentId: appointments && appointments.length > 0 ? appointments[appointments.length - 1]?._id : null,
+      // Füge auch die IDs der ersten Einträge hinzu, um sicherzustellen, dass neue Einträge erkannt werden
+      firstDekursId: dekursEntries && dekursEntries.length > 0 ? dekursEntries[0]?._id : null,
+      firstAppointmentId: appointments && appointments.length > 0 ? appointments[0]?._id : null
+    });
+
+    // Prüfe, ob sich die Daten wirklich geändert haben
+    if (currentDataHash === lastProcessedDataRef.current) {
+      // Keine Änderung, überspringe Neuberechnung
+      return;
+    }
+
+    // Clear any pending timeout
+    if (processTimeoutRef.current) {
+      clearTimeout(processTimeoutRef.current);
+      processTimeoutRef.current = null;
+    }
+
+    // Debounce: Warte 300ms, bevor die EPA neu berechnet wird
+    // Dies verhindert, dass die EPA bei schnellen aufeinanderfolgenden Updates mehrfach neu berechnet wird
+    processTimeoutRef.current = setTimeout(() => {
+      // Aktualisiere den Hash NACH dem Debounce, um Race Conditions zu vermeiden
+      lastProcessedDataRef.current = currentDataHash;
+
+      // OPTIMIERT: Verarbeite alle Daten auf einmal, aber nur einmal
+      const processEntries = () => {
       try {
         let entries: EPAEntry[] = [];
+        
+        // Hilfsfunktion zum Extrahieren der patientId aus einem Dekurs-Eintrag
+        // Wird hier definiert, damit sie im gesamten Block verfügbar ist
+        const getDekursPatientId = (dekurs: any): string | null => {
+          if (dekurs.patientId) return String(dekurs.patientId);
+          if (dekurs.patient && typeof dekurs.patient === 'string') return dekurs.patient;
+          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient._id) return String(dekurs.patient._id);
+          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient.id) return String(dekurs.patient.id);
+          return null;
+        };
+        
+        // Filtere Dekurs-Einträge nach patientId - wird hier definiert, damit es im gesamten Block verfügbar ist
+        const patientDekursEntries = (dekursEntries || []).filter((dekurs: any) => {
+          const dekursPatientId = getDekursPatientId(dekurs);
+          if (!dekursPatientId) {
+            console.warn('⚠️ Dekurs-Eintrag ohne patientId gefunden:', dekurs._id, dekurs);
+            return false; // Keine patientId = nicht zu diesem Patienten
+          }
+          const matches = dekursPatientId === String(patientId);
+          if (!matches && dekursEntries.length <= 10) {
+            console.log('🔍 Dekurs-Eintrag passt nicht:', {
+              dekursId: dekurs._id,
+              dekursPatientId,
+              expectedPatientId: patientId,
+              dekursPatientIdType: typeof dekursPatientId,
+              patientIdType: typeof patientId
+            });
+          }
+          return matches;
+        });
       
       // OPTIMIERT: Reduziere Logging für bessere Performance
       // Nur loggen wenn viele Einträge vorhanden sind
@@ -1181,6 +1309,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       try {
         // Filtere Termine nach patientId BEVOR wir sie verarbeiten (getAppointmentPatientId ist bereits oben definiert)
         // Der Redux Store kann Termine von mehreren Patienten enthalten
+        // WICHTIG: Nur Termine anzeigen, die bereits wahrgenommen wurden (Status != 'geplant')
         const patientAppointments = (appointments || []).filter((apt: any) => {
           const aptPatientId = getAppointmentPatientId(apt);
           if (!aptPatientId) {
@@ -1188,7 +1317,15 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             // (sollte eigentlich nicht vorkommen, aber sicherheitshalber)
             return false;
           }
-          return aptPatientId === String(patientId);
+          // Prüfe patientId
+          if (aptPatientId !== String(patientId)) {
+            return false;
+          }
+          // Filtere Termine mit Status "geplant" aus - nur wahrgenommene Termine anzeigen
+          if (apt.status === 'geplant') {
+            return false;
+          }
+          return true;
         });
 
         // OPTIMIERT: Reduziere Logging
@@ -1233,28 +1370,20 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
       // Dekurs-Einträge
       try {
-        // Hilfsfunktion zum Extrahieren der patientId aus einem Dekurs-Eintrag
-        const getDekursPatientId = (dekurs: any): string | null => {
-          if (dekurs.patientId) return String(dekurs.patientId);
-          if (dekurs.patient && typeof dekurs.patient === 'string') return dekurs.patient;
-          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient._id) return String(dekurs.patient._id);
-          if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient.id) return String(dekurs.patient.id);
-          return null;
-        };
+        // patientDekursEntries wurde bereits oben definiert, verwende es hier
 
-        // Filtere Dekurs-Einträge nach patientId BEVOR wir sie verarbeiten
-        const patientDekursEntries = (dekursEntries || []).filter((dekurs: any) => {
-          const dekursPatientId = getDekursPatientId(dekurs);
-          if (!dekursPatientId) return false; // Keine patientId = nicht zu diesem Patienten
-          return dekursPatientId === String(patientId);
-        });
-
-        // OPTIMIERT: Reduziere Logging
-        if (patientDekursEntries.length > 20) {
+        // Debug-Logging für neue Dekurs-Einträge
+        if (patientDekursEntries.length > 0 || (dekursEntries && dekursEntries.length > 0)) {
           console.log('📝 Verarbeite Dekurs-Einträge:', { 
             total: dekursEntries?.length || 0,
             filtered: patientDekursEntries.length,
-            patientId
+            patientId,
+            sampleDekurs: patientDekursEntries.length > 0 ? {
+              id: patientDekursEntries[0]._id,
+              patientId: getDekursPatientId(patientDekursEntries[0]),
+              entryDate: patientDekursEntries[0].entryDate,
+              status: patientDekursEntries[0].status
+            } : null
           });
         }
         
@@ -1264,12 +1393,15 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             id: `dekurs-${dekurs._id}`,
             type: 'dekurs',
             date: new Date(dekurs.entryDate || dekurs.createdAt),
-            title: 'Dekurs-Eintrag',
+            title: dekurs.visitReason || dekurs.clinicalObservations || dekurs.findings || dekurs.notes || '',
             description: dekurs.visitReason || dekurs.clinicalObservations || dekurs.findings || dekurs.notes,
             status: dekurs.status,
             doctor: dekurs.createdBy ? (typeof dekurs.createdBy === 'object' ? `${dekurs.createdBy.firstName || ''} ${dekurs.createdBy.lastName || ''}`.trim() : dekurs.createdBy) : undefined,
             metadata: dekurs
           });
+          
+          // HINWEIS: Diagnosen aus linkedDiagnoses werden später im Diagnosen-Bereich verarbeitet,
+          // um Duplikate zu vermeiden (falls die Diagnose bereits synchronisiert wurde)
           
           // Medikamente aus Dekurs-Einträgen
           if (dekurs.linkedMedications && Array.isArray(dekurs.linkedMedications)) {
@@ -1341,17 +1473,71 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           });
         }
         
-        // Verarbeite alle Diagnosen
+        // Set für bereits verarbeitete Diagnosen-IDs (um Duplikate zu vermeiden)
+        const processedDiagnosisIds = new Set<string>();
+        
+        // Verarbeite alle Diagnosen aus PatientDiagnosis
         patientDiagnosesFiltered.forEach((diag: any) => {
+          const diagnosisId = diag._id?.toString() || diag.id?.toString();
+          if (diagnosisId) {
+            processedDiagnosisIds.add(diagnosisId);
+          }
+          
+          const diagnosisTitle = diag.display || (diag.code ? `${diag.code}` : '');
           entries.push({
             id: `diagnosis-${diag._id}`,
             type: 'diagnosis',
             date: new Date(diag.createdAt || diag.onsetDate || new Date()),
-            title: `${diag.code || ''} - ${diag.display || 'Diagnose'}`,
-            description: diag.notes || diag.description,
+            title: diagnosisTitle,
+            description: diag.notes || diag.description || (diag.code ? `Code: ${diag.code}` : ''),
             status: diag.statusGerman || diag.status,
             metadata: diag
           });
+        });
+        
+        // WICHTIG: Verarbeite auch Diagnosen aus linkedDiagnoses der Dekurs-Einträge
+        // Diese werden nur hinzugefügt, wenn sie noch nicht in processedDiagnosisIds sind
+        // (um Duplikate zu vermeiden, falls die Diagnose bereits synchronisiert wurde)
+        patientDekursEntries.forEach((dekurs: any) => {
+          if (dekurs.linkedDiagnoses && Array.isArray(dekurs.linkedDiagnoses)) {
+            dekurs.linkedDiagnoses.forEach((linkedDiag: any) => {
+              // Prüfe, ob diese Diagnose bereits verarbeitet wurde (über diagnosisId)
+              const diagnosisId = linkedDiag.diagnosisId?.toString();
+              if (diagnosisId && processedDiagnosisIds.has(diagnosisId)) {
+                // Diagnose wurde bereits aus PatientDiagnosis verarbeitet, überspringe
+                return;
+              }
+              
+              if (!linkedDiag.icd10Code && !linkedDiag.display) {
+                // Überspringe Diagnosen ohne ICD-10 Code oder Display-Text
+                return;
+              }
+              
+              const diagnosisTitle = linkedDiag.display || (linkedDiag.icd10Code ? `${linkedDiag.icd10Code}` : '');
+              const diagnosisDescription = [
+                linkedDiag.icd10Code && `ICD-10: ${linkedDiag.icd10Code}`,
+                linkedDiag.notes && `Notizen: ${linkedDiag.notes}`,
+                linkedDiag.side && `Seite: ${linkedDiag.side === 'left' ? 'Links' : linkedDiag.side === 'right' ? 'Rechts' : 'Beidseitig'}`,
+                linkedDiag.severity && `Schweregrad: ${linkedDiag.severity}`
+              ].filter(Boolean).join(', ') || (linkedDiag.icd10Code ? `ICD-10: ${linkedDiag.icd10Code}` : '');
+              
+              entries.push({
+                id: `diagnosis-dekurs-${dekurs._id}-${linkedDiag.icd10Code || 'unknown'}`,
+                type: 'diagnosis',
+                date: new Date(linkedDiag.onsetDate || dekurs.entryDate || dekurs.createdAt),
+                title: diagnosisTitle,
+                description: diagnosisDescription,
+                status: linkedDiag.status || 'active',
+                doctor: dekurs.createdBy ? (typeof dekurs.createdBy === 'object' ? `${dekurs.createdBy.firstName || ''} ${dekurs.createdBy.lastName || ''}`.trim() : dekurs.createdBy) : undefined,
+                metadata: {
+                  ...linkedDiag,
+                  diagnosisId: linkedDiag.diagnosisId,
+                  dekursId: dekurs._id,
+                  source: 'dekurs'
+                }
+              });
+            });
+          }
         });
       } catch (error) {
         console.error('Fehler beim Verarbeiten von Diagnosen:', error);
@@ -1411,7 +1597,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             id: `labor-${lab._id}`,
             type: 'labor',
             date: new Date(lab.date || lab.createdAt || new Date()),
-            title: lab.testName || lab.name || 'Laborwert',
+            title: lab.testName || lab.name || '',
             description: lab.result || lab.value || lab.description,
             status: lab.status,
             metadata: lab
@@ -1602,7 +1788,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             id: `vital-${vital._id || vital.id}`,
             type: 'vital',
             date: new Date(vital.recordedAt || vital.createdAt || new Date()),
-            title: 'Vitalwerte',
+            title: description || '',
             description: description,
             status: hasAbnormalValues ? 'abnormal' : 'normal',
             doctor: vital.recordedBy ? (typeof vital.recordedBy === 'object' ? `${vital.recordedBy.firstName || ''} ${vital.recordedBy.lastName || ''}`.trim() : vital.recordedBy) : undefined,
@@ -1621,13 +1807,16 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       entries.sort((a, b) => b.date.getTime() - a.date.getTime());
       }
 
-      // Erstelle einen einfacheren Hash für Change Detection
+      // Erstelle einen detaillierteren Hash für Change Detection
+      // Verwende die IDs der ersten 5 und letzten 5 Einträge, um echte Änderungen zu erkennen
+      const entryIds = entries.map(e => e.id).sort();
       const simpleHash = entries.length > 0 
-        ? `${entries.length}|${entries[0].id}|${entries[entries.length - 1].id}`
+        ? `${entries.length}|${entryIds.slice(0, 5).join(',')}|${entryIds.slice(-5).join(',')}`
         : '0';
       
       // Prüfe, ob sich die Daten geändert haben
       if (prevDataHashRef.current === simpleHash) {
+        // Keine Änderung - aber aktualisiere trotzdem lastProcessedDataRef, um Race Conditions zu vermeiden
         return; // Keine Änderung
       }
       
@@ -1660,20 +1849,56 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         };
       }
       
-      // Setze alle Einträge auf einmal - kein startTransition, kein Batching
+      // WICHTIG: Setze Einträge nur, wenn sie sich wirklich geändert haben
+      // Verwende den Ref, um die aktuellen Einträge zu erhalten (vermeidet Stale-Closure-Probleme)
+      const currentEntryIds = currentEpaEntriesRef.current.length > 0 
+        ? new Set(currentEpaEntriesRef.current.map(e => e.id)) 
+        : new Set<string>();
+      const newEntryIds = new Set(entries.map(e => e.id));
+      
+      // Prüfe, ob sich die Einträge wirklich geändert haben
+      const hasRealChanges = 
+        currentEntryIds.size !== newEntryIds.size ||
+        !Array.from(newEntryIds).every(id => currentEntryIds.has(id)) ||
+        !Array.from(currentEntryIds).every(id => newEntryIds.has(id));
+      
+      // Nur aktualisieren, wenn es echte Änderungen gibt ODER wenn noch keine Einträge vorhanden sind
+      if (hasRealChanges || currentEpaEntriesRef.current.length === 0) {
+        // Aktualisiere den Ref ZUERST, dann den State
+        currentEpaEntriesRef.current = entries;
+        // Setze alle Einträge auf einmal - kein startTransition, kein Batching
         setEpaEntries(entries);
+      } else {
+        // Keine Änderung - behalte die alten Einträge
+        // Dies verhindert, dass Einträge während der Neuberechnung verschwinden
+        return;
+      }
     } catch (error) {
       console.error('Fehler beim Erstellen der EPA-Einträge:', error);
       startTransition(() => {
         setEpaEntries([]);
+        currentEpaEntriesRef.current = [];
       });
     }
     };
 
-    // Verarbeite sofort - keine Verzögerung
+    // Verarbeite die Einträge
     processEntries();
+    }, 300); // 300ms Debounce
+
+    // Cleanup: Clear timeout wenn Component unmountet oder dependencies sich ändern
+    return () => {
+      if (processTimeoutRef.current) {
+        clearTimeout(processTimeoutRef.current);
+        processTimeoutRef.current = null;
+      }
+    };
   }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns, patient]);
 
+  // Synchronisiere den Ref mit dem State, wenn sich epaEntries ändert (z.B. durch andere Quellen)
+  useEffect(() => {
+    currentEpaEntriesRef.current = epaEntries;
+  }, [epaEntries]);
 
   // OPTIMIERT: Berechne Typ-Zählungen nur einmal mit useMemo
   const typeCounts = React.useMemo(() => {
@@ -2378,6 +2603,10 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                   getTypeIcon={getTypeIcon}
                   getTypeLabel={getTypeLabel}
                   getTypeColor={getTypeColor}
+                  onDekursPreview={(dekursEntry) => {
+                    setPreviewDekursEntry(dekursEntry);
+                    setDekursPreviewOpen(true);
+                  }}
                 />
               );
             } catch (dateError) {
@@ -2484,6 +2713,303 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setVitalSignsChartOpen(false)}>Schließen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dekurs-Vorschau-Dialog */}
+      <Dialog
+        open={dekursPreviewOpen}
+        onClose={() => {
+          setDekursPreviewOpen(false);
+          setPreviewDekursEntry(null);
+        }}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: {
+            bgcolor: '#FFF9C4',
+            borderRadius: 3
+          }
+        }}
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Assignment color="primary" />
+              Dekurs-Vorschau
+              {previewDekursEntry?.status === 'finalized' && (
+                <Chip
+                  icon={<CheckCircle />}
+                  label="Finalisiert"
+                  color="success"
+                  size="small"
+                  sx={{ ml: 1 }}
+                />
+              )}
+            </Typography>
+            <IconButton onClick={() => {
+              setDekursPreviewOpen(false);
+              setPreviewDekursEntry(null);
+            }} size="small">
+              <Close />
+            </IconButton>
+          </Box>
+        </DialogTitle>
+        <DialogContent dividers sx={{ bgcolor: '#FFF9C4' }}>
+          {previewDekursEntry && (
+            <Stack spacing={3}>
+              {/* Basis-Informationen */}
+              <Box>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  Datum & Zeit
+                </Typography>
+                <Typography variant="body1" sx={{ mb: 2 }}>
+                  {new Date(previewDekursEntry.entryDate || previewDekursEntry.createdAt).toLocaleString('de-DE', {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                </Typography>
+
+                <Box sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Besuchsgrund
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {previewDekursEntry.visitReason || '—'}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Besuchstyp
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {previewDekursEntry.visitType === 'appointment' ? 'Termin' :
+                       previewDekursEntry.visitType === 'phone' ? 'Telefonat' :
+                       previewDekursEntry.visitType === 'emergency' ? 'Notfall' :
+                       previewDekursEntry.visitType === 'follow-up' ? 'Nachkontrolle' :
+                       previewDekursEntry.visitType === 'other' ? 'Sonstiges' :
+                       previewDekursEntry.visitType || 'Unbekannt'}
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {previewDekursEntry.createdBy && (
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Erstellt von
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {typeof previewDekursEntry.createdBy === 'object' 
+                        ? `${previewDekursEntry.createdBy.firstName || ''} ${previewDekursEntry.createdBy.lastName || ''}`.trim()
+                        : previewDekursEntry.createdBy}
+                    </Typography>
+                  </Box>
+                )}
+
+                {previewDekursEntry.finalizedAt && (
+                  <Box>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Finalisiert am
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {new Date(previewDekursEntry.finalizedAt).toLocaleString('de-DE')}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+
+              <Divider />
+
+              {/* Klinische Beobachtungen */}
+              {previewDekursEntry.clinicalObservations && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LocalHospital color="primary" />
+                    Klinische Beobachtungen
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {previewDekursEntry.clinicalObservations}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Verlaufskontrollen */}
+              {previewDekursEntry.progressChecks && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Schedule color="primary" />
+                    Verlaufskontrollen
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {previewDekursEntry.progressChecks}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Befunde */}
+              {previewDekursEntry.findings && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <CheckCircle color="primary" />
+                    Befunde
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {previewDekursEntry.findings}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Medikamentenänderungen */}
+              {previewDekursEntry.medicationChanges && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Medication color="primary" />
+                    Medikamentenänderungen
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {previewDekursEntry.medicationChanges}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Behandlungsdetails */}
+              {previewDekursEntry.treatmentDetails && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Psychology color="primary" />
+                    Behandlungsdetails
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {previewDekursEntry.treatmentDetails}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Psychosoziale Faktoren */}
+              {previewDekursEntry.psychosocialFactors && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Psychology color="primary" />
+                    Psychosoziale Faktoren
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {previewDekursEntry.psychosocialFactors}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Notizen */}
+              {previewDekursEntry.notes && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Assignment color="primary" />
+                    Notizen
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                    {previewDekursEntry.notes}
+                  </Typography>
+                </Box>
+              )}
+
+              {/* Verknüpfte Diagnosen */}
+              {previewDekursEntry.linkedDiagnoses && previewDekursEntry.linkedDiagnoses.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <LocalHospital color="primary" />
+                    Verknüpfte Diagnosen ({previewDekursEntry.linkedDiagnoses.length})
+                  </Typography>
+                  <Stack spacing={1}>
+                    {previewDekursEntry.linkedDiagnoses.map((diag: any, index: number) => (
+                      <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                        <Chip
+                          label={`${diag.icd10Code || ''} - ${diag.display || ''}`}
+                          color="primary"
+                          variant="outlined"
+                          size="small"
+                        />
+                        {diag.side && (
+                          <Chip
+                            label={diag.side === 'left' ? 'Links' : diag.side === 'right' ? 'Rechts' : 'Beidseitig'}
+                            color="secondary"
+                            size="small"
+                          />
+                        )}
+                        {diag.isPrimary && (
+                          <Chip
+                            label="Hauptdiagnose"
+                            color="primary"
+                            size="small"
+                          />
+                        )}
+                        {diag.status && (
+                          <Chip
+                            label={diag.status === 'active' ? 'Aktiv' : diag.status === 'resolved' ? 'Behoben' : diag.status === 'provisional' ? 'Vermutlich' : diag.status}
+                            size="small"
+                            variant="outlined"
+                          />
+                        )}
+                      </Box>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+
+              {/* Verknüpfte Medikamente */}
+              {previewDekursEntry.linkedMedications && previewDekursEntry.linkedMedications.length > 0 && (
+                <Box>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Medication color="primary" />
+                    Verknüpfte Medikamente ({previewDekursEntry.linkedMedications.length})
+                  </Typography>
+                  <Stack spacing={1}>
+                    {previewDekursEntry.linkedMedications.map((med: any, index: number) => (
+                      <Card key={index} variant="outlined" sx={{ p: 1 }}>
+                        <Typography variant="body2" fontWeight="bold">
+                          {med.name || med.medicationId?.name || 'Unbekanntes Medikament'}
+                        </Typography>
+                        {(med.dosage || med.frequency) && (
+                          <Typography variant="caption" color="text.secondary">
+                            {med.dosage && med.dosageUnit ? `${med.dosage} ${med.dosageUnit}` : med.dosage} {med.frequency && `• ${med.frequency}`}
+                          </Typography>
+                        )}
+                        {med.notes && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                            {med.notes}
+                          </Typography>
+                        )}
+                      </Card>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ bgcolor: '#FFF9C4', p: 2 }}>
+          <Button onClick={() => {
+            setDekursPreviewOpen(false);
+            setPreviewDekursEntry(null);
+          }}>
+            Schließen
+          </Button>
+          {previewDekursEntry && onTabChange && (
+            <Button
+              variant="contained"
+              onClick={() => {
+                setDekursPreviewOpen(false);
+                setPreviewDekursEntry(null);
+                setTimeout(() => {
+                  onTabChange(1); // Navigiere zum Dekurs-Tab
+                }, 10);
+              }}
+            >
+              Zum Dekurs-Tab
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

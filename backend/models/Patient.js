@@ -1,4 +1,8 @@
 const mongoose = require('mongoose');
+const { encryptField, decryptField } = require('../utils/fieldEncryption');
+
+// Felder die verschlüsselt werden sollen
+const ENCRYPTED_FIELDS = ['insuranceNumber']; // SVNR wird separat behandelt
 
 const PatientSchema = new mongoose.Schema({
   // Grunddaten
@@ -173,5 +177,39 @@ PatientSchema.methods.getAge = function() {
   
   return age;
 };
+
+// Verschlüsselung vor dem Speichern
+PatientSchema.pre('save', function(next) {
+  if (this.isModified('insuranceNumber') && this.insuranceNumber) {
+    try {
+      const { encryptField, isEncrypted } = require('../utils/fieldEncryption');
+      if (!isEncrypted(this.insuranceNumber)) {
+        this.insuranceNumber = encryptField(this.insuranceNumber);
+      }
+    } catch (error) {
+      console.error('Fehler beim Verschlüsseln von insuranceNumber:', error);
+      // Bei Fehler: Weiter ohne Verschlüsselung (für Migration)
+    }
+  }
+  next();
+});
+
+// Entschlüsselung nach dem Laden
+PatientSchema.post(['find', 'findOne', 'findOneAndUpdate'], function(docs) {
+  if (!docs) return;
+  
+  const { decryptField, isEncrypted } = require('../utils/fieldEncryption');
+  const documents = Array.isArray(docs) ? docs : [docs];
+  
+  documents.forEach(doc => {
+    if (doc && doc.insuranceNumber && isEncrypted(doc.insuranceNumber)) {
+      try {
+        doc.insuranceNumber = decryptField(doc.insuranceNumber);
+      } catch (error) {
+        console.error('Fehler beim Entschlüsseln von insuranceNumber:', error);
+      }
+    }
+  });
+});
 
 module.exports = mongoose.model('Patient', PatientSchema);

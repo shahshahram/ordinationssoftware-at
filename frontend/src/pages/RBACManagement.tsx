@@ -60,7 +60,8 @@ import {
   Info,
   Print,
   Download,
-  Upload
+  Upload,
+  Restore
 } from '@mui/icons-material';
 import { ROLES, ACTIONS, RESOURCES } from '../utils/rbac';
 import { useRBAC } from '../hooks/useRBAC';
@@ -315,46 +316,86 @@ const RBACManagement: React.FC = () => {
     loadData();
   }, []);
 
-  // Lade gespeicherte Rollen-Permissions aus localStorage
-  const loadCustomRolePermissions = (): Record<string, any> => {
+  // Lade angepasste Rollen-Permissions vom Backend
+  const loadCustomRolePermissions = async (): Promise<Record<string, any>> => {
     try {
-      const stored = localStorage.getItem('rbac_custom_role_permissions');
-      return stored ? JSON.parse(stored) : {};
+      const customPermissions: Record<string, any> = {};
+      
+      // Lade für jede System-Rolle die angepassten Permissions
+      for (const role of systemRoles) {
+        try {
+          const response = await api.get<{
+            success?: boolean;
+            data?: {
+              customPermissions?: any;
+            };
+          }>(`/rbac/roles/${role.value}/permissions`);
+          if (response.data?.success && response.data?.data?.customPermissions) {
+            customPermissions[role.value] = response.data.data.customPermissions;
+          }
+        } catch (error) {
+          // Ignoriere Fehler (Rolle hat keine angepassten Permissions)
+          console.debug(`No custom permissions for role ${role.value}`);
+        }
+      }
+      
+      return customPermissions;
     } catch (error) {
       console.error('Error loading custom role permissions:', error);
       return {};
     }
   };
 
-  // Speichere geänderte Rollen-Permissions in localStorage
-  const saveCustomRolePermissions = (roleValue: string, permissions: any) => {
+  // Speichere geänderte Rollen-Permissions im Backend
+  const saveCustomRolePermissions = async (roleValue: string, permissions: any, changeReason?: string) => {
     try {
-      const customPermissions = loadCustomRolePermissions();
-      customPermissions[roleValue] = permissions;
-      localStorage.setItem('rbac_custom_role_permissions', JSON.stringify(customPermissions));
+      await api.put(`/rbac/roles/${roleValue}/permissions`, {
+        permissions,
+        changeReason: changeReason || `Permissions für Rolle ${roleValue} angepasst`
+      });
     } catch (error) {
       console.error('Error saving custom role permissions:', error);
+      throw error;
     }
   };
 
   const loadData = async () => {
     setLoading(true);
     try {
-      // Lade gespeicherte Custom-Permissions
-      const customPermissions = loadCustomRolePermissions();
-      
-      // Merge System-Rollen mit Custom-Permissions
-      const mergedRoles = systemRoles.map(role => {
-        if (customPermissions[role.value]) {
+      // Lade Rollen vom Backend (inkl. hasCustomPermissions Flag)
+      const rolesRes = await api.get<{
+        success?: boolean;
+        data?: Array<{
+          value: string;
+          label: string;
+          description: string;
+          level: number;
+          permissions: Record<string, string[]>;
+          hasCustomPermissions?: boolean;
+        }>;
+      }>('/rbac/roles');
+      if (rolesRes.data?.success && rolesRes.data?.data) {
+        // Backend liefert bereits merged Permissions und hasCustomPermissions Flag
+        setRoles(rolesRes.data.data);
+      } else {
+        // Fallback: Lade Custom-Permissions manuell
+        const customPermissions = await loadCustomRolePermissions();
+        const mergedRoles = systemRoles.map(role => {
+          if (customPermissions[role.value]) {
+            return {
+              ...role,
+              permissions: customPermissions[role.value],
+              hasCustomPermissions: true
+            };
+          }
           return {
             ...role,
-            permissions: customPermissions[role.value]
+            hasCustomPermissions: false
           };
-        }
-        return role;
-      });
+        });
+        setRoles(mergedRoles);
+      }
       
-      setRoles(mergedRoles);
       setPermissions(systemPermissions);
       
       // Nur Benutzer von der API laden
@@ -487,14 +528,14 @@ const RBACManagement: React.FC = () => {
 
   const handleUpdateRole = async (roleId: string, updates: any) => {
     try {
-      // Für System-Rollen: Speichere die geänderten Permissions im localStorage
+      // Für System-Rollen: Speichere die geänderten Permissions im Backend
       const isSystemRole = systemRoles.some(sr => sr.value === roleId || sr.value === updates.value || sr.value === updates.name);
       
       if (isSystemRole) {
-        // Speichere Custom-Permissions für System-Rolle
+        // Speichere Custom-Permissions für System-Rolle im Backend
         const roleValue = updates.value || updates.name || roleId;
-        saveCustomRolePermissions(roleValue, updates.permissions);
-        setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert (Änderungen lokal gespeichert)', severity: 'success' });
+        await saveCustomRolePermissions(roleValue, updates.permissions, `Rolle ${roleValue} bearbeitet`);
+        setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert', severity: 'success' });
         loadData();
       } else {
         // Für benutzerdefinierte Rollen: Versuche Backend-Update (falls Endpoint existiert)
@@ -502,9 +543,9 @@ const RBACManagement: React.FC = () => {
           await api.put(`/rbac/roles/${roleId}`, updates);
           setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert', severity: 'success' });
         } catch (apiError) {
-          // Falls Backend-Endpoint nicht existiert, speichere lokal
-          saveCustomRolePermissions(roleId, updates.permissions);
-          setSnackbar({ open: true, message: 'Rolle erfolgreich aktualisiert (lokal gespeichert)', severity: 'success' });
+          // Falls Backend-Endpoint nicht existiert, zeige Fehler
+          console.error('Error updating custom role:', apiError);
+          setSnackbar({ open: true, message: 'Fehler beim Aktualisieren der benutzerdefinierten Rolle', severity: 'error' });
         }
         loadData();
       }
@@ -544,6 +585,17 @@ const RBACManagement: React.FC = () => {
     } catch (error) {
       console.error('Error revoking permission:', error);
       setSnackbar({ open: true, message: 'Fehler beim Entziehen der Berechtigung', severity: 'error' });
+    }
+  };
+
+  const handleResetRolePermissions = async (roleId: string) => {
+    try {
+      await api.delete(`/rbac/roles/${roleId}/permissions`);
+      setSnackbar({ open: true, message: 'Rollen-Permissions auf Standard zurückgesetzt', severity: 'success' });
+      loadData();
+    } catch (error) {
+      console.error('Error resetting role permissions:', error);
+      setSnackbar({ open: true, message: 'Fehler beim Zurücksetzen der Rollen-Permissions', severity: 'error' });
     }
   };
 
@@ -717,17 +769,19 @@ const RBACManagement: React.FC = () => {
                             </IconButton>
                           </Tooltip>
                         )}
-                        {systemRoles.some(sr => sr.value === role.value) && (
-                          <Tooltip title="System-Rolle (kann bearbeitet, aber nicht gelöscht werden)">
-                            <span>
-                              <Chip 
-                                label="System" 
-                                size="small" 
-                                color="primary" 
-                                variant="outlined"
-                                sx={{ ml: 1 }}
-                              />
-                            </span>
+                        {systemRoles.some(sr => sr.value === role.value) && role.hasCustomPermissions && (
+                          <Tooltip title="Angepasste Permissions zurücksetzen">
+                            <IconButton 
+                              size="small" 
+                              color="warning"
+                              onClick={() => {
+                                if (window.confirm(`Angepasste Permissions für "${role.label}" wirklich auf Standard zurücksetzen?`)) {
+                                  handleResetRolePermissions(role.value);
+                                }
+                              }}
+                            >
+                              <Restore />
+                            </IconButton>
                           </Tooltip>
                         )}
                       </Box>

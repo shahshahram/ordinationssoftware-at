@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { ROLES, ACTIONS, RESOURCES, authorize } = require('../utils/rbac');
+const RolePermission = require('../models/RolePermission');
+const { ROLES, ACTIONS, RESOURCES, authorize, clearPermissionCache } = require('../utils/rbac');
 const { rbacMiddleware } = require('../middleware/rbac');
 const auth = require('../middleware/auth');
 
@@ -19,13 +20,22 @@ const auth = require('../middleware/auth');
  */
 router.get('/roles', auth, rbacMiddleware.requireAdmin, async (req, res) => {
   try {
-    const roles = Object.values(ROLES).map(role => ({
-      value: role,
-      label: getRoleLabel(role),
-      description: getRoleDescription(role),
-      level: getRoleLevel(role),
-      permissions: getRolePermissions(role)
-    }));
+    const roles = await Promise.all(
+      Object.values(ROLES).map(async (role) => {
+        const finalPermissions = await getRolePermissions(role, true);
+        const standardPermissions = await getRolePermissions(role, false);
+        const hasCustomPermissions = JSON.stringify(finalPermissions) !== JSON.stringify(standardPermissions);
+        
+        return {
+          value: role,
+          label: getRoleLabel(role),
+          description: getRoleDescription(role),
+          level: getRoleLevel(role),
+          permissions: finalPermissions,
+          hasCustomPermissions
+        };
+      })
+    );
 
     res.json({
       success: true,
@@ -42,7 +52,7 @@ router.get('/roles', auth, rbacMiddleware.requireAdmin, async (req, res) => {
 
 /**
  * @route   GET /api/rbac/roles/:role/permissions
- * @desc    Permissions einer bestimmten Rolle abrufen
+ * @desc    Permissions einer bestimmten Rolle abrufen (inkl. angepasste Permissions)
  * @access  Private (Admin)
  */
 router.get('/roles/:role/permissions', auth, rbacMiddleware.requireAdmin, async (req, res) => {
@@ -56,14 +66,24 @@ router.get('/roles/:role/permissions', auth, rbacMiddleware.requireAdmin, async 
       });
     }
 
-    const permissions = getRolePermissions(role);
+    // Lade Permissions (inkl. angepasste)
+    const finalPermissions = await getRolePermissions(role, true);
+    const standardPermissions = await getRolePermissions(role, false);
+    
+    // Lade Metadaten für angepasste Permissions
+    const rolePermission = await RolePermission.getRolePermissions(role);
     
     res.json({
       success: true,
       data: {
         role,
-        permissions,
-        inheritedPermissions: getInheritedPermissions(role)
+        permissions: finalPermissions,
+        standardPermissions,
+        customPermissions: rolePermission ? rolePermission.permissions : null,
+        inheritedPermissions: getInheritedPermissions(role),
+        modifiedBy: rolePermission?.modifiedBy,
+        modifiedAt: rolePermission?.modifiedAt,
+        version: rolePermission?.version || 1
       }
     });
   } catch (error) {
@@ -71,6 +91,187 @@ router.get('/roles/:role/permissions', auth, rbacMiddleware.requireAdmin, async 
     res.status(500).json({
       success: false,
       message: 'Fehler beim Laden der Rollen-Permissions'
+    });
+  }
+});
+
+/**
+ * @route   PUT /api/rbac/roles/:role/permissions
+ * @desc    Angepasste Permissions für eine System-Rolle speichern
+ * @access  Private (Admin)
+ */
+router.put('/roles/:role/permissions', auth, rbacMiddleware.requireAdmin, async (req, res) => {
+  try {
+    const { role } = req.params;
+    const { permissions, changeReason } = req.body;
+    
+    if (!Object.values(ROLES).includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültige Rolle'
+      });
+    }
+
+    if (!permissions || typeof permissions !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Permissions müssen ein Objekt sein'
+      });
+    }
+
+    // Validiere Permissions-Format
+    const validPermissions = {};
+    for (const [resource, actions] of Object.entries(permissions)) {
+      if (Array.isArray(actions)) {
+        // Validiere Actions
+        const validActions = actions.filter(action => 
+          Object.values(ACTIONS).includes(action) || action === '*'
+        );
+        if (validActions.length > 0) {
+          validPermissions[resource] = validActions;
+        }
+      }
+    }
+
+    // Speichere angepasste Permissions
+    const rolePermission = await RolePermission.saveRolePermissions(
+      role,
+      validPermissions,
+      req.user.id,
+      changeReason
+    );
+
+    // Cache löschen für diese Rolle
+    clearPermissionCache();
+
+    res.json({
+      success: true,
+      message: 'Rollen-Permissions erfolgreich gespeichert',
+      data: {
+        role,
+        permissions: validPermissions,
+        modifiedBy: rolePermission.modifiedBy,
+        modifiedAt: rolePermission.modifiedAt,
+        version: rolePermission.version
+      }
+    });
+  } catch (error) {
+    console.error('Error saving role permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Speichern der Rollen-Permissions'
+    });
+  }
+});
+
+/**
+ * @route   DELETE /api/rbac/roles/:role/permissions
+ * @desc    Angepasste Permissions für eine System-Rolle zurücksetzen (auf Standard)
+ * @access  Private (Admin)
+ */
+router.delete('/roles/:role/permissions', auth, rbacMiddleware.requireAdmin, async (req, res) => {
+  try {
+    const { role } = req.params;
+    
+    if (!Object.values(ROLES).includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültige Rolle'
+      });
+    }
+
+    // Lösche angepasste Permissions
+    await RolePermission.findOneAndDelete({ roleId: role });
+
+    // Cache löschen
+    clearPermissionCache();
+
+    const standardPermissions = await getRolePermissions(role, false);
+
+    res.json({
+      success: true,
+      message: 'Rollen-Permissions auf Standard zurückgesetzt',
+      data: {
+        role,
+        permissions: standardPermissions
+      }
+    });
+  } catch (error) {
+    console.error('Error resetting role permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Zurücksetzen der Rollen-Permissions'
+    });
+  }
+});
+
+// ===== MIGRATION =====
+
+/**
+ * @route   POST /api/rbac/migrate-permissions
+ * @desc    Migriert alte user.permissions zu rbac.customPermissions
+ * @access  Private (Super Admin)
+ */
+router.post('/migrate-permissions', auth, rbacMiddleware.requireSuperAdmin, async (req, res) => {
+  try {
+    const { userId, dryRun = false } = req.body;
+    const { migrateUserPermissions } = require('../scripts/migrate-permissions');
+    
+    let users;
+    if (userId) {
+      const user = await User.findById(userId);
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          message: 'Benutzer nicht gefunden'
+        });
+      }
+      users = [user];
+    } else {
+      users = await User.find({
+        permissions: { $exists: true, $ne: [], $size: { $gt: 0 } }
+      });
+    }
+
+    const results = [];
+    let totalMigrated = 0;
+    let totalSkipped = 0;
+
+    for (const user of users) {
+      const result = await migrateUserPermissions(user, dryRun);
+      totalMigrated += result.migrated;
+      totalSkipped += result.skipped;
+      
+      if (!dryRun && result.migrated > 0) {
+        await user.save();
+        // Cache löschen
+        clearPermissionCache(user._id.toString());
+      }
+
+      results.push({
+        userId: user._id,
+        email: user.email,
+        migrated: result.migrated,
+        skipped: result.skipped
+      });
+    }
+
+    res.json({
+      success: true,
+      message: dryRun ? 'Dry-Run abgeschlossen' : 'Migration abgeschlossen',
+      data: {
+        totalProcessed: users.length,
+        totalMigrated,
+        totalSkipped,
+        results
+      }
+    });
+  } catch (error) {
+    console.error('Error migrating permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei der Migration',
+      error: error.message
     });
   }
 });
@@ -94,12 +295,14 @@ router.get('/users/:userId/roles', auth, rbacMiddleware.requireAdmin, async (req
       });
     }
 
+    const effectivePermissions = await getEffectivePermissions(user);
+
     res.json({
       success: true,
       data: {
         primaryRole: user.role,
         resourceRoles: user.rbac?.resourceRoles || [],
-        effectivePermissions: getEffectivePermissions(user)
+        effectivePermissions
       }
     });
   } catch (error) {
@@ -357,6 +560,9 @@ router.post('/users/:userId/permissions', auth, rbacMiddleware.requireAdmin, asy
 
     await user.save();
 
+    // Cache löschen für diesen Benutzer
+    clearPermissionCache(userId);
+
     res.json({
       success: true,
       message: 'Permission erfolgreich zugewiesen',
@@ -442,6 +648,9 @@ router.delete('/users/:userId/permissions/:permission', auth, rbacMiddleware.req
 
     await user.save();
 
+    // Cache löschen für diesen Benutzer
+    clearPermissionCache(userId);
+
     res.json({
       success: true,
       message: 'Permission erfolgreich entfernt',
@@ -507,6 +716,9 @@ router.post('/users/:userId/custom-permissions', auth, rbacMiddleware.requireAdm
     });
 
     await user.save();
+
+    // Cache löschen für diesen Benutzer
+    clearPermissionCache(userId);
 
     res.json({
       success: true,
@@ -824,9 +1036,32 @@ function getRoleLevel(role) {
   return levels[role] || 0;
 }
 
-function getRolePermissions(role) {
+/**
+ * Gibt Permissions für eine Rolle zurück (inkl. angepasste Permissions)
+ * @param {string} role - Rollen-ID
+ * @param {boolean} includeCustom - Ob angepasste Permissions eingeschlossen werden sollen
+ * @returns {Promise<Object>} Permissions-Objekt
+ */
+async function getRolePermissions(role, includeCustom = true) {
   const { ROLE_PERMISSIONS } = require('../utils/rbac');
-  return ROLE_PERMISSIONS[role] || {};
+  const standardPermissions = ROLE_PERMISSIONS[role] || {};
+  
+  if (!includeCustom) {
+    return standardPermissions;
+  }
+
+  // Lade angepasste Permissions
+  try {
+    const rolePermission = await RolePermission.getRolePermissions(role);
+    if (rolePermission && rolePermission.permissions) {
+      // Merge: Angepasste Permissions überschreiben Standard-Permissions
+      return { ...standardPermissions, ...rolePermission.permissions };
+    }
+  } catch (error) {
+    // Ignoriere Fehler (Rolle hat keine angepassten Permissions)
+  }
+
+  return standardPermissions;
 }
 
 function getInheritedPermissions(role) {
@@ -834,9 +1069,9 @@ function getInheritedPermissions(role) {
   return ROLE_HIERARCHY[role] || [];
 }
 
-function getEffectivePermissions(user) {
+async function getEffectivePermissions(user) {
   // Kombiniere Rollen-Permissions mit Custom Permissions
-  const rolePermissions = getRolePermissions(user.role);
+  const rolePermissions = await getRolePermissions(user.role, true);
   const customPermissions = user.rbac?.customPermissions || [];
   
   // Vereinfachte Darstellung - in der Praxis würde man hier die Permissions zusammenführen
@@ -979,5 +1214,163 @@ function getResourceModel(resource) {
   
   return models[resource];
 }
+
+// ===== TEST ENDPOINTS =====
+
+/**
+ * @route   POST /api/rbac/test/authorize
+ * @desc    Testet die authorize() Funktion
+ * @access  Private (Admin)
+ */
+router.post('/test/authorize', auth, rbacMiddleware.requireAdmin, async (req, res) => {
+  try {
+    const { action, resource, resourceObject, context } = req.body;
+    
+    if (!action || !resource) {
+      return res.status(400).json({
+        success: false,
+        message: 'action und resource sind erforderlich'
+      });
+    }
+
+    // Validiere Action und Resource
+    if (!Object.values(ACTIONS).includes(action) && action !== '*') {
+      return res.status(400).json({
+        success: false,
+        message: `Ungültige Action: ${action}`,
+        validActions: Object.values(ACTIONS)
+      });
+    }
+
+    if (!Object.values(RESOURCES).includes(resource) && resource !== '*') {
+      return res.status(400).json({
+        success: false,
+        message: `Ungültige Resource: ${resource}`,
+        validResources: Object.values(RESOURCES)
+      });
+    }
+
+    // Führe Autorisierung durch
+    const result = await authorize(
+      req.user,
+      action,
+      resource,
+      resourceObject || null,
+      context || {}
+    );
+
+    res.json({
+      success: true,
+      data: {
+        allowed: result.allowed,
+        reason: result.reason,
+        auditData: {
+          userId: result.auditData.userId,
+          userRole: result.auditData.userRole,
+          action: result.auditData.action,
+          resource: result.auditData.resource,
+          timestamp: result.auditData.timestamp
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error testing authorization:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Testen der Autorisierung',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   GET /api/rbac/test/permissions
+ * @desc    Zeigt alle effektiven Permissions des aktuellen Benutzers
+ * @access  Private
+ */
+router.get('/test/permissions', auth, async (req, res) => {
+  try {
+    const user = req.user;
+    
+    // Lade alle Permission-Quellen
+    const { checkRolePermission, checkCustomPermissions, checkLegacyPermissions } = require('../utils/rbac');
+    
+    // Lade angepasste Rollen-Permissions
+    let customRolePermissions = null;
+    try {
+      const rolePermission = await RolePermission.getRolePermissions(user.role);
+      if (rolePermission && rolePermission.permissions) {
+        customRolePermissions = rolePermission.permissions;
+      }
+    } catch (error) {
+      // Ignoriere Fehler
+    }
+
+    // Teste Permissions für alle Resources und Actions
+    const permissionMatrix = {};
+    
+    for (const resource of Object.values(RESOURCES)) {
+      permissionMatrix[resource] = {};
+      
+      for (const action of Object.values(ACTIONS)) {
+        const hasRolePerm = checkRolePermission(user.role, action, resource, customRolePermissions);
+        const hasCustomPerm = checkCustomPermissions(user, action, resource, null, {});
+        const hasLegacyPerm = checkLegacyPermissions(user, action, resource);
+        
+        permissionMatrix[resource][action] = {
+          rolePermission: hasRolePerm,
+          customPermission: hasCustomPerm,
+          legacyPermission: hasLegacyPerm,
+          effective: hasRolePerm || hasCustomPerm || hasLegacyPerm
+        };
+      }
+    }
+
+    res.json({
+      success: true,
+      data: {
+        userId: user._id,
+        email: user.email,
+        role: user.role,
+        customRolePermissions,
+        legacyPermissions: user.permissions || [],
+        customPermissions: user.rbac?.customPermissions || [],
+        permissionMatrix
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching permissions:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Permissions',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/rbac/test/cache/clear
+ * @desc    Löscht den Permission-Cache
+ * @access  Private (Admin)
+ */
+router.post('/test/cache/clear', auth, rbacMiddleware.requireAdmin, async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    clearPermissionCache(userId || null);
+
+    res.json({
+      success: true,
+      message: userId ? `Cache für Benutzer ${userId} gelöscht` : 'Gesamter Cache gelöscht'
+    });
+  } catch (error) {
+    console.error('Error clearing cache:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen des Caches',
+      error: error.message
+    });
+  }
+});
 
 module.exports = router;

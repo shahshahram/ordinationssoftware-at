@@ -215,21 +215,81 @@ UserSchema.methods.getFullName = function() {
   return `${this.firstName} ${this.lastName}`;
 };
 
-// Method to check if user has permission
+// Method to check if user has permission (prüft sowohl altes als auch neues System)
 UserSchema.methods.hasPermission = function(permission) {
-  return this.permissions && this.permissions.includes(permission);
+  // Prüfe altes Permission-System
+  if (this.permissions && this.permissions.includes(permission)) {
+    return true;
+  }
+
+  // Prüfe neues RBAC-System (Custom Permissions)
+  if (this.rbac && this.rbac.customPermissions) {
+    const now = new Date();
+    for (const cp of this.rbac.customPermissions) {
+      // Prüfe Expiry
+      if (cp.expiresAt && new Date(cp.expiresAt) < now) {
+        continue; // Permission abgelaufen
+      }
+
+      // Prüfe ob Permission-String dem Format "resource.action" entspricht
+      if (permission.includes('.')) {
+        const [resource, action] = permission.split('.');
+        if (cp.resource === resource && cp.actions && cp.actions.includes(action)) {
+          return true;
+        }
+      } else {
+        // Einfache Permission ohne Resource
+        if (cp.actions && cp.actions.includes(permission)) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 };
 
 // Method to check if user has any of the required permissions
 UserSchema.methods.hasAnyPermission = function(permissions) {
-  if (!this.permissions || !Array.isArray(permissions)) return false;
-  return permissions.some(permission => this.permissions.includes(permission));
+  if (!Array.isArray(permissions)) return false;
+  return permissions.some(permission => this.hasPermission(permission));
 };
 
 // Method to check if user has all required permissions
 UserSchema.methods.hasAllPermissions = function(permissions) {
-  if (!this.permissions || !Array.isArray(permissions)) return false;
-  return permissions.every(permission => this.permissions.includes(permission));
+  if (!Array.isArray(permissions)) return false;
+  return permissions.every(permission => this.hasPermission(permission));
+};
+
+// Method to check if user can perform action on resource (mit Custom Permissions)
+UserSchema.methods.canPerformAction = async function(action, resource, resourceId = null) {
+  const { checkRolePermission, checkCustomPermissions, checkLegacyPermissions } = require('../utils/rbac');
+  
+  // Lade angepasste Rollen-Permissions
+  let customRolePermissions = null;
+  try {
+    const RolePermission = require('./RolePermission');
+    const rolePermission = await RolePermission.getRolePermissions(this.role);
+    if (rolePermission && rolePermission.permissions) {
+      customRolePermissions = rolePermission.permissions;
+    }
+  } catch (error) {
+    // Ignoriere Fehler
+  }
+  
+  // Prüfe Rollen-Permission (inkl. angepasste)
+  if (checkRolePermission(this.role, action, resource, customRolePermissions)) {
+    return true;
+  }
+
+  // Prüfe Custom Permissions
+  const resourceObject = resourceId ? { _id: resourceId } : null;
+  if (checkCustomPermissions(this, action, resource, resourceObject, {})) {
+    return true;
+  }
+
+  // Prüfe Legacy Permissions als Fallback
+  return checkLegacyPermissions(this, action, resource);
 };
 
 // Method to get default permissions based on role

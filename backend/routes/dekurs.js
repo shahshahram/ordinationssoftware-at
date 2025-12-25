@@ -1494,6 +1494,24 @@ router.post('/:id/finalize', auth, async (req, res) => {
       });
     }
 
+    // WICHTIG: Synchronisiere Diagnosen BEVOR der Eintrag finalisiert wird
+    // Dies stellt sicher, dass Diagnosen in PatientDiagnosis erstellt/aktualisiert werden
+    if (dekursEntry.linkedDiagnoses && dekursEntry.linkedDiagnoses.length > 0) {
+      try {
+        const normalizedEncounterId = dekursEntry.encounterId ? normalizeEncounterId(dekursEntry.encounterId) : null;
+        await syncDiagnosesToPatientDiagnosis(
+          dekursEntry.linkedDiagnoses,
+          dekursEntry.patientId.toString(),
+          normalizedEncounterId,
+          req.user.id
+        );
+        console.log(`✅ Diagnosen synchronisiert beim Finalisieren von Dekurs-Eintrag ${dekursEntry._id}`);
+      } catch (syncError) {
+        console.error(`❌ Fehler beim Synchronisieren der Diagnosen beim Finalisieren:`, syncError);
+        // Fehler wird geloggt, aber nicht geworfen, damit die Finalisierung trotzdem durchgeführt wird
+      }
+    }
+
     await dekursEntry.finalize(req.user.id);
 
     await dekursEntry.populate([

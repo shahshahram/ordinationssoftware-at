@@ -2208,7 +2208,7 @@ const PatientOrganizer: React.FC = () => {
 
       <Box sx={{ p: { xs: 1, sm: 2 } }}>
         {/* Kompakter Header */}
-        <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: { xs: 1, sm: 2 }, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
+        <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: { xs: 1, sm: 2 }, bgcolor: 'grey.700', color: 'white' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flex: 1, minWidth: 200 }}>
               {/* Patientenfoto */}
@@ -2252,7 +2252,7 @@ const PatientOrganizer: React.FC = () => {
                         disabled={uploadingPhoto}
                         sx={{
                           bgcolor: 'rgba(255, 255, 255, 0.9)',
-                          color: 'primary.main',
+                          color: 'grey.700',
                           '&:hover': {
                             bgcolor: 'white'
                           }
@@ -2289,9 +2289,25 @@ const PatientOrganizer: React.FC = () => {
                   {patient ? `${patient.firstName} ${patient.lastName}` : 'Patienten-Organizer'}
                 </Typography>
                 {patient && (
-                  <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, mt: 1, flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, mt: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                     <Typography variant={isMobile ? 'caption' : 'body2'} sx={{ fontSize: { xs: '0.7rem', sm: '0.875rem' } }}>
                       {patient.dateOfBirth ? new Date(patient.dateOfBirth).toLocaleDateString('de-DE') : '—'} • 
+                      {(() => {
+                        if (!patient.dateOfBirth) return '';
+                        const calculateAge = (dateOfBirth: string | Date | undefined): number => {
+                          if (!dateOfBirth) return 0;
+                          const birthDate = typeof dateOfBirth === 'string' ? new Date(dateOfBirth) : dateOfBirth;
+                          const today = new Date();
+                          let age = today.getFullYear() - birthDate.getFullYear();
+                          const monthDiff = today.getMonth() - birthDate.getMonth();
+                          if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+                            age--;
+                          }
+                          return age;
+                        };
+                        const age = calculateAge(patient.dateOfBirth);
+                        return ` ${age} Jahre •`;
+                      })()}
                       {patient.socialSecurityNumber ? ` SVNR: ${patient.socialSecurityNumber}` : ''} • 
                       {patient.gender || '—'}
                     </Typography>
@@ -2299,7 +2315,7 @@ const PatientOrganizer: React.FC = () => {
                       <Chip 
                         label={patient.status} 
                         size="small" 
-                        sx={{ bgcolor: 'rgba(255, 255, 255, 0.2)', color: 'inherit' }}
+                        sx={{ bgcolor: 'rgba(255, 255, 255, 0.25)', color: 'inherit', fontWeight: 500 }}
                       />
                     )}
                     {patient.isTemporary && (
@@ -2310,8 +2326,8 @@ const PatientOrganizer: React.FC = () => {
                         color="warning"
                         title="Patient über Online-Buchung erstellt - Stammdaten müssen vervollständigt werden"
                         sx={{ 
-                          bgcolor: 'rgba(255, 193, 7, 0.3)', 
-                          color: 'inherit',
+                          bgcolor: 'rgba(255, 193, 7, 0.9)', 
+                          color: 'rgba(0, 0, 0, 0.87)',
                           fontWeight: 'bold'
                         }}
                       />
@@ -2328,11 +2344,12 @@ const PatientOrganizer: React.FC = () => {
                           setHintDetailsDialogOpen(true);
                         }}
                         sx={{ 
-                          bgcolor: 'rgba(255, 193, 7, 0.3)', 
-                          color: 'inherit',
+                          bgcolor: 'rgba(255, 193, 7, 0.9)', 
+                          color: 'rgba(0, 0, 0, 0.87)',
                           cursor: 'pointer',
+                          fontWeight: 500,
                           '&:hover': {
-                            bgcolor: 'rgba(255, 193, 7, 0.5)'
+                            bgcolor: 'rgba(255, 193, 7, 1)'
                           }
                         }}
                       />
@@ -2355,11 +2372,32 @@ const PatientOrganizer: React.FC = () => {
                         size="small" 
                         color="secondary"
                         sx={{ 
-                          bgcolor: 'rgba(156, 39, 176, 0.3)', 
-                          color: 'inherit',
+                          bgcolor: 'rgba(156, 39, 176, 0.9)', 
+                          color: 'white',
                           fontWeight: 600
                         }}
                       />
+                    )}
+                    {patient.allergies && patient.allergies.length > 0 && (
+                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                        {patient.allergies.map((allergy, index) => {
+                          const allergyLabel = typeof allergy === 'string' ? allergy : (allergy.description || allergy.type || 'Allergie');
+                          return (
+                            <Chip
+                              key={index}
+                              icon={<Warning />}
+                              label={`Allergie: ${allergyLabel}`}
+                              size="small"
+                              color="error"
+                              sx={{ 
+                                bgcolor: 'rgba(211, 47, 47, 0.9)',
+                                color: 'white',
+                                fontWeight: 600
+                              }}
+                            />
+                          );
+                        })}
+                      </Box>
                     )}
                     {patient.infections && patient.infections.length > 0 && patient.infections.some(inf => inf.status === 'active') && (
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
@@ -2373,8 +2411,8 @@ const PatientOrganizer: React.FC = () => {
                               size="small"
                               color={isMRSAOrMRGN ? 'error' : 'success'}
                               sx={{ 
-                                bgcolor: isMRSAOrMRGN ? 'rgba(211, 47, 47, 0.3)' : 'rgba(46, 125, 50, 0.3)',
-                                color: 'inherit',
+                                bgcolor: isMRSAOrMRGN ? 'rgba(211, 47, 47, 0.9)' : 'rgba(46, 125, 50, 0.9)',
+                                color: 'white',
                                 fontWeight: 600
                               }}
                             />
@@ -2384,9 +2422,47 @@ const PatientOrganizer: React.FC = () => {
                     )}
                   </Box>
                 )}
+                {/* Diagnosen links */}
+                {(() => {
+                  const primaryDiagnosis = (patientDiagnoses || []).find((diag: PatientDiagnosis) => diag.isPrimary && diag.status === 'active');
+                  if (primaryDiagnosis) {
+                    return (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1.5 }}>
+                        <LocalHospital sx={{ fontSize: 20 }} />
+                        <Chip
+                          label={`Hauptdiagnose: ${primaryDiagnosis.code} - ${primaryDiagnosis.display}`}
+                          size="medium"
+                          sx={{ 
+                            bgcolor: 'rgba(255, 255, 255, 0.25)', 
+                            color: 'inherit',
+                            fontSize: { xs: '0.85rem', sm: '0.95rem' },
+                            height: 'auto',
+                            py: 0.75,
+                            fontWeight: 500
+                          }}
+                        />
+                      </Box>
+                    );
+                  }
+                  return null;
+                })()}
               </Box>
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-end', minWidth: 250 }}>
+              {/* Adresse */}
+              {patient && patient.address && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-end', mb: 1 }}>
+                  <Typography variant="body2" sx={{ textAlign: 'right', fontWeight: 500 }}>
+                    {patient.address.street && `${patient.address.street}`}
+                    {patient.address.zipCode && `, ${patient.address.zipCode}`}
+                    {patient.address.postalCode && !patient.address.zipCode && `, ${patient.address.postalCode}`}
+                  </Typography>
+                  <Typography variant="body2" sx={{ textAlign: 'right' }}>
+                    {patient.address.city && `${patient.address.city}`}
+                    {patient.address.country && patient.address.country !== 'Österreich' && `, ${patient.address.country}`}
+                  </Typography>
+                </Box>
+              )}
               {/* Kontaktdaten */}
               {patient && (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-end' }}>
@@ -2419,29 +2495,6 @@ const PatientOrganizer: React.FC = () => {
                   )}
                 </Box>
               )}
-              {/* Hauptdiagnose */}
-              {(() => {
-                const primaryDiagnosis = (patientDiagnoses || []).find((diag: PatientDiagnosis) => diag.isPrimary && diag.status === 'active');
-                if (primaryDiagnosis) {
-                  return (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
-                      <LocalHospital sx={{ fontSize: 16 }} />
-                      <Chip
-                        label={`Hauptdiagnose: ${primaryDiagnosis.code} - ${primaryDiagnosis.display}`}
-                        size="small"
-                        sx={{ 
-                          bgcolor: 'rgba(255, 255, 255, 0.2)', 
-                          color: 'inherit',
-                          fontSize: '0.75rem',
-                          height: 'auto',
-                          py: 0.5
-                        }}
-                      />
-                    </Box>
-                  );
-                }
-                return null;
-              })()}
               <Tooltip title="Patienten-Workspace öffnen">
                 <IconButton 
                   onClick={() => setSidebarOpen(true)}
@@ -2574,15 +2627,6 @@ const PatientOrganizer: React.FC = () => {
               }}
             >
               Patienten-/Arztbrief
-            </Button>
-            <Button
-              variant="outlined"
-              size="small"
-              startIcon={<Description />}
-              onClick={handleTemplateMenuOpen}
-              disabled={!patient || isCreatingDocument}
-            >
-              Dokument
             </Button>
             <Button
               variant="outlined"
@@ -2890,7 +2934,12 @@ const PatientOrganizer: React.FC = () => {
                 patientId={patientId}
                 compact={false}
                 onSave={() => {
-                  // Lade Dekurs-Historie neu
+                  // Lade Dekurs-Einträge neu für EPA
+                  if (patientId) {
+                    dispatch(fetchDekursEntries({ patientId, limit: 1000 }));
+                    // Lade auch Diagnosen neu, um sicherzustellen, dass neue Diagnosen aus linkedDiagnoses verfügbar sind
+                    dispatch(fetchPatientDiagnoses({ patientId }));
+                  }
                   setSnackbar({
                     open: true,
                     message: 'Dekurs erfolgreich erstellt',
@@ -4556,6 +4605,15 @@ const PatientOrganizer: React.FC = () => {
           onSave={(entry) => {
             // Aktualisiere selectedDekursEntry damit Fotos hinzugefügt werden können
             setSelectedDekursEntry(entry);
+            // Lade Dekurs-Einträge neu für EPA
+            if (patientId) {
+              dispatch(fetchDekursEntries({ patientId, limit: 1000 }));
+              // WICHTIG: Lade auch Diagnosen neu, wenn der Dekurs finalisiert wurde
+              // Dies stellt sicher, dass neue Diagnosen aus linkedDiagnoses im Diagnosen-Tab und in der EPA erscheinen
+              if (entry.status === 'finalized') {
+                dispatch(fetchPatientDiagnoses({ patientId }));
+              }
+            }
             // Aktualisiere die Dekurs-Historie
             setSnackbar({
               open: true,

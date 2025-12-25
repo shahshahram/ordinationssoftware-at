@@ -3,7 +3,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, Alert, Typography } from '@mui/material';
 import { loadUser } from '../store/slices/authSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { useRBAC } from '../hooks/useRBAC';
+import { useRBAC } from '../utils/rbac';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -134,8 +134,8 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     
     // Use the new RBAC hook for permission checking
     const hasRequiredPermission = rbacPermissions.some(({ action, resource }) => {
-      // Use the hasPermission function from useRBAC hook
-      return rbac.hasPermission(resource, action);
+      // Use the can function from useRBAC hook (correct signature: can(action, resource))
+      return rbac.can(action, resource);
     });
     
     if (!hasRequiredPermission) {
@@ -180,7 +180,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Check action-resource based access
   if (requiredAction && requiredResource) {
-    if (!rbac.hasPermission(requiredResource, requiredAction)) {
+    if (!rbac.can(requiredAction, requiredResource, resourceId)) {
       console.log('ProtectedRoute: Action-Resource check failed', {
         requiredAction,
         requiredResource,

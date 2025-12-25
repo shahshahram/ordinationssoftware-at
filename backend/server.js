@@ -10,6 +10,10 @@ const fs = require('fs');
 const cron = require('node-cron');
 require('dotenv').config();
 
+// Data Protection Services
+const DataRetentionService = require('./services/dataRetentionService');
+const DataBreachService = require('./services/dataBreachService');
+
 // Import routes
 const authRoutes = require('./routes/auth');
 const patientRoutes = require('./routes/patients');
@@ -88,6 +92,7 @@ const dekursVorlagenRoutes = require('./routes/dekursVorlagen');
 const contactsRoutes = require('./routes/contacts');
 const waitingListRoutes = require('./routes/waitingList');
 const insuranceProviderRoutes = require('./routes/insurance-providers');
+const dataProtectionRoutes = require('./routes/dataProtection');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -334,6 +339,7 @@ app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/contacts', contactsRoutes);
   app.use('/api/waiting-list', waitingListRoutes);
   app.use('/api/insurance-providers', insuranceProviderRoutes);
+  app.use('/api/data-protection', dataProtectionRoutes);
   
   // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)
   if (USE_MODULE_MANAGER) {
@@ -442,6 +448,49 @@ cron.schedule('0 2 1 1 *', async () => {
     logger.info('✅ Jährliches Service-Katalog Update erfolgreich abgeschlossen');
   } catch (error) {
     logger.error('❌ Fehler bei jährlichem Service-Katalog Update:', error);
+  }
+});
+
+// ===== DATENSCHUTZ & COMPLIANCE =====
+
+// Automatische Datenbereinigung (täglich um 1:00 Uhr)
+cron.schedule('0 1 * * *', async () => {
+  try {
+    logger.info('🧹 Starte automatische Datenbereinigung...');
+    const result = await DataRetentionService.runCleanup();
+    logger.info(`✅ Datenbereinigung abgeschlossen: ${JSON.stringify(result.results)}`);
+  } catch (error) {
+    logger.error('❌ Fehler bei der Datenbereinigung:', error);
+  }
+});
+
+// Datenpannen-Überwachung (alle 15 Minuten)
+cron.schedule('*/15 * * * *', async () => {
+  try {
+    const detection = await DataBreachService.startMonitoring();
+    if (detection.detected) {
+      logger.warn(`⚠️ ${detection.breaches.length} potenzielle Datenpannen erkannt`);
+    }
+  } catch (error) {
+    logger.error('❌ Fehler bei der Datenpannen-Überwachung:', error);
+  }
+});
+
+// Compliance-Prüfung (wöchentlich montags um 6:00 Uhr)
+cron.schedule('0 6 * * 1', async () => {
+  try {
+    logger.info('🔍 Starte Compliance-Prüfung...');
+    const compliance = await DataRetentionService.checkCompliance();
+    if (!compliance.compliant) {
+      logger.warn(`⚠️ Compliance-Probleme gefunden: ${compliance.issues.length} Issues`);
+      compliance.issues.forEach(issue => {
+        logger.warn(`  - ${issue.type}: ${issue.message}`);
+      });
+    } else {
+      logger.info('✅ System ist DSGVO-konform');
+    }
+  } catch (error) {
+    logger.error('❌ Fehler bei der Compliance-Prüfung:', error);
   }
 });
 

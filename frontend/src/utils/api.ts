@@ -153,7 +153,17 @@ class ApiClient {
                 console.log('Retry request successful:', result);
                 return result;
               } else {
-                // Refresh failed, redirect to login
+                // Refresh failed - prüfe ob es ein Netzwerkfehler ist
+                const errorData = await refreshResponse.json().catch(() => ({}));
+                const isNetworkError = refreshResponse.status === 0;
+                
+                if (isNetworkError) {
+                  console.warn('Token-Refresh fehlgeschlagen wegen Netzwerkfehler - Benutzer wird nicht abgemeldet');
+                  throw new Error('Netzwerkfehler: Verbindung zum Server konnte nicht hergestellt werden. Bitte versuchen Sie es erneut.');
+                }
+                
+                // Nur bei echten Auth-Fehlern abmelden
+                console.log('Token-Refresh fehlgeschlagen - Benutzer wird abgemeldet');
                 localStorage.removeItem('token');
                 localStorage.removeItem('refreshToken');
                 window.location.href = '/login';
@@ -164,10 +174,14 @@ class ApiClient {
               
               // Prüfe ob es ein Netzwerkfehler ist
               const isNetworkError = 
-                refreshError?.name === 'TypeError' && 
+                refreshError?.isNetworkError === true ||
+                refreshError?.isTimeout === true ||
+                refreshError?.name === 'TypeError' || 
+                refreshError?.name === 'AbortError' ||
                 (refreshError?.message?.includes('Failed to fetch') || 
                  refreshError?.message?.includes('NetworkError') ||
-                 refreshError?.message?.includes('ERR_CONNECTION_RESET'));
+                 refreshError?.message?.includes('ERR_CONNECTION_RESET') ||
+                 refreshError?.message?.includes('Request-Timeout'));
               
               // Bei Netzwerkfehlern: Nicht abmelden, nur Fehler werfen
               if (isNetworkError) {
@@ -176,14 +190,38 @@ class ApiClient {
               }
               
               // Bei echten Authentifizierungsfehlern: Abmelden
+              console.log('Token-Refresh fehlgeschlagen - Authentifizierungsfehler erkannt');
               localStorage.removeItem('token');
               localStorage.removeItem('refreshToken');
               window.location.href = '/login';
               throw new Error('Session expired. Please login again.');
             }
           } else {
-            // No refresh token, redirect to login
+            // No refresh token - prüfe ob Token noch gültig ist (könnte Session-Problem sein)
+            if (token) {
+              try {
+                // Versuche Token zu dekodieren (ohne Verifizierung)
+                const tokenParts = token.split('.');
+                if (tokenParts.length === 3) {
+                  const payload = JSON.parse(atob(tokenParts[1]));
+                  const exp = payload.exp * 1000; // Convert to milliseconds
+                  const now = Date.now();
+                  
+                  // Wenn Token noch nicht abgelaufen ist, könnte es ein Session-Problem sein
+                  if (exp > now) {
+                    console.warn('Token noch gültig, aber kein Refresh-Token vorhanden. Möglicherweise Session-Problem.');
+                    // Versuche Request trotzdem (Session-Validierung ist jetzt optional)
+                    throw new Error('Kein Refresh-Token verfügbar. Bitte melden Sie sich erneut an.');
+                  }
+                }
+              } catch (tokenCheckError) {
+                // Token ist abgelaufen oder ungültig
+              }
+            }
+            
+            // Token abgelaufen und kein Refresh-Token
             localStorage.removeItem('token');
+            localStorage.removeItem('refreshToken');
             window.location.href = '/login';
             throw new Error('Session expired. Please login again.');
           }

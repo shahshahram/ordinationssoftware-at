@@ -5,6 +5,43 @@ const mongoose = require('mongoose');
  * mit Object-level ACLs für österreichische Ordinationssoftware
  */
 
+// Permission-Cache für bessere Performance
+const permissionCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 Minuten
+
+/**
+ * Cache-Management für Permissions
+ */
+function getCachedPermissions(cacheKey) {
+  const cached = permissionCache.get(cacheKey);
+  if (cached && (Date.now() - cached.timestamp) < CACHE_TTL) {
+    return cached.data;
+  }
+  permissionCache.delete(cacheKey);
+  return null;
+}
+
+function setCachedPermissions(cacheKey, data) {
+  permissionCache.set(cacheKey, {
+    data,
+    timestamp: Date.now()
+  });
+}
+
+function clearPermissionCache(userId = null) {
+  if (userId) {
+    // Lösche nur Cache-Einträge für diesen Benutzer
+    for (const [key] of permissionCache) {
+      if (key.includes(userId)) {
+        permissionCache.delete(key);
+      }
+    }
+  } else {
+    // Lösche gesamten Cache
+    permissionCache.clear();
+  }
+}
+
 // Rollen-Definitionen mit Hierarchie
 const ROLES = {
   SUPER_ADMIN: 'super_admin',
@@ -239,9 +276,43 @@ async function authorize(user, action, resource, resourceObject = null, context 
       return { allowed: true, reason: 'Super Admin access', auditData };
     }
 
-    // 2. Prüfe Rollen-basierte Permissions
-    const hasRolePermission = checkRolePermission(user.role, action, resource);
-    if (!hasRolePermission) {
+    // Prüfe ob Delegationen übersprungen werden sollen (verhindert Endlosschleifen)
+    const skipDelegations = context.skipDelegations === true;
+
+    // 2. Lade angepasste System-Rollen-Permissions (mit Cache)
+    let customRolePermissions = null;
+    const roleCacheKey = `role_permissions_${user.role}`;
+    customRolePermissions = getCachedPermissions(roleCacheKey);
+    
+    if (customRolePermissions === null) {
+      try {
+        const RolePermission = require('../models/RolePermission');
+        const rolePermission = await RolePermission.getRolePermissions(user.role);
+        if (rolePermission && rolePermission.permissions) {
+          customRolePermissions = rolePermission.permissions;
+          setCachedPermissions(roleCacheKey, customRolePermissions);
+        } else {
+          setCachedPermissions(roleCacheKey, {}); // Cache auch leere Ergebnisse
+        }
+      } catch (error) {
+        // Ignoriere Fehler beim Laden (Rolle hat keine angepassten Permissions)
+        console.debug(`No custom role permissions for ${user.role}`);
+        setCachedPermissions(roleCacheKey, {}); // Cache leeres Ergebnis
+      }
+    }
+
+    // 3. Prüfe Rollen-basierte Permissions (inkl. angepasste) ODER Custom Permissions ODER altes Permission-System
+    const hasRolePermission = checkRolePermission(user.role, action, resource, customRolePermissions);
+    const hasCustomPermission = checkCustomPermissions(user, action, resource, resourceObject, context);
+    const hasLegacyPermission = checkLegacyPermissions(user, action, resource);
+    
+    // Prüfe Delegationen nur wenn nicht übersprungen
+    let hasDelegatedPermission = false;
+    if (!skipDelegations) {
+      hasDelegatedPermission = await checkDelegations(user, action, resource, resourceObject, context);
+    }
+    
+    if (!hasRolePermission && !hasCustomPermission && !hasLegacyPermission && !hasDelegatedPermission) {
       await logAuthorization(auditData, false, `Role ${user.role} lacks permission for ${action} on ${resource}`);
       return { allowed: false, reason: `Insufficient role permissions`, auditData };
     }
@@ -280,12 +351,22 @@ async function authorize(user, action, resource, resourceObject = null, context 
 }
 
 /**
- * Prüft Rollen-basierte Permissions
+ * Prüft Rollen-basierte Permissions (inkl. angepasste System-Rollen-Permissions)
+ * @param {string} userRole - Rolle des Benutzers
+ * @param {string} action - Aktion
+ * @param {string} resource - Ressource
+ * @param {Object} customRolePermissions - Optional: Angepasste Permissions für diese Rolle
+ * @returns {boolean} true wenn Permission vorhanden
  */
-function checkRolePermission(userRole, action, resource) {
-  // Prüfe direkte Permissions
-  const rolePermissions = ROLE_PERMISSIONS[userRole];
+function checkRolePermission(userRole, action, resource, customRolePermissions = null) {
+  // Lade angepasste Permissions falls nicht übergeben
+  let rolePermissions = ROLE_PERMISSIONS[userRole];
   if (!rolePermissions) return false;
+
+  // Merge angepasste Permissions mit Standard-Permissions
+  if (customRolePermissions && typeof customRolePermissions === 'object') {
+    rolePermissions = { ...rolePermissions, ...customRolePermissions };
+  }
 
   // Wildcard für alle Permissions
   if (rolePermissions['*'] && rolePermissions['*'].includes('*')) {
@@ -309,6 +390,206 @@ function checkRolePermission(userRole, action, resource) {
   // Spezielle Behandlung für 'write' - Alias für 'create' und 'update'
   if (action === 'write') {
     return resourcePermissions.includes('create') || resourcePermissions.includes('update');
+  }
+
+  return false;
+}
+
+/**
+ * Prüft Custom Permissions eines Benutzers
+ * @param {Object} user - Benutzer-Objekt
+ * @param {string} action - Aktion die ausgeführt werden soll
+ * @param {string} resource - Ressource auf die zugegriffen wird
+ * @param {Object} resourceObject - Optional: Das spezifische Objekt
+ * @param {Object} context - Zusätzlicher Kontext (IP, Location, etc.)
+ * @returns {boolean} true wenn Custom Permission vorhanden und gültig
+ */
+function checkCustomPermissions(user, action, resource, resourceObject = null, context = {}) {
+  // Prüfe ob Custom Permissions existieren
+  if (!user.rbac || !user.rbac.customPermissions || !Array.isArray(user.rbac.customPermissions)) {
+    return false;
+  }
+
+  const now = new Date();
+  const resourceId = resourceObject?._id || resourceObject?.id;
+
+  // Durchsuche alle Custom Permissions
+  for (const cp of user.rbac.customPermissions) {
+    // Prüfe Resource-Match
+    if (cp.resource !== resource) {
+      continue;
+    }
+
+    // Prüfe ResourceId-Match (falls vorhanden)
+    if (cp.resourceId) {
+      const cpResourceId = cp.resourceId.toString ? cp.resourceId.toString() : cp.resourceId;
+      const reqResourceId = resourceId ? (resourceId.toString ? resourceId.toString() : resourceId) : null;
+      
+      if (reqResourceId && cpResourceId !== reqResourceId) {
+        continue; // ResourceId stimmt nicht überein
+      }
+    }
+
+    // Prüfe Action-Match
+    if (!cp.actions || !Array.isArray(cp.actions) || !cp.actions.includes(action)) {
+      continue;
+    }
+
+    // Prüfe Expiry
+    if (cp.expiresAt) {
+      const expiresAt = cp.expiresAt instanceof Date ? cp.expiresAt : new Date(cp.expiresAt);
+      if (now > expiresAt) {
+        continue; // Permission ist abgelaufen
+      }
+    }
+
+    // Prüfe Conditions
+    if (cp.conditions) {
+      // Zeitbeschränkungen
+      if (cp.conditions.timeRestricted) {
+        if (cp.conditions.timeStart) {
+          const timeStart = cp.conditions.timeStart instanceof Date ? cp.conditions.timeStart : new Date(cp.conditions.timeStart);
+          if (now < timeStart) {
+            continue; // Zugriff noch nicht erlaubt
+          }
+        }
+        if (cp.conditions.timeEnd) {
+          const timeEnd = cp.conditions.timeEnd instanceof Date ? cp.conditions.timeEnd : new Date(cp.conditions.timeEnd);
+          if (now > timeEnd) {
+            continue; // Zugriff abgelaufen
+          }
+        }
+      }
+
+      // Ortsbeschränkungen
+      if (cp.conditions.locationRestricted && cp.conditions.allowedLocations) {
+        if (!context.locationId || !cp.conditions.allowedLocations.includes(context.locationId)) {
+          continue; // Standort nicht erlaubt
+        }
+      }
+
+      // IP-Beschränkungen
+      if (cp.conditions.ipRestricted && cp.conditions.allowedIPs) {
+        if (!context.ip || !cp.conditions.allowedIPs.includes(context.ip)) {
+          continue; // IP nicht erlaubt
+        }
+      }
+    }
+
+    // Alle Prüfungen bestanden - Custom Permission ist gültig
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Prüft altes Permission-System (user.permissions) als Fallback
+ * @param {Object} user - Benutzer-Objekt
+ * @param {string} action - Aktion
+ * @param {string} resource - Ressource
+ * @returns {boolean} true wenn Permission vorhanden
+ */
+function checkLegacyPermissions(user, action, resource) {
+  if (!user.permissions || !Array.isArray(user.permissions)) {
+    return false;
+  }
+
+  // Prüfe verschiedene Permission-Formate
+  const permissionFormats = [
+    `${resource}.${action}`,           // patient.read
+    `${resource}s.${action}`,          // patients.read (plural)
+    action,                             // read (einfach)
+    `${resource}.*`,                    // patient.*
+    `*.${action}`                       // *.read
+  ];
+
+  return user.permissions.some(perm => permissionFormats.includes(perm));
+}
+
+/**
+ * Prüft Delegationen (Benutzer hat Permissions von anderen Benutzern delegiert bekommen)
+ * @param {Object} user - Benutzer-Objekt
+ * @param {string} action - Aktion
+ * @param {string} resource - Ressource
+ * @param {Object} resourceObject - Optional: Resource-Objekt
+ * @param {Object} context - Kontext
+ * @returns {Promise<boolean>} true wenn delegierte Permission vorhanden
+ */
+async function checkDelegations(user, action, resource, resourceObject = null, context = {}) {
+  if (!user.rbac || !user.rbac.delegations || !Array.isArray(user.rbac.delegations)) {
+    return false;
+  }
+
+  const now = new Date();
+  const resourceId = resourceObject?._id || resourceObject?.id;
+
+  for (const delegation of user.rbac.delegations) {
+    // Prüfe Expiry
+    if (delegation.expiresAt) {
+      const expiresAt = delegation.expiresAt instanceof Date ? delegation.expiresAt : new Date(delegation.expiresAt);
+      if (now > expiresAt) {
+        continue; // Delegation abgelaufen
+      }
+    }
+
+    // Prüfe Resources (falls spezifiziert)
+    if (delegation.resources && delegation.resources.length > 0) {
+      if (!delegation.resources.includes(resource)) {
+        continue; // Resource nicht in Delegation
+      }
+    }
+
+    // Prüfe Permissions
+    if (delegation.permissions && Array.isArray(delegation.permissions)) {
+      // Prüfe verschiedene Permission-Formate
+      const permissionFormats = [
+        `${resource}.${action}`,
+        `${resource}s.${action}`,
+        action,
+        `${resource}.*`,
+        `*.${action}`
+      ];
+
+      const hasDelegatedPermission = delegation.permissions.some(perm => 
+        permissionFormats.includes(perm)
+      );
+
+      if (hasDelegatedPermission) {
+        // Prüfe ob delegierender Benutzer die Permission hat (ohne rekursive Delegationen)
+        try {
+          const User = require('../models/User');
+          const delegator = await User.findById(delegation.delegateTo).select('role rbac permissions');
+          if (delegator) {
+            // Lade angepasste Rollen-Permissions
+            let customRolePermissions = null;
+            try {
+              const RolePermission = require('../models/RolePermission');
+              const rolePermission = await RolePermission.getRolePermissions(delegator.role);
+              if (rolePermission && rolePermission.permissions) {
+                customRolePermissions = rolePermission.permissions;
+              }
+            } catch (error) {
+              // Ignoriere Fehler
+            }
+            
+            // Prüfe Rollen-Permission
+            const hasRolePerm = checkRolePermission(delegator.role, action, resource, customRolePermissions);
+            // Prüfe Custom Permissions
+            const hasCustomPerm = checkCustomPermissions(delegator, action, resource, resourceObject, context);
+            // Prüfe Legacy Permissions
+            const hasLegacyPerm = checkLegacyPermissions(delegator, action, resource);
+            
+            if (hasRolePerm || hasCustomPerm || hasLegacyPerm) {
+              return true;
+            }
+          }
+        } catch (error) {
+          console.error('Error checking delegator permissions:', error);
+          // Bei Fehler: Delegation nicht gültig
+        }
+      }
+    }
   }
 
   return false;
@@ -543,7 +824,11 @@ module.exports = {
   requirePermission,
   loadResource,
   checkRolePermission,
+  checkCustomPermissions,
+  checkLegacyPermissions,
+  checkDelegations,
   checkObjectACL,
   checkBusinessRules,
-  checkTimeLocationRestrictions
+  checkTimeLocationRestrictions,
+  clearPermissionCache
 };
