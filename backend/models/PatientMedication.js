@@ -71,7 +71,7 @@ const PatientMedicationSchema = new mongoose.Schema({
   // Quelle
   source: { 
     type: String, 
-    enum: ['clinical', 'elga', 'import', 'prescription'], 
+    enum: ['clinical', 'elga', 'import', 'prescription', 'dekurs', 'anamnestic'], 
     default: 'clinical' 
   },
   prescribedBy: { 

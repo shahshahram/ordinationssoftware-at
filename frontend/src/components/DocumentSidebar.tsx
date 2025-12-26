@@ -24,7 +24,9 @@ import {
   MonitorHeart,
   Description,
   Assignment,
-  LocalHospital
+  LocalHospital,
+  Medication,
+  LocalHospital as DiagnosisIcon
 } from '@mui/icons-material';
 import { apiRequest } from '../utils/api';
 import { format } from 'date-fns';
@@ -32,8 +34,8 @@ import { de } from 'date-fns/locale';
 
 interface DocumentSidebarProps {
   patientId: string;
-  onAddToDocument?: (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs', data: any) => void;
-  onViewDetails?: (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs', data: any) => void;
+  onAddToDocument?: (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs' | 'medication' | 'diagnosis', data: any) => void;
+  onViewDetails?: (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs' | 'medication' | 'diagnosis', data: any) => void;
 }
 
 interface AccordionState {
@@ -42,6 +44,8 @@ interface AccordionState {
   vital: boolean;
   documents: boolean;
   dicom: boolean;
+  medications: boolean;
+  diagnoses: boolean;
 }
 
 const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
@@ -55,6 +59,8 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
   const [vitalSigns, setVitalSigns] = useState<any[]>([]);
   const [documents, setDocuments] = useState<any[]>([]);
   const [dicomStudies, setDicomStudies] = useState<any[]>([]);
+  const [medications, setMedications] = useState<any[]>([]);
+  const [diagnoses, setDiagnoses] = useState<any[]>([]);
 
   // State für Lade-Status
   const [loading, setLoading] = useState<Record<string, boolean>>({
@@ -62,7 +68,9 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     dekurs: false,
     vital: false,
     documents: false,
-    dicom: false
+    dicom: false,
+    medications: false,
+    diagnoses: false
   });
 
   // State für Accordion (aus localStorage)
@@ -73,10 +81,10 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
       try {
         return JSON.parse(saved);
       } catch {
-        return { labor: true, dekurs: true, vital: false, documents: false, dicom: false };
+        return { labor: true, dekurs: true, vital: false, documents: false, dicom: false, medications: false, diagnoses: false };
       }
     }
-    return { labor: true, dekurs: true, vital: false, documents: false, dicom: false };
+    return { labor: true, dekurs: true, vital: false, documents: false, dicom: false, medications: false, diagnoses: false };
   });
 
   // Lade Daten lazy (nur wenn Accordion geöffnet wird)
@@ -160,6 +168,38 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     }
   }, [patientId, dicomStudies.length, loading.dicom]);
 
+  const loadMedications = useCallback(async () => {
+    if (medications.length > 0 || loading.medications) return;
+    
+    setLoading(prev => ({ ...prev, medications: true }));
+    try {
+      const response: any = await apiRequest.get(`/medications/patient/${patientId}?status=active&limit=10`);
+      const data = response?.data?.data || response?.data || [];
+      setMedications(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Medikamente:', error);
+      setMedications([]);
+    } finally {
+      setLoading(prev => ({ ...prev, medications: false }));
+    }
+  }, [patientId, medications.length, loading.medications]);
+
+  const loadDiagnoses = useCallback(async () => {
+    if (diagnoses.length > 0 || loading.diagnoses) return;
+    
+    setLoading(prev => ({ ...prev, diagnoses: true }));
+    try {
+      const response: any = await apiRequest.get(`/diagnoses/patient/${patientId}?limit=20`);
+      const data = response?.data?.data || response?.data || [];
+      setDiagnoses(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error('Fehler beim Laden der Diagnosen:', error);
+      setDiagnoses([]);
+    } finally {
+      setLoading(prev => ({ ...prev, diagnoses: false }));
+    }
+  }, [patientId, diagnoses.length, loading.diagnoses]);
+
   // Lade Daten für initial geöffnete Accordions
   useEffect(() => {
     if (accordionState.labor && laborResults.length === 0 && !loading.labor) {
@@ -176,6 +216,12 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     }
     if (accordionState.dicom && dicomStudies.length === 0 && !loading.dicom) {
       loadDicomStudies();
+    }
+    if (accordionState.medications && medications.length === 0 && !loading.medications) {
+      loadMedications();
+    }
+    if (accordionState.diagnoses && diagnoses.length === 0 && !loading.diagnoses) {
+      loadDiagnoses();
     }
   }, [accordionState, patientId]);
 
@@ -202,6 +248,12 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
           break;
         case 'dicom':
           loadDicomStudies();
+          break;
+        case 'medications':
+          loadMedications();
+          break;
+        case 'diagnoses':
+          loadDiagnoses();
           break;
       }
     }
@@ -515,6 +567,153 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
             </List>
           ) : (
             <Alert severity="info" sx={{ m: 1 }}>Keine DICOM-Studien verfügbar</Alert>
+          )}
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Medikamente - Priorität 6 */}
+      <Accordion 
+        expanded={accordionState.medications} 
+        onChange={() => handleAccordionChange('medications')}
+        sx={{ boxShadow: 'none', borderBottom: '1px solid', borderColor: 'divider' }}
+      >
+        <AccordionSummary expandIcon={<ExpandMore />}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+            <Medication color="primary" />
+            <Typography variant="subtitle2" fontWeight="bold">
+              Medikamente
+            </Typography>
+            {medications.length > 0 && (
+              <Chip label={medications.length} size="small" sx={{ ml: 'auto' }} />
+            )}
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: 0 }}>
+          {loading.medications ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : medications.length > 0 ? (
+            <List dense>
+              {medications.map((medication) => (
+                <ListItemButton
+                  key={medication._id || medication.id}
+                  sx={{ py: 1 }}
+                  onClick={() => onViewDetails?.('medication', medication)}
+                >
+                  <ListItemText
+                    primary={medication.name || 'Medikament'}
+                    secondary={
+                      <>
+                        {medication.dosage && medication.frequency && (
+                          <Typography variant="caption" display="block">
+                            {medication.dosage} • {medication.frequency}
+                          </Typography>
+                        )}
+                        {medication.startDate && (
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            Seit: {formatDate(medication.startDate)}
+                          </Typography>
+                        )}
+                      </>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    {onAddToDocument && (
+                      <Tooltip title="In Brief übernehmen">
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddToDocument('medication', medication);
+                          }}
+                        >
+                          <Add fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </ListItemSecondaryAction>
+                </ListItemButton>
+              ))}
+            </List>
+          ) : (
+            <Alert severity="info" sx={{ m: 1 }}>Keine aktiven Medikamente verfügbar</Alert>
+          )}
+        </AccordionDetails>
+      </Accordion>
+
+      {/* Diagnosen - Priorität 7 */}
+      <Accordion 
+        expanded={accordionState.diagnoses} 
+        onChange={() => handleAccordionChange('diagnoses')}
+        sx={{ boxShadow: 'none', borderBottom: '1px solid', borderColor: 'divider' }}
+      >
+        <AccordionSummary expandIcon={<ExpandMore />}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+            <DiagnosisIcon color="primary" />
+            <Typography variant="subtitle2" fontWeight="bold">
+              Diagnosen
+            </Typography>
+            {diagnoses.length > 0 && (
+              <Chip label={diagnoses.length} size="small" sx={{ ml: 'auto' }} />
+            )}
+          </Box>
+        </AccordionSummary>
+        <AccordionDetails sx={{ p: 0 }}>
+          {loading.diagnoses ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+              <CircularProgress size={24} />
+            </Box>
+          ) : diagnoses.length > 0 ? (
+            <List dense>
+              {diagnoses.map((diagnosis) => (
+                <ListItemButton
+                  key={diagnosis._id || diagnosis.id}
+                  sx={{ py: 1 }}
+                  onClick={() => onViewDetails?.('diagnosis', diagnosis)}
+                >
+                  <ListItemText
+                    primary={diagnosis.code ? `${diagnosis.code} - ${diagnosis.name || diagnosis.description || 'Diagnose'}` : (diagnosis.name || diagnosis.description || 'Diagnose')}
+                    secondary={
+                      <>
+                        {diagnosis.isPrimary && (
+                          <Chip label="Hauptdiagnose" size="small" color="primary" sx={{ mr: 0.5, height: 18, fontSize: '0.65rem' }} />
+                        )}
+                        {diagnosis.status && (
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            Status: {diagnosis.status === 'active' ? 'Aktiv' : diagnosis.status === 'resolved' ? 'Behoben' : diagnosis.status === 'chronic' ? 'Chronisch' : diagnosis.status}
+                          </Typography>
+                        )}
+                        {diagnosis.diagnosedDate && (
+                          <Typography variant="caption" display="block" color="text.secondary">
+                            Diagnostiziert: {formatDate(diagnosis.diagnosedDate)}
+                          </Typography>
+                        )}
+                      </>
+                    }
+                  />
+                  <ListItemSecondaryAction>
+                    {onAddToDocument && (
+                      <Tooltip title="In Brief übernehmen">
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onAddToDocument('diagnosis', diagnosis);
+                          }}
+                        >
+                          <Add fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    )}
+                  </ListItemSecondaryAction>
+                </ListItemButton>
+              ))}
+            </List>
+          ) : (
+            <Alert severity="info" sx={{ m: 1 }}>Keine Diagnosen verfügbar</Alert>
           )}
         </AccordionDetails>
       </Accordion>

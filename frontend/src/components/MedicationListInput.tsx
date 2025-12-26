@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import MedicationAutocomplete from './MedicationAutocomplete';
+import MedicationDialog from './MedicationDialog';
 import { Medication } from '../types/Medication';
 
 interface MedicationListInputProps {
@@ -84,10 +85,7 @@ const MedicationListInput: React.FC<MedicationListInputProps> = ({
   const [selectedMedication, setSelectedMedication] = useState<Medication | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
-  const [dosage, setDosage] = useState('');
-  const [frequency, setFrequency] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [prescribedBy, setPrescribedBy] = useState('');
+  const [editingMedicationForDialog, setEditingMedicationForDialog] = useState<any>(null);
 
   const handleAddMedication = (medication: Medication | null) => {
     if (!medication) return;
@@ -105,78 +103,78 @@ const MedicationListInput: React.FC<MedicationListInputProps> = ({
     });
 
     if (!isDuplicate) {
-      // Initialisiere Dosierung und Häufigkeit
-      const initialDosage = medication.strength && medication.strengthUnit 
-        ? `${medication.strength} ${medication.strengthUnit}` 
-        : '';
-      setDosage(initialDosage);
-      setFrequency('');
-      setStartDate('');
-      setPrescribedBy('');
       setEditingIndex(value.length); // Neuer Eintrag am Ende
-      
-      // Medikament erst hinzufügen und Dialog öffnen
-      const newMedication: Medication = {
-        ...medication,
-        dosage: initialDosage || 'Nicht angegeben',
-        frequency: 'Nicht angegeben'
-      };
-      onChange([...value, newMedication]);
+      setSelectedMedication(medication);
+      setEditingMedicationForDialog(null);
       setEditDialogOpen(true);
-      setSelectedMedication(null);
     }
   };
 
   const handleEditMedication = (index: number) => {
     const medication = value[index];
-    if (typeof medication === 'string') {
-      // Für String-Medikamente nur Name anzeigen
-      setDosage('');
-      setFrequency('');
-    } else {
-      setDosage(medication.dosage || (medication.strength && medication.strengthUnit ? `${medication.strength} ${medication.strengthUnit}` : ''));
-      setFrequency(medication.frequency || '');
-      setStartDate(medication.startDate || '');
-      setPrescribedBy(medication.prescribedBy || '');
-    }
     setEditingIndex(index);
+    setSelectedMedication(typeof medication === 'string' ? null : medication);
+    
+    // Konvertiere zu PatientMedication-Format für den Dialog
+    if (typeof medication === 'string') {
+      const medForDialog: any = {
+        _id: '',
+        name: medication,
+        dosage: '',
+        frequency: '',
+        startDate: '',
+        notes: ''
+      };
+      setEditingMedicationForDialog(medForDialog);
+    } else {
+      const medForDialog: any = {
+        _id: medication._id || '',
+        name: medication.name || '',
+        dosage: medication.dosage || (medication.strength && medication.strengthUnit ? `${medication.strength} ${medication.strengthUnit}` : ''),
+        frequency: medication.frequency || '',
+        startDate: medication.startDate || '',
+        strength: medication.strength,
+        strengthUnit: medication.strengthUnit
+      };
+      setEditingMedicationForDialog(medForDialog);
+    }
     setEditDialogOpen(true);
   };
 
-  const handleSaveMedication = () => {
-    if (editingIndex === null || editingIndex >= value.length) return;
+  const handleSaveMedication = (medicationData: any) => {
+    if (editingIndex === null) return;
 
-    const medication = value[editingIndex];
+    // Konvertiere MedicationDialog-Format zurück zu Medication-Format
+    const updatedMedication: Medication = {
+      _id: medicationData.medicationId || selectedMedication?._id || '',
+      name: medicationData.name,
+      dosage: medicationData.dosage,
+      frequency: medicationData.frequency,
+      startDate: medicationData.startDate,
+      strength: medicationData.strength,
+      strengthUnit: medicationData.strengthUnit || medicationData.dosageUnit,
+      form: medicationData.form,
+      atcCode: medicationData.atcCode
+    };
 
-    const updatedMedication: Medication = typeof medication === 'string' 
-      ? {
-          name: medication,
-          dosage: dosage || 'Nicht angegeben',
-          frequency: frequency || 'Nicht angegeben',
-          startDate: startDate || undefined,
-          prescribedBy: prescribedBy || undefined
-        }
-      : {
-          ...medication,
-          dosage: dosage.trim() || (medication.dosage || 'Nicht angegeben'),
-          frequency: frequency.trim() || (medication.frequency || 'Nicht angegeben'),
-          startDate: startDate.trim() || medication.startDate,
-          prescribedBy: prescribedBy.trim() || medication.prescribedBy
-        };
-
-    const newMedications = [...value];
-    newMedications[editingIndex] = updatedMedication;
-    onChange(newMedications);
+    if (editingIndex >= value.length) {
+      // Neuer Eintrag
+      onChange([...value, updatedMedication]);
+    } else {
+      // Bearbeiten
+      const updated = [...value];
+      updated[editingIndex] = updatedMedication;
+      onChange(updated);
+    }
+    
     handleCloseDialog();
   };
 
   const handleCloseDialog = () => {
     setEditDialogOpen(false);
     setEditingIndex(null);
-    setDosage('');
-    setFrequency('');
-    setStartDate('');
-    setPrescribedBy('');
+    setSelectedMedication(null);
+    setEditingMedicationForDialog(null);
   };
 
   const handleRemoveMedication = (index: number) => {
@@ -274,68 +272,17 @@ const MedicationListInput: React.FC<MedicationListInputProps> = ({
         </Typography>
       )}
 
-      {/* Dialog für Dosierung und Häufigkeit */}
-      <Dialog open={editDialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          Medikamentendetails
-          {editingIndex !== null && editingIndex < value.length && (
-            <Typography variant="body2" color="textSecondary" sx={{ mt: 0.5, fontWeight: 'normal' }}>
-              {getMedicationName(value[editingIndex])}
-            </Typography>
-          )}
-        </DialogTitle>
-        <DialogContent>
-          <Grid container spacing={2} sx={{ mt: 0.5 }}>
-            <Grid size={{ xs: 12 }}>
-              <TextField
-                fullWidth
-                label="Dosierung"
-                value={dosage}
-                onChange={(e) => setDosage(e.target.value)}
-                placeholder="z.B. 50 mg, 1 Tablette"
-                helperText="Geben Sie die Dosierung ein (z.B. 50 mg, 1 Tablette, 2x täglich)"
-              />
-            </Grid>
-            <Grid size={{ xs: 12 }}>
-              <TextField
-                fullWidth
-                label="Häufigkeit"
-                value={frequency}
-                onChange={(e) => setFrequency(e.target.value)}
-                placeholder="z.B. 2x täglich, morgens und abends"
-                helperText="Geben Sie die Einnahmehäufigkeit ein"
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                fullWidth
-                label="Startdatum (optional)"
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                InputLabelProps={{
-                  shrink: true,
-                }}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, sm: 6 }}>
-              <TextField
-                fullWidth
-                label="Verschrieben von (optional)"
-                value={prescribedBy}
-                onChange={(e) => setPrescribedBy(e.target.value)}
-                placeholder="z.B. Dr. Mustermann"
-              />
-            </Grid>
-          </Grid>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Abbrechen</Button>
-          <Button onClick={handleSaveMedication} variant="contained" color="primary">
-            Speichern
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* Medication Dialog */}
+      <MedicationDialog
+        open={editDialogOpen}
+        onClose={handleCloseDialog}
+        onSave={handleSaveMedication}
+        patientId="" // Nicht benötigt für MedicationListInput
+        initialMedication={editingMedicationForDialog}
+        selectedCatalogMedication={selectedMedication}
+        source="anamnestic"
+        mode="medical"
+      />
     </Box>
   );
 };

@@ -68,6 +68,7 @@ import {
 } from '../store/slices/medicationSlice';
 import { PatientMedication, CreateMedicationData, UpdateMedicationData, MedicationInteraction } from '../store/slices/medicationSlice';
 import MedicationAutocomplete from './MedicationAutocomplete';
+import MedicationDialog from './MedicationDialog';
 import { Medication } from '../types/Medication';
 
 interface MedicationManagerProps {
@@ -109,7 +110,6 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
   const [selectedConflict, setSelectedConflict] = useState<any>(null);
   const [selectedPrescription, setSelectedPrescription] = useState<PatientMedication | null>(null);
   const [editingMedication, setEditingMedication] = useState<PatientMedication | null>(null);
-  const [selectedCatalogMedication, setSelectedCatalogMedication] = useState<Medication | null>(null);
   const [elgaStatus, setElgaStatus] = useState<{ available: boolean; elgaId?: string } | null>(null);
   const [formData, setFormData] = useState<CreateMedicationData>({
     patientId: patientId || '',
@@ -180,141 +180,26 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patientMedications, encounterMedications, activeMedications, encounterId, showActiveOnly]);
 
-  // Handle form submission
-  const handleSubmit = async () => {
-    try {
-      if (!formData.name || !formData.dosage || !formData.frequency) {
-        alert('Bitte füllen Sie alle erforderlichen Felder aus.');
-        return;
-      }
-
-      if (editingMedication) {
-        const updateData: UpdateMedicationData = {
-          name: formData.name,
-          atcCode: formData.atcCode,
-          strength: formData.strength,
-          strengthUnit: formData.strengthUnit,
-          form: formData.form,
-          dosage: formData.dosage,
-          frequency: formData.frequency,
-          duration: formData.duration,
-          startDate: formData.startDate,
-          endDate: formData.endDate,
-          instructions: formData.instructions,
-          notes: formData.notes,
-          indication: formData.indication
-        };
-        await dispatch(updateMedication({ id: editingMedication._id, data: updateData }));
-        
-        // Automatische ELGA-Synchronisation nach Update
-        await autoSyncWithELGA();
+  // Handle medication save from dialog
+  const handleMedicationSave = async () => {
+    // Reload medications after save
+    if (patientId) {
+      if (showActiveOnly) {
+        dispatch(fetchActiveMedications(patientId));
       } else {
-        // Prüfe Wechselwirkungen vor dem Erstellen
-        if (formData.atcCode && patientId) {
-          try {
-            const interactionResult = await dispatch(checkNewMedicationInteraction({
-              patientId,
-              atcCode: formData.atcCode,
-              name: formData.name
-            })).unwrap();
-            
-            if (interactionResult.data?.hasInteractions && interactionResult.data.interactions.length > 0) {
-              const confirmed = window.confirm(
-                `⚠️ Wechselwirkungen gefunden!\n\n` +
-                `${interactionResult.data.interactions.length} Wechselwirkung(en) mit bestehenden Medikamenten.\n\n` +
-                `Möchten Sie das Medikament trotzdem hinzufügen?`
-              );
-              if (!confirmed) {
-                return;
-              }
-            }
-          } catch (error) {
-            console.error('Fehler bei Wechselwirkungsprüfung:', error);
-            // Weiter mit Erstellung, auch wenn Prüfung fehlschlägt
-          }
-        }
-        
-        // Prüfe Dosierung vor dem Erstellen
-        if (patientId) {
-          try {
-            const dosageResult = await dispatch(validateMedicationDosage({
-              patientId,
-              medication: formData
-            })).unwrap();
-            
-            if (dosageResult.data && !dosageResult.data.valid) {
-              const errors = dosageResult.data.errors.map((e: any) => `❌ ${e.message}`).join('\n');
-              const warnings = dosageResult.data.warnings.map((w: any) => `⚠️ ${w.message}`).join('\n');
-              const message = `⚠️ Dosierungsprüfung:\n\n${errors}${warnings ? '\n\n' + warnings : ''}\n\nMöchten Sie das Medikament trotzdem hinzufügen?`;
-              const confirmed = window.confirm(message);
-              if (!confirmed) {
-                return;
-              }
-            } else if (dosageResult.data && dosageResult.data.warnings.length > 0) {
-              const warnings = dosageResult.data.warnings.map((w: any) => `⚠️ ${w.message}`).join('\n');
-              const confirmed = window.confirm(`⚠️ Dosierungswarnungen:\n\n${warnings}\n\nMöchten Sie fortfahren?`);
-              if (!confirmed) {
-                return;
-              }
-            }
-          } catch (error) {
-            console.error('Fehler bei Dosierungsprüfung:', error);
-            // Weiter mit Erstellung, auch wenn Prüfung fehlschlägt
-          }
-        }
-        
-        await dispatch(createMedication(formData));
-        
-        // Automatische ELGA-Synchronisation nach Erstellung
-        await autoSyncWithELGA();
+        dispatch(fetchPatientMedications({ patientId }));
       }
-      
-      setOpenDialog(false);
-      setEditingMedication(null);
-      resetForm();
-    } catch (error) {
-      console.error('Error saving medication:', error);
     }
-  };
-
-  // Handle medication selection from catalog
-  const handleMedicationSelect = (medication: Medication | null) => {
-    setSelectedCatalogMedication(medication);
-    if (medication) {
-      setFormData(prev => ({
-        ...prev,
-        medicationId: medication._id,
-        name: medication.name,
-        atcCode: medication.atcCode,
-        strength: medication.strength,
-        strengthUnit: medication.strengthUnit,
-        form: medication.form
-      }));
+    if (encounterId) {
+      dispatch(fetchEncounterMedications(encounterId));
     }
+    // Automatische ELGA-Synchronisation
+    await autoSyncWithELGA();
   };
 
   // Handle edit
   const handleEdit = (medication: PatientMedication) => {
     setEditingMedication(medication);
-    setFormData({
-      patientId: medication.patientId,
-      encounterId: medication.encounterId,
-      medicationId: medication.medicationId,
-      name: medication.name,
-      atcCode: medication.atcCode,
-      strength: medication.strength,
-      strengthUnit: medication.strengthUnit,
-      form: medication.form,
-      dosage: medication.dosage,
-      frequency: medication.frequency,
-      duration: medication.duration,
-      startDate: medication.startDate ? medication.startDate.split('T')[0] : new Date().toISOString().split('T')[0],
-      endDate: medication.endDate ? medication.endDate.split('T')[0] : '',
-      instructions: medication.instructions,
-      notes: medication.notes,
-      indication: medication.indication,
-      source: medication.source
-    });
     setOpenDialog(true);
   };
 
@@ -361,25 +246,10 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
     }
   };
 
-  // Reset form
-  const resetForm = () => {
-    setFormData({
-      patientId: patientId || '',
-      encounterId: encounterId,
-      name: '',
-      dosage: '',
-      frequency: '',
-      duration: '',
-      startDate: new Date().toISOString().split('T')[0],
-      source: 'clinical'
-    });
-    setSelectedCatalogMedication(null);
-  };
 
   // Open dialog for new medication
   const handleAddNew = () => {
     setEditingMedication(null);
-    resetForm();
     setOpenDialog(true);
   };
 
@@ -387,7 +257,6 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
   const handleCloseDialog = () => {
     setOpenDialog(false);
     setEditingMedication(null);
-    resetForm();
   };
 
   // Get status color
@@ -826,6 +695,24 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
                             <Chip label={medication.atcCode} size="small" variant="outlined" />
                           </Tooltip>
                         )}
+                        {medication.source === 'dekurs' && (
+                          <Chip 
+                            label="Dekurs" 
+                            size="small" 
+                            color="info" 
+                            variant="outlined"
+                            sx={{ fontSize: '0.7rem' }}
+                          />
+                        )}
+                        {medication.source === 'anamnestic' && (
+                          <Chip 
+                            label="Anamnestisch" 
+                            size="small" 
+                            color="secondary" 
+                            variant="outlined"
+                            sx={{ fontSize: '0.7rem' }}
+                          />
+                        )}
                       </Box>
                     }
                     secondary={
@@ -963,160 +850,17 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
         </List>
       )}
 
-      {/* Add/Edit Dialog */}
-      <Dialog
+      {/* Medication Dialog */}
+      <MedicationDialog
         open={openDialog}
         onClose={handleCloseDialog}
-        maxWidth="md"
-        fullWidth
-      >
-        <DialogTitle>
-          {editingMedication ? 'Medikament bearbeiten' : 'Neues Medikament hinzufügen'}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            {/* Medication Selection */}
-            <Box>
-              <MedicationAutocomplete
-                value={selectedCatalogMedication}
-                onChange={handleMedicationSelect}
-                label="Medikament aus Katalog"
-                helperText="Suchen Sie nach Medikamenten aus dem Katalog"
-                required
-              />
-            </Box>
-
-            {/* Manual Entry Fields */}
-            <Divider>oder manuell eingeben</Divider>
-            
-            <TextField
-              fullWidth
-              label="Medikamentenname"
-              value={formData.name}
-              onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-              required
-            />
-
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
-                fullWidth
-                label="Stärke"
-                value={formData.strength || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, strength: e.target.value }))}
-              />
-              <TextField
-                fullWidth
-                label="Einheit"
-                value={formData.strengthUnit || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, strengthUnit: e.target.value }))}
-              />
-              <TextField
-                fullWidth
-                label="Darreichungsform"
-                value={formData.form || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, form: e.target.value }))}
-              />
-            </Box>
-
-            {/* Dosage and Frequency */}
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
-                fullWidth
-                label="Dosierung"
-                value={formData.dosage}
-                onChange={(e) => setFormData(prev => ({ ...prev, dosage: e.target.value }))}
-                required
-                placeholder="z.B. 1 Tablette"
-              />
-              <TextField
-                fullWidth
-                label="Einnahmehäufigkeit"
-                value={formData.frequency}
-                onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value }))}
-                required
-                placeholder="z.B. 2x täglich"
-              />
-            </Box>
-
-            {/* Duration */}
-            <TextField
-              fullWidth
-              label="Dauer"
-              value={formData.duration || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, duration: e.target.value }))}
-              placeholder="z.B. 7 Tage, bis zum Ende"
-            />
-
-            {/* Dates */}
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField
-                fullWidth
-                label="Startdatum"
-                type="date"
-                value={formData.startDate || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-                required
-              />
-              <TextField
-                fullWidth
-                label="Enddatum (optional)"
-                type="date"
-                value={formData.endDate || ''}
-                onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Box>
-
-            {/* Instructions and Notes */}
-            <TextField
-              fullWidth
-              label="Einnahmehinweise"
-              multiline
-              rows={2}
-              value={formData.instructions || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, instructions: e.target.value }))}
-              placeholder="z.B. morgens nüchtern, nach dem Essen"
-            />
-
-            <TextField
-              fullWidth
-              label="Indikation"
-              value={formData.indication || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, indication: e.target.value }))}
-              placeholder="Für welche Diagnose wird das Medikament verschrieben?"
-            />
-
-            <TextField
-              fullWidth
-              label="Notizen"
-              multiline
-              rows={3}
-              value={formData.notes || ''}
-              onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-              placeholder="Zusätzliche Informationen..."
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>
-            Abbrechen
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={!formData.name || !formData.dosage || !formData.frequency || loading}
-            sx={{
-              bgcolor: '#4CAF50',
-              '&:hover': {
-                bgcolor: '#45a049'
-              }
-            }}
-          >
-            {editingMedication ? 'Aktualisieren' : 'Hinzufügen'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onSave={handleMedicationSave}
+        patientId={patientId || ''}
+        encounterId={encounterId}
+        initialMedication={editingMedication}
+        source="clinical"
+        mode="manager"
+      />
 
       {/* Conflict Resolution Dialog */}
       <Dialog

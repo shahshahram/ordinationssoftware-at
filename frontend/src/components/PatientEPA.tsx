@@ -70,6 +70,7 @@ import { fetchDocuments } from '../store/slices/documentSlice';
 import { fetchDekursEntries, resetDekursState } from '../store/slices/dekursSlice';
 import { fetchVitalSigns, clearVitalSigns } from '../store/slices/vitalSignsSlice';
 import { fetchPatients } from '../store/slices/patientSlice';
+import { fetchPatientMedications } from '../store/slices/medicationSlice';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -105,6 +106,7 @@ interface PatientEPAProps {
   patientId: string;
   onNavigate?: (path: string) => void;
   onTabChange?: (tabIndex: number) => void;
+  onOpenMedicationManager?: () => void;
 }
 
 // Separate memoized Komponente für einzelne Datum-Cards
@@ -121,6 +123,7 @@ interface EPADateCardProps {
   getTypeLabel: (type: string) => string;
   getTypeColor: (type: string) => "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning";
   onDekursPreview?: (dekursEntry: any) => void;
+  onOpenMedicationManager?: () => void;
 }
 
 const EPADateCard = memo(({ 
@@ -135,7 +138,8 @@ const EPADateCard = memo(({
   getTypeIcon,
   getTypeLabel,
   getTypeColor,
-  onDekursPreview
+  onDekursPreview,
+  onOpenMedicationManager
 }: EPADateCardProps) => {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -233,6 +237,11 @@ const EPADateCard = memo(({
                         tabIndex = 3;
                         break;
                       case 'medication':
+                        // Öffne Medikamenten-Dialog statt zu navigieren
+                        if (onOpenMedicationManager) {
+                          onOpenMedicationManager();
+                        }
+                        return; // Verhindere Navigation
                       case 'allergy':
                       case 'infection':
                       case 'pregnancy':
@@ -344,13 +353,16 @@ const EPADateCard = memo(({
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                          <Chip
-                            label={getTypeLabel(groupedEntry.type)}
-                            size="small"
-                            color={getTypeColor(groupedEntry.type)}
-                            variant="outlined"
-                            sx={{ height: 24 }}
-                          />
+                          {/* Zeige Chip nicht für Medikamente und Diagnosen */}
+                          {groupedEntry.type !== 'medication' && groupedEntry.type !== 'diagnosis' && (
+                            <Chip
+                              label={getTypeLabel(groupedEntry.type)}
+                              size="small"
+                              color={getTypeColor(groupedEntry.type)}
+                              variant="outlined"
+                              sx={{ height: 24 }}
+                            />
+                          )}
                           {groupedEntry.date && (
                             <Typography variant="caption" color="text.secondary">
                               {format(new Date(groupedEntry.date), 'HH:mm', { locale: de })}
@@ -544,7 +556,7 @@ const EPADateCard = memo(({
 
 EPADateCard.displayName = 'EPADateCard';
 
-const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabChange }) => {
+const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabChange, onOpenMedicationManager }) => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -553,6 +565,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((state) => state.diagnoses);
   const { documents, loading: documentsLoading } = useAppSelector((state) => state.documents);
   const { entries: dekursEntries, loading: dekursLoading } = useAppSelector((state) => state.dekurs);
+  const { patientMedications, loading: medicationsLoading } = useAppSelector((state) => state.medications);
   const { vitalSigns, loading: vitalSignsLoading } = useAppSelector((state) => state.vitalSigns);
   const { patients } = useAppSelector((state) => state.patients);
   
@@ -952,6 +965,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         if (!hasDiagnoses) {
           criticalPromises.push(dispatch(fetchPatientDiagnoses({ patientId })).catch(() => {}));
         }
+        
+        // Medikamente laden
+        criticalPromises.push(dispatch(fetchPatientMedications({ patientId })).catch(() => {}));
         
         // Patientendaten immer laden (für medizinische Felder)
         criticalPromises.push(
@@ -1543,7 +1559,31 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         console.error('Fehler beim Verarbeiten von Diagnosen:', error);
       }
 
-      // Medikamente - ENTFERNT: Medizinische Daten werden nicht mehr in ePA angezeigt
+      // Medikamente
+      try {
+        const medicationsArray = Array.isArray(patientMedications) ? patientMedications : [];
+        medicationsArray.forEach((medication: any) => {
+          const medicationDate = new Date(medication.startDate || medication.createdAt || new Date());
+          const statusText = medication.status === 'active' ? 'Aktiv' : 
+                            medication.status === 'completed' ? 'Abgeschlossen' :
+                            medication.status === 'discontinued' ? 'Abgesetzt' :
+                            medication.status === 'suspended' ? 'Ausgesetzt' : 'Unbekannt';
+          
+          entries.push({
+            id: `medication-${medication._id}`,
+            type: 'medication',
+            date: medicationDate,
+            title: medication.name || 'Medikament',
+            description: `${medication.dosage || ''} ${medication.frequency || ''}${medication.duration ? `, ${medication.duration}` : ''}`.trim(),
+            status: statusText,
+            doctor: medication.prescribedBy ? 'Verschrieben' : undefined,
+            metadata: medication,
+            changeType: 'prescribed'
+          });
+        });
+      } catch (error) {
+        console.error('Fehler beim Verarbeiten von Medikamenten:', error);
+      }
 
       // Dokumente
       try {
@@ -2250,8 +2290,29 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                 continue;
               }
               
-              // Wenn mehr als 1 Eintrag, gruppiere sie
-              if (typeEntries.length > 1) {
+              // Medikamente und Diagnosen werden nie gruppiert - jedes einzeln anzeigen
+              if (typeKey === 'medication' || typeKey === 'diagnosis') {
+                // Jedes Medikament/Diagnose einzeln anzeigen
+                for (let m = 0; m < typeEntries.length; m++) {
+                  const entry = typeEntries[m];
+                  if (entry) {
+                    groupedEntriesForDate.push({
+                      id: entry.id,
+                      type: entry.type as any,
+                      date: entry.date,
+                      title: entry.title,
+                      description: entry.description,
+                      status: entry.status,
+                      doctor: entry.doctor,
+                      count: 1,
+                      entries: [entry],
+                      isGrouped: false,
+                      metadata: entry.metadata
+                    });
+                  }
+                }
+              } else if (typeEntries.length > 1) {
+                // Wenn mehr als 1 Eintrag, gruppiere sie (außer Medikamente)
                 // OPTIMIERT: Verwende slice für Titel, um nicht alle zu verarbeiten
                 const titles = typeEntries.slice(0, 5).map(e => e?.title || '').filter(Boolean);
                 const titleSuffix = typeEntries.length > 5 ? `, ... (+${typeEntries.length - 5} weitere)` : '';
@@ -2603,6 +2664,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                   getTypeIcon={getTypeIcon}
                   getTypeLabel={getTypeLabel}
                   getTypeColor={getTypeColor}
+                  onOpenMedicationManager={onOpenMedicationManager}
                   onDekursPreview={(dekursEntry) => {
                     setPreviewDekursEntry(dekursEntry);
                     setDekursPreviewOpen(true);

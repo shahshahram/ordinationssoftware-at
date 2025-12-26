@@ -44,6 +44,7 @@ import { Patient } from '../store/slices/patientSlice';
 import { fetchContacts, Contact } from '../store/slices/contactSlice';
 import ICD10Autocomplete from './ICD10Autocomplete';
 import MedicationAutocomplete from './MedicationAutocomplete';
+import MedicationDialog from './MedicationDialog';
 import { apiRequest } from '../utils/api';
 import Autocomplete from '@mui/material/Autocomplete';
 import RichTextEditor from './RichTextEditor';
@@ -157,20 +158,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   const [medicationDialogOpen, setMedicationDialogOpen] = useState(false);
   const [selectedMedication, setSelectedMedication] = useState<any | null>(null);
   const [editingMedicationIndex, setEditingMedicationIndex] = useState<number | null>(null);
-  const [medicationFormData, setMedicationFormData] = useState({
-    dosage: '',
-    dosageUnit: '',
-    frequency: '',
-    duration: '',
-    instructions: '',
-    startDate: '',
-    endDate: '',
-    quantity: '',
-    quantityUnit: '',
-    route: 'oral' as 'oral' | 'topical' | 'injection' | 'inhalation' | 'rectal' | 'vaginal' | 'other',
-    changeType: 'added' as 'added' | 'modified' | 'discontinued' | 'unchanged',
-    notes: ''
-  });
+  const [editingMedicationForDialog, setEditingMedicationForDialog] = useState<any>(null);
 
   // State für Tabs (Editor/Vorschau)
   const [activeTab, setActiveTab] = useState(0);
@@ -192,7 +180,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   });
   const [isResizing, setIsResizing] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [detailDialogData, setDetailDialogData] = useState<{ type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs', data: any } | null>(null);
+  const [detailDialogData, setDetailDialogData] = useState<{ type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs' | 'medication' | 'diagnosis', data: any } | null>(null);
 
   // Dekurs-Felder-Mapping
   const dekursFields = [
@@ -735,20 +723,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     
     setSelectedMedication(medication);
     setEditingMedicationIndex(null);
-    setMedicationFormData({
-      dosage: medication.dosage || medication.strength || '',
-      dosageUnit: medication.strengthUnit || '',
-      frequency: medication.frequency || '',
-      duration: '',
-      instructions: '',
-      startDate: '',
-      endDate: '',
-      quantity: '',
-      quantityUnit: '',
-      route: 'oral',
-      changeType: 'added',
-      notes: ''
-    });
+    setEditingMedicationForDialog(null);
     setMedicationDialogOpen(true);
   };
 
@@ -759,20 +734,22 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     
     setEditingMedicationIndex(index);
     setSelectedMedication(med);
-    setMedicationFormData({
+    // Konvertiere LinkedMedication zu PatientMedication-Format für den Dialog
+    const medForDialog: any = {
+      _id: med.medicationId || '',
+      patientId: patient?._id || '',
+      medicationId: med.medicationId,
+      name: med.name,
       dosage: med.dosage || '',
-      dosageUnit: med.dosageUnit || '',
       frequency: med.frequency || '',
       duration: med.duration || '',
       instructions: med.instructions || '',
-      startDate: med.startDate ? (typeof med.startDate === 'string' ? med.startDate.split('T')[0] : new Date(med.startDate).toISOString().split('T')[0]) : '',
-      endDate: med.endDate ? (typeof med.endDate === 'string' ? med.endDate.split('T')[0] : new Date(med.endDate).toISOString().split('T')[0]) : '',
-      quantity: med.quantity?.toString() || '',
-      quantityUnit: med.quantityUnit || '',
-      route: (med.route as any) || 'oral',
-      changeType: med.changeType || 'added',
-      notes: med.notes || ''
-    });
+      startDate: med.startDate ? (typeof med.startDate === 'string' ? med.startDate : new Date(med.startDate).toISOString()) : '',
+      endDate: med.endDate ? (typeof med.endDate === 'string' ? med.endDate : new Date(med.endDate).toISOString()) : '',
+      notes: med.notes || '',
+      strengthUnit: med.dosageUnit || ''
+    };
+    setEditingMedicationForDialog(medForDialog);
     setMedicationDialogOpen(true);
   };
 
@@ -949,53 +926,27 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     return `<p><strong>Foto</strong></p><p>${parts.join('<br />')}</p>`;
   };
 
-  const handleSaveMedication = () => {
-    if (!selectedMedication) return;
-    
-    let medicationId: string | undefined = undefined;
-    let medicationName: string = '';
-    
-    if (editingMedicationIndex !== null) {
-      const originalMed = linkedMedications[editingMedicationIndex];
-      if (originalMed) {
-        medicationId = originalMed.medicationId;
-        medicationName = originalMed.name;
-      }
-    } else {
-      if (selectedMedication._id) {
-        medicationId = typeof selectedMedication._id === 'string' ? selectedMedication._id : selectedMedication._id.toString();
-      } else if (selectedMedication.id) {
-        medicationId = typeof selectedMedication.id === 'string' ? selectedMedication.id : selectedMedication.id.toString();
-      }
-      medicationName = selectedMedication.name || selectedMedication.Name || selectedMedication.medicationName || '';
-    }
-    
+  const handleSaveMedication = (medicationData: any) => {
+    // Konvertiere MedicationDialog-Format zu LinkedMedication-Format
     const newMedication: any = {
-      medicationId: medicationId,
-      name: medicationName || selectedMedication.name || '',
-      changeType: medicationFormData.changeType || 'added',
-      dosage: medicationFormData.dosage?.trim() || '',
-      dosageUnit: medicationFormData.dosageUnit?.trim() || '',
-      frequency: medicationFormData.frequency?.trim() || '',
-      duration: medicationFormData.duration?.trim() || '',
-      instructions: medicationFormData.instructions?.trim() || '',
-      quantityUnit: medicationFormData.quantityUnit?.trim() || '',
-      route: medicationFormData.route || 'oral',
-      notes: medicationFormData.notes?.trim() || ''
+      medicationId: medicationData.medicationId,
+      name: medicationData.name,
+      changeType: 'added',
+      dosage: medicationData.dosage || '',
+      dosageUnit: medicationData.dosageUnit || medicationData.strengthUnit || '',
+      frequency: medicationData.frequency || '',
+      duration: medicationData.duration || '',
+      instructions: medicationData.instructions || '',
+      route: 'oral', // Default
+      notes: medicationData.notes || ''
     };
     
-    if (medicationFormData.startDate && medicationFormData.startDate.trim() !== '') {
-      newMedication.startDate = new Date(medicationFormData.startDate);
+    // Datum-Felder
+    if (medicationData.startDate) {
+      newMedication.startDate = new Date(medicationData.startDate);
     }
-    if (medicationFormData.endDate && medicationFormData.endDate.trim() !== '') {
-      newMedication.endDate = new Date(medicationFormData.endDate);
-    }
-    
-    if (medicationFormData.quantity && medicationFormData.quantity.trim() !== '') {
-      const qty = parseFloat(medicationFormData.quantity);
-      if (!isNaN(qty)) {
-        newMedication.quantity = qty;
-      }
+    if (medicationData.endDate) {
+      newMedication.endDate = new Date(medicationData.endDate);
     }
     
     if (editingMedicationIndex !== null) {
@@ -1010,51 +961,10 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   };
 
   const handleCloseMedicationDialog = () => {
-    // Entferne Fokus von allen fokussierbaren Elementen im Medikamenten-Dialog
-    const dialogElement = document.querySelector('.MuiDialog-root');
-    if (dialogElement) {
-      const focusedElement = dialogElement.querySelector(':focus') as HTMLElement;
-      if (focusedElement && focusedElement.blur) {
-        focusedElement.blur();
-      }
-    }
-    
-    const activeElement = document.activeElement as HTMLElement;
-    if (activeElement && activeElement !== document.body) {
-      const isInDialog = activeElement.closest('.MuiDialog-root');
-      if (isInDialog && activeElement.blur) {
-        activeElement.blur();
-      }
-    }
-    
-    // Setze Fokus auf Body
-    if (document.body && typeof document.body.focus === 'function') {
-      document.body.focus();
-    } else if (activeElement && activeElement.blur) {
-      activeElement.blur();
-    }
-    
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        setMedicationDialogOpen(false);
-      }, 0);
-    });
+    setMedicationDialogOpen(false);
     setEditingMedicationIndex(null);
     setSelectedMedication(null);
-    setMedicationFormData({
-      dosage: '',
-      dosageUnit: '',
-      frequency: '',
-      duration: '',
-      instructions: '',
-      startDate: '',
-      endDate: '',
-      quantity: '',
-      quantityUnit: '',
-      route: 'oral',
-      changeType: 'added',
-      notes: ''
-    });
+    setEditingMedicationForDialog(null);
   };
 
   // Handler für Diagnosen entfernen
@@ -1101,7 +1011,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   }, [isResizing, sidebarWidth]);
 
   // Handler für "In Brief übernehmen" aus Sidebar
-  const handleAddFromSidebar = (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs', data: any) => {
+  const handleAddFromSidebar = (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs' | 'medication' | 'diagnosis', data: any) => {
     switch (type) {
       case 'labor':
         handleAddLaborResult(data);
@@ -1134,11 +1044,47 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
         };
         setLetterSections([...letterSections, dekursSection]);
         break;
+      case 'medication':
+        // Medikament zu linkedMedications hinzufügen
+        const newMedication: LinkedMedication = {
+          medicationId: data._id || data.medicationId,
+          name: data.name,
+          dosage: data.dosage || '',
+          dosageUnit: data.strengthUnit || '',
+          frequency: data.frequency || '',
+          duration: data.duration || '',
+          instructions: data.instructions || '',
+          startDate: data.startDate ? new Date(data.startDate) : undefined,
+          endDate: data.endDate ? new Date(data.endDate) : undefined,
+          route: 'oral',
+          changeType: 'added',
+          notes: data.notes || ''
+        };
+        setLinkedMedications([...linkedMedications, newMedication]);
+        break;
+      case 'diagnosis':
+        // Diagnose zu linkedDiagnoses hinzufügen
+        const newDiagnosis: LinkedDiagnosis = {
+          diagnosisId: data._id || data.id,
+          icd10Code: data.code,
+          display: data.name || data.description,
+          isPrimary: data.isPrimary || false,
+          status: data.status || 'active',
+          onsetDate: data.diagnosedDate ? (typeof data.diagnosedDate === 'string' ? data.diagnosedDate : new Date(data.diagnosedDate).toISOString()) : new Date().toISOString(),
+          resolvedDate: data.resolvedDate ? (typeof data.resolvedDate === 'string' ? data.resolvedDate : new Date(data.resolvedDate).toISOString()) : undefined,
+          notes: data.notes
+        };
+        // Prüfe ob bereits vorhanden
+        const isDuplicate = linkedDiagnoses.some(d => d.icd10Code === newDiagnosis.icd10Code || d.diagnosisId === newDiagnosis.diagnosisId);
+        if (!isDuplicate) {
+          setLinkedDiagnoses([...linkedDiagnoses, newDiagnosis]);
+        }
+        break;
     }
   };
 
   // Handler für Detailansicht öffnen
-  const handleViewDetails = (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs', data: any) => {
+  const handleViewDetails = (type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs' | 'medication' | 'diagnosis', data: any) => {
     setDetailDialogData({ type, data });
     setDetailDialogOpen(true);
   };
@@ -2998,179 +2944,17 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
       </DialogActions>
     </Dialog>
 
-      {/* Medikamenten-Dialog */}
-      <Dialog
+      {/* Medication Dialog */}
+      <MedicationDialog
         open={medicationDialogOpen}
         onClose={handleCloseMedicationDialog}
-        maxWidth="md"
-        fullWidth
-        disableRestoreFocus={true}
-        TransitionProps={{
-          onExited: () => {
-            // Zusätzliche Bereinigung nach vollständigem Schließen
-            const activeElement = document.activeElement as HTMLElement;
-            if (activeElement && activeElement !== document.body && activeElement.blur) {
-              activeElement.blur();
-            }
-          }
-        }}
-      >
-        <DialogTitle>
-          {editingMedicationIndex !== null ? 'Medikament bearbeiten' : 'Medikament hinzufügen'}
-          {selectedMedication && (
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {selectedMedication.name || selectedMedication.Name || selectedMedication.medicationName}
-            </Typography>
-          )}
-        </DialogTitle>
-        <DialogContent dividers>
-          <Stack spacing={3} sx={{ mt: 1 }}>
-            <Grid container spacing={2}>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Dosis"
-                  value={medicationFormData.dosage}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, dosage: e.target.value }))}
-                  placeholder="z.B. 500"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Dosis-Einheit"
-                  value={medicationFormData.dosageUnit}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, dosageUnit: e.target.value }))}
-                  placeholder="z.B. mg, ml, Stk."
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Häufigkeit"
-                  value={medicationFormData.frequency}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, frequency: e.target.value }))}
-                  placeholder="z.B. 2x täglich, morgens und abends"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Applikationsweg</InputLabel>
-                  <Select
-                    value={medicationFormData.route}
-                    onChange={(e) => setMedicationFormData(prev => ({ ...prev, route: e.target.value as any }))}
-                    label="Applikationsweg"
-                  >
-                    <MenuItem value="oral">Oral</MenuItem>
-                    <MenuItem value="topical">Topisch</MenuItem>
-                    <MenuItem value="injection">Injektion</MenuItem>
-                    <MenuItem value="inhalation">Inhalation</MenuItem>
-                    <MenuItem value="rectal">Rektal</MenuItem>
-                    <MenuItem value="vaginal">Vaginal</MenuItem>
-                    <MenuItem value="other">Sonstig</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Dauer"
-                  value={medicationFormData.duration}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, duration: e.target.value }))}
-                  placeholder="z.B. 7 Tage, 2 Wochen"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <FormControl fullWidth>
-                  <InputLabel>Änderungstyp</InputLabel>
-                  <Select
-                    value={medicationFormData.changeType}
-                    onChange={(e) => setMedicationFormData(prev => ({ ...prev, changeType: e.target.value as any }))}
-                    label="Änderungstyp"
-                  >
-                    <MenuItem value="added">Hinzugefügt</MenuItem>
-                    <MenuItem value="modified">Geändert</MenuItem>
-                    <MenuItem value="discontinued">Abgesetzt</MenuItem>
-                    <MenuItem value="unchanged">Unverändert</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Startdatum"
-                  type="date"
-                  value={medicationFormData.startDate}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Enddatum"
-                  type="date"
-                  value={medicationFormData.endDate}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, endDate: e.target.value }))}
-                  InputLabelProps={{ shrink: true }}
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Menge"
-                  type="number"
-                  value={medicationFormData.quantity}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, quantity: e.target.value }))}
-                  placeholder="z.B. 20"
-                />
-              </Grid>
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Mengen-Einheit"
-                  value={medicationFormData.quantityUnit}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, quantityUnit: e.target.value }))}
-                  placeholder="z.B. Stk., Packungen"
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  label="Einnahmehinweise"
-                  multiline
-                  rows={3}
-                  value={medicationFormData.instructions}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, instructions: e.target.value }))}
-                  placeholder="z.B. zu den Mahlzeiten, mit viel Wasser"
-                />
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  label="Notizen"
-                  multiline
-                  rows={3}
-                  value={medicationFormData.notes}
-                  onChange={(e) => setMedicationFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  placeholder="Zusätzliche Informationen..."
-                />
-              </Grid>
-            </Grid>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseMedicationDialog}>
-            Abbrechen
-          </Button>
-          <Button
-            onClick={handleSaveMedication}
-            variant="contained"
-          >
-            {editingMedicationIndex !== null ? 'Speichern' : 'Hinzufügen'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onSave={handleSaveMedication}
+        patientId={patient?._id || ''}
+        initialMedication={editingMedicationForDialog}
+        selectedCatalogMedication={selectedMedication}
+        source="clinical"
+        mode="brief"
+      />
 
       {/* Vorlagenauswahl-Dialog */}
       <Dialog 

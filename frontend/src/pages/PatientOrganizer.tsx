@@ -96,6 +96,7 @@ import PatientSidebar from '../components/PatientSidebar';
 import DiagnosisManager from '../components/DiagnosisManager';
 import MedicationManager from '../components/MedicationManager';
 import MedicationListInput, { convertMedicationsArrayToPatientFormat } from '../components/MedicationListInput';
+import { createMedication, fetchPatientMedications } from '../store/slices/medicationSlice';
 import CDADocumentViewer from '../components/CDADocumentViewer';
 import PatientVisitHistory from '../components/PatientVisitHistory';
 import DekursHistory from '../components/DekursHistory';
@@ -1489,6 +1490,70 @@ const PatientOrganizer: React.FC = () => {
           console.log('✅ Reloaded patient infections:', updatedPatient?.infections);
           // Aktualisiere den Patient im Redux Store
           dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
+          
+          // Automatische Übernahme von Medikamenten aus medizinischen Daten in den Medikamenten-Manager
+          if (updatedMedicalData.currentMedications && updatedMedicalData.currentMedications.length > 0) {
+            try {
+              // Lade bestehende Medikamente
+              const existingMedicationsResult = await dispatch(fetchPatientMedications({ patientId })).unwrap();
+              const existingMedications = existingMedicationsResult.data || [];
+              
+              for (const med of updatedMedicalData.currentMedications) {
+                if (!med) continue;
+                
+                // Unterstütze sowohl String als auch Objekt-Format
+                let medName: string;
+                let medDosage: string;
+                let medFrequency: string;
+                let medDuration: string = '';
+                let medStartDate: string = new Date().toISOString().split('T')[0];
+                
+                if (typeof med === 'string') {
+                  // String-Format: nur Name vorhanden
+                  medName = med.trim();
+                  medDosage = 'Nicht angegeben';
+                  medFrequency = 'Nicht angegeben';
+                } else if (typeof med === 'object' && med.name) {
+                  // Objekt-Format: vollständige Daten
+                  const medAny = med as any;
+                  medName = medAny.name.trim();
+                  medDosage = medAny.dosage || 'Nicht angegeben';
+                  medFrequency = medAny.frequency || 'Nicht angegeben';
+                  medDuration = medAny.duration || '';
+                  medStartDate = medAny.startDate ? new Date(medAny.startDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0];
+                } else {
+                  continue; // Überspringe ungültige Einträge
+                }
+                
+                if (!medName) continue; // Überspringe leere Namen
+                
+                // Prüfe ob Medikament bereits existiert (gleicher Name, Dosierung, Häufigkeit und Quelle anamnestic)
+                const exists = existingMedications.some((m: any) => 
+                  m.name === medName && 
+                  m.dosage === medDosage && 
+                  m.frequency === medFrequency &&
+                  m.source === 'anamnestic'
+                );
+                
+                if (!exists) {
+                  await dispatch(createMedication({
+                    patientId,
+                    medicationId: (med as any).medicationId || undefined,
+                    name: medName,
+                    dosage: medDosage,
+                    frequency: medFrequency,
+                    duration: medDuration,
+                    startDate: medStartDate,
+                    source: 'anamnestic',
+                    notes: 'Übernommen aus medizinischen Daten (Anamnese)'
+                  })).unwrap();
+                }
+              }
+            } catch (error) {
+              console.error('Fehler bei automatischer Medikamenten-Übernahme aus medizinischen Daten:', error);
+              // Nicht blockieren - medizinische Daten wurden bereits gespeichert
+            }
+          }
         }
       } catch (reloadError) {
         console.warn('⚠️ Could not reload patient:', reloadError);
@@ -3014,6 +3079,9 @@ const PatientOrganizer: React.FC = () => {
                   onTabChange={(tabIndex: number) => {
                     // Verwende zentrale Navigation-Funktion
                     handleTabNavigation(tabIndex, true);
+                  }}
+                  onOpenMedicationManager={() => {
+                    setMedicationManagerDialogOpen(true);
                   }}
                   onNavigate={(path: string) => {
                     try {

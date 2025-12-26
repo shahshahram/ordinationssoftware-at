@@ -25,7 +25,7 @@ import { de } from 'date-fns/locale';
 interface DocumentDetailDialogProps {
   open: boolean;
   onClose: () => void;
-  type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs';
+  type: 'labor' | 'vital' | 'dicom' | 'document' | 'dekurs' | 'medication' | 'diagnosis';
   data: any;
 }
 
@@ -385,6 +385,97 @@ const DocumentDetailDialog: React.FC<DocumentDetailDialogProps> = ({
     </Stack>
   );
 
+  const renderMedicationDetails = () => (
+    <Stack spacing={2}>
+      <Box>
+        <Typography variant="h6" gutterBottom>
+          {data.name || 'Medikament'}
+        </Typography>
+      </Box>
+      {data.dosage && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Dosierung:</Typography>
+            <Typography variant="body2">{data.dosage} {data.dosageUnit || data.strengthUnit || ''}</Typography>
+          </Box>
+        </>
+      )}
+      {data.frequency && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Häufigkeit:</Typography>
+            <Typography variant="body2">{data.frequency}</Typography>
+          </Box>
+        </>
+      )}
+      {data.duration && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Dauer:</Typography>
+            <Typography variant="body2">{data.duration}</Typography>
+          </Box>
+        </>
+      )}
+      {data.startDate && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Startdatum:</Typography>
+            <Typography variant="body2">{formatDate(data.startDate)}</Typography>
+          </Box>
+        </>
+      )}
+      {data.endDate && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Enddatum:</Typography>
+            <Typography variant="body2">{formatDate(data.endDate)}</Typography>
+          </Box>
+        </>
+      )}
+      {data.instructions && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Einnahmehinweise:</Typography>
+            <Typography variant="body2">{data.instructions}</Typography>
+          </Box>
+        </>
+      )}
+      {data.notes && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Notizen:</Typography>
+            <Typography variant="body2">{data.notes}</Typography>
+          </Box>
+        </>
+      )}
+      {data.source && (
+        <>
+          <Divider />
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>Quelle:</Typography>
+            <Chip 
+              label={data.source === 'clinical' ? 'Klinisch' : 
+                     data.source === 'elga' ? 'ELGA' : 
+                     data.source === 'prescription' ? 'Rezept' :
+                     data.source === 'dekurs' ? 'Dekurs' :
+                     data.source === 'anamnestic' ? 'Anamnestisch' : data.source}
+              size="small"
+              color="primary"
+              variant="outlined"
+            />
+          </Box>
+        </>
+      )}
+    </Stack>
+  );
+
   const renderContent = () => {
     switch (type) {
       case 'labor':
@@ -397,6 +488,8 @@ const DocumentDetailDialog: React.FC<DocumentDetailDialogProps> = ({
         return renderDocumentDetails();
       case 'dekurs':
         return renderDekursDetails();
+      case 'medication':
+        return renderMedicationDetails();
       default:
         return <Typography>Keine Details verfügbar</Typography>;
     }
@@ -410,7 +503,10 @@ const DocumentDetailDialog: React.FC<DocumentDetailDialogProps> = ({
            type === 'vital' ? 'Vitalwerte' :
            type === 'dicom' ? 'DICOM-Studie' :
            type === 'document' ? 'Dokument' :
-           'Dekurs-Eintrag'}
+           type === 'dekurs' ? 'Dekurs-Eintrag' :
+           type === 'medication' ? 'Medikament' :
+           type === 'diagnosis' ? 'Diagnose' :
+           'Details'}
         </Typography>
         <Button onClick={onClose} startIcon={<Close />} size="small">
           Schließen

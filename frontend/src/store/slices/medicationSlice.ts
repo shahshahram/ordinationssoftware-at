@@ -25,7 +25,7 @@ export interface PatientMedication {
   duration?: string;
   startDate: string;
   endDate?: string;
-  source: 'clinical' | 'elga' | 'import' | 'prescription';
+  source: 'clinical' | 'elga' | 'import' | 'prescription' | 'dekurs' | 'anamnestic';
   prescribedBy?: string;
   prescribedAt?: string;
   status: 'active' | 'completed' | 'discontinued' | 'suspended';
@@ -69,7 +69,7 @@ export interface CreateMedicationData {
   duration?: string;
   startDate?: string;
   endDate?: string;
-  source?: 'clinical' | 'elga' | 'import' | 'prescription';
+  source?: 'clinical' | 'elga' | 'import' | 'prescription' | 'dekurs' | 'anamnestic';
   instructions?: string;
   notes?: string;
   indication?: string;
