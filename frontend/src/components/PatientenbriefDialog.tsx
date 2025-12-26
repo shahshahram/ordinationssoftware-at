@@ -73,7 +73,7 @@ interface PatientenbriefDialogProps {
   documentType?: 'patientenbrief' | 'arztbrief';
   source?: 'leer' | 'dekurs';
   selectedDekursEntry?: any;
-  onSaveSuccess?: () => void; // Callback nach erfolgreichem Speichern
+  onSaveSuccess?: (documentId?: string) => void; // Callback nach erfolgreichem Speichern
 }
 
 // Hilfsfunktion zum Entfernen von HTML-Tags
@@ -2060,7 +2060,9 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
         status: (finalize ? 'ready' : 'draft') as 'ready' | 'draft'
       };
 
-      await dispatch(createDocument(documentData));
+      const result: any = await dispatch(createDocument(documentData)).unwrap();
+      const createdDoc = result.data || result;
+      const createdDocId = createdDoc._id || createdDoc.id;
       
       // Dokumente neu laden
       if (patient._id || patient.id) {
@@ -2069,7 +2071,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
 
       // Callback aufrufen, um zum Dokumenten-Tab zu navigieren
       if (onSaveSuccess) {
-        onSaveSuccess();
+        onSaveSuccess(createdDocId || undefined);
       }
 
       onClose();

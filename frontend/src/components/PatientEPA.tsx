@@ -75,6 +75,7 @@ import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import VitalSignsChart from './VitalSignsChart';
+import StandaloneDocumentDialog from './StandaloneDocumentDialog';
 
 interface EPAEntry {
   id: string;
@@ -107,6 +108,7 @@ interface PatientEPAProps {
   onNavigate?: (path: string) => void;
   onTabChange?: (tabIndex: number) => void;
   onOpenMedicationManager?: () => void;
+  onDocumentPreview?: (document: any) => void;
 }
 
 // Separate memoized Komponente für einzelne Datum-Cards
@@ -124,6 +126,7 @@ interface EPADateCardProps {
   getTypeColor: (type: string) => "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning";
   onDekursPreview?: (dekursEntry: any) => void;
   onOpenMedicationManager?: () => void;
+  onDocumentPreview?: (document: any) => void;
 }
 
 const EPADateCard = memo(({ 
@@ -139,7 +142,8 @@ const EPADateCard = memo(({
   getTypeLabel,
   getTypeColor,
   onDekursPreview,
-  onOpenMedicationManager
+  onOpenMedicationManager,
+  onDocumentPreview
 }: EPADateCardProps) => {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -264,12 +268,71 @@ const EPADateCard = memo(({
                         tabIndex = 5;
                         break;
                       case 'document':
-                        if (!groupedEntry.isGrouped && groupedEntry.entries?.[0]?.metadata?._id) {
-                          documentId = groupedEntry.entries[0].metadata._id;
-                        } else {
-                          tabIndex = 7;
+                        // Öffne Dokumentenvorschau-Dialog statt zu navigieren
+                        // Genauso wie bei Dekurs-Einträgen
+                        console.log('📄 Dokument geklickt:', {
+                          hasEntries: !!groupedEntry.entries,
+                          entriesLength: groupedEntry.entries?.length || 0,
+                          isGrouped: groupedEntry.isGrouped,
+                          hasDirectMetadata: !!groupedEntry.metadata,
+                          hasEntryMetadata: !!groupedEntry.entries?.[0]?.metadata,
+                          metadataType: typeof groupedEntry.metadata,
+                          metadataKeys: groupedEntry.metadata ? Object.keys(groupedEntry.metadata) : []
+                        });
+                        
+                        let documentToPreview = groupedEntry.metadata;
+                        if (!documentToPreview && groupedEntry.entries && groupedEntry.entries.length > 0) {
+                          documentToPreview = groupedEntry.entries[0]?.metadata;
                         }
-                        break;
+                        
+                        if (!documentToPreview) {
+                          const entryIdMatch = groupedEntry.id?.match(/^document-(.+)$/);
+                          if (entryIdMatch && entryIdMatch[1]) {
+                            documentToPreview = {
+                              _id: entryIdMatch[1],
+                              id: entryIdMatch[1],
+                              title: groupedEntry.title || 'Dokument',
+                              type: 'sonstiges'
+                            };
+                          } else if (groupedEntry.entries && groupedEntry.entries.length > 0) {
+                            const firstEntryIdMatch = groupedEntry.entries[0]?.id?.match(/^document-(.+)$/);
+                            if (firstEntryIdMatch && firstEntryIdMatch[1]) {
+                              documentToPreview = {
+                                _id: firstEntryIdMatch[1],
+                                id: firstEntryIdMatch[1],
+                                title: groupedEntry.entries[0]?.title || groupedEntry.title || 'Dokument',
+                                type: 'sonstiges'
+                              };
+                            }
+                          }
+                        }
+                        
+                        const documentId = documentToPreview?._id || documentToPreview?.id;
+                        const hasValidDocumentId = documentId && typeof documentId === 'string' && documentId.length > 0;
+                        
+                        console.log('📄 Dokument zum Anzeigen:', {
+                          hasDocument: !!documentToPreview,
+                          documentId: documentId,
+                          hasValidDocumentId,
+                          documentType: documentToPreview?.type,
+                          documentTitle: documentToPreview?.title,
+                          documentContent: documentToPreview?.content?.html ? 'has content' : 'no content',
+                          templateId: documentToPreview?.templateId
+                        });
+                        
+                        if (hasValidDocumentId && onDocumentPreview) {
+                          console.log('📄 Öffne Dokumentenvorschau für:', documentId);
+                          onDocumentPreview(documentToPreview);
+                          return; // Verhindere Navigation
+                        } else {
+                          console.warn('📄 Fallback: Navigiere zum Dokumenten-Tab - keine Vorschau möglich', {
+                            hasDocument: !!documentToPreview,
+                            hasValidDocumentId,
+                            hasOnDocumentPreview: !!onDocumentPreview
+                          });
+                          tabIndex = 7;
+                          return; // Verhindere Navigation
+                        }
                       case 'photo':
                         tabIndex = 9;
                         break;
@@ -353,16 +416,13 @@ const EPADateCard = memo(({
                       </Box>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                          {/* Zeige Chip nicht für Medikamente und Diagnosen */}
-                          {groupedEntry.type !== 'medication' && groupedEntry.type !== 'diagnosis' && (
-                            <Chip
-                              label={getTypeLabel(groupedEntry.type)}
-                              size="small"
-                              color={getTypeColor(groupedEntry.type)}
-                              variant="outlined"
-                              sx={{ height: 24 }}
-                            />
-                          )}
+                          <Chip
+                            label={getTypeLabel(groupedEntry.type)}
+                            size="small"
+                            color={getTypeColor(groupedEntry.type)}
+                            variant="outlined"
+                            sx={{ height: 24 }}
+                          />
                           {groupedEntry.date && (
                             <Typography variant="caption" color="text.secondary">
                               {format(new Date(groupedEntry.date), 'HH:mm', { locale: de })}
@@ -556,7 +616,7 @@ const EPADateCard = memo(({
 
 EPADateCard.displayName = 'EPADateCard';
 
-const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabChange, onOpenMedicationManager }) => {
+const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabChange, onOpenMedicationManager, onDocumentPreview }) => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -898,6 +958,8 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   const [visibleDatesCount, setVisibleDatesCount] = useState(20); // Zeige initial 20 Datum-Karten für bessere UX
   const [dekursPreviewOpen, setDekursPreviewOpen] = useState(false);
   const [previewDekursEntry, setPreviewDekursEntry] = useState<any>(null);
+  const [documentPreviewOpen, setDocumentPreviewOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<any>(null);
 
   // Hilfsfunktion zum Extrahieren der Patient-ID aus einem Appointment
   const getAppointmentPatientId = React.useCallback((apt: any): string | null => {
@@ -926,6 +988,24 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       clearTimeout(loadDekursTimeout);
     };
   }, [patientId, dispatch]);
+
+  // Lade Dokumente neu, wenn sich die Dokumente im Redux Store ändern
+  // Dies stellt sicher, dass neue Dokumente sofort in der EPA angezeigt werden
+  useEffect(() => {
+    if (!patientId) return;
+    
+    // Lade Dokumente neu, wenn sich die Anzahl der Dokumente ändert
+    // Verwende einen kleinen Delay, um sicherzustellen, dass die Komponente vollständig gerendert ist
+    const loadDocumentsTimeout = setTimeout(() => {
+      dispatch(fetchDocuments({ patientId })).catch((error: any) => {
+        console.warn('Fehler beim Neuladen der Dokumente:', error);
+      });
+    }, 100);
+    
+    return () => {
+      clearTimeout(loadDocumentsTimeout);
+    };
+  }, [patientId, dispatch, documents?.length]);
 
   // Lade alle Daten - OPTIMIERT: Prüfe Redux Store zuerst, lade nur wenn nötig
   useEffect(() => {
@@ -1491,12 +1571,27 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         
         // Set für bereits verarbeitete Diagnosen-IDs (um Duplikate zu vermeiden)
         const processedDiagnosisIds = new Set<string>();
+        // Set für bereits verarbeitete ICD-10 Codes (um Duplikate zu vermeiden, auch wenn diagnosisId fehlt)
+        const processedIcd10Codes = new Set<string>();
+        // Set für bereits verarbeitete Display-Texte (als Fallback, wenn weder ID noch Code vorhanden)
+        const processedDisplayTexts = new Set<string>();
         
         // Verarbeite alle Diagnosen aus PatientDiagnosis
         patientDiagnosesFiltered.forEach((diag: any) => {
           const diagnosisId = diag._id?.toString() || diag.id?.toString();
           if (diagnosisId) {
             processedDiagnosisIds.add(diagnosisId);
+          }
+          
+          // Füge auch ICD-10 Code und Display-Text hinzu, um Duplikate zu vermeiden
+          const icd10Code = diag.code || diag.icd10Code;
+          if (icd10Code) {
+            processedIcd10Codes.add(icd10Code.toLowerCase().trim());
+          }
+          
+          const displayText = diag.display || diag.name;
+          if (displayText) {
+            processedDisplayTexts.add(displayText.toLowerCase().trim());
           }
           
           const diagnosisTitle = diag.display || (diag.code ? `${diag.code}` : '');
@@ -1512,7 +1607,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         });
         
         // WICHTIG: Verarbeite auch Diagnosen aus linkedDiagnoses der Dekurs-Einträge
-        // Diese werden nur hinzugefügt, wenn sie noch nicht in processedDiagnosisIds sind
+        // Diese werden nur hinzugefügt, wenn sie noch nicht verarbeitet wurden
         // (um Duplikate zu vermeiden, falls die Diagnose bereits synchronisiert wurde)
         patientDekursEntries.forEach((dekurs: any) => {
           if (dekurs.linkedDiagnoses && Array.isArray(dekurs.linkedDiagnoses)) {
@@ -1521,24 +1616,52 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
               const diagnosisId = linkedDiag.diagnosisId?.toString();
               if (diagnosisId && processedDiagnosisIds.has(diagnosisId)) {
                 // Diagnose wurde bereits aus PatientDiagnosis verarbeitet, überspringe
+                console.log('[PatientEPA] Überspringe Diagnose aus Dekurs - bereits verarbeitet (ID):', diagnosisId);
                 return;
               }
               
-              if (!linkedDiag.icd10Code && !linkedDiag.display) {
+              // Prüfe auch über ICD-10 Code
+              const icd10Code = linkedDiag.icd10Code || linkedDiag.code;
+              if (icd10Code && processedIcd10Codes.has(icd10Code.toLowerCase().trim())) {
+                // Diagnose mit diesem ICD-10 Code wurde bereits verarbeitet, überspringe
+                console.log('[PatientEPA] Überspringe Diagnose aus Dekurs - bereits verarbeitet (ICD-10):', icd10Code);
+                return;
+              }
+              
+              // Prüfe auch über Display-Text (als Fallback)
+              const displayText = linkedDiag.display || linkedDiag.name;
+              if (displayText && processedDisplayTexts.has(displayText.toLowerCase().trim())) {
+                // Diagnose mit diesem Display-Text wurde bereits verarbeitet, überspringe
+                console.log('[PatientEPA] Überspringe Diagnose aus Dekurs - bereits verarbeitet (Display):', displayText);
+                return;
+              }
+              
+              if (!icd10Code && !displayText) {
                 // Überspringe Diagnosen ohne ICD-10 Code oder Display-Text
                 return;
               }
               
-              const diagnosisTitle = linkedDiag.display || (linkedDiag.icd10Code ? `${linkedDiag.icd10Code}` : '');
+              // Füge diese Diagnose zu den verarbeiteten hinzu, um weitere Duplikate zu vermeiden
+              if (diagnosisId) {
+                processedDiagnosisIds.add(diagnosisId);
+              }
+              if (icd10Code) {
+                processedIcd10Codes.add(icd10Code.toLowerCase().trim());
+              }
+              if (displayText) {
+                processedDisplayTexts.add(displayText.toLowerCase().trim());
+              }
+              
+              const diagnosisTitle = displayText || (icd10Code ? `${icd10Code}` : '');
               const diagnosisDescription = [
-                linkedDiag.icd10Code && `ICD-10: ${linkedDiag.icd10Code}`,
+                icd10Code && `ICD-10: ${icd10Code}`,
                 linkedDiag.notes && `Notizen: ${linkedDiag.notes}`,
                 linkedDiag.side && `Seite: ${linkedDiag.side === 'left' ? 'Links' : linkedDiag.side === 'right' ? 'Rechts' : 'Beidseitig'}`,
                 linkedDiag.severity && `Schweregrad: ${linkedDiag.severity}`
-              ].filter(Boolean).join(', ') || (linkedDiag.icd10Code ? `ICD-10: ${linkedDiag.icd10Code}` : '');
+              ].filter(Boolean).join(', ') || (icd10Code ? `ICD-10: ${icd10Code}` : '');
               
               entries.push({
-                id: `diagnosis-dekurs-${dekurs._id}-${linkedDiag.icd10Code || 'unknown'}`,
+                id: `diagnosis-dekurs-${dekurs._id}-${icd10Code || 'unknown'}`,
                 type: 'diagnosis',
                 date: new Date(linkedDiag.onsetDate || dekurs.entryDate || dekurs.createdAt),
                 title: diagnosisTitle,
@@ -2290,9 +2413,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                 continue;
               }
               
-              // Medikamente und Diagnosen werden nie gruppiert - jedes einzeln anzeigen
-              if (typeKey === 'medication' || typeKey === 'diagnosis') {
-                // Jedes Medikament/Diagnose einzeln anzeigen
+              // Medikamente, Diagnosen und Dokumente werden nie gruppiert - jedes einzeln anzeigen
+              if (typeKey === 'medication' || typeKey === 'diagnosis' || typeKey === 'document') {
+                // Jedes Medikament/Diagnose/Dokument einzeln anzeigen
                 for (let m = 0; m < typeEntries.length; m++) {
                   const entry = typeEntries[m];
                   if (entry) {
@@ -2668,6 +2791,10 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
                   onDekursPreview={(dekursEntry) => {
                     setPreviewDekursEntry(dekursEntry);
                     setDekursPreviewOpen(true);
+                  }}
+                  onDocumentPreview={(document) => {
+                    setPreviewDocument(document);
+                    setDocumentPreviewOpen(true);
                   }}
                 />
               );
@@ -3074,6 +3201,21 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
           )}
         </DialogActions>
       </Dialog>
+
+      {/* Dokumentenvorschau-Dialog */}
+      <StandaloneDocumentDialog
+        open={documentPreviewOpen}
+        onClose={() => {
+          console.log('📄 Dokumenten-Vorschau-Dialog wird geschlossen');
+          setDocumentPreviewOpen(false);
+          setPreviewDocument(null);
+        }}
+        patient={patientFromStore || null}
+        location={null} // Location wird nicht benötigt für die Vorschau
+        documentId={previewDocument?._id || previewDocument?.id || null}
+        document={previewDocument || null} // Das Dokument-Objekt direkt übergeben
+        templateId={previewDocument?.templateId || null} // Template-ID aus Dokument übernehmen
+      />
     </Box>
     );
   } catch (renderError) {

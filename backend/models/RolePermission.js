@@ -101,3 +101,4 @@ RolePermissionSchema.statics.saveRolePermissions = async function(roleId, permis
 module.exports = mongoose.model('RolePermission', RolePermissionSchema);
 
 
+

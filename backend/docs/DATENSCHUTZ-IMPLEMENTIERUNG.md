@@ -171,3 +171,4 @@ Diese Implementierung unterstützt DSGVO-Compliance, ersetzt aber **nicht**:
 **Wichtig:** Konsultieren Sie einen Datenschutzbeauftragten vor Produktivbetrieb!
 
 
+

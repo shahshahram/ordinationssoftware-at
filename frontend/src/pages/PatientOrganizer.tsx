@@ -379,6 +379,8 @@ const PatientOrganizer: React.FC = () => {
   // State für Standalone-Dokumente
   const [standaloneDocumentDialogOpen, setStandaloneDocumentDialogOpen] = useState(false);
   const [selectedStandaloneTemplateId, setSelectedStandaloneTemplateId] = useState<string | null>(null);
+  const [documentPreviewDialogOpen, setDocumentPreviewDialogOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<any | null>(null);
   const [standaloneTemplates, setStandaloneTemplates] = useState<DocumentTemplate[]>([]);
   const [loadingStandaloneTemplates, setLoadingStandaloneTemplates] = useState(false);
   const [standaloneTemplateDialogOpen, setStandaloneTemplateDialogOpen] = useState(false);
@@ -3083,6 +3085,41 @@ const PatientOrganizer: React.FC = () => {
                   onOpenMedicationManager={() => {
                     setMedicationManagerDialogOpen(true);
                   }}
+                  onDocumentPreview={(document) => {
+                    try {
+                      console.log('📄 onDocumentPreview aufgerufen:', {
+                        document,
+                        documentId: document?._id || document?.id,
+                        hasDocument: !!document,
+                        documentType: document?.type,
+                        documentTitle: document?.title
+                      });
+                      
+                      // Validierung: Stelle sicher, dass das Dokument gültig ist
+                      if (!document) {
+                        console.error('📄 Fehler: Kein Dokument übergeben');
+                        return;
+                      }
+                      
+                      const documentId = document._id || document.id;
+                      if (!documentId) {
+                        console.error('📄 Fehler: Dokument hat keine ID', document);
+                        return;
+                      }
+                      
+                      // Setze das Dokument und öffne den Dialog
+                      setPreviewDocument(document);
+                      setDocumentPreviewDialogOpen(true);
+                      
+                      console.log('📄 Dialog-Status gesetzt:', {
+                        previewDocument: document,
+                        documentId,
+                        dialogOpen: true
+                      });
+                    } catch (error) {
+                      console.error('📄 Fehler beim Öffnen der Dokumentenvorschau:', error);
+                    }
+                  }}
                   onNavigate={(path: string) => {
                     try {
                       // Parse den Tab-Parameter aus dem Pfad
@@ -5235,13 +5272,19 @@ const PatientOrganizer: React.FC = () => {
         documentType={selectedDocumentType || 'patientenbrief'}
         source={selectedSource || 'leer'}
         selectedDekursEntry={selectedDekursForLetter}
-        onSaveSuccess={() => {
-          // Navigiere zum Dokumenten-Tab (Tab 7) nach erfolgreichem Speichern
-          setActiveTab(7);
-          handleTabNavigation(7, true);
+        onSaveSuccess={async (documentId) => {
+          // Lade Dokumente neu, um den aktualisierten Status zu sehen
+          if (patient?._id || patient?.id) {
+            await dispatch(fetchDocuments({ patientId: patient._id || patient.id }));
+          }
+          dispatch(fetchDocuments({}));
+          
+          // Entfernt: Automatische Öffnung der Dokumentenvorschau nach dem Speichern
+          // Das Dokument wird nicht mehr automatisch geöffnet, nachdem es gespeichert wurde
+          
           setSnackbar({
             open: true,
-            message: `${selectedDocumentType === 'arztbrief' ? 'Arztbrief' : 'Patientenbrief'} erfolgreich erstellt. Sie finden ihn im Tab "Dokumente".`,
+            message: `${selectedDocumentType === 'arztbrief' ? 'Arztbrief' : 'Patientenbrief'} erfolgreich erstellt.`,
             severity: 'success'
           });
           setSelectedDocumentType(null);
@@ -5477,6 +5520,23 @@ const PatientOrganizer: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Dokumentenvorschau-Dialog */}
+      {documentPreviewDialogOpen && (
+        <StandaloneDocumentDialog
+          open={documentPreviewDialogOpen}
+          onClose={() => {
+            console.log('📄 Dialog wird geschlossen');
+            setDocumentPreviewDialogOpen(false);
+            setPreviewDocument(null);
+          }}
+          patient={patient || null}
+          location={currentLocation || null}
+          templateId={null}
+          documentId={previewDocument?._id || previewDocument?.id || null}
+          document={previewDocument || null}
+        />
+      )}
+
       {/* Standalone-Dokument Dialog */}
       <StandaloneDocumentDialog
         open={standaloneDocumentDialogOpen}
@@ -5487,16 +5547,17 @@ const PatientOrganizer: React.FC = () => {
         patient={patient || null}
         location={currentLocation || null}
         templateId={selectedStandaloneTemplateId}
-        onSaveSuccess={() => {
+        onSaveSuccess={async (documentId) => {
           // Lade Dokumente neu, um den aktualisierten Status zu sehen
           // Lade sowohl patientenspezifische als auch alle Dokumente (für Dokumentenverwaltung)
           if (patient?._id || patient?.id) {
-            dispatch(fetchDocuments({ patientId: patient._id || patient.id }));
+            await dispatch(fetchDocuments({ patientId: patient._id || patient.id }));
           }
           // Lade auch alle Dokumente, um sicherzustellen, dass die Dokumentenverwaltung aktualisiert wird
           dispatch(fetchDocuments({}));
-          setActiveTab(7);
-          handleTabNavigation(7, true);
+          
+          // Dialog wird automatisch geschlossen, keine automatische Vorschau mehr
+          
           setSnackbar({
             open: true,
             message: 'Dokument erfolgreich erstellt. Sie finden es im Tab "Dokumente".',

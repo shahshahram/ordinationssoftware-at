@@ -56,7 +56,7 @@ interface StandaloneDocumentDialogProps {
   templateId: string | null;
   documentId?: string | null; // Für Bearbeitungsmodus
   document?: Document | null; // Optional: Dokument direkt übergeben
-  onSaveSuccess?: () => void;
+  onSaveSuccess?: (documentId?: string) => void;
 }
 
 const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
@@ -161,101 +161,81 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         return;
       }
       
+      // Verwende documentId aus initialDocument oder aus Prop
+      const docIdToLoad = documentId || initialDocument?._id || initialDocument?.id;
+      
       console.log('[StandaloneDocumentDialog] Loading document:', { 
         hasInitialDocument: !!initialDocument, 
         documentId,
-        initialDocumentId: initialDocument?._id || initialDocument?.id 
+        docIdToLoad,
+        initialDocumentId: initialDocument?._id || initialDocument?.id,
+        hasContentInInitial: !!initialDocument?.content?.html
       });
       
-      if (initialDocument) {
-        console.log('[StandaloneDocumentDialog] Using initialDocument:', {
-          id: initialDocument._id || initialDocument.id,
-          status: initialDocument.status,
-          templateId: initialDocument.templateId
-        });
-        setEditingDocument(initialDocument);
-        if (initialDocument.templateId) {
-          try {
-            const result = await dispatch(fetchStandaloneTemplate(initialDocument.templateId)).unwrap();
-            setTemplate(result);
-          } catch (error) {
-            console.error('Fehler beim Laden des Templates:', error);
+      // Wenn eine documentId vorhanden ist, IMMER das vollständige Dokument über die API laden
+      // initialDocument könnte unvollständig sein (z.B. ohne content.html)
+      if (docIdToLoad) {
+        console.log('[StandaloneDocumentDialog] Lade vollständiges Dokument über API, auch wenn initialDocument vorhanden ist');
+        
+        try {
+          console.log('[StandaloneDocumentDialog] Fetching document from API:', docIdToLoad);
+          const response: any = await apiRequest.get(`/documents/${docIdToLoad}`);
+          const doc = response.data?.data || response.data;
+          console.log('[StandaloneDocumentDialog] Loaded document:', {
+            id: doc._id || doc.id,
+            status: doc.status,
+            templateId: doc.templateId,
+            hasContent: !!doc.content?.html
+          });
+          setEditingDocument(doc);
+          
+          // Lade Template aus dem Dokument oder aus Prop (optional)
+          // Wenn kein Template vorhanden ist, kann das Dokument trotzdem bearbeitet werden
+          const docTemplateId = doc.templateId || templateId;
+          if (docTemplateId) {
+            try {
+              const result = await dispatch(fetchStandaloneTemplate(docTemplateId)).unwrap();
+              setTemplate(result);
+            } catch (error) {
+              console.warn('[StandaloneDocumentDialog] Template konnte nicht geladen werden, aber Dokument kann trotzdem bearbeitet werden:', error);
+              // Kein Fehler setzen - Dokument kann auch ohne Template bearbeitet werden
+            }
+          } else {
+            console.log('[StandaloneDocumentDialog] Kein Template vorhanden - Dokument kann trotzdem bearbeitet werden');
           }
-        }
-        if (initialDocument.content?.html) {
-          // Entferne ALLE Briefköpfe und Datumszeilen aus dem geladenen Content
-          const contentWithoutLetterhead = removeLetterheadAndDates(initialDocument.content.html);
-          if (contentWithoutLetterhead !== initialDocument.content.html) {
-            console.log('[StandaloneDocumentDialog] Briefkopf(e) und Datumszeilen aus initialDocument entfernt');
+          
+          // Lade Dokumentinhalt
+          if (doc.content?.html) {
+            // Entferne ALLE Briefköpfe und Datumszeilen aus dem geladenen Content
+            const contentWithoutLetterhead = removeLetterheadAndDates(doc.content.html);
+            if (contentWithoutLetterhead !== doc.content.html) {
+              console.log('[StandaloneDocumentDialog] Briefkopf(e) und Datumszeilen aus geladenem Dokument entfernt');
+            }
+            setDocumentContent(contentWithoutLetterhead);
+            setPlaceholdersResolved(true); // Inhalt ist bereits aufgelöst
+          } else {
+            console.warn('[StandaloneDocumentDialog] Geladenes Dokument hat keinen Content. Template wird geladen, aber Dokument-Inhalt fehlt.');
+            // Wenn kein Content vorhanden ist, wird das Template-Inhalt verwendet (falls Template geladen wurde)
           }
-          setDocumentContent(contentWithoutLetterhead);
-          setPlaceholdersResolved(true); // Inhalt ist bereits aufgelöst
+          
+          // Lade Empfänger
+          if (doc.recipient) {
+            setRecipient(doc.recipient);
+          }
+          
+          // Lade Status und Priorität
+          if (doc.status) {
+            setDocumentStatus(doc.status);
+          }
+          if (doc.priority) {
+            setDocumentPriority(doc.priority);
+          }
+        } catch (error) {
+          console.error('Fehler beim Laden des Dokuments:', error);
+          setError('Fehler beim Laden des Dokuments');
         }
-        if (initialDocument.recipient) {
-          setRecipient(initialDocument.recipient);
-        }
-        if (initialDocument.status) {
-          setDocumentStatus(initialDocument.status);
-        }
-        if (initialDocument.priority) {
-          setDocumentPriority(initialDocument.priority);
-        }
-        return;
-      }
-      
-      if (!documentId) {
+      } else {
         console.log('[StandaloneDocumentDialog] No documentId provided');
-        return;
-      }
-      
-      try {
-        console.log('[StandaloneDocumentDialog] Fetching document from API:', documentId);
-        const response: any = await apiRequest.get(`/documents/${documentId}`);
-        const doc = response.data?.data || response.data;
-        console.log('[StandaloneDocumentDialog] Loaded document:', {
-          id: doc._id || doc.id,
-          status: doc.status,
-          templateId: doc.templateId,
-          hasContent: !!doc.content?.html
-        });
-        setEditingDocument(doc);
-        
-        // Lade Template aus dem Dokument
-        if (doc.templateId) {
-          try {
-            const result = await dispatch(fetchStandaloneTemplate(doc.templateId)).unwrap();
-            setTemplate(result);
-          } catch (error) {
-            console.error('Fehler beim Laden des Templates:', error);
-          }
-        }
-        
-        // Lade Dokumentinhalt
-        if (doc.content?.html) {
-          // Entferne ALLE Briefköpfe und Datumszeilen aus dem geladenen Content
-          const contentWithoutLetterhead = removeLetterheadAndDates(doc.content.html);
-          if (contentWithoutLetterhead !== doc.content.html) {
-            console.log('[StandaloneDocumentDialog] Briefkopf(e) und Datumszeilen aus geladenem Dokument entfernt');
-          }
-          setDocumentContent(contentWithoutLetterhead);
-          setPlaceholdersResolved(true); // Inhalt ist bereits aufgelöst
-        }
-        
-        // Lade Empfänger
-        if (doc.recipient) {
-          setRecipient(doc.recipient);
-        }
-        
-        // Lade Status und Priorität
-        if (doc.status) {
-          setDocumentStatus(doc.status);
-        }
-        if (doc.priority) {
-          setDocumentPriority(doc.priority);
-        }
-      } catch (error) {
-        console.error('Fehler beim Laden des Dokuments:', error);
-        setError('Fehler beim Laden des Dokuments');
       }
     };
     
@@ -270,11 +250,24 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     }
   }, [editingDocument?.status]);
 
-  // Lade Template (nur wenn nicht im Bearbeitungsmodus)
+  // Lade Template (auch im Bearbeitungsmodus, wenn noch kein Template geladen wurde)
   useEffect(() => {
     const loadTemplate = async () => {
-      if (!templateId || !open || isEditMode) {
-        console.log('[StandaloneDocumentDialog] Skipping template load:', { templateId, open, isEditMode });
+      // Überspringe, wenn kein templateId vorhanden ist oder Dialog nicht offen ist
+      if (!templateId || !open) {
+        console.log('[StandaloneDocumentDialog] Skipping template load:', { templateId, open });
+        return;
+      }
+      
+      // Im Edit-Modus nur laden, wenn noch kein Template vorhanden ist
+      if (isEditMode && template) {
+        console.log('[StandaloneDocumentDialog] Skipping template load - already loaded in edit mode');
+        return;
+      }
+
+      // Überspringe, wenn Template bereits geladen ist (verhindert Endlosschleife)
+      if (template && template._id === templateId) {
+        console.log('[StandaloneDocumentDialog] Skipping template load - already loaded');
         return;
       }
 
@@ -286,13 +279,16 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         console.log('[StandaloneDocumentDialog] Template loaded successfully:', result.name);
         setTemplate(result);
         
-        // Setze initialen Inhalt
-        if (result.content) {
+        // Setze initialen Inhalt nur, wenn noch kein Dokument-Inhalt vorhanden ist
+        // (im Edit-Modus sollte der Dokument-Inhalt Vorrang haben)
+        if (result.content && !isEditMode) {
           setDocumentContent(result.content);
         }
 
-        // Reset Platzhalter-Status beim Laden eines neuen Templates
-        setPlaceholdersResolved(false);
+        // Reset Platzhalter-Status beim Laden eines neuen Templates (nur im Erstellungsmodus)
+        if (!isEditMode) {
+          setPlaceholdersResolved(false);
+        }
 
         // Setze Standard-Empfänger wenn definiert
         if (result.defaultRecipientType) {
@@ -305,15 +301,24 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
       } catch (err: any) {
         console.error('[StandaloneDocumentDialog] Error loading template:', err);
         const errorMessage = err.message || err.error || 'Fehler beim Laden der Vorlage';
-        setError(errorMessage);
-        alert(`Fehler beim Laden der Vorlage: ${errorMessage}`);
+        
+        // Im Edit-Modus ohne Template ist das kein kritischer Fehler
+        // Der Dialog kann trotzdem verwendet werden, um das Dokument zu bearbeiten
+        if (isEditMode) {
+          console.warn('[StandaloneDocumentDialog] Template konnte nicht geladen werden, aber Dokument kann trotzdem bearbeitet werden');
+          setError(null); // Kein Fehler setzen, damit der Dialog funktioniert
+        } else {
+          // Im Erstellungsmodus ist ein Template erforderlich
+          setError(errorMessage);
+          alert(`Fehler beim Laden der Vorlage: ${errorMessage}`);
+        }
       } finally {
         setLoadingTemplate(false);
       }
     };
 
     loadTemplate();
-  }, [templateId, open, dispatch]);
+  }, [templateId, open, dispatch, isEditMode]); // template entfernt aus Dependencies
 
   // Lade Ärzte
   useEffect(() => {
@@ -441,7 +446,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     }
 
     // Initial: Lade Template-Inhalt und löse Platzhalter auf
-    const templateContent = template.content || '';
+    const templateContent = template?.content || '';
     
     // Debug: Prüfe Patientendaten
     console.log('[StandaloneDocumentDialog] Patient data:', {
@@ -798,7 +803,11 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
 
   // Dokument erstellen und direkt freigeben
   const handleCreateAndRelease = async () => {
-    if (!patient || !user || !template || !location) return;
+    if (!patient || !user || !location) {
+      setError('Patient, Benutzer oder Standort fehlt. Bitte überprüfen Sie die Eingaben.');
+      return;
+    }
+    // Template ist optional - Dokument kann auch ohne Template erstellt werden
 
     // Bestätigung
     if (!window.confirm('Möchten Sie dieses Dokument erstellen und direkt freigeben?')) {
@@ -830,8 +839,10 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
       const contentWithLetterhead = letterhead + contentWithoutLetterhead;
 
       const documentData: Partial<Document> = {
-        type: (template.documentType || 'sonstiges') as Document['type'],
-        title: `${template.name} für ${patient.firstName} ${patient.lastName}`,
+        type: (template?.documentType || editingDocument?.type || 'sonstiges') as Document['type'],
+        title: template?.name 
+          ? `${template?.name} für ${patient.firstName} ${patient.lastName}`
+          : (editingDocument?.title || `Dokument für ${patient.firstName} ${patient.lastName}`),
         content: {
           text: contentWithLetterhead.replace(/<[^>]*>/g, ''),
           html: contentWithLetterhead
@@ -851,7 +862,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         recipient: recipient || undefined,
         status: 'draft' as const, // Erst als Entwurf erstellen
         priority: documentPriority,
-        templateId: template._id
+        templateId: template?._id || editingDocument?.templateId || undefined
       };
 
       // Erstelle das Dokument
@@ -919,8 +930,8 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         // Rufe onSaveSuccess auf, um die Dokumentenliste zu aktualisieren
         // WICHTIG: Dies muss NACH setEditingDocument passieren, damit der Status korrekt ist
         if (onSaveSuccess) {
-          console.log('[StandaloneDocumentDialog] Rufe onSaveSuccess auf');
-          onSaveSuccess();
+          console.log('[StandaloneDocumentDialog] Rufe onSaveSuccess auf mit documentId:', createdDocId);
+          onSaveSuccess(createdDocId);
         }
         
         // Dialog bleibt offen, damit der Benutzer das freigegebene Dokument sehen kann
@@ -939,7 +950,11 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
 
   // Dokument freigeben (nur im Bearbeitungsmodus)
   const handleRelease = async () => {
-    if (!patient || !user || !template || !location) return;
+    if (!patient || !user || !location) {
+      setError('Patient, Benutzer oder Standort fehlt. Bitte überprüfen Sie die Eingaben.');
+      return;
+    }
+    // Template ist optional - Dokument kann auch ohne Template freigegeben werden
     
     if (!isEditMode || !editingDocument) {
       setError('Nur vorhandene Dokumente können freigegeben werden.');
@@ -982,8 +997,10 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
       const contentWithLetterhead = letterhead + contentWithoutLetterhead;
 
       const documentData: Partial<Document> = {
-        type: (template.documentType || 'sonstiges') as Document['type'],
-        title: editingDocument.title || `${template.name} für ${patient.firstName} ${patient.lastName}`,
+        type: (template?.documentType || editingDocument?.type || 'sonstiges') as Document['type'],
+        title: editingDocument.title || (template?.name 
+          ? `${template?.name} für ${patient.firstName} ${patient.lastName}`
+          : `Dokument für ${patient.firstName} ${patient.lastName}`),
         content: {
           text: contentWithLetterhead.replace(/<[^>]*>/g, ''),
           html: contentWithLetterhead
@@ -1003,7 +1020,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         recipient: recipient || undefined,
         status: documentStatus, // Behalte aktuellen Status beim Speichern
         priority: documentPriority,
-        templateId: template._id
+        templateId: template?._id || editingDocument?.templateId || undefined
       };
 
       const docId = editingDocument._id || editingDocument.id || documentId;
@@ -1066,7 +1083,8 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         }
 
         if (onSaveSuccess) {
-          onSaveSuccess();
+          const docId = editingDocument?._id || editingDocument?.id;
+          onSaveSuccess(docId || undefined);
         }
       }
     } catch (err: any) {
@@ -1078,7 +1096,11 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
 
   // Speichern
   const handleSave = async (finalize: boolean = false) => {
-    if (!patient || !user || !template || !location) return;
+    if (!patient || !user || !location) {
+      setError('Patient, Benutzer oder Standort fehlt. Bitte überprüfen Sie die Eingaben.');
+      return;
+    }
+    // Template ist optional - Dokument kann auch ohne Template gespeichert werden
 
     // Verhindere Speichern von freigegebenen Dokumenten
     if (isEditMode && editingDocument && editingDocument.status === 'released') {
@@ -1141,10 +1163,12 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
       }
 
       const documentData: Partial<Document> = {
-        type: (template.documentType || 'sonstiges') as Document['type'],
+        type: (template?.documentType || editingDocument?.type || 'sonstiges') as Document['type'],
         title: isEditMode && editingDocument?.title 
           ? editingDocument.title 
-          : `${template.name} für ${patient.firstName} ${patient.lastName}`,
+          : (template?.name 
+            ? `${template?.name} für ${patient.firstName} ${patient.lastName}`
+            : `Dokument für ${patient.firstName} ${patient.lastName}`),
         content: {
           text: contentWithLetterhead.replace(/<[^>]*>/g, ''), // Plain text
           html: contentWithLetterhead
@@ -1164,7 +1188,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         recipient: recipient || undefined,
         status: isEditMode ? documentStatus : 'draft' as const, // Immer "draft" beim Erstellen, Release-Route setzt es auf "released"
         priority: isEditMode ? documentPriority : 'normal',
-        templateId: template._id
+        templateId: template?._id || editingDocument?.templateId || undefined
       };
 
       if (isEditMode && editingDocument) {
@@ -1179,15 +1203,22 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         }
       } else {
         // Neues Dokument: Create
-        await dispatch(createDocument(documentData));
+        const result: any = await dispatch(createDocument(documentData)).unwrap();
+        const createdDoc = result.data || result;
+        const createdDocId = createdDoc._id || createdDoc.id;
+        
+        if (onSaveSuccess) {
+          onSaveSuccess(createdDocId || undefined);
+        }
       }
       
       if (patient._id || patient.id) {
         dispatch(fetchDocuments({ patientId: patient._id || patient.id }));
       }
 
-      if (onSaveSuccess) {
-        onSaveSuccess();
+      if (onSaveSuccess && editingDocument) {
+        const docId = editingDocument._id || editingDocument.id;
+        onSaveSuccess(docId || undefined);
       }
 
       handleClose();
@@ -1224,7 +1255,11 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
 
   // Drucken
   const handlePrint = async () => {
-    if (!location || !template) return;
+    if (!location) {
+      alert('Standort nicht gefunden. Bitte wählen Sie einen Standort aus.');
+      return;
+    }
+    // Template ist optional - Dokument kann auch ohne Template gedruckt werden
     
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -1294,7 +1329,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
       <!DOCTYPE html>
       <html>
         <head>
-          <title>${template.name || 'Dokument'}</title>
+          <title>${template?.name || editingDocument?.title || 'Dokument'}</title>
           <meta charset="UTF-8">
           <style>
             @media print {
@@ -1350,7 +1385,9 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     );
   }
 
-  if (!template) {
+  // Im Edit-Modus kann der Dialog auch ohne Template funktionieren
+  // Im Erstellungsmodus ist ein Template erforderlich
+  if (!template && !isEditMode) {
     return (
       <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
         <DialogContent>
@@ -1365,7 +1402,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
       <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
         <DialogTitle>
           <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6">{template.name}</Typography>
+            <Typography variant="h6">{template?.name || editingDocument?.title || 'Dokument'}</Typography>
             <IconButton onClick={handleClose} size="small">
               <Close />
             </IconButton>
@@ -1381,7 +1418,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
           <Box sx={{ mt: 1 }}>
             <Stack spacing={2}>
             {/* Empfänger-Auswahl */}
-            {template.requiresRecipient && (
+            {template?.requiresRecipient && (
               <Box>
                 <FormControl fullWidth>
                   <InputLabel>Empfänger</InputLabel>
@@ -1688,7 +1725,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
             <Alert severity="success" sx={{ width: '100%' }}>
               Dokument wurde erfolgreich freigegeben und kann nicht mehr bearbeitet werden.
             </Alert>
-          ) : !isEditMode || (editingDocument && editingDocument.status !== 'released') ? (
+          ) : (
             <>
               <Button onClick={() => handleSave(false)} variant="outlined" startIcon={<Save />} disabled={saving}>
                 Entwurf speichern
@@ -1696,8 +1733,8 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
               <Button onClick={() => handleSave(true)} variant="contained" startIcon={<Save />} disabled={saving}>
                 {saving ? <CircularProgress size={20} /> : 'Speichern'}
               </Button>
-              {/* Freigeben-Button: Im Erstellungsmodus oder wenn Status "draft" oder "under_review" */}
-              {(!isEditMode || (editingDocument && (editingDocument.status === 'draft' || editingDocument.status === 'under_review'))) && (
+              {/* Freigeben-Button: Im Erstellungsmodus oder wenn Status "draft" oder "under_review" oder kein Status (neue Dokumente ohne Template) */}
+              {(!isEditMode || !editingDocument || editingDocument.status === 'draft' || editingDocument.status === 'under_review' || !editingDocument.status) && (
                 <Button 
                   onClick={!isEditMode ? handleCreateAndRelease : handleRelease} 
                   variant="contained" 
@@ -1709,10 +1746,6 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
                 </Button>
               )}
             </>
-          ) : (
-            <Button onClick={() => handleSave(false)} variant="contained" startIcon={<Save />} disabled={saving}>
-              {saving ? <CircularProgress size={20} /> : 'Speichern'}
-            </Button>
           )}
         </DialogActions>
       </Dialog>

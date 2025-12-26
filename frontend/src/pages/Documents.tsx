@@ -169,9 +169,26 @@ const Documents: React.FC = () => {
   };
 
   const handleEdit = async (document: Document) => {
-    // Prüfe, ob das Dokument aus einer Vorlage erstellt wurde
-    if (document.templateId) {
-      // Öffne StandaloneDocumentDialog für Dokumente aus Vorlagen
+    // Dokumenttypen, die immer mit StandaloneDocumentDialog behandelt werden sollen
+    // (genauso wie Überweisungen)
+    const standaloneDocumentTypes: Document['type'][] = [
+      'ueberweisung',
+      'arztbrief',
+      'sonstiges', // Patientenbrief wird als 'sonstiges' gespeichert
+      'zuweisung',
+      'rueckueberweisung',
+      'konsiliarbericht',
+      'operationsbericht',
+      'pflegebrief'
+    ];
+    
+    // Prüfe, ob das Dokument aus einer Vorlage erstellt wurde ODER
+    // ob es ein Dokumenttyp ist, der immer mit StandaloneDocumentDialog behandelt werden soll
+    const shouldUseStandaloneDialog = document.templateId || 
+      standaloneDocumentTypes.includes(document.type);
+    
+    if (shouldUseStandaloneDialog) {
+      // Öffne StandaloneDocumentDialog für Dokumente aus Vorlagen oder für bestimmte Dokumenttypen
       setStandaloneDialogDocument(document);
       
       // Lade Patient, falls nicht bereits geladen
