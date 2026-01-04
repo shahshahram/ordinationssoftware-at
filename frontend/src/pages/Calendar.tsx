@@ -12,6 +12,7 @@ import {
   MenuItem,
   CircularProgress,
   Alert,
+  useTheme,
 } from '@mui/material';
 import {
   ArrowBackIos as ArrowBackIosIcon,
@@ -22,7 +23,7 @@ import {
   CalendarViewMonth as ViewMonthIcon,
   Event as EventIcon,
 } from '@mui/icons-material';
-import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears } from 'date-fns';
+import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -30,6 +31,8 @@ import { fetchAppointments, createAppointment, updateAppointment, deleteAppointm
 import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import { fetchRooms } from '../store/slices/roomSlice';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import api from '../utils/api';
+import { Warning } from '@mui/icons-material';
 
 interface CalendarEvent {
   id: string;
@@ -60,6 +63,7 @@ interface NewEventState {
   const Calendar: React.FC = () => {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
+    const theme = useTheme();
     const { appointments, loading, error } = useAppSelector((state) => state.appointments);
     const { staffProfiles } = useAppSelector((state) => state.staff);
     const { rooms } = useAppSelector((state) => state.rooms);
@@ -80,12 +84,50 @@ interface NewEventState {
   });
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
+  const [timeBlocks, setTimeBlocks] = useState<any[]>([]);
+
+  // Load TimeBlocks
+  const loadTimeBlocks = async () => {
+    try {
+      let startDate: Date;
+      let endDate: Date;
+      
+      if (viewMode === 'week') {
+        startDate = startOfWeek(currentDate, { weekStartsOn: 1 });
+        endDate = endOfWeek(currentDate, { weekStartsOn: 1 });
+      } else if (viewMode === 'month') {
+        startDate = startOfMonth(currentDate);
+        endDate = endOfMonth(currentDate);
+      } else {
+        startDate = startOfDay(currentDate);
+        endDate = endOfDay(currentDate);
+      }
+      
+      const response = await api.get('/time-blocks', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        status: 'blocked'
+      });
+      
+      if (response.success && response.data) {
+        const blocks = Array.isArray(response.data) ? response.data : (response.data as any).data || [];
+        setTimeBlocks(blocks);
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Laden der TimeBlocks:', error);
+    }
+  };
 
   useEffect(() => {
     dispatch(fetchAppointments());
     dispatch(fetchStaffProfiles());
     dispatch(fetchRooms());
+    loadTimeBlocks();
   }, [dispatch]);
+
+  useEffect(() => {
+    loadTimeBlocks();
+  }, [currentDate, viewMode]);
 
   const handleDateChange = (direction: 'prev' | 'next' | 'today') => {
     if (direction === 'prev') {
@@ -283,11 +325,15 @@ interface NewEventState {
   const renderDayView = () => {
     const hours = Array.from({ length: 24 }, (_, i) => i);
     const dayEvents = getEventsForCurrentView().filter(event => isSameDay(event.start, currentDate));
+    const dayTimeBlocks = timeBlocks.filter((block: any) => {
+      const blockDate = new Date(block.startTime);
+      return isSameDay(blockDate, currentDate);
+    });
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-        <Box sx={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
-          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }} />
+        <Box sx={{ display: 'flex', borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid', borderColor: 'divider' }} />
           <Box sx={{ flexGrow: 1, textAlign: 'center', py: 1, fontWeight: 'bold' }}>
             {format(currentDate, 'EEEE, dd. MMMM yyyy', { locale: de })}
           </Box>
@@ -317,8 +363,8 @@ interface NewEventState {
                 groupedEvents[timeKey].push(event);
               });
               
-              // Render events
-              return Object.entries(groupedEvents).flatMap(([timeKey, eventsAtTime]) => {
+              // Render events and time blocks
+              const eventElements = Object.entries(groupedEvents).flatMap(([timeKey, eventsAtTime]) => {
                 const baseEvent = eventsAtTime[0];
                 const startHour = baseEvent.start.getHours();
                 const startMinute = baseEvent.start.getMinutes();
@@ -492,6 +538,65 @@ interface NewEventState {
                   );
                 });
               });
+              
+              // Render TimeBlocks
+              const timeBlockElements = dayTimeBlocks.map((block: any) => {
+                const blockStart = new Date(block.startTime);
+                const blockEnd = new Date(block.endTime);
+                const startHour = blockStart.getHours();
+                const startMinute = blockStart.getMinutes();
+                const endHour = blockEnd.getHours();
+                const endMinute = blockEnd.getMinutes();
+                
+                const top = (startHour * 60 + startMinute) / 60 * 60;
+                const durationMinutes = (blockEnd.getTime() - blockStart.getTime()) / (1000 * 60);
+                const height = Math.max((durationMinutes / 60 * 60), 80);
+                
+                return (
+                  <Box
+                    key={block._id}
+                    sx={{
+                      position: 'absolute',
+                      top: `${top}px`,
+                      left: '4px',
+                      right: '4px',
+                      width: 'calc(100% - 8px)',
+                      height: `${height}px`,
+                      minHeight: '80px',
+                      backgroundColor: 'rgba(244, 67, 54, 0.7)',
+                      color: 'white',
+                      borderRadius: '8px',
+                      p: 1.5,
+                      overflow: 'hidden',
+                      border: '2px solid #f44336',
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+                      zIndex: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'flex-start',
+                      justifyContent: 'flex-start',
+                      gap: 0.5
+                    }}
+                  >
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Warning sx={{ fontSize: '1.2rem' }} />
+                      <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.9rem' }}>
+                        Gesperrt
+                      </Typography>
+                    </Box>
+                    {block.reason && (
+                      <Typography variant="caption" sx={{ fontSize: '0.8rem', opacity: 0.95 }}>
+                        {block.reason}
+                      </Typography>
+                    )}
+                    <Typography variant="caption" sx={{ fontSize: '0.75rem', opacity: 0.9 }}>
+                      {format(blockStart, 'HH:mm')} - {format(blockEnd, 'HH:mm')}
+                    </Typography>
+                  </Box>
+                );
+              });
+              
+              return [...eventElements, ...timeBlockElements];
             })()}
           </Box>
         </Box>
@@ -507,10 +612,10 @@ interface NewEventState {
 
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflowY: 'auto' }}>
-        <Box sx={{ display: 'flex', borderBottom: '1px solid #e0e0e0' }}>
-          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid #e0e0e0' }} />
+        <Box sx={{ display: 'flex', borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Box sx={{ width: '60px', flexShrink: 0, borderRight: '1px solid', borderColor: 'divider' }} />
           {days.map(day => (
-            <Box key={day.toISOString()} sx={{ flexGrow: 1, textAlign: 'center', py: 1, fontWeight: 'bold', borderRight: '1px solid #e0e0e0' }}>
+            <Box key={day.toISOString()} sx={{ flexGrow: 1, textAlign: 'center', py: 1, fontWeight: 'bold', borderRight: '1px solid', borderColor: 'divider' }}>
               <Typography variant="caption" display="block">{format(day, 'EEE', { locale: de })}</Typography>
               <Typography variant="body2">{format(day, 'dd.MM.', { locale: de })}</Typography>
             </Box>
@@ -526,6 +631,10 @@ interface NewEventState {
           </Box>
           {days.map(day => {
             const dayEvents = weekEvents.filter(event => isSameDay(event.start, day));
+            const dayTimeBlocks = timeBlocks.filter((block: any) => {
+              const blockDate = new Date(block.startTime);
+              return isSameDay(blockDate, day);
+            });
             
             // Group events by their time slot
             const groupedEvents: { [key: string]: typeof dayEvents } = {};
@@ -539,10 +648,63 @@ interface NewEventState {
             });
             
             return (
-              <Box key={day.toISOString()} sx={{ flexGrow: 1, position: 'relative', borderRight: '1px solid #e0e0e0' }}>
+              <Box key={day.toISOString()} sx={{ flexGrow: 1, position: 'relative', borderRight: '1px solid', borderColor: 'divider' }}>
                 {hours.map(hour => (
                   <Box key={hour} sx={{ height: '60px', borderBottom: '1px dashed #e0e0e0' }} onClick={() => handleOpenNewEventDialog(day, hour)} />
                 ))}
+                {/* TimeBlocks */}
+                {dayTimeBlocks.map((block: any) => {
+                  const blockStart = new Date(block.startTime);
+                  const blockEnd = new Date(block.endTime);
+                  const startHour = blockStart.getHours();
+                  const startMinute = blockStart.getMinutes();
+                  const durationMinutes = (blockEnd.getTime() - blockStart.getTime()) / (1000 * 60);
+                  
+                  const top = (startHour * 60 + startMinute) / 60 * 60;
+                  const height = Math.max((durationMinutes / 60 * 60), 70);
+                  
+                  return (
+                    <Box
+                      key={block._id}
+                      sx={{
+                        position: 'absolute',
+                        top: `${top}px`,
+                        left: '2px',
+                        right: '2px',
+                        height: `${height}px`,
+                        minHeight: '70px',
+                        backgroundColor: 'rgba(244, 67, 54, 0.7)',
+                        color: 'white',
+                        borderRadius: '6px',
+                        p: 1.5,
+                        overflow: 'hidden',
+                        border: '2px solid #f44336',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+                        zIndex: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'flex-start',
+                        justifyContent: 'flex-start',
+                        gap: 0.5
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Warning sx={{ fontSize: '1rem' }} />
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.85rem' }}>
+                          Gesperrt
+                        </Typography>
+                      </Box>
+                      {block.reason && (
+                        <Typography variant="caption" sx={{ fontSize: '0.75rem', opacity: 0.95 }}>
+                          {block.reason}
+                        </Typography>
+                      )}
+                      <Typography variant="caption" sx={{ fontSize: '0.7rem', opacity: 0.9 }}>
+                        {format(blockStart, 'HH:mm')} - {format(blockEnd, 'HH:mm')}
+                      </Typography>
+                    </Box>
+                  );
+                })}
                 {Object.entries(groupedEvents).flatMap(([timeKey, eventsAtTime]) => {
                   const baseEvent = eventsAtTime[0];
                   const startHour = baseEvent.start.getHours();
@@ -707,11 +869,12 @@ interface NewEventState {
             <Box
               key={index}
               sx={{
-                borderRight: '1px solid #e0e0e0',
-                borderBottom: '1px solid #e0e0e0',
+                borderRight: '1px solid',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
                 minHeight: '100px',
                 p: 0.5,
-                backgroundColor: isSameMonth(dayItem, currentDate) ? 'white' : '#f5f5f5',
+                backgroundColor: isSameMonth(dayItem, currentDate) ? 'background.paper' : 'action.hover',
                 opacity: isSameMonth(dayItem, currentDate) ? 1 : 0.7,
                 cursor: 'pointer',
                 '&:nth-of-type(7n)': { borderRight: 'none' },
@@ -824,7 +987,7 @@ interface NewEventState {
         </Box>
       </Box>
 
-      <Box sx={{ flexGrow: 1, border: '1px solid #e0e0e0', borderRadius: '8px', overflow: 'hidden' }}>
+      <Box sx={{ flexGrow: 1, border: '1px solid', borderColor: 'divider', borderRadius: '8px', overflow: 'hidden', bgcolor: 'background.paper' }}>
         {viewMode === 'day' && renderDayView()}
         {viewMode === 'week' && renderWeekView()}
         {viewMode === 'month' && renderMonthView()}

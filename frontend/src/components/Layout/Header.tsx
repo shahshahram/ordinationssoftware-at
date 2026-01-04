@@ -4,6 +4,7 @@ import { useAppDispatch, useAppSelector } from '../../store/hooks';
 import { logout } from '../../store/slices/authSlice';
 import { fetchUnreadCount } from '../../store/slices/internalMessagesSlice';
 import { setCurrentLocation, fetchUserLocations } from '../../store/slices/locationSlice';
+import { toggleTheme } from '../../store/slices/uiSlice';
 import {
   AppBar,
   Toolbar,
@@ -26,6 +27,8 @@ import {
   Logout,
   Settings,
   LocationOn,
+  LightMode,
+  DarkMode,
 } from '@mui/icons-material';
 
 interface HeaderProps {
@@ -38,6 +41,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const { user } = useAppSelector((state) => state.auth);
   const { unreadCount } = useAppSelector((state) => state.internalMessages);
   const { currentLocation, availableLocations, hasNoAssignment } = useAppSelector((state) => state.locations);
+  const { theme } = useAppSelector((state) => state.ui);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [messagesDialogOpen, setMessagesDialogOpen] = React.useState(false);
   
@@ -78,12 +82,16 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     }
   };
 
+  const handleThemeToggle = () => {
+    dispatch(toggleTheme());
+  };
+
   return (
     <AppBar
       position="sticky"
       elevation={1}
       sx={{
-        backgroundColor: 'white',
+        backgroundColor: 'background.paper',
         color: 'text.primary',
         borderBottom: 1,
         borderColor: 'divider',
@@ -183,6 +191,17 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
               {user.firstName} {user.lastName}
             </Typography>
           )}
+
+          {/* Theme Toggle */}
+          <Tooltip title={theme === 'dark' ? 'Hellmodus aktivieren' : 'Dunkelmodus aktivieren'}>
+            <IconButton 
+              color="inherit"
+              onClick={handleThemeToggle}
+              aria-label={theme === 'dark' ? 'Hellmodus aktivieren' : 'Dunkelmodus aktivieren'}
+            >
+              {theme === 'dark' ? <LightMode /> : <DarkMode />}
+            </IconButton>
+          </Tooltip>
 
           {/* Notifications */}
           <Tooltip title="Benachrichtigungen">

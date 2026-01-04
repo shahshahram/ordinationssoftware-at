@@ -24,6 +24,7 @@ import {
   FormControlLabel,
   Tooltip,
   Checkbox,
+  useTheme,
 } from '@mui/material';
 import {
   ArrowBackIos as ArrowBackIosIcon,
@@ -51,6 +52,7 @@ import { fetchWeeklySchedules, deleteWeeklySchedulesByStaffId } from '../store/s
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import { eventBus, EVENTS } from '../utils/eventBus';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import api from '../utils/api';
 
 // Hilfsfunktionen für localStorage
 const CALENDAR_SETTINGS_KEY = 'calendar-settings';
@@ -135,6 +137,7 @@ interface NewEventState {
 const EnhancedCalendar: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const theme = useTheme();
   const { appointments, loading: appointmentsLoading, error: appointmentsError } = useAppSelector((state) => state.appointments);
   const { staffProfiles, loading: staffLoading } = useAppSelector((state) => state.staff);
   const { rooms, loading: roomsLoading } = useAppSelector((state) => state.rooms);
@@ -174,6 +177,7 @@ const EnhancedCalendar: React.FC = () => {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [timeBlocks, setTimeBlocks] = useState<any[]>([]);
 
   // Einstellungen beim ersten Laden wiederherstellen
   useEffect(() => {
@@ -247,6 +251,49 @@ const EnhancedCalendar: React.FC = () => {
     setIsInitialized(true);
   }, []);
 
+  // Load TimeBlocks
+  const loadTimeBlocks = async () => {
+    try {
+      let startDate: Date;
+      let endDate: Date;
+      
+      switch (viewMode) {
+        case 'day':
+          startDate = startOfDay(currentDate);
+          endDate = endOfDay(currentDate);
+          break;
+        case '3day':
+          startDate = startOfDay(addDays(currentDate, -1));
+          endDate = endOfDay(addDays(currentDate, 1));
+          break;
+        case 'week':
+          startDate = startOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+          endDate = endOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+          break;
+        case 'month':
+          startDate = startOfWeek(startOfMonth(currentDate), { locale: de, weekStartsOn: 1 });
+          endDate = endOfWeek(endOfMonth(currentDate), { locale: de, weekStartsOn: 1 });
+          break;
+        default:
+          startDate = startOfDay(currentDate);
+          endDate = endOfDay(currentDate);
+      }
+      
+      const response = await api.get('/time-blocks', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        status: 'blocked'
+      });
+      
+      if (response.success && response.data) {
+        const blocks = Array.isArray(response.data) ? response.data : (response.data as any).data || [];
+        setTimeBlocks(blocks);
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Laden der TimeBlocks:', error);
+    }
+  };
+
   useEffect(() => {
     console.log('Dispatching data fetch actions...');
     dispatch(fetchAppointments());
@@ -255,7 +302,12 @@ const EnhancedCalendar: React.FC = () => {
     dispatch(fetchLocations());
     dispatch(fetchLocationWeeklySchedules());
     dispatch(fetchWeeklySchedules());
+    loadTimeBlocks();
   }, [dispatch]);
+
+  useEffect(() => {
+    loadTimeBlocks();
+  }, [currentDate, viewMode]);
 
   // Lade Diagnosen für alle Patienten in den Terminen
   useEffect(() => {
@@ -1601,11 +1653,12 @@ const EnhancedCalendar: React.FC = () => {
             <Box
               key={index}
               sx={{
-                borderRight: '1px solid #e0e0e0',
-                borderBottom: '1px solid #e0e0e0',
+                borderRight: '1px solid',
+                borderBottom: '1px solid',
+                borderColor: 'divider',
                 minHeight: '100px',
                 p: 0.5,
-                backgroundColor: isSameMonth(dayItem, currentDate) ? 'white' : '#f5f5f5',
+                backgroundColor: isSameMonth(dayItem, currentDate) ? 'background.paper' : 'action.hover',
                 opacity: isSameMonth(dayItem, currentDate) ? 1 : 0.7,
                 cursor: 'pointer',
                 '&:nth-of-type(7n)': { borderRight: 'none' },
@@ -2117,7 +2170,7 @@ const EnhancedCalendar: React.FC = () => {
             position: 'fixed',
             left: tooltip.x,
             top: tooltip.y,
-            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.9)' : 'rgba(0, 0, 0, 0.85)',
             color: 'white',
             padding: '8px 12px',
             borderRadius: '4px',

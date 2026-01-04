@@ -776,7 +776,7 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
         fullWidth
         PaperProps={{
           sx: {
-            bgcolor: '#FFF9C4',
+            bgcolor: 'background.paper',
             borderRadius: 3
           }
         }}
@@ -804,7 +804,7 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent dividers sx={{ bgcolor: '#FFF9C4' }}>
+        <DialogContent dividers sx={{ bgcolor: 'background.paper' }}>
           {previewEntry && (
             <Stack spacing={3}>
               {/* Basis-Informationen */}

@@ -191,6 +191,32 @@ router.post('/', [
       });
     }
 
+    // Prüfe TimeBlocks (gesperrte Zeitslots) für das zugewiesene Personal
+    const TimeBlock = require('../models/TimeBlock');
+    const appointmentStart = new Date(startTime);
+    const appointmentEnd = new Date(endTime);
+    const doctorId = assigned_users && assigned_users.length > 0 ? assigned_users[0] : req.user.id;
+    
+    // Prüfe TimeBlocks: TimeBlocks mit Personal blockieren nur dieses Personal, TimeBlocks ohne Personal blockieren alle
+    const conflictingTimeBlocks = await TimeBlock.find({
+      $or: [
+        { doctor: doctorId }, // TimeBlock für dieses Personal
+        { doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
+        { doctor: null } // Oder TimeBlocks mit null (blockieren alle)
+      ],
+      startTime: { $lt: appointmentEnd },
+      endTime: { $gt: appointmentStart },
+      status: { $in: ['blocked', 'reserved'] } // Nur aktive Sperren
+    });
+    
+    if (conflictingTimeBlocks.length > 0) {
+      return res.status(409).json({
+        success: false,
+        message: `Zeitslot ist gesperrt: ${conflictingTimeBlocks[0].reason || 'Gesperrter Zeitraum'}`,
+        conflictingTimeBlock: conflictingTimeBlocks[0]
+      });
+    }
+    
     // Reserve slot first
     let reservation = null;
     try {

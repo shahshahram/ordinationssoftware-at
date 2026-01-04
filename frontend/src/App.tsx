@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
+import { useAppSelector } from './store/hooks';
 // import { Global } from '@emotion/react'; // Disabled to prevent accessibility issues
 
 // Layout Components
@@ -20,6 +21,7 @@ import PatientsHints from './pages/PatientsHints';
 import Appointments from './pages/Appointments';
 import Resources from './pages/Resources';
 import Billing from './pages/Billing';
+import CashRegisterManagement from './pages/CashRegisterManagement';
 import Documents from './pages/Documents';
 import LetterTemplates from './pages/LetterTemplates';
 import OnlineBooking from './pages/OnlineBooking';
@@ -90,10 +92,10 @@ import KassaTestPage from './pages/KassaTestPage';
 import ELDATestPage from './pages/ELDATestPage';
 import WAHonlineTestPage from './pages/WAHonlineTestPage';
 
-// Theme
-const theme = createTheme({
+// Theme-Funktion, die basierend auf dem Modus ein Theme erstellt
+const getTheme = (mode: 'light' | 'dark') => createTheme({
   palette: {
-    mode: 'light',
+    mode,
     primary: {
       main: '#1976d2',
       light: '#42a5f5',
@@ -103,8 +105,12 @@ const theme = createTheme({
       main: '#dc004e',
     },
     background: {
-      default: '#f5f5f5',
-      paper: '#ffffff',
+      default: mode === 'dark' ? '#121212' : '#f5f5f5',
+      paper: mode === 'dark' ? '#1e1e1e' : '#ffffff',
+    },
+    text: {
+      primary: mode === 'dark' ? '#ffffff' : 'rgba(0, 0, 0, 0.87)',
+      secondary: mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
     },
   },
   typography: {
@@ -147,7 +153,9 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 12,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+          boxShadow: mode === 'dark' 
+            ? '0 2px 8px rgba(0,0,0,0.3)' 
+            : '0 2px 8px rgba(0,0,0,0.1)',
         },
       },
     },
@@ -169,6 +177,14 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           // Removed aria-hidden CSS to prevent accessibility issues
+        },
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        root: {
+          backgroundColor: mode === 'dark' ? '#1e1e1e' : '#ffffff',
+          color: mode === 'dark' ? '#ffffff' : 'rgba(0, 0, 0, 0.87)',
         },
       },
     },
@@ -382,6 +398,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['billing.read']}>
                             <Billing />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/cash-register" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <CashRegisterManagement />
                           </ProtectedRoute>
                         } 
                       />
@@ -740,6 +764,9 @@ const AppContent: React.FC = () => {
 };
 
 function App() {
+  const themeMode = useAppSelector((state) => state.ui.theme);
+  const theme = React.useMemo(() => getTheme(themeMode), [themeMode]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

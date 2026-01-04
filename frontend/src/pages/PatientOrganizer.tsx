@@ -2285,7 +2285,7 @@ const PatientOrganizer: React.FC = () => {
 
       <Box sx={{ p: { xs: 1, sm: 2 } }}>
         {/* Kompakter Header */}
-        <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: { xs: 1, sm: 2 }, bgcolor: 'grey.700', color: 'white' }}>
+        <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: { xs: 1, sm: 2 }, bgcolor: 'primary.main', color: 'primary.contrastText' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 2 }}>
             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flex: 1, minWidth: 200 }}>
               {/* Patientenfoto */}
@@ -2328,10 +2328,10 @@ const PatientOrganizer: React.FC = () => {
                         onClick={() => photoInputRef?.click()}
                         disabled={uploadingPhoto}
                         sx={{
-                          bgcolor: 'rgba(255, 255, 255, 0.9)',
-                          color: 'grey.700',
+                          bgcolor: 'background.paper',
+                          color: 'text.primary',
                           '&:hover': {
-                            bgcolor: 'white'
+                            bgcolor: 'action.hover'
                           }
                         }}
                       >
@@ -2461,12 +2461,12 @@ const PatientOrganizer: React.FC = () => {
                             setHintDetailsDialogOpen(true);
                           }}
                           sx={{ 
-                            bgcolor: 'rgba(211, 47, 47, 0.9)', 
-                            color: 'white',
+                            bgcolor: 'error.main', 
+                            color: 'error.contrastText',
                             cursor: 'pointer',
                             fontWeight: 500,
                             '&:hover': {
-                              bgcolor: 'rgba(211, 47, 47, 1)'
+                              bgcolor: 'error.dark'
                             }
                           }}
                         />
@@ -2526,8 +2526,8 @@ const PatientOrganizer: React.FC = () => {
                           size="small" 
                           color="secondary"
                           sx={{ 
-                            bgcolor: 'rgba(156, 39, 176, 0.9)', 
-                            color: 'white',
+                            bgcolor: 'secondary.main', 
+                            color: 'secondary.contrastText',
                             fontWeight: 600
                           }}
                         />
@@ -2561,8 +2561,8 @@ const PatientOrganizer: React.FC = () => {
                           size="small"
                           color="error"
                           sx={{ 
-                            bgcolor: 'rgba(211, 47, 47, 0.9)',
-                            color: 'white',
+                            bgcolor: 'error.main',
+                            color: 'error.contrastText',
                             fontWeight: 600
                           }}
                         />
@@ -2607,8 +2607,8 @@ const PatientOrganizer: React.FC = () => {
                                 size="small"
                                 color={isMRSAOrMRGN ? 'error' : 'success'}
                                 sx={{ 
-                                  bgcolor: isMRSAOrMRGN ? 'rgba(211, 47, 47, 0.9)' : 'rgba(46, 125, 50, 0.9)',
-                                  color: 'white',
+                                  bgcolor: isMRSAOrMRGN ? 'error.main' : 'success.main',
+                                  color: isMRSAOrMRGN ? 'error.contrastText' : 'success.contrastText',
                                   fontWeight: 600
                                 }}
                               />
@@ -2797,10 +2797,11 @@ const PatientOrganizer: React.FC = () => {
               }}
               disabled={!patient}
               sx={{
-                bgcolor: '#FFF9C4',
-                color: 'text.primary',
+                bgcolor: theme.palette.mode === 'dark' ? 'warning.dark' : 'warning.light',
+                color: theme.palette.mode === 'dark' ? 'warning.contrastText' : 'text.primary',
                 '&:hover': {
-                  bgcolor: '#FFEB3B'
+                  bgcolor: theme.palette.mode === 'dark' ? 'warning.main' : 'warning.main',
+                  color: theme.palette.mode === 'dark' ? 'warning.contrastText' : 'text.primary'
                 }
               }}
             >
@@ -2816,10 +2817,10 @@ const PatientOrganizer: React.FC = () => {
               }}
               disabled={!patient || isCreatingDocument}
               sx={{
-                bgcolor: '#E3F2FD',
-                color: 'text.primary',
+                bgcolor: theme.palette.mode === 'dark' ? 'primary.dark' : '#E3F2FD',
+                color: theme.palette.mode === 'dark' ? 'primary.contrastText' : 'text.primary',
                 '&:hover': {
-                  bgcolor: '#90CAF9'
+                  bgcolor: theme.palette.mode === 'dark' ? 'primary.main' : '#90CAF9'
                 }
               }}
             >
@@ -2835,10 +2836,10 @@ const PatientOrganizer: React.FC = () => {
               }}
               disabled={!patient}
               sx={{
-                bgcolor: '#E8F5E9',
-                color: 'text.primary',
+                bgcolor: theme.palette.mode === 'dark' ? 'success.dark' : '#E8F5E9',
+                color: theme.palette.mode === 'dark' ? 'success.contrastText' : 'text.primary',
                 '&:hover': {
-                  bgcolor: '#A5D6A7'
+                  bgcolor: theme.palette.mode === 'dark' ? 'success.main' : '#A5D6A7'
                 }
               }}
             >
@@ -2905,10 +2906,10 @@ const PatientOrganizer: React.FC = () => {
               }}
               disabled={!patient}
               sx={{
-                bgcolor: '#4CAF50',
-                color: 'white',
+                bgcolor: 'success.main',
+                color: 'success.contrastText',
                 '&:hover': {
-                  bgcolor: '#45a049'
+                  bgcolor: 'success.dark'
                 }
               }}
             >
@@ -3788,7 +3789,7 @@ const PatientOrganizer: React.FC = () => {
               key="templates-header"
               sx={{ 
                 backgroundColor: 'primary.main',
-                color: 'white',
+                color: 'primary.contrastText',
                 borderBottom: '1px solid',
                 borderColor: 'divider'
               }}

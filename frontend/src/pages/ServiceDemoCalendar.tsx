@@ -32,6 +32,8 @@ import {
   ListItemText,
   List,
   Tooltip,
+  Menu,
+  useTheme,
 } from '@mui/material';
 import {
   Favorite,
@@ -60,6 +62,9 @@ import {
   Done,
   Warning,
   CheckCircle,
+  Block,
+  LockOpen,
+  Merge,
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, endOfWeek, isSameDay, isSameMonth, eachDayOfInterval, parseISO, addMonths, subMonths, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -81,6 +86,15 @@ import GradientDialogTitle from '../components/GradientDialogTitle';
 import DiagnosisManager from '../components/DiagnosisManager';
 import CreateTaskDialog from '../components/Tasks/CreateTaskDialog';
 import api from '../utils/api';
+import { useTimeSlotSelection } from '../hooks/useTimeSlotSelection';
+
+// Hilfsfunktion zum Entfernen von HTML-Tags
+const stripHtmlTags = (html: string): string => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
 
 interface CalendarAppointment {
   id: string;
@@ -191,6 +205,7 @@ interface BackgroundEvent {
 const ServiceDemoCalendar: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const theme = useTheme();
   
   // Redux State
   const { appointments, loading: appointmentsLoading } = useAppSelector((state) => state.appointments);
@@ -205,6 +220,7 @@ const ServiceDemoCalendar: React.FC = () => {
   const { user } = useAppSelector((state) => state.auth);
 
   // Default settings - immer mit diesen Werten initialisieren
+  // WICHTIG: currentDate wird immer dynamisch berechnet, nicht als statischer Wert
   const defaultSettings = {
     useStaffColumns: false,
     selectedStaffForColumns: [] as string[],
@@ -214,11 +230,10 @@ const ServiceDemoCalendar: React.FC = () => {
     showWorkingHours: true,
     showBreaks: true,
     viewMode: 'week' as 'day' | 'week' | 'month',
-    currentDate: startOfWeek(new Date(), { locale: de, weekStartsOn: 1 })
   };
 
-  // Local State - IMMER mit Default-Werten initialisieren, nicht mit geladenen Einstellungen
-  const [currentDate, setCurrentDate] = useState(defaultSettings.currentDate);
+  // Local State - IMMER mit aktuellen Datum initialisieren
+  const [currentDate, setCurrentDate] = useState(() => startOfWeek(new Date(), { locale: de, weekStartsOn: 1 }));
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>(defaultSettings.viewMode);
   const [selectedLocations, setSelectedLocations] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -248,6 +263,39 @@ const ServiceDemoCalendar: React.FC = () => {
   const [selectedStaffForColumns, setSelectedStaffForColumns] = useState<string[]>(defaultSettings.selectedStaffForColumns); // Für Personenspalten-Auswahl
   const [useStaffColumns, setUseStaffColumns] = useState(defaultSettings.useStaffColumns); // Toggle zwischen alter und neuer Ansicht
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
+  
+  // TimeBlock State
+  const [timeBlocks, setTimeBlocks] = useState<any[]>([]);
+  const [showTimeBlocks, setShowTimeBlocks] = useState(true); // Toggle für TimeBlocks
+  const isLoadingTimeBlocksRef = useRef(false); // Flag um doppelte API-Aufrufe zu verhindern
+  const [selectedTimeBlock, setSelectedTimeBlock] = useState<any | null>(null);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+  const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [blockName, setBlockName] = useState('');
+  const [selectedBlockStaff, setSelectedBlockStaff] = useState<string>('');
+  const [pendingBlockTime, setPendingBlockTime] = useState<{ start: Date; end: Date; staffId?: string } | null>(null);
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<{
+    x: number;
+    y: number;
+    timeBlock?: any;
+    start?: Date;
+    end?: Date;
+    staffId?: string;
+  } | null>(null);
+  
+  // Drag-Selection Hook
+  const {
+    isSelecting,
+    selectionStart,
+    selectionEnd,
+    startSelection,
+    updateSelection,
+    endSelection,
+    clearSelection,
+    isSlotInSelection,
+    getSelectionRange
+  } = useTimeSlotSelection();
+  
   const settingsLoadedRef = useRef(false);
   const isSavingRef = useRef(false); // Flag um Endlosschleife zu verhindern
   const isLoadingSettingsRef = useRef(false); // Flag um zu verhindern, dass saveCalendarSettings während des Ladens aufgerufen wird
@@ -388,11 +436,25 @@ const ServiceDemoCalendar: React.FC = () => {
           try {
             const savedDate = new Date(calendarSettings.currentDate);
             if (!isNaN(savedDate.getTime())) {
-              setCurrentDate(savedDate);
+              // Prüfe, ob das gespeicherte Datum nicht zu alt ist (max. 1 Woche in der Vergangenheit)
+              const now = new Date();
+              const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              // Wenn das gespeicherte Datum zu alt ist, verwende das aktuelle Datum
+              if (savedDate < oneWeekAgo) {
+                console.log('📅 Saved date is too old, using current date instead');
+                setCurrentDate(startOfWeek(new Date(), { locale: de, weekStartsOn: 1 }));
+              } else {
+                setCurrentDate(savedDate);
+              }
             }
           } catch (e) {
             console.warn('Invalid date in calendar settings:', calendarSettings.currentDate);
+            // Bei Fehler verwende das aktuelle Datum
+            setCurrentDate(startOfWeek(new Date(), { locale: de, weekStartsOn: 1 }));
           }
+        } else {
+          // Kein gespeichertes Datum vorhanden - verwende aktuelles Datum
+          setCurrentDate(startOfWeek(new Date(), { locale: de, weekStartsOn: 1 }));
         }
         settingsLoadedRef.current = true;
         console.log('✅ Calendar settings loaded successfully');
@@ -1298,6 +1360,171 @@ const ServiceDemoCalendar: React.FC = () => {
   const handleFormChange = (field: keyof AppointmentFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
+
+  // Load TimeBlocks
+  const loadTimeBlocks = useCallback(async () => {
+    // Verhindere doppelte API-Aufrufe
+    if (isLoadingTimeBlocksRef.current) {
+      return;
+    }
+    
+    isLoadingTimeBlocksRef.current = true;
+    
+    try {
+      const startDate = startOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+      const endDate = endOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+      
+      // Lade TimeBlocks für den aktuellen Zeitraum
+      
+      const response = await api.get('/time-blocks', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString()
+        // Kein Status-Filter beim Laden - wir filtern in der Filterlogik nach 'blocked' und 'merged'
+      });
+      
+      // Verarbeite API Response
+      
+      if (response.success && response.data) {
+        // Backend gibt {success: true, data: Array, pagination: {...}} zurück
+        // Frontend API-Client wrappt das in response.data, also ist das Array unter response.data.data
+        const backendResponse = response.data as any;
+        const blocks = Array.isArray(backendResponse?.data) 
+          ? backendResponse.data 
+          : Array.isArray(backendResponse) 
+            ? backendResponse 
+            : [];
+        // TimeBlocks erfolgreich geladen
+        setTimeBlocks(blocks);
+      } else {
+        // Keine TimeBlocks in Response
+        setTimeBlocks([]);
+      }
+    } catch (error) {
+      console.error('❌ Fehler beim Laden der TimeBlocks:', error);
+      setTimeBlocks([]);
+    } finally {
+      isLoadingTimeBlocksRef.current = false;
+    }
+  }, [currentDate]);
+
+  // Load TimeBlocks when currentDate changes
+  useEffect(() => {
+    // Warte kurz, damit Settings geladen werden können, bevor TimeBlocks geladen werden
+    const timer = setTimeout(() => {
+      loadTimeBlocks();
+    }, 100);
+    return () => clearTimeout(timer);
+  }, [loadTimeBlocks]);
+
+  // Handle Block Time
+  const handleBlockTime = (start: Date, end: Date, staffId?: string) => {
+    // Öffne Dialog für Namenseingabe
+    const initialStaff = staffId || (selectedStaff !== 'all' ? selectedStaff : '');
+    setPendingBlockTime({ start, end, staffId });
+    setBlockName('');
+    setSelectedBlockStaff(initialStaff);
+    setBlockDialogOpen(true);
+  };
+
+  const handleConfirmBlockTime = async () => {
+    if (!pendingBlockTime) return;
+    
+    try {
+      const timeBlock = {
+        startTime: pendingBlockTime.start.toISOString(),
+        endTime: pendingBlockTime.end.toISOString(),
+        doctor: selectedBlockStaff && selectedBlockStaff !== '' ? selectedBlockStaff : null,
+        locationId: selectedLocation !== 'all' ? selectedLocation : undefined,
+        reason: blockName.trim() || 'Manuelle Sperre',
+        status: 'blocked'
+      };
+      
+      const response = await api.post('/time-blocks', timeBlock);
+      
+      if (response.success) {
+        setSnackbar({
+          open: true,
+          message: 'Zeitslot erfolgreich gesperrt',
+          severity: 'success'
+        });
+        
+        await loadTimeBlocks();
+        dispatch(fetchAppointments());
+        clearSelection();
+        setBlockDialogOpen(false);
+        setBlockName('');
+        setSelectedBlockStaff('');
+        setPendingBlockTime(null);
+      }
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Fehler beim Sperren des Zeitslots',
+        severity: 'error'
+      });
+    }
+  };
+
+  // Handle Unblock Time
+  const handleUnblockTime = async (timeBlockId: string) => {
+    try {
+      const confirmed = window.confirm('Möchten Sie diese Sperre wirklich aufheben?');
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      const response = await api.delete(`/time-blocks/${timeBlockId}`);
+      
+      if (response.success) {
+        setSnackbar({
+          open: true,
+          message: 'Sperre erfolgreich aufgehoben',
+          severity: 'success'
+        });
+        
+        await loadTimeBlocks();
+        dispatch(fetchAppointments());
+      }
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Fehler beim Aufheben der Sperre',
+        severity: 'error'
+      });
+    }
+  };
+
+  // Handle Merge TimeBlock
+  const handleMergeTimeBlock = async (timeBlockId: string, mergeData: {
+    patientId: string;
+    serviceId?: string;
+    title?: string;
+    notes?: string;
+  }) => {
+    try {
+      const response = await api.post(`/time-blocks/${timeBlockId}/merge`, mergeData);
+      
+      if (response.success) {
+        setSnackbar({
+          open: true,
+          message: 'TimeBlock erfolgreich mit Termin zusammengeführt',
+          severity: 'success'
+        });
+        
+        await loadTimeBlocks();
+        dispatch(fetchAppointments());
+        setMergeDialogOpen(false);
+        setSelectedTimeBlock(null);
+      }
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Fehler beim Zusammenführen',
+        severity: 'error'
+      });
+    }
+  };
   
   // Get recent services
   const getRecentServices = (): string[] => {
@@ -1573,7 +1800,7 @@ const ServiceDemoCalendar: React.FC = () => {
   }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: '#f5f5f5' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh', bgcolor: 'background.default' }}>
       {/* Top Navigation Bar */}
       <Box
         sx={{
@@ -1582,23 +1809,24 @@ const ServiceDemoCalendar: React.FC = () => {
           justifyContent: 'space-between',
           px: 3,
           py: 1.5,
-          bgcolor: 'white',
-          borderBottom: '1px solid #e0e0e0',
+          bgcolor: 'background.paper',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
         }}
       >
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Dienst-Demo Kalender
+            Dienstkalender
           </Typography>
           <Chip 
             label={`Warteliste ${waitingListCount || 0}`} 
             size="small" 
             sx={{ 
-              bgcolor: '#f44336',
-              color: 'white',
+              bgcolor: 'error.main',
+              color: 'error.contrastText',
               cursor: 'pointer',
               '&:hover': {
-                bgcolor: '#d32f2f',
+                bgcolor: 'error.dark',
               }
             }}
             onClick={() => navigate('/waiting-list')}
@@ -1628,7 +1856,7 @@ const ServiceDemoCalendar: React.FC = () => {
             startIcon={<Add />}
             size="small"
             onClick={handleNewPatient}
-            sx={{ bgcolor: '#1976d2' }}
+            sx={{ bgcolor: 'primary.main' }}
           >
             Neuer Patient
           </Button>
@@ -1663,8 +1891,8 @@ const ServiceDemoCalendar: React.FC = () => {
               width: 32,
               height: 32,
               borderRadius: '50%',
-              bgcolor: '#1976d2',
-              color: 'white',
+              bgcolor: 'primary.main',
+              color: 'primary.contrastText',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1688,8 +1916,9 @@ const ServiceDemoCalendar: React.FC = () => {
           justifyContent: 'space-between',
           px: 3,
           py: 1.5,
-          bgcolor: 'white',
-          borderBottom: '1px solid #e0e0e0',
+          bgcolor: 'background.paper',
+          borderBottom: '1px solid',
+          borderColor: 'divider',
         }}
       >
         {viewMode === 'month' ? (
@@ -1792,7 +2021,7 @@ const ServiceDemoCalendar: React.FC = () => {
             size="small"
             startIcon={<Add />}
             onClick={() => handleOpenNewEventDialog()}
-            sx={{ bgcolor: '#1976d2' }}
+            sx={{ bgcolor: 'primary.main' }}
           >
             Neuer Termin
           </Button>
@@ -1808,11 +2037,13 @@ const ServiceDemoCalendar: React.FC = () => {
         <Box
           sx={{
             width: 280,
-            bgcolor: '#1e3a5f',
-            color: 'white',
+            bgcolor: theme.palette.mode === 'dark' ? 'background.paper' : '#1e3a5f',
+            color: theme.palette.mode === 'dark' ? 'text.primary' : 'white',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'auto',
+            borderRight: '1px solid',
+            borderColor: 'divider',
           }}
         >
           {/* Kalender Section */}
@@ -1834,12 +2065,12 @@ const ServiceDemoCalendar: React.FC = () => {
                   />
                 }
                 label={location.name}
-                sx={{ color: 'white', mb: 1, display: 'block' }}
+                sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', mb: 1, display: 'block' }}
               />
             ))}
           </Box>
 
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.2)' }} />
+          <Divider sx={{ borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(255,255,255,0.2)' }} />
 
           {/* EnhancedCalendar Filter */}
           <Box sx={{ p: 2 }}>
@@ -1848,15 +2079,15 @@ const ServiceDemoCalendar: React.FC = () => {
             </Typography>
             
             <FormControl fullWidth size="small" sx={{ mb: 2 }}>
-              <InputLabel sx={{ color: 'rgba(255,255,255,0.7)' }}>Personal</InputLabel>
+              <InputLabel sx={{ color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)' }}>Personal</InputLabel>
               <Select
                 value={medicalFilter}
                 onChange={(e) => setMedicalFilter(e.target.value as 'all' | 'medical' | 'non-medical')}
                 sx={{ 
-                  color: 'white',
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.3)' },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'rgba(255,255,255,0.5)' },
-                  '& .MuiSvgIcon-root': { color: 'rgba(255,255,255,0.7)' }
+                  color: theme.palette.mode === 'dark' ? 'text.primary' : 'white',
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(255,255,255,0.3)' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.mode === 'dark' ? 'primary.main' : 'rgba(255,255,255,0.5)' },
+                  '& .MuiSvgIcon-root': { color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)' }
                 }}
               >
                 <MenuItem value="all">Alle</MenuItem>
@@ -1866,7 +2097,7 @@ const ServiceDemoCalendar: React.FC = () => {
             </FormControl>
 
             <Box sx={{ mb: 2 }}>
-              <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', mb: 1, display: 'block' }}>
+              <Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)', mb: 1, display: 'block' }}>
                 Anzeigeoptionen
               </Typography>
               <FormControlLabel
@@ -1881,7 +2112,7 @@ const ServiceDemoCalendar: React.FC = () => {
                     }}
                   />
                 }
-                label={<Typography variant="caption" sx={{ color: 'white', fontSize: '0.75rem' }}>Öffnungszeiten</Typography>}
+                label={<Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', fontSize: '0.75rem' }}>Öffnungszeiten</Typography>}
                 sx={{ mb: 0.5 }}
               />
               <FormControlLabel
@@ -1896,7 +2127,7 @@ const ServiceDemoCalendar: React.FC = () => {
                     }}
                   />
                 }
-                label={<Typography variant="caption" sx={{ color: 'white', fontSize: '0.75rem' }}>Arbeitszeiten</Typography>}
+                label={<Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', fontSize: '0.75rem' }}>Arbeitszeiten</Typography>}
                 sx={{ mb: 0.5 }}
               />
               <FormControlLabel
@@ -1911,12 +2142,26 @@ const ServiceDemoCalendar: React.FC = () => {
                     }}
                   />
                 }
-                label={<Typography variant="caption" sx={{ color: 'white', fontSize: '0.75rem' }}>Pausen</Typography>}
+                label={<Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', fontSize: '0.75rem' }}>Pausen</Typography>}
+              />
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={showTimeBlocks}
+                    onChange={(e) => setShowTimeBlocks(e.target.checked)}
+                    size="small"
+                    sx={{
+                      '& .MuiSwitch-switchBase.Mui-checked': { color: '#f44336' },
+                      '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#f44336' }
+                    }}
+                  />
+                }
+                label={<Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', fontSize: '0.75rem' }}>Geblockte Termine</Typography>}
               />
             </Box>
           </Box>
 
-          <Divider sx={{ borderColor: 'rgba(255,255,255,0.2)' }} />
+          <Divider sx={{ borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(255,255,255,0.2)' }} />
 
           {/* Mini-Kalender */}
           <Box sx={{ p: 2 }}>
@@ -1924,7 +2169,7 @@ const ServiceDemoCalendar: React.FC = () => {
               <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                 {format(currentDate, 'MMMM yy', { locale: de })}
               </Typography>
-              <Button size="small" sx={{ color: 'white', textTransform: 'none' }} onClick={() => handleDateNavigation('today')}>
+              <Button size="small" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', textTransform: 'none' }} onClick={() => handleDateNavigation('today')}>
                 Heute
               </Button>
             </Box>
@@ -1933,7 +2178,7 @@ const ServiceDemoCalendar: React.FC = () => {
                 <Typography
                   key={day}
                   variant="caption"
-                  sx={{ textAlign: 'center', color: 'rgba(255,255,255,0.7)' }}
+                  sx={{ textAlign: 'center', color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)' }}
                 >
                   {day}.
                 </Typography>
@@ -2001,7 +2246,7 @@ const ServiceDemoCalendar: React.FC = () => {
                       '& .MuiSwitch-switchBase.Mui-checked': { color: '#ffc107' },
                       '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#ffc107' }
                     }}
-              />
+                  />
                 }
                 label={<Typography variant="caption" sx={{ color: 'white', fontSize: '0.75rem' }}>Personenspalten aktivieren</Typography>}
               />
@@ -2033,7 +2278,7 @@ const ServiceDemoCalendar: React.FC = () => {
                           }}
                           size="small"
                           sx={{
-                            color: 'rgba(255,255,255,0.7)',
+                            color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)',
                             '&.Mui-checked': { color: '#ffc107' }
                           }}
                         />
@@ -2066,7 +2311,7 @@ const ServiceDemoCalendar: React.FC = () => {
                   );
                 })}
                 {filteredStaff.length === 0 && (
-                  <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
+                  <Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.5)', fontStyle: 'italic' }}>
                     Keine Personen verfügbar
                   </Typography>
                 )}
@@ -2076,11 +2321,11 @@ const ServiceDemoCalendar: React.FC = () => {
         </Box>
 
         {/* Main Calendar Grid */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', bgcolor: 'white' }}>
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', bgcolor: 'background.default' }}>
           {/* Day Headers */}
           {viewMode === 'month' ? (
             // Monatsansicht: Einfache Header
-          <Box sx={{ display: 'flex', borderBottom: '2px solid #e0e0e0' }}>
+          <Box sx={{ display: 'flex', borderBottom: '2px solid', borderColor: 'divider' }}>
             <Box sx={{ width: 80, p: 1 }} /> {/* Time column spacer */}
               {Array.from({ length: 7 }, (_, i) => {
                 const day = addDays(startOfWeek(currentDate, { locale: de, weekStartsOn: 1 }), i);
@@ -2091,11 +2336,12 @@ const ServiceDemoCalendar: React.FC = () => {
                       flex: 1,
                       p: 1,
                       textAlign: 'center',
-                      borderLeft: '1px solid #e0e0e0',
-                      bgcolor: '#fafafa',
+                      borderLeft: '1px solid',
+                      borderColor: 'divider',
+                      bgcolor: 'action.hover',
                     }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
                       {format(day, 'EEE', { locale: de })}
                     </Typography>
                   </Box>
@@ -2106,7 +2352,7 @@ const ServiceDemoCalendar: React.FC = () => {
             // Neue Ansicht: Wochentage oben, dann Personenspalten
             <>
               {/* Wochentage Header (Ebene 1) */}
-              <Box sx={{ display: 'flex', borderBottom: '2px solid #424242', bgcolor: '#424242' }}>
+              <Box sx={{ display: 'flex', borderBottom: '2px solid', borderColor: 'divider', bgcolor: theme.palette.mode === 'dark' ? 'background.paper' : '#424242' }}>
                 <Box sx={{ width: 80, p: 1 }} /> {/* Time column spacer */}
                 {displayedDays.map((day) => {
                   const staffCount = selectedStaffForColumns.length;
@@ -2117,8 +2363,9 @@ const ServiceDemoCalendar: React.FC = () => {
                         flex: staffCount,
                         p: 1,
                         textAlign: 'center',
-                        borderLeft: '1px solid rgba(255,255,255,0.2)',
-                        color: 'white',
+                        borderLeft: '1px solid',
+                        borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(255,255,255,0.2)',
+                        color: theme.palette.mode === 'dark' ? 'text.primary' : 'white',
                       }}
                     >
                       <Typography variant="body2" sx={{ fontWeight: 600 }}>
@@ -2129,7 +2376,7 @@ const ServiceDemoCalendar: React.FC = () => {
                 })}
               </Box>
               {/* Personenspalten Header (Ebene 2) */}
-              <Box sx={{ display: 'flex', borderBottom: '2px solid #e0e0e0', bgcolor: '#f5f5f5' }}>
+              <Box sx={{ display: 'flex', borderBottom: '2px solid', borderColor: 'divider', bgcolor: 'action.hover' }}>
                 <Box sx={{ width: 80, p: 1 }} /> {/* Time column spacer */}
                 {displayedDays.map((day) => (
                   <Box key={day.toISOString()} sx={{ display: 'flex', flex: 1 }}>
@@ -2151,8 +2398,9 @@ const ServiceDemoCalendar: React.FC = () => {
                             flex: 1,
                             p: 0.75,
                             textAlign: 'center',
-                            borderLeft: '1px solid #e0e0e0',
-                            borderRight: '1px solid #e0e0e0',
+                            borderLeft: '1px solid',
+                            borderRight: '1px solid',
+                            borderColor: 'divider',
                             display: 'flex',
                             flexDirection: 'column',
                             alignItems: 'center',
@@ -2175,7 +2423,7 @@ const ServiceDemoCalendar: React.FC = () => {
                           >
                             {initials}
                           </Box>
-                          <Typography variant="caption" sx={{ fontSize: '0.7rem', fontWeight: 500 }}>
+                          <Typography variant="caption" sx={{ fontSize: '0.7rem', fontWeight: 500, color: 'text.primary' }}>
                             {staffName}
                           </Typography>
                         </Box>
@@ -2187,7 +2435,7 @@ const ServiceDemoCalendar: React.FC = () => {
             </>
           ) : (
             // Alte Ansicht: Einfache Header
-            <Box sx={{ display: 'flex', borderBottom: '2px solid #e0e0e0' }}>
+            <Box sx={{ display: 'flex', borderBottom: '2px solid', borderColor: 'divider' }}>
               <Box sx={{ width: 80, p: 1 }} /> {/* Time column spacer */}
               {displayedDays.map((day) => (
                 <Box
@@ -2196,22 +2444,23 @@ const ServiceDemoCalendar: React.FC = () => {
                     flex: 1,
                     p: 1,
                     textAlign: 'center',
-                    borderLeft: '1px solid #e0e0e0',
-                    bgcolor: '#fafafa',
+                    borderLeft: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'action.hover',
                   }}
                 >
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
                     {format(day, 'EEE', { locale: de })} {format(day, 'd.')}
                   </Typography>
                 </Box>
               ))}
-          </Box>
+            </Box>
           )}
 
           {/* Time Grid */}
           <Box sx={{ display: 'flex', flex: 1, position: 'relative' }}>
             {/* Time Scale */}
-            <Box sx={{ width: 80, borderRight: '1px solid #e0e0e0' }}>
+            <Box sx={{ width: 80, borderRight: '1px solid', borderColor: 'divider' }}>
               {timeSlots.map((time) => (
                 <Box
                   key={time}
@@ -2224,7 +2473,7 @@ const ServiceDemoCalendar: React.FC = () => {
                     pt: 0.5,
                   }}
                 >
-                  <Typography variant="caption" sx={{ color: '#666', fontSize: '0.7rem' }}>
+                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
                     {time}
                   </Typography>
                 </Box>
@@ -2247,13 +2496,14 @@ const ServiceDemoCalendar: React.FC = () => {
                       }}
                       sx={{
                         minHeight: 100,
-                        borderLeft: '1px solid #e0e0e0',
-                        borderBottom: '1px solid #e0e0e0',
+                        borderLeft: '1px solid',
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
                         p: 0.5,
-                        bgcolor: isCurrentMonth ? 'white' : '#f5f5f5',
+                        bgcolor: isCurrentMonth ? 'background.paper' : 'action.hover',
                         cursor: 'pointer',
                         position: 'relative',
-                        '&:hover': { bgcolor: isCurrentMonth ? '#f0f0f0' : '#e8e8e8' },
+                        '&:hover': { bgcolor: 'action.selected' },
                       }}
                     >
                       <Typography 
@@ -2473,7 +2723,7 @@ const ServiceDemoCalendar: React.FC = () => {
               // Neue Ansicht: Personenspalten
               <Box sx={{ display: 'flex', flex: 1 }}>
                 {displayedDays.map((day) => (
-                  <Box key={day.toISOString()} sx={{ display: 'flex', flex: 1, borderLeft: '1px solid #e0e0e0' }}>
+                  <Box key={day.toISOString()} sx={{ display: 'flex', flex: 1, borderLeft: '1px solid', borderColor: 'divider' }}>
                     {selectedStaffForColumns.map((staffId) => {
                       const staff = filteredStaff.find(s => s._id === staffId);
                       if (!staff) return null;
@@ -2559,6 +2809,9 @@ const ServiceDemoCalendar: React.FC = () => {
                             flex: 1,
                             borderRight: '1px solid #e0e0e0',
                             position: 'relative',
+                            minHeight: `${timeSlots.length * 40}px`, // Ensure container has minimum height
+                            height: `${timeSlots.length * 40}px`, // Explicit height for proper positioning
+                            overflow: 'visible', // Ensure TimeBlocks are not clipped
                           }}
                         >
                           {/* Location Hours - Hintergrund (volle Breite) */}
@@ -2640,23 +2893,165 @@ const ServiceDemoCalendar: React.FC = () => {
                           })}
                           
                           {/* Time Slots */}
-                          {timeSlots.map((time) => (
-                            <Box
-                              key={time}
-                              onClick={() => {
-                                const [hour, minute] = time.split(':').map(Number);
-                                const slotDate = new Date(day);
-                                slotDate.setHours(hour, minute, 0, 0);
-                                handleOpenNewEventDialog(slotDate, hour);
-                              }}
-                              sx={{
-                                height: 40,
-                                borderBottom: '1px solid #f0f0f0',
-                                cursor: 'pointer',
-                                '&:hover': { bgcolor: '#f5f5f5' },
-                              }}
-                            />
-                          ))}
+                          {timeSlots.map((time) => {
+                            const isInSelection = isSlotInSelection(day, time);
+                            
+                            return (
+                              <Box
+                                key={time}
+                                onMouseDown={(e) => {
+                                  if (e.button === 0) { // Nur linke Maustaste
+                                    e.preventDefault();
+                                    startSelection(day, time);
+                                  }
+                                }}
+                                onMouseMove={(e) => {
+                                  if (isSelecting) {
+                                    updateSelection(day, time);
+                                  }
+                                }}
+                                onMouseUp={(e) => {
+                                  if (e.button === 0 && isSelecting) {
+                                    endSelection();
+                                  }
+                                }}
+                                onContextMenu={(e) => {
+                                  if (selectionStart && selectionEnd) {
+                                    e.preventDefault();
+                                    const range = getSelectionRange();
+                                    if (range) {
+                                      setContextMenuAnchor({
+                                        x: e.clientX,
+                                        y: e.clientY,
+                                        start: range.start,
+                                        end: range.end,
+                                        staffId: staffId
+                                      });
+                                    }
+                                  }
+                                }}
+                                onClick={() => {
+                                  if (!isSelecting) {
+                                    const [hour, minute] = time.split(':').map(Number);
+                                    const slotDate = new Date(day);
+                                    slotDate.setHours(hour, minute, 0, 0);
+                                    handleOpenNewEventDialog(slotDate, hour);
+                                  }
+                                }}
+                                sx={{
+                                  height: 40,
+                                  borderBottom: '1px solid',
+                                  borderColor: 'divider',
+                                  cursor: isSelecting ? 'crosshair' : 'pointer',
+                                  bgcolor: isInSelection ? 'rgba(25, 118, 210, 0.2)' : 'transparent',
+                                  borderLeft: isInSelection ? '3px solid #1976d2' : 'none',
+                                  '&:hover': { 
+                                    bgcolor: isSelecting 
+                                      ? 'rgba(25, 118, 210, 0.3)' 
+                                      : isInSelection 
+                                        ? 'rgba(25, 118, 210, 0.25)' 
+                                        : 'action.hover' 
+                                  },
+                                }}
+                              />
+                            );
+                          })}
+                          
+                          {/* TimeBlocks für diese Person - Nur anzeigen, wenn sie für dieses Personal sind */}
+                          {showTimeBlocks && useStaffColumns && timeBlocks
+                            .filter((block: any) => {
+                              // Einfache Filterung: Nur blocked/merged, gleicher Tag
+                              if (block.status !== 'blocked' && block.status !== 'merged') {
+                                return false;
+                              }
+                              
+                              const blockDate = startOfDay(new Date(block.startTime));
+                              const dayDate = startOfDay(day);
+                              if (!isSameDay(blockDate, dayDate)) {
+                                return false;
+                              }
+                              
+                              // Staff-Filter: TimeBlocks mit Personal nur für das entsprechende Personal anzeigen
+                              // TimeBlocks ohne Personal werden für alle angezeigt
+                              if (block.doctor) {
+                                const blockDoctorId = typeof block.doctor === 'object' ? block.doctor._id : block.doctor;
+                                if (blockDoctorId !== staffId) {
+                                  return false;
+                                }
+                              }
+                              // Wenn kein Personal zugewiesen ist, wird der Block für alle angezeigt
+                              
+                              return true;
+                            })
+                            .map((block: any) => {
+                              const blockStart = new Date(block.startTime);
+                              const blockEnd = new Date(block.endTime);
+                              const startMinutes = blockStart.getHours() * 60 + blockStart.getMinutes();
+                              const endMinutes = blockEnd.getHours() * 60 + blockEnd.getMinutes();
+                              const duration = endMinutes - startMinutes;
+                              
+                              // Einfache Positionierung: 6:00 = 0px, jede 30min = 40px
+                              const top = Math.max(0, ((startMinutes - 360) / 30) * 40);
+                              const height = Math.max(40, (duration / 30) * 40);
+                              
+                              // Nur rendern wenn im sichtbaren Bereich
+                              if (top >= timeSlots.length * 40 || top + height <= 0) {
+                                return null;
+                              }
+                              
+                              return (
+                                <Box
+                                  key={block._id}
+                                  onContextMenu={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (block.status === 'blocked') {
+                                      setContextMenuAnchor({ x: e.clientX, y: e.clientY, timeBlock: block });
+                                    }
+                                  }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (block.status === 'blocked') {
+                                      setSelectedTimeBlock(block);
+                                      setMergeDialogOpen(true);
+                                    } else if (block.mergedAppointmentId) {
+                                      navigate(`/appointments/${block.mergedAppointmentId}`);
+                                    }
+                                  }}
+                                  sx={{
+                                    position: 'absolute',
+                                    left: 4,
+                                    right: 4,
+                                    top: `${top}px`,
+                                    height: `${height}px`,
+                                    minHeight: '40px',
+                                    bgcolor: block.status === 'merged' ? '#4caf50' : '#f44336',
+                                    border: `3px solid ${block.status === 'merged' ? '#2e7d32' : '#c62828'}`,
+                                    borderRadius: '4px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                    zIndex: 20,
+                                    pointerEvents: 'auto',
+                                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                                  }}
+                                >
+                                  <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'white', fontSize: '0.75rem' }}>
+                                    {block.status === 'merged' ? 'Zusammengeführt' : 'Gesperrt'}
+                                  </Typography>
+                                  {block.reason && (
+                                    <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'white', mt: 0.5 }}>
+                                      {block.reason}
+                                    </Typography>
+                                  )}
+                                  <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'white', mt: 0.5 }}>
+                                    {format(blockStart, 'HH:mm')} - {format(blockEnd, 'HH:mm')}
+                                  </Typography>
+                                </Box>
+                              );
+                            })}
                           
                           {/* Appointments für diese Person */}
                           {dayAppointments.map((appointment) => {
@@ -2881,8 +3276,12 @@ const ServiceDemoCalendar: React.FC = () => {
                   key={day.toISOString()}
                   sx={{
                     flex: 1,
-                    borderLeft: '1px solid #e0e0e0',
+                    borderLeft: '1px solid',
+                    borderColor: 'divider',
                     position: 'relative',
+                    minHeight: `${timeSlots.length * 40}px`, // Ensure container has minimum height
+                    height: `${timeSlots.length * 40}px`, // Explicit height for proper positioning
+                    overflow: 'visible', // Ensure TimeBlocks are not clipped
                   }}
                 >
                     {/* Location Hours - Hintergrund (volle Breite) */}
@@ -3009,6 +3408,107 @@ const ServiceDemoCalendar: React.FC = () => {
                       );
                     })}
                     
+                    {/* TimeBlocks für diesen Tag - Vereinfachte Version */}
+                    {showTimeBlocks && timeBlocks
+                      .filter((block: any) => {
+                        // Einfache Filterung: Nur blocked/merged, gleicher Tag
+                        if (block.status !== 'blocked' && block.status !== 'merged') {
+                          return false;
+                        }
+                        
+                        const blockDate = startOfDay(new Date(block.startTime));
+                        const dayDate = startOfDay(day);
+                        if (!isSameDay(blockDate, dayDate)) {
+                          return false;
+                        }
+                        
+                        // Filter nach Personal: Wenn eine Person ausgewählt ist, zeige nur TimeBlocks für diese Person oder TimeBlocks ohne Personal (für alle)
+                        if (selectedStaff && selectedStaff !== 'all') {
+                          const blockDoctorId = block.doctor?._id || block.doctor || null;
+                          // Zeige TimeBlock nur wenn:
+                          // 1. TimeBlock hat kein Personal (blockiert alle) ODER
+                          // 2. TimeBlock ist für die ausgewählte Person
+                          if (blockDoctorId && String(blockDoctorId) !== String(selectedStaff)) {
+                            return false;
+                          }
+                        }
+                        
+                        // Location-Filter: TimeBlocks werden immer angezeigt, unabhängig von der Location
+                        // (TimeBlocks sind standortübergreifend und sollten für alle Locations sichtbar sein)
+                        // Keine Location-Filterung mehr - TimeBlocks werden für alle Locations angezeigt
+                        
+                        return true;
+                      })
+                      .map((block: any) => {
+                        const blockStart = new Date(block.startTime);
+                        const blockEnd = new Date(block.endTime);
+                        const startMinutes = blockStart.getHours() * 60 + blockStart.getMinutes();
+                        const endMinutes = blockEnd.getHours() * 60 + blockEnd.getMinutes();
+                        const duration = endMinutes - startMinutes;
+                        
+                        // Einfache Positionierung: 6:00 = 0px, jede 30min = 40px
+                        const top = Math.max(0, ((startMinutes - 360) / 30) * 40);
+                        const height = Math.max(40, (duration / 30) * 40);
+                        
+                        // Nur rendern wenn im sichtbaren Bereich
+                        if (top >= timeSlots.length * 40 || top + height <= 0) {
+                          return null;
+                        }
+                        
+                        return (
+                          <Box
+                            key={block._id}
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (block.status === 'blocked') {
+                                setContextMenuAnchor({ x: e.clientX, y: e.clientY, timeBlock: block });
+                              }
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (block.status === 'blocked') {
+                                setSelectedTimeBlock(block);
+                                setMergeDialogOpen(true);
+                              } else if (block.mergedAppointmentId) {
+                                navigate(`/appointments/${block.mergedAppointmentId}`);
+                              }
+                            }}
+                            sx={{
+                              position: 'absolute',
+                              left: 4,
+                              right: 4,
+                              top: `${top}px`,
+                              height: `${height}px`,
+                              minHeight: '40px',
+                              bgcolor: block.status === 'merged' ? '#4caf50' : '#f44336',
+                              border: `3px solid ${block.status === 'merged' ? '#2e7d32' : '#c62828'}`,
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              zIndex: 20,
+                              pointerEvents: 'auto',
+                              boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'white', fontSize: '0.75rem' }}>
+                              {block.status === 'merged' ? 'Zusammengeführt' : 'Gesperrt'}
+                            </Typography>
+                            {block.reason && (
+                              <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'white', mt: 0.5 }}>
+                                {block.reason}
+                              </Typography>
+                            )}
+                            <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'white', mt: 0.5 }}>
+                              {format(blockStart, 'HH:mm')} - {format(blockEnd, 'HH:mm')}
+                            </Typography>
+                          </Box>
+                        );
+                      })}
+                    
                   {timeSlots.map((time, index) => (
                     <Box
                       key={time}
@@ -3020,9 +3520,10 @@ const ServiceDemoCalendar: React.FC = () => {
                       }}
                       sx={{
                         height: 40,
-                        borderBottom: '1px solid #f0f0f0',
+                        borderBottom: '1px solid',
+                        borderColor: 'divider',
                         cursor: 'pointer',
-                        '&:hover': { bgcolor: '#f5f5f5' },
+                        '&:hover': { bgcolor: 'action.hover' },
                       }}
                     />
                   ))}
@@ -3354,7 +3855,10 @@ const ServiceDemoCalendar: React.FC = () => {
                       setServiceSearchInput(newInputValue);
                     }}
                     options={getFilteredAndSortedServices()}
-                    getOptionLabel={(option) => `${option.code || ''} - ${option.name}`}
+                    getOptionLabel={(option) => {
+                      const cleanName = stripHtmlTags(option.name || '');
+                      return `${option.code || ''} - ${cleanName}`;
+                    }}
                     isOptionEqualToValue={(option, value) => option._id === value._id}
                     ListboxProps={{
                       style: { maxHeight: '400px' }
@@ -3379,7 +3883,7 @@ const ServiceDemoCalendar: React.FC = () => {
                             <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Typography variant="body2" fontWeight="bold" noWrap>
-                                  {option.name}
+                                  {stripHtmlTags(option.name || '')}
                                 </Typography>
                                 {isFavorite && (
                                   <Chip
@@ -4379,6 +4883,307 @@ const ServiceDemoCalendar: React.FC = () => {
             sx={{ textTransform: 'none' }}
           >
             Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog für Sperre-Namenseingabe */}
+      <Dialog 
+        open={blockDialogOpen} 
+        onClose={() => {
+          setBlockDialogOpen(false);
+          setBlockName('');
+          setSelectedBlockStaff('');
+          setPendingBlockTime(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <GradientDialogTitle 
+          title="Zeitslot sperren"
+          onClose={() => {
+            setBlockDialogOpen(false);
+            setBlockName('');
+            setSelectedBlockStaff('');
+            setPendingBlockTime(null);
+          }}
+        />
+        <DialogContent sx={{ pt: 3 }}>
+          {pendingBlockTime && (
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Zeitraum: {format(pendingBlockTime.start, 'dd.MM.yyyy HH:mm')} - {format(pendingBlockTime.end, 'HH:mm')}
+            </Alert>
+          )}
+          
+          <TextField
+            label="Name der Sperre"
+            value={blockName}
+            onChange={(e) => setBlockName(e.target.value)}
+            fullWidth
+            placeholder="z.B. Wartung, Urlaub, Fortbildung..."
+            autoFocus
+            sx={{ mb: 3 }}
+          />
+          
+          <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600, color: 'text.primary', mt: 2 }}>
+            Personal auswählen:
+          </Typography>
+          
+          <FormControl fullWidth variant="outlined" sx={{ mb: 2 }}>
+            <InputLabel id="block-staff-label">Personal</InputLabel>
+            <Select
+              labelId="block-staff-label"
+              value={selectedBlockStaff || ''}
+              onChange={(e) => setSelectedBlockStaff(e.target.value)}
+              label="Personal"
+              displayEmpty
+              renderValue={(value) => {
+                if (!value || value === '') {
+                  return <em>Keine Auswahl (für alle)</em>;
+                }
+                const selectedStaff = staffProfiles?.find((staff: any) => (staff._id || staff.id) === value);
+                if (selectedStaff) {
+                  return `${selectedStaff.first_name || (selectedStaff as any).firstName || ''} ${selectedStaff.last_name || (selectedStaff as any).lastName || ''}`;
+                }
+                return '';
+              }}
+            >
+              <MenuItem value="">
+                <em>Keine Auswahl (für alle)</em>
+              </MenuItem>
+              {staffProfiles && Array.isArray(staffProfiles) && staffProfiles.length > 0 ? (
+                staffProfiles.map((staff: any) => (
+                  <MenuItem key={staff._id || staff.id} value={staff._id || staff.id}>
+                    {staff.firstName || staff.first_name} {staff.lastName || staff.last_name}
+                  </MenuItem>
+                ))
+              ) : (
+                <MenuItem value="" disabled>
+                  Kein Personal verfügbar
+                </MenuItem>
+              )}
+            </Select>
+          </FormControl>
+          
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Geben Sie einen Namen für diese Sperre ein. Wenn Personal ausgewählt wird, ist dieses Personal für den Zeitraum blockiert.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setBlockDialogOpen(false);
+              setBlockName('');
+              setPendingBlockTime(null);
+            }}
+          >
+            Abbrechen
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleConfirmBlockTime}
+          >
+            Sperren
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Kontextmenü für Selection und TimeBlocks */}
+      <Menu
+        anchorReference="anchorPosition"
+        anchorPosition={contextMenuAnchor ? 
+          { top: contextMenuAnchor.y, left: contextMenuAnchor.x } : 
+          undefined
+        }
+        open={!!contextMenuAnchor}
+        onClose={() => setContextMenuAnchor(null)}
+      >
+        {/* Option 1: Wenn auf TimeBlock geklickt → "Sperre aufheben" */}
+        {contextMenuAnchor?.timeBlock && (
+          <MenuItem 
+            onClick={() => {
+              if (contextMenuAnchor?.timeBlock) {
+                handleUnblockTime(contextMenuAnchor.timeBlock._id);
+                setContextMenuAnchor(null);
+              }
+            }}
+          >
+            <ListItemIcon>
+              <LockOpen fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Sperre aufheben</ListItemText>
+          </MenuItem>
+        )}
+        
+        {/* Option 2: Wenn auf TimeBlock geklickt → "Zusammenführen" */}
+        {contextMenuAnchor?.timeBlock && contextMenuAnchor.timeBlock.status === 'blocked' && (
+          <MenuItem 
+            onClick={() => {
+              if (contextMenuAnchor?.timeBlock) {
+                setSelectedTimeBlock(contextMenuAnchor.timeBlock);
+                setMergeDialogOpen(true);
+                setContextMenuAnchor(null);
+              }
+            }}
+          >
+            <ListItemIcon>
+              <Merge fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Mit Patient/Leistung zusammenführen</ListItemText>
+          </MenuItem>
+        )}
+        
+        {/* Option 3: Wenn auf Selection geklickt → "Termin sperren" */}
+        {contextMenuAnchor?.start && contextMenuAnchor?.end && (
+          <MenuItem 
+            onClick={() => {
+              if (contextMenuAnchor?.start && contextMenuAnchor?.end) {
+                handleBlockTime(contextMenuAnchor.start, contextMenuAnchor.end, contextMenuAnchor.staffId);
+                setContextMenuAnchor(null);
+              }
+            }}
+          >
+            <ListItemIcon>
+              <Block fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Termin sperren</ListItemText>
+          </MenuItem>
+        )}
+        
+        {/* Option 4: Wenn auf Selection geklickt → "Termin erstellen" */}
+        {contextMenuAnchor?.start && contextMenuAnchor?.end && (
+          <MenuItem 
+            onClick={() => {
+              if (contextMenuAnchor?.start) {
+                handleOpenNewEventDialog(contextMenuAnchor.start);
+                setContextMenuAnchor(null);
+              }
+            }}
+          >
+            <ListItemIcon>
+              <EventIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Termin erstellen</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
+
+      {/* Merge-Dialog für TimeBlock */}
+      <Dialog 
+        open={mergeDialogOpen} 
+        onClose={() => {
+          setMergeDialogOpen(false);
+          setSelectedTimeBlock(null);
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <GradientDialogTitle 
+          title="TimeBlock zusammenführen"
+          onClose={() => {
+            setMergeDialogOpen(false);
+            setSelectedTimeBlock(null);
+          }}
+        />
+        <DialogContent>
+          {selectedTimeBlock && (
+            <Box sx={{ mt: 2 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Zeitraum: {format(new Date(selectedTimeBlock.startTime), 'dd.MM.yyyy HH:mm')} - {format(new Date(selectedTimeBlock.endTime), 'HH:mm')}
+              </Alert>
+              
+              <Autocomplete
+                options={patients}
+                getOptionLabel={(option) => `${option.firstName} ${option.lastName}`}
+                value={patientSearchValue}
+                onChange={(event, newValue) => {
+                  setPatientSearchValue(newValue);
+                  if (newValue) {
+                    handleFormChange('patientId', newValue._id);
+                    handleFormChange('patient', newValue);
+                    handleFormChange('patientName', `${newValue.firstName} ${newValue.lastName}`);
+                  }
+                }}
+                inputValue={patientSearchInput}
+                onInputChange={(event, newInputValue) => {
+                  setPatientSearchInput(newInputValue);
+                }}
+                loading={patientSearchLoading}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Patient"
+                    variant="outlined"
+                    fullWidth
+                    sx={{ mb: 2 }}
+                  />
+                )}
+              />
+              
+              <Autocomplete
+                options={services}
+                getOptionLabel={(option) => stripHtmlTags(option.name || option.code || '')}
+                value={formData.service || null}
+                onChange={(event, newValue) => {
+                  handleFormChange('service', newValue || undefined);
+                  handleFormChange('serviceId', newValue?._id || '');
+                }}
+                inputValue={serviceSearchInput}
+                onInputChange={(event, newInputValue) => {
+                  setServiceSearchInput(newInputValue);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Leistung (optional)"
+                    variant="outlined"
+                    fullWidth
+                    sx={{ mb: 2 }}
+                  />
+                )}
+              />
+              
+              <TextField
+                label="Titel"
+                value={formData.type || ''}
+                onChange={(e) => handleFormChange('type', e.target.value)}
+                fullWidth
+                sx={{ mb: 2 }}
+              />
+              
+              <TextField
+                label="Notizen"
+                value={formData.notes || ''}
+                onChange={(e) => handleFormChange('notes', e.target.value)}
+                fullWidth
+                multiline
+                rows={3}
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setMergeDialogOpen(false);
+            setSelectedTimeBlock(null);
+          }}>
+            Abbrechen
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              if (selectedTimeBlock && formData.patientId) {
+                handleMergeTimeBlock(selectedTimeBlock._id, {
+                  patientId: formData.patientId,
+                  serviceId: formData.serviceId,
+                  title: formData.type || 'Termin',
+                  notes: formData.notes
+                });
+              }
+            }}
+            disabled={!formData.patientId}
+          >
+            Zusammenführen
           </Button>
         </DialogActions>
       </Dialog>

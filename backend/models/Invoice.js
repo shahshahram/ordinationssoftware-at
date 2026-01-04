@@ -86,7 +86,24 @@ const InvoiceSchema = new mongoose.Schema({
     default: 'draft' 
   },
   paymentDate: { type: Date },
-  paymentMethod: { type: String, enum: ['cash', 'transfer', 'card', 'insurance'] },
+  paymentMethod: { 
+    type: String, 
+    enum: ['cash', 'transfer', 'card', 'bankomat', 'creditcard', 'mobile', 'insurance'],
+    default: null
+  },
+  // RKSVO: Zahlungsart-Details für Barumsatz-Prüfung
+  paymentDetails: {
+    isCashTransaction: { type: Boolean, default: false }, // Bar, Karte, Bankomat, Mobile = true
+    paymentType: { 
+      type: String, 
+      enum: ['cash', 'card', 'bankomat', 'creditcard', 'mobile', 'transfer', 'insurance'],
+      default: null
+    },
+    // Für Hausbesuche
+    isHouseCall: { type: Boolean, default: false },
+    manualReceiptNumber: { type: String }, // Paragon-Nummer
+    enteredAt: { type: Date } // Nacherfassungs-Zeitpunkt
+  },
   
   // Kassenabrechnung (für Kassenärzte)
   insuranceBilling: {

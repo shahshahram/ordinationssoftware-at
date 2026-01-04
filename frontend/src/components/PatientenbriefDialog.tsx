@@ -2657,7 +2657,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
                 <Box>
                   {letterSections.map((section, index) => {
                     return (
-                      <Box key={section.id} sx={{ mb: 3, p: 2, border: '1px solid #e0e0e0', borderRadius: 1, bgcolor: section.source === 'dekurs' ? '#fafafa' : 'white' }}>
+                      <Box key={section.id} sx={{ mb: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1, bgcolor: section.source === 'dekurs' ? 'action.hover' : 'background.paper' }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1, gap: 1 }}>
                           <TextField
                             value={section.title}
@@ -2860,7 +2860,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
           {/* Vorschau Tab */}
           {activeTab === 1 && (
             <Box>
-              <Paper sx={{ p: 3, bgcolor: 'white', minHeight: '500px' }}>
+              <Paper sx={{ p: 3, bgcolor: 'background.paper', minHeight: '500px' }}>
                 <Box
                   dangerouslySetInnerHTML={{ __html: generatePrintHtml() }}
                   sx={{

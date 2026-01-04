@@ -1205,7 +1205,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
       fullWidth
       PaperProps={{
         sx: {
-          bgcolor: '#FFF9C4', // Hellgelber Hintergrund
+          bgcolor: 'background.paper',
           borderRadius: 3
         }
       }}
@@ -1233,7 +1233,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
         </Box>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ bgcolor: '#FFF9C4' }}>
+      <DialogContent dividers sx={{ bgcolor: 'background.paper' }}>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
             {error}

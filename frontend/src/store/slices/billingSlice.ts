@@ -82,7 +82,16 @@ export interface Invoice {
   totalAmount: number;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentDate?: Date;
-  paymentMethod?: 'cash' | 'transfer' | 'card' | 'insurance';
+  paymentMethod?: 'cash' | 'transfer' | 'card' | 'bankomat' | 'creditcard' | 'mobile' | 'insurance';
+  // RKSVO: Zahlungsart-Details für Barumsatz-Prüfung
+  paymentDetails?: {
+    isCashTransaction?: boolean; // Bar, Karte, Bankomat, Mobile = true
+    paymentType?: 'cash' | 'card' | 'bankomat' | 'creditcard' | 'mobile' | 'transfer' | 'insurance';
+    // Für Hausbesuche
+    isHouseCall?: boolean;
+    manualReceiptNumber?: string; // Paragon-Nummer
+    enteredAt?: Date; // Nacherfassungs-Zeitpunkt
+  };
   insuranceBilling?: {
     insuranceCompany?: string;
     billingPeriod?: string;

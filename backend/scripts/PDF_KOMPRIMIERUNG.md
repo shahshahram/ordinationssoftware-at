@@ -47,3 +47,5 @@ gs -sDEVICE=pdfwrite -dCompatibilityLevel=1.4 -dPDFSETTINGS=/printer -dNOPAUSE -
 - `/ebook` - Mittlere Qualität, gute Komprimierung (empfohlen)
 - `/printer` - Hohe Qualität, weniger Komprimierung
 
+
+

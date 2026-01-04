@@ -2916,7 +2916,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         fullWidth
         PaperProps={{
           sx: {
-            bgcolor: '#FFF9C4',
+            bgcolor: 'background.paper',
             borderRadius: 3
           }
         }}
@@ -2944,7 +2944,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             </IconButton>
           </Box>
         </DialogTitle>
-        <DialogContent dividers sx={{ bgcolor: '#FFF9C4' }}>
+        <DialogContent dividers sx={{ bgcolor: 'background.paper' }}>
           {previewDekursEntry && (
             <Stack spacing={3}>
               {/* Basis-Informationen */}
@@ -3178,7 +3178,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
             </Stack>
           )}
         </DialogContent>
-        <DialogActions sx={{ bgcolor: '#FFF9C4', p: 2 }}>
+        <DialogActions sx={{ bgcolor: 'background.paper', p: 2 }}>
           <Button onClick={() => {
             setDekursPreviewOpen(false);
             setPreviewDekursEntry(null);

@@ -14,6 +14,9 @@ require('dotenv').config();
 const DataRetentionService = require('./services/dataRetentionService');
 const DataBreachService = require('./services/dataBreachService');
 
+// RKSVO Services
+const rksvoReceiptService = require('./services/rksvoReceiptService');
+
 // Import routes
 const authRoutes = require('./routes/auth');
 const patientRoutes = require('./routes/patients');
@@ -78,6 +81,7 @@ const medicalDataHistoryRoutes = require('./routes/medicalDataHistory');
 const patientDataHistoryRoutes = require('./routes/patientDataHistory');
 const laborRoutes = require('./routes/labor');
 const tasksRoutes = require('./routes/tasks');
+const timeBlocksRoutes = require('./routes/timeBlocks');
 const dicomRoutes = require('./routes/dicom');
 const dicomProviderRoutes = require('./routes/dicomProvider');
 const reimbursementsRoutes = require('./routes/reimbursements');
@@ -328,6 +332,7 @@ app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/patient-data-history', patientDataHistoryRoutes);
   app.use('/api/labor', laborRoutes);
   app.use('/api/tasks', tasksRoutes);
+  app.use('/api/time-blocks', timeBlocksRoutes);
   app.use('/api/dicom', dicomRoutes);
   app.use('/api/dicom-providers', dicomProviderRoutes);
   app.use('/api/reimbursements', reimbursementsRoutes);
@@ -497,6 +502,10 @@ cron.schedule('0 6 * * 1', async () => {
     logger.error('❌ Fehler bei der Compliance-Prüfung:', error);
   }
 });
+
+// RKSVO Beleg-Service starten (automatische Monats-/Jahresbelege)
+rksvoReceiptService.start();
+logger.info('✅ RKSVO Beleg-Service gestartet (automatische Monats-/Jahresbelege)');
 
 // Graceful shutdown
 process.on('SIGTERM', () => {

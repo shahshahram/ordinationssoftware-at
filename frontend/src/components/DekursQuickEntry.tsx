@@ -161,7 +161,7 @@ const DekursQuickEntry: React.FC<DekursQuickEntryProps> = ({
 
   if (compact) {
     return (
-      <Paper sx={{ p: 2, bgcolor: '#FFF9C4' }}>
+      <Paper sx={{ p: 2, bgcolor: 'background.paper' }}>
         <Stack spacing={2}>
           <Box display="flex" alignItems="center" gap={1}>
             <Assignment sx={{ color: 'warning.main' }} />
@@ -245,7 +245,7 @@ const DekursQuickEntry: React.FC<DekursQuickEntryProps> = ({
   }
 
   return (
-    <Paper sx={{ p: 3, bgcolor: '#FFF9C4', borderRadius: 2 }}>
+    <Paper sx={{ p: 3, bgcolor: 'background.paper', borderRadius: 2 }}>
       <Stack spacing={3}>
         <Box display="flex" alignItems="center" gap={2}>
           <Assignment sx={{ fontSize: 32, color: 'warning.main' }} />

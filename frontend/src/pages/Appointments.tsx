@@ -328,6 +328,7 @@ const Appointments: React.FC = () => {
   const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
   const { appointments: reduxAppointments } = useAppSelector((state) => state.appointments);
   const [patientDiagnosesMap, setPatientDiagnosesMap] = useState<Map<string, PatientDiagnosis[]>>(new Map());
+  const [timeBlocks, setTimeBlocks] = useState<any[]>([]);
   
   const initialFormData: Partial<Appointment> = {
     patientId: '',
@@ -2063,9 +2064,34 @@ const Appointments: React.FC = () => {
     // Load real appointments from API
     if (!isInitialized) {
       dispatch(fetchAppointments());
+      loadTimeBlocks();
       setIsInitialized(true);
     }
   }, [isInitialized, dispatch]); // Only depend on isInitialized and dispatch
+
+  // Load TimeBlocks
+  const loadTimeBlocks = async () => {
+    try {
+      const today = new Date();
+      const startDate = new Date(today);
+      startDate.setDate(today.getDate() - 7); // Letzte 7 Tage
+      const endDate = new Date(today);
+      endDate.setDate(today.getDate() + 30); // Nächste 30 Tage
+      
+      const response = await api.get('/time-blocks', {
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        status: 'blocked'
+      });
+      
+      if (response.success && response.data) {
+        const blocks = Array.isArray(response.data) ? response.data : (response.data as any).data || [];
+        setTimeBlocks(blocks);
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Laden der TimeBlocks:', error);
+    }
+  };
 
   // Setze Formularwerte, wenn Services/Locations/Staff geladen sind und Dialog im Edit- oder View-Modus ist
   useEffect(() => {
@@ -2664,14 +2690,33 @@ const Appointments: React.FC = () => {
                 </Box>
               </Box>
               
-              {filteredAppointments.length === 0 ? (
+              {filteredAppointments.length === 0 && timeBlocks.filter((block: any) => {
+                const blockDate = new Date(block.startTime);
+                const today = new Date();
+                if (viewMode === 'day') {
+                  return blockDate.toDateString() === today.toDateString();
+                } else if (viewMode === 'week') {
+                  const weekStart = new Date(today);
+                  weekStart.setDate(today.getDate() - today.getDay());
+                  weekStart.setHours(0, 0, 0, 0);
+                  const weekEnd = new Date(weekStart);
+                  weekEnd.setDate(weekStart.getDate() + 6);
+                  weekEnd.setHours(23, 59, 59, 999);
+                  return blockDate >= weekStart && blockDate <= weekEnd;
+                } else if (viewMode === 'month') {
+                  return blockDate.getMonth() === today.getMonth() && 
+                         blockDate.getFullYear() === today.getFullYear();
+                }
+                return true;
+              }).length === 0 ? (
                 <Box textAlign="center" py={4}>
                   <Typography variant="body1" color="text.secondary">
                     Keine Termine gefunden
                   </Typography>
                 </Box>
               ) : (
-                filteredAppointments.map((appointment) => (
+                <>
+                {filteredAppointments.map((appointment) => (
                   <Paper
                     key={appointment._id}
                     sx={{
@@ -3072,7 +3117,115 @@ const Appointments: React.FC = () => {
                       </Box>
                     </Box>
                   </Paper>
-                ))
+                ))}
+                {/* TimeBlocks (gesperrte Zeitslots) */}
+                {timeBlocks
+                  .filter((block: any) => {
+                    // Filtere TimeBlocks basierend auf viewMode
+                    const blockDate = new Date(block.startTime);
+                    const today = new Date();
+                    
+                    if (viewMode === 'day') {
+                      return blockDate.toDateString() === today.toDateString();
+                    } else if (viewMode === 'week') {
+                      const weekStart = new Date(today);
+                      weekStart.setDate(today.getDate() - today.getDay());
+                      weekStart.setHours(0, 0, 0, 0);
+                      const weekEnd = new Date(weekStart);
+                      weekEnd.setDate(weekStart.getDate() + 6);
+                      weekEnd.setHours(23, 59, 59, 999);
+                      return blockDate >= weekStart && blockDate <= weekEnd;
+                    } else if (viewMode === 'month') {
+                      return blockDate.getMonth() === today.getMonth() && 
+                             blockDate.getFullYear() === today.getFullYear();
+                    }
+                    return true;
+                  })
+                  .map((block: any) => (
+                    <Paper
+                      key={block._id}
+                      sx={{
+                        p: 3,
+                        mb: 2.5,
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        justifyContent: 'space-between',
+                        borderLeft: 5,
+                        borderLeftColor: 'error.main',
+                        borderRadius: 2,
+                        bgcolor: 'error.light',
+                        transition: 'all 0.2s ease',
+                        '&:hover': {
+                          boxShadow: 4,
+                          transform: 'translateY(-2px)'
+                        }
+                      }}
+                    >
+                      <Box display="flex" alignItems="flex-start" sx={{ flexGrow: 1, gap: 2 }}>
+                        <Avatar 
+                          sx={{ 
+                            width: 56, 
+                            height: 56,
+                            mr: 1, 
+                            bgcolor: 'error.main',
+                            fontSize: '1.5rem'
+                          }}
+                        >
+                          <Warning />
+                        </Avatar>
+                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                          <Box display="flex" alignItems="center" gap={2} mb={1.5} flexWrap="wrap">
+                            <Typography 
+                              variant="h6" 
+                              fontWeight="bold"
+                              sx={{ 
+                                color: 'error.main',
+                                fontSize: '1.25rem',
+                                minWidth: 'fit-content'
+                              }}
+                            >
+                              {new Date(block.startTime).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}
+                              {' - '}
+                              {new Date(block.endTime).toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' })}
+                            </Typography>
+                            <Chip
+                              label="Gesperrt"
+                              size="medium"
+                              sx={{
+                                backgroundColor: 'error.main',
+                                color: 'white',
+                                fontWeight: 'bold',
+                                fontSize: '0.875rem',
+                                height: '28px'
+                              }}
+                            />
+                          </Box>
+                          <Box display="flex" alignItems="center" gap={2} mb={1.5} flexWrap="wrap">
+                            <Box display="flex" alignItems="center" gap={0.5}>
+                              <CalendarToday sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                              <Typography variant="body1" color="text.secondary" fontWeight="500">
+                                {new Date(block.startTime).toLocaleDateString('de-DE', { 
+                                  weekday: 'short', 
+                                  day: '2-digit', 
+                                  month: '2-digit', 
+                                  year: 'numeric' 
+                                })}
+                              </Typography>
+                            </Box>
+                            {block.reason && (
+                              <Box display="flex" alignItems="center" gap={0.5}>
+                                <Note sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                                <Typography variant="body1" color="text.secondary" fontWeight="500">
+                                  {block.reason}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Paper>
+                  ))}
+                </>
               )}
             </CardContent>
           </Card>
@@ -3437,7 +3590,10 @@ const Appointments: React.FC = () => {
                     setServiceSearchInput(newInputValue);
                   }}
                   options={getFilteredAndSortedServices()}
-                  getOptionLabel={(option) => `${option.code || ''} - ${option.name}`}
+                  getOptionLabel={(option) => {
+                    const cleanName = stripHtmlTags(option.name || '');
+                    return `${option.code || ''} - ${cleanName}`;
+                  }}
                   filterOptions={(options, state) => {
                     // Die Filterung wird bereits in getFilteredAndSortedServices durchgeführt
                     // Hier geben wir einfach alle Optionen zurück, die bereits gefiltert wurden
@@ -3467,7 +3623,7 @@ const Appointments: React.FC = () => {
                           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Typography variant="body2" fontWeight="bold" noWrap>
-                                {option.name}
+                                {stripHtmlTags(option.name || '')}
                               </Typography>
                               {isFavorite && (
                                 <Chip

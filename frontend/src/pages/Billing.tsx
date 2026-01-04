@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import QRCodeGenerator from '../components/QRCodeGenerator';
 import api from '../utils/api';
 import { 
   fetchInvoices, 
@@ -73,6 +74,14 @@ import {
   PersonAdd,
   Email,
 } from '@mui/icons-material';
+
+// Hilfsfunktion zum Entfernen von HTML-Tags
+const stripHtmlTags = (html: string): string => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
 
 const Billing: React.FC = () => {
   const navigate = useNavigate();
@@ -578,24 +587,45 @@ const Billing: React.FC = () => {
     try {
       setLoadingRKSVO(true);
       const token = localStorage.getItem('token');
+      
+      // Lade CashRegister-Liste
+      const cashRegistersResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/cash-registers`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const cashRegistersData = await cashRegistersResponse.json();
+      
+      let cashRegisterId = null;
+      if (cashRegistersData.success && cashRegistersData.data && cashRegistersData.data.length > 0) {
+        cashRegisterId = cashRegistersData.data[0]._id;
+      }
+      
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/generate-rksvo-receipt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ invoiceId: invoice?._id || invoice?.id })
+        body: JSON.stringify({ 
+          invoiceId: invoice?._id || invoice?.id,
+          cashRegisterId: cashRegisterId
+        })
       });
       
       const data = await response.json();
       
       if (data.success) {
-        setQrCodeData(data.data.qrCode);
+        setQrCodeData(data.data.qrCodeData || data.data.qrCode);
         setQrCodeDialog(true);
         setSnackbar({ open: true, message: 'RKSVO-Beleg erfolgreich generiert!', severity: 'success' });
+        // Aktualisiere Invoice-Liste
+        dispatch(fetchInvoices({}));
+      } else {
+        setSnackbar({ open: true, message: data.message || 'Fehler beim Generieren des RKSVO-Belegs', severity: 'error' });
       }
-    } catch (error) {
-      setSnackbar({ open: true, message: 'Fehler beim Generieren des RKSVO-Belegs', severity: 'error' });
+    } catch (error: any) {
+      setSnackbar({ open: true, message: 'Fehler beim Generieren des RKSVO-Belegs: ' + (error.message || 'Unbekannter Fehler'), severity: 'error' });
     } finally {
       setLoadingRKSVO(false);
     }
@@ -1286,7 +1316,10 @@ const Billing: React.FC = () => {
                   {dialogMode !== 'view' && (
                     <Autocomplete
                       options={services || []}
-                      getOptionLabel={(option) => `${option.code} - ${option.name}`}
+                      getOptionLabel={(option) => {
+                        const cleanName = stripHtmlTags(option.name || '');
+                        return `${option.code} - ${cleanName}`;
+                      }}
                       onChange={(event, newValue) => {
                         if (newValue) {
                           handleServiceAdd(newValue);
@@ -1380,16 +1413,72 @@ const Billing: React.FC = () => {
                       <InputLabel>Zahlungsmethode</InputLabel>
                       <Select
                         value={formData.paymentMethod || ''}
-                        onChange={(e) => handleFormChange('paymentMethod', e.target.value)}
+                        onChange={(e) => {
+                          const paymentMethod = e.target.value;
+                          handleFormChange('paymentMethod', paymentMethod);
+                          // Automatisch isCashTransaction setzen
+                          const isCashTransaction = ['cash', 'card', 'bankomat', 'creditcard', 'mobile'].includes(paymentMethod);
+                          handleFormChange('paymentDetails', {
+                            ...formData.paymentDetails,
+                            isCashTransaction,
+                            paymentType: paymentMethod
+                          });
+                        }}
                         disabled={dialogMode === 'view'}
                       >
                         <SelectMenuItem value="cash">Bar</SelectMenuItem>
-                        <SelectMenuItem value="transfer">Überweisung</SelectMenuItem>
                         <SelectMenuItem value="card">Karte</SelectMenuItem>
+                        <SelectMenuItem value="bankomat">Bankomat</SelectMenuItem>
+                        <SelectMenuItem value="creditcard">Kreditkarte</SelectMenuItem>
+                        <SelectMenuItem value="mobile">Mobile Payment</SelectMenuItem>
+                        <SelectMenuItem value="transfer">Überweisung</SelectMenuItem>
                         <SelectMenuItem value="insurance">Versicherung</SelectMenuItem>
                       </Select>
                     </FormControl>
                   </Box>
+                  {formData.paymentMethod && ['cash', 'card', 'bankomat', 'creditcard', 'mobile'].includes(formData.paymentMethod) && (
+                    <Box sx={{ flex: '1 1 100%' }}>
+                      <Alert severity="info" sx={{ mt: 1 }}>
+                        Diese Zahlungsart zählt als Barumsatz für die Registrierkassenpflicht.
+                      </Alert>
+                    </Box>
+                  )}
+                  <Box sx={{ flex: '1 1 300px', minWidth: '300px' }}>
+                    <FormControl fullWidth margin="normal">
+                      <InputLabel>Hausbesuch</InputLabel>
+                      <Select
+                        value={formData.paymentDetails?.isHouseCall ? 'yes' : 'no'}
+                        onChange={(e) => {
+                          const isHouseCall = e.target.value === 'yes';
+                          handleFormChange('paymentDetails', {
+                            ...formData.paymentDetails,
+                            isHouseCall,
+                            enteredAt: isHouseCall ? new Date() : undefined
+                          });
+                        }}
+                        disabled={dialogMode === 'view'}
+                      >
+                        <SelectMenuItem value="no">Nein</SelectMenuItem>
+                        <SelectMenuItem value="yes">Ja (Paragon-Beleg)</SelectMenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
+                  {formData.paymentDetails?.isHouseCall && (
+                    <Box sx={{ flex: '1 1 300px', minWidth: '300px' }}>
+                      <TextField
+                        fullWidth
+                        label="Paragon-Nummer"
+                        value={formData.paymentDetails?.manualReceiptNumber || ''}
+                        onChange={(e) => handleFormChange('paymentDetails', {
+                          ...formData.paymentDetails,
+                          manualReceiptNumber: e.target.value
+                        })}
+                        disabled={dialogMode === 'view'}
+                        margin="normal"
+                        helperText="Nummer des händischen Belegs (Paragon)"
+                      />
+                    </Box>
+                  )}
                 </Box>
                 <Box>
                   <TextField
@@ -1607,9 +1696,12 @@ const Billing: React.FC = () => {
         <DialogContent sx={{ pt: 3, textAlign: 'center' }}>
           {qrCodeData && (
             <Box>
-              <img src={qrCodeData} alt="QR-Code" style={{ width: '100%', maxWidth: '300px' }} />
+              <QRCodeGenerator 
+                data={qrCodeData} 
+                size={250}
+              />
               <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                Dieser QR-Code ist für die RKSVO-compliant Belegung erforderlich
+                Dieser QR-Code ist für die RKSVO-compliant Belegung erforderlich. Scannen Sie ihn mit der BMF Belegcheck-App.
               </Typography>
             </Box>
           )}

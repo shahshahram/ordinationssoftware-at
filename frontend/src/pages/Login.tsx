@@ -144,7 +144,7 @@ const Login: React.FC = () => {
           maxWidth: 400,
           borderRadius: 3,
           backdropFilter: 'blur(10px)',
-          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          backgroundColor: 'background.paper',
         }}
       >
         <Box textAlign="center" mb={3}>

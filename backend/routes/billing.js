@@ -11,6 +11,11 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const billingCalculator = require('../utils/billing-calculator');
 const rksvo = require('../utils/rksvo');
+const rksvoEnhanced = require('../utils/rksvo-enhanced');
+const rksvoReceiptService = require('../services/rksvoReceiptService');
+const finanzOnlineService = require('../services/finanzOnlineService');
+const CashRegister = require('../models/CashRegister');
+const ReceiptChain = require('../models/ReceiptChain');
 const ogkXMLGenerator = require('../utils/ogk-xml-generator');
 const router = express.Router();
 
@@ -475,11 +480,11 @@ router.post('/calculate', auth, async (req, res) => {
 });
 
 // @route   POST /api/billing/generate-rksvo-receipt
-// @desc    Generiert RKSVO-konformen Beleg mit QR-Code
+// @desc    Generiert RKSVO-konformen Beleg mit QR-Code und Belegverkettung
 // @access  Private
 router.post('/generate-rksvo-receipt', auth, async (req, res) => {
   try {
-    const { invoiceId } = req.body;
+    const { invoiceId, cashRegisterId } = req.body;
     
     const invoice = await Invoice.findById(invoiceId).populate('patient.id');
     if (!invoice) {
@@ -489,22 +494,49 @@ router.post('/generate-rksvo-receipt', auth, async (req, res) => {
       });
     }
     
-    // TSE-Config (sollte aus Config oder DB kommen)
-    const tseConfig = {
-      cashBoxId: process.env.TSE_CASH_BOX_ID || 'CSHBOX1',
-      serialNumber: process.env.TSE_SERIAL || null,
-      publicKey: process.env.TSE_PUBLIC_KEY || null,
-      secret: process.env.TSE_SECRET || null
-    };
+    // Lade CashRegister (oder verwende Standard)
+    let cashRegister;
+    if (cashRegisterId) {
+      cashRegister = await CashRegister.findById(cashRegisterId);
+    } else {
+      // Finde aktive Registrierkasse für Standort
+      cashRegister = await CashRegister.findOne({ isActive: true });
+    }
     
-    // RKSVO-Beleg generieren
-    const rksvoData = await rksvo.generateRKSVInvoice(invoice, tseConfig);
+    if (!cashRegister) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registrierkasse nicht gefunden. Bitte zuerst Registrierkasse einrichten.'
+      });
+    }
+    
+    // Prüfe ob TSE initialisiert ist
+    if (!cashRegister.tse.initialized) {
+      return res.status(400).json({
+        success: false,
+        message: 'TSE ist nicht initialisiert. Bitte zuerst Startbeleg erstellen.'
+      });
+    }
+    
+    // Bestimme isCashTransaction basierend auf paymentMethod
+    if (!invoice.paymentDetails) {
+      invoice.paymentDetails = {};
+    }
+    invoice.paymentDetails.isCashTransaction = ['cash', 'card', 'bankomat', 'creditcard', 'mobile'].includes(invoice.paymentMethod);
+    
+    // RKSVO-Beleg generieren (mit Verkettung)
+    const rksvoData = await rksvoEnhanced.generateRKSVInvoiceEnhanced(
+      invoice, 
+      cashRegister._id, 
+      req.user.id
+    );
     
     // Rechnung aktualisieren mit RKSVO-Daten
     invoice.rksvoData = {
       tseSignature: rksvoData.tseSignature,
       qrCode: rksvoData.qrCodeData,
-      generatedAt: new Date()
+      generatedAt: new Date(),
+      receiptChainId: rksvoData.receiptChainEntry._id
     };
     await invoice.save();
     
@@ -514,14 +546,15 @@ router.post('/generate-rksvo-receipt', auth, async (req, res) => {
         invoice: invoice,
         receipt: rksvoData.receipt,
         qrCode: rksvoData.qrCode,
-        qrCodeData: rksvoData.qrCodeData
+        qrCodeData: rksvoData.qrCodeData,
+        receiptChainEntry: rksvoData.receiptChainEntry
       }
     });
   } catch (error) {
     console.error('RKSVO-Generierungsfehler:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler bei RKSVO-Beleggenerierung'
+      message: 'Fehler bei RKSVO-Beleggenerierung: ' + error.message
     });
   }
 });
@@ -1641,6 +1674,763 @@ router.get('/kassa/list', auth, checkPermission('billing.read'), async (req, res
       message: 'Abrechnungsliste konnte nicht abgerufen werden',
       error: error.message,
       details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// ============================================================================
+// RKSVO - Registrierkassenpflicht Endpoints
+// ============================================================================
+
+// @route   GET /api/billing/cash-registers
+// @desc    Liste aller Registrierkassen
+// @access  Private
+router.get('/cash-registers', auth, async (req, res) => {
+  try {
+    const cashRegisters = await CashRegister.find({ isActive: true })
+      .populate('locationId', 'name')
+      .select('-tse.secret -tse.apiSecret -finanzOnline.webservicePassword');
+    
+    res.json({
+      success: true,
+      data: cashRegisters
+    });
+  } catch (error) {
+    console.error('Fehler beim Laden der Registrierkassen:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Registrierkassen'
+    });
+  }
+});
+
+// @route   POST /api/billing/cash-registers
+// @desc    Erstellt neue Registrierkasse
+// @access  Private
+router.post('/cash-registers', auth, async (req, res) => {
+  try {
+    const { cashBoxId, locationId, tse } = req.body;
+    
+    // Prüfe ob cashBoxId bereits existiert
+    const existing = await CashRegister.findOne({ cashBoxId });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'Registrierkasse mit dieser ID existiert bereits'
+      });
+    }
+    
+    const cashRegister = new CashRegister({
+      cashBoxId,
+      locationId,
+      tse: {
+        provider: tse?.provider || 'software',
+        serialNumber: tse?.serialNumber,
+        publicKey: tse?.publicKey,
+        secret: tse?.secret,
+        apiKey: tse?.apiKey,
+        apiSecret: tse?.apiSecret,
+        endpoint: tse?.endpoint,
+        testMode: tse?.testMode || false,
+        sandboxEndpoint: tse?.sandboxEndpoint,
+        initialized: false
+      },
+      createdBy: req.user.id
+    });
+    
+    await cashRegister.save();
+    
+    res.json({
+      success: true,
+      data: cashRegister
+    });
+  } catch (error) {
+    console.error('Fehler beim Erstellen der Registrierkasse:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen der Registrierkasse: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/cash-registers/:id/start-receipt
+// @desc    Erstellt Startbeleg (TSE-Initialisierung)
+// @access  Private
+router.post('/cash-registers/:id/start-receipt', auth, async (req, res) => {
+  try {
+    const cashRegisterId = req.params.id;
+    
+    const startReceipt = await rksvoReceiptService.createStartReceipt(
+      cashRegisterId,
+      req.user.id
+    );
+    
+    res.json({
+      success: true,
+      message: 'Startbeleg erfolgreich erstellt',
+      data: startReceipt
+    });
+  } catch (error) {
+    console.error('Fehler beim Erstellen des Startbelegs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen des Startbelegs: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/cash-registers/:id/monthly-receipt
+// @desc    Erstellt Monatsbeleg manuell
+// @access  Private
+router.post('/cash-registers/:id/monthly-receipt', auth, async (req, res) => {
+  try {
+    const cashRegisterId = req.params.id;
+    const { year, month } = req.body;
+    
+    const date = year && month ? new Date(year, month - 1, 1) : new Date();
+    await rksvoReceiptService.generateMonthlyReceipt(date);
+    
+    res.json({
+      success: true,
+      message: 'Monatsbeleg erfolgreich erstellt'
+    });
+  } catch (error) {
+    console.error('Fehler beim Erstellen des Monatsbelegs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen des Monatsbelegs: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/cash-registers/:id/yearly-receipt
+// @desc    Erstellt Jahresbeleg manuell
+// @access  Private
+router.post('/cash-registers/:id/yearly-receipt', auth, async (req, res) => {
+  try {
+    const cashRegisterId = req.params.id;
+    const { year } = req.body;
+    
+    await rksvoReceiptService.generateYearlyReceipt(year || new Date().getFullYear());
+    
+    res.json({
+      success: true,
+      message: 'Jahresbeleg erfolgreich erstellt'
+    });
+  } catch (error) {
+    console.error('Fehler beim Erstellen des Jahresbelegs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen des Jahresbelegs: ' + error.message
+    });
+  }
+});
+
+// @route   GET /api/billing/cash-registers/:id/yearly-receipt/:year/pdf
+// @desc    Exportiert Jahresbeleg als PDF (für BMF-App Scan)
+// @access  Private
+router.get('/cash-registers/:id/yearly-receipt/:year/pdf', auth, checkPermission('billing.read'), async (req, res) => {
+  try {
+    const { id, year } = req.params;
+    const cashRegister = await CashRegister.findById(id);
+    if (!cashRegister) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registrierkasse nicht gefunden'
+      });
+    }
+    
+    // Finde Jahresbeleg (Dezember-Monatsbeleg)
+    const yearlyReceipt = await ReceiptChain.findOne({
+      cashBoxId: cashRegister.cashBoxId,
+      receiptType: 'monthly',
+      'period.year': parseInt(year),
+      'period.month': 12
+    });
+    
+    if (!yearlyReceipt) {
+      return res.status(404).json({
+        success: false,
+        message: `Jahresbeleg für ${year} nicht gefunden`
+      });
+    }
+    
+    // Generiere Beleg-Text
+    const receiptText = rksvoEnhanced.generateReceiptEnhanced(
+      { invoiceNumber: `YEARLY-${year}`, totalAmount: 0 },
+      yearlyReceipt.tseSignature
+    );
+    
+    // Generiere PDF (einfaches Text-PDF)
+    const pdfGenerator = require('../utils/pdfGenerator');
+    const htmlContent = `
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body {
+              font-family: 'Courier New', monospace;
+              font-size: 10pt;
+              line-height: 1.2;
+              white-space: pre-wrap;
+              margin: 20px;
+            }
+          </style>
+        </head>
+        <body>${receiptText.replace(/\n/g, '<br>')}</body>
+      </html>
+    `;
+    
+    const pdfBuffer = await pdfGenerator.generatePDF(htmlContent, {
+      format: 'A4',
+      printBackground: false,
+      margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
+    });
+    
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="Jahresbeleg_${year}_${cashRegister.cashBoxId}.pdf"`,
+      'Content-Length': pdfBuffer.length
+    });
+    
+    res.send(pdfBuffer);
+  } catch (error) {
+    console.error('Fehler beim PDF-Export des Jahresbelegs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim PDF-Export: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/house-call-receipt
+// @desc    Erstellt Hausbesuch-Beleg (Paragon mit Nacherfassung)
+// @access  Private
+router.post('/house-call-receipt', auth, async (req, res) => {
+  try {
+    const { cashRegisterId, manualReceiptNumber, amount, date, paymentMethod } = req.body;
+    
+    if (!cashRegisterId || !amount || !manualReceiptNumber) {
+      return res.status(400).json({
+        success: false,
+        message: 'cashRegisterId, amount und manualReceiptNumber sind erforderlich'
+      });
+    }
+    
+    const receipt = await rksvoReceiptService.createHouseCallReceipt({
+      manualReceiptNumber,
+      amount: Math.round(amount * 100), // In Cent
+      date: date ? new Date(date) : new Date(),
+      paymentMethod: paymentMethod || 'cash',
+      receiptNumber: `HOUSECALL-${Date.now()}`
+    }, cashRegisterId, req.user.id);
+    
+    res.json({
+      success: true,
+      message: 'Hausbesuch-Beleg erfolgreich erstellt',
+      data: receipt
+    });
+  } catch (error) {
+    console.error('Fehler beim Erstellen des Hausbesuch-Belegs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Erstellen des Hausbesuch-Belegs: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/cash-registers/:id/register-finanzonline
+// @desc    Registriert Kasse bei FinanzOnline
+// @access  Private
+router.post('/cash-registers/:id/register-finanzonline', auth, async (req, res) => {
+  try {
+    const cashRegisterId = req.params.id;
+    const { taxNumber, location } = req.body;
+    
+    const cashRegister = await CashRegister.findById(cashRegisterId);
+    if (!cashRegister) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registrierkasse nicht gefunden'
+      });
+    }
+    
+    if (!cashRegister.tse.initialized) {
+      return res.status(400).json({
+        success: false,
+        message: 'TSE muss zuerst initialisiert werden (Startbeleg erstellen)'
+      });
+    }
+    
+    const registration = await finanzOnlineService.registerCashRegister(
+      cashRegister,
+      { taxNumber, location }
+    );
+    
+    // Aktualisiere CashRegister mit FinanzOnline-Daten
+    cashRegister.finanzOnline = {
+      registered: true,
+      registrationDate: registration.registrationDate,
+      cashRegisterId: registration.cashRegisterId,
+      tseId: registration.tseId,
+      webserviceUser: process.env.FINANZONLINE_WEBSERVICE_USER,
+      webservicePassword: process.env.FINANZONLINE_WEBSERVICE_PASSWORD // Verschlüsselt speichern
+    };
+    await cashRegister.save();
+    
+    res.json({
+      success: true,
+      message: 'Registrierkasse erfolgreich bei FinanzOnline registriert',
+      data: registration
+    });
+  } catch (error) {
+    console.error('Fehler bei FinanzOnline-Registrierung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei FinanzOnline-Registrierung: ' + error.message
+    });
+  }
+});
+
+// @route   GET /api/billing/receipt-chain
+// @desc    Zeigt Belegverkettung (DEP)
+// @access  Private
+router.get('/receipt-chain', auth, async (req, res) => {
+  try {
+    const { cashBoxId, limit = 50 } = req.query;
+    
+    const filter = {};
+    if (cashBoxId) filter.cashBoxId = cashBoxId;
+    
+    const receipts = await ReceiptChain.find(filter)
+      .sort({ receiptNumber: -1 })
+      .limit(parseInt(limit))
+      .populate('invoiceId', 'invoiceNumber totalAmount')
+      .populate('createdBy', 'firstName lastName');
+    
+    res.json({
+      success: true,
+      data: receipts
+    });
+  } catch (error) {
+    console.error('Fehler beim Laden der Belegverkettung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Belegverkettung'
+    });
+  }
+});
+
+// ============================================================================
+// RKSVO Test- und Validierungs-Endpoints
+// ============================================================================
+
+const rksvoValidation = require('../utils/rksvo-validation');
+
+// @route   POST /api/billing/validate-receipt
+// @desc    Validiert Beleg für BMF Belegcheck-App und A-SIT Plus
+// @access  Private
+router.post('/validate-receipt', auth, async (req, res) => {
+  try {
+    const { receiptChainId, qrCodeData } = req.body;
+    
+    let receiptChainEntry = null;
+    
+    if (receiptChainId) {
+      receiptChainEntry = await ReceiptChain.findById(receiptChainId);
+      if (!receiptChainEntry) {
+        return res.status(404).json({
+          success: false,
+          message: 'Beleg nicht gefunden'
+        });
+      }
+    }
+    
+    if (!receiptChainEntry && !qrCodeData) {
+      return res.status(400).json({
+        success: false,
+        message: 'receiptChainId oder qrCodeData erforderlich'
+      });
+    }
+    
+    // Hole vorherigen Beleg für Verkettungs-Validierung
+    let previousReceipt = null;
+    if (receiptChainEntry) {
+      previousReceipt = await ReceiptChain.findOne({
+        cashBoxId: receiptChainEntry.cashBoxId,
+        receiptNumber: receiptChainEntry.receiptNumber - 1
+      });
+    }
+    
+    // Vollständige Validierung
+    const validationResult = await rksvoValidation.validateReceiptComplete(
+      receiptChainEntry || { qrCodeData },
+      previousReceipt
+    );
+    
+    res.json({
+      success: true,
+      data: validationResult
+    });
+  } catch (error) {
+    console.error('Fehler bei Beleg-Validierung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei Beleg-Validierung: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/validate-qr-code
+// @desc    Validiert QR-Code für BMF Belegcheck-App
+// @access  Private
+router.post('/validate-qr-code', auth, async (req, res) => {
+  try {
+    const { qrCodeData } = req.body;
+    
+    if (!qrCodeData) {
+      return res.status(400).json({
+        success: false,
+        message: 'qrCodeData erforderlich'
+      });
+    }
+    
+    const validationResult = rksvoValidation.validateQRCodeForBMF(qrCodeData);
+    
+    res.json({
+      success: true,
+      data: validationResult
+    });
+  } catch (error) {
+    console.error('Fehler bei QR-Code-Validierung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei QR-Code-Validierung: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/validate-tse-signature
+// @desc    Validiert TSE-Signatur kryptographisch (A-SIT Plus)
+// @access  Private
+router.post('/validate-tse-signature', auth, async (req, res) => {
+  try {
+    const { receiptData, tseSignature, publicKey } = req.body;
+    
+    if (!receiptData || !tseSignature) {
+      return res.status(400).json({
+        success: false,
+        message: 'receiptData und tseSignature erforderlich'
+      });
+    }
+    
+    const validationResult = rksvoValidation.validateTSESignatureCryptographic(
+      receiptData,
+      tseSignature,
+      publicKey
+    );
+    
+    res.json({
+      success: true,
+      data: validationResult
+    });
+  } catch (error) {
+    console.error('Fehler bei TSE-Signatur-Validierung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei TSE-Signatur-Validierung: ' + error.message
+    });
+  }
+});
+
+// @route   GET /api/billing/test-receipt
+// @desc    Erstellt Test-Beleg für Validierung (ohne echte TSE)
+// @access  Private
+router.post('/test-receipt', auth, async (req, res) => {
+  try {
+    const { amount = 10000, cashBoxId = 'TEST-CASHBOX-1' } = req.body;
+    
+    // Erstelle Test-CashRegister
+    let testCashRegister = await CashRegister.findOne({ cashBoxId });
+    if (!testCashRegister) {
+      testCashRegister = new CashRegister({
+        cashBoxId,
+        tse: {
+          provider: 'software',
+          testMode: true,
+          initialized: true,
+          serialNumber: 'TEST-TSE-001'
+        },
+        signatureCounter: 0,
+        createdBy: req.user.id
+      });
+      await testCashRegister.save();
+    }
+    
+    // Erstelle Test-Invoice
+    const testInvoice = {
+      invoiceNumber: `TEST-${Date.now()}`,
+      totalAmount: amount,
+      subtotal: amount,
+      taxAmount: 0,
+      invoiceDate: new Date(),
+      dueDate: new Date(),
+      billingType: 'privat',
+      doctor: {
+        name: 'Test-Ordination',
+        firstName: 'Test',
+        lastName: 'Arzt',
+        taxNumber: 'TEST12345678',
+        chamberNumber: 'TEST-001',
+        address: {
+          street: 'Teststraße 1',
+          postalCode: '1010',
+          city: 'Wien'
+        }
+      },
+      services: [{
+        description: 'Test-Leistung',
+        serviceCode: 'TEST-001',
+        quantity: 1,
+        unitPrice: amount,
+        totalPrice: amount,
+        date: new Date()
+      }],
+      paymentMethod: 'cash',
+      paymentDetails: {
+        isCashTransaction: true
+      }
+    };
+    
+    // Generiere Test-Beleg
+    const rksvoData = await rksvoEnhanced.generateRKSVInvoiceEnhanced(
+      testInvoice,
+      testCashRegister._id,
+      req.user.id
+    );
+    
+    // Validiere sofort
+    const validationResult = await rksvoValidation.validateReceiptComplete(
+      rksvoData.receiptChainEntry,
+      null
+    );
+    
+    res.json({
+      success: true,
+      message: 'Test-Beleg erfolgreich erstellt',
+      data: {
+        receipt: rksvoData.receiptChainEntry,
+        qrCode: rksvoData.qrCodeData,
+        validation: validationResult
+      }
+    });
+  } catch (error) {
+    console.error('Fehler bei Test-Beleg-Erstellung:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei Test-Beleg-Erstellung: ' + error.message
+    });
+  }
+});
+
+// ============================================================================
+// DEP-Export Endpoint
+// ============================================================================
+
+// @route   GET /api/billing/export-dep
+// @desc    Exportiert DEP (Datenerfassungsprotokoll) für externe Datenträger
+// @access  Private
+router.get('/export-dep', auth, checkPermission('billing.read'), async (req, res) => {
+  try {
+    const { cashBoxId, startDate, endDate, format = 'json' } = req.query;
+    
+    const filter = {};
+    if (cashBoxId) filter.cashBoxId = cashBoxId;
+    if (startDate || endDate) {
+      filter['receiptData.timestamp'] = {};
+      if (startDate) filter['receiptData.timestamp'].$gte = new Date(startDate);
+      if (endDate) filter['receiptData.timestamp'].$lte = new Date(endDate);
+    }
+    
+    const receipts = await ReceiptChain.find(filter)
+      .sort({ receiptNumber: 1 }) // Chronologisch
+      .populate('invoiceId', 'invoiceNumber totalAmount')
+      .populate('createdBy', 'firstName lastName')
+      .lean();
+    
+    // Formatiere für Export
+    const exportData = {
+      exportDate: new Date().toISOString(),
+      cashBoxId: cashBoxId || 'all',
+      period: {
+        start: startDate || null,
+        end: endDate || null
+      },
+      totalReceipts: receipts.length,
+      receipts: receipts.map(receipt => ({
+        receiptNumber: receipt.receiptNumber,
+        receiptType: receipt.receiptType,
+        timestamp: receipt.receiptData.timestamp,
+        amount: receipt.receiptData.amount,
+        receiptHash: receipt.receiptHash,
+        previousReceiptHash: receipt.previousReceiptHash,
+        tseSignature: {
+          tseSerial: receipt.tseSignature.tseSerial,
+          signatureCounter: receipt.tseSignature.signatureCounter,
+          timestamp: receipt.tseSignature.timestamp,
+          signatureAlgorithm: receipt.tseSignature.signatureAlgorithm
+        },
+        tseFailure: receipt.tseFailure || { isFailed: false },
+        qrCodeData: receipt.qrCodeData,
+        paymentMethod: receipt.paymentMethod,
+        isCashTransaction: receipt.isCashTransaction,
+        invoiceNumber: receipt.invoiceId?.invoiceNumber || null
+      }))
+    };
+    
+    if (format === 'csv') {
+      // CSV-Export
+      const csvRows = [
+        ['Beleg-Nr.', 'Typ', 'Datum', 'Betrag', 'Hash', 'Vorheriger Hash', 'TSE-Serial', 'Counter', 'TSE-Ausfall'].join(',')
+      ];
+      
+      receipts.forEach(receipt => {
+        csvRows.push([
+          receipt.receiptNumber,
+          receipt.receiptType,
+          new Date(receipt.receiptData.timestamp).toISOString(),
+          (receipt.receiptData.amount / 100).toFixed(2),
+          receipt.receiptHash,
+          receipt.previousReceiptHash || '',
+          receipt.tseSignature.tseSerial,
+          receipt.tseSignature.signatureCounter,
+          receipt.tseFailure?.isFailed ? 'Ja' : 'Nein'
+        ].join(','));
+      });
+      
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="dep-export-${Date.now()}.csv"`);
+      res.send(csvRows.join('\n'));
+    } else {
+      // JSON-Export (Standard)
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="dep-export-${Date.now()}.json"`);
+      res.json(exportData);
+    }
+  } catch (error) {
+    console.error('Fehler beim DEP-Export:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim DEP-Export: ' + error.message
+    });
+  }
+});
+
+// @route   POST /api/billing/resign-receipts
+// @desc    Nachsigniert Belege die im Ausfallmodus erstellt wurden
+// @access  Private
+router.post('/resign-receipts', auth, checkPermission('billing.write'), async (req, res) => {
+  try {
+    const { cashRegisterId } = req.body;
+    
+    const cashRegister = await CashRegister.findById(cashRegisterId);
+    if (!cashRegister) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registrierkasse nicht gefunden'
+      });
+    }
+    
+    if (!cashRegister.tseFailure?.pendingResignatures || cashRegister.tseFailure.pendingResignatures.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Keine Belege zur Nachsignatur vorhanden',
+        data: { resignedCount: 0 }
+      });
+    }
+    
+    let resignedCount = 0;
+    const errors = [];
+    
+    for (const receiptId of cashRegister.tseFailure.pendingResignatures) {
+      try {
+        const receipt = await ReceiptChain.findById(receiptId);
+        if (!receipt || !receipt.tseFailure?.isFailed) {
+          continue; // Beleg wurde bereits nachsigniert oder existiert nicht
+        }
+        
+        // Generiere neue TSE-Signatur
+        const invoice = receipt.invoiceId ? await Invoice.findById(receipt.invoiceId) : null;
+        const previousReceipt = await ReceiptChain.findOne({
+          cashBoxId: receipt.cashBoxId,
+          receiptNumber: receipt.receiptNumber - 1
+        });
+        
+        const newTseSignature = await rksvoEnhanced.generateTSESignatureEnhanced(
+          invoice || { invoiceNumber: `RECEIPT-${receipt.receiptNumber}`, totalAmount: receipt.receiptData.amount },
+          cashRegister,
+          previousReceipt
+        );
+        
+        // Aktualisiere Beleg mit neuer Signatur
+        receipt.tseSignature = newTseSignature;
+        receipt.tseFailure.isFailed = false;
+        receipt.tseFailure.resignedAt = new Date();
+        receipt.tseFailure.resignedSignature = newTseSignature.signature;
+        
+        // Neu berechneter Hash
+        const receiptDataForHash = {
+          receiptNumber: receipt.receiptNumber,
+          receiptType: receipt.receiptType,
+          amount: receipt.receiptData.amount,
+          timestamp: receipt.receiptData.timestamp,
+          previousHash: receipt.previousReceiptHash,
+          tseSignature: newTseSignature.signature
+        };
+        receipt.receiptHash = crypto.createHash('sha256')
+          .update(JSON.stringify(receiptDataForHash))
+          .digest('hex');
+        
+        await receipt.save();
+        resignedCount++;
+      } catch (error) {
+        console.error(`Fehler bei Nachsignatur von Beleg ${receiptId}:`, error);
+        errors.push({ receiptId, error: error.message });
+      }
+    }
+    
+    // Entferne nachsignierte Belege aus der Liste
+    const stillPending = [];
+    for (const id of cashRegister.tseFailure.pendingResignatures) {
+      const receipt = await ReceiptChain.findById(id);
+      // Beleg ist noch ausstehend, wenn er nicht existiert oder noch als fehlgeschlagen markiert ist
+      if (!receipt || receipt.tseFailure?.isFailed === true) {
+        stillPending.push(id);
+      }
+    }
+    cashRegister.tseFailure.pendingResignatures = stillPending;
+    
+    // Wenn alle nachsigniert sind, markiere TSE als wiederhergestellt
+    if (cashRegister.tseFailure.pendingResignatures.length === 0) {
+      cashRegister.tseFailure.isFailed = false;
+      cashRegister.tseFailure.failureStartTime = null;
+    }
+    
+    await cashRegister.save();
+    
+    res.json({
+      success: true,
+      message: `${resignedCount} Belege erfolgreich nachsigniert`,
+      data: {
+        resignedCount,
+        errors: errors.length > 0 ? errors : undefined
+      }
+    });
+  } catch (error) {
+    console.error('Fehler bei Nachsignatur:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei Nachsignatur: ' + error.message
     });
   }
 });

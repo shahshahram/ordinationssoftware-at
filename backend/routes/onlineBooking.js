@@ -17,6 +17,7 @@ const SystemSettings = require('../models/SystemSettings');
 const AvailabilityService = require('../services/availabilityService');
 const { generateICSFromBooking } = require('../utils/icsGenerator');
 const InternalMessage = require('../models/InternalMessage');
+const TimeBlock = require('../models/TimeBlock');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
@@ -231,6 +232,33 @@ router.get('/availability', async (req, res) => {
         start: apt.startTime,
         end: apt.endTime
       }));
+
+      // Prüfe TimeBlocks (gesperrte Zeitslots)
+      // TimeBlocks mit Personal blockieren nur dieses Personal
+      // TimeBlocks ohne Personal blockieren alle
+      const timeBlocks = await TimeBlock.find({
+        $or: [
+          { doctor: doctorId }, // TimeBlock für dieses Personal
+          { doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
+          { doctor: null } // Oder TimeBlocks mit null (blockieren alle)
+        ],
+        startTime: {
+          $gte: new Date(`${date}T00:00:00`),
+          $lt: new Date(`${date}T23:59:59`)
+        },
+        status: { $in: ['blocked', 'reserved'] } // Nur aktive Sperren
+      }).catch(err => {
+        console.error('[OnlineBooking] Error fetching time blocks:', err);
+        return []; // Fallback: keine TimeBlocks gefunden
+      });
+
+      // Füge TimeBlocks zu bookedSlots hinzu
+      timeBlocks.forEach(block => {
+        bookedSlots.push({
+          start: block.startTime,
+          end: block.endTime
+        });
+      });
 
       // Generiere 30-Minuten-Slots mit Pausenzeiten-Berücksichtigung
       const slotDuration = parseInt(duration) || 30;
@@ -2155,6 +2183,40 @@ async function checkAvailability(doctorId, date, time) {
     // Prüfe ob der gewünschte Zeitpunkt mit einem bestehenden Termin kollidiert
     if (startDateTime < existingEnd && endDateTime > existingStart) {
       console.log(`[OnlineBooking] Time slot conflicts with existing appointment`);
+      return false;
+    }
+  }
+
+  // 2. Prüfe TimeBlocks (gesperrte Zeitslots)
+  // TimeBlocks mit Personal blockieren nur dieses Personal
+  // TimeBlocks ohne Personal blockieren alle
+  const timeBlocks = await TimeBlock.find({
+    $or: [
+      { doctor: doctorId }, // TimeBlock für dieses Personal
+      { doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
+      { doctor: null } // Oder TimeBlocks mit null (blockieren alle)
+    ],
+    startTime: {
+      $gte: new Date(`${dateStr}T00:00:00`),
+      $lt: new Date(`${dateStr}T23:59:59`)
+    },
+    status: { $in: ['blocked', 'reserved'] } // Nur aktive Sperren
+  }).catch(err => {
+    console.error('[OnlineBooking] Error fetching time blocks:', err);
+    return []; // Fallback: keine TimeBlocks gefunden
+  });
+
+  console.log(`[OnlineBooking] Found ${timeBlocks.length} time blocks for this date`);
+  
+  // Prüfe ob der gewünschte Zeitpunkt mit einem TimeBlock kollidiert
+  for (const timeBlock of timeBlocks) {
+    const blockStart = new Date(timeBlock.startTime);
+    const blockEnd = new Date(timeBlock.endTime);
+    console.log(`[OnlineBooking] Checking against time block: ${blockStart.toISOString()} - ${blockEnd.toISOString()}`);
+    
+    // Prüfe ob der gewünschte Zeitpunkt mit einem TimeBlock kollidiert
+    if (startDateTime < blockEnd && endDateTime > blockStart) {
+      console.log(`[OnlineBooking] Time slot conflicts with time block: ${timeBlock.reason || 'Gesperrt'}`);
       return false;
     }
   }

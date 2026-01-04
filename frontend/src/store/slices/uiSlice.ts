@@ -21,9 +21,24 @@ interface Notification {
   read: boolean;
 }
 
+// Lade Theme aus localStorage oder verwende 'light' als Standard
+const getInitialTheme = (): 'light' | 'dark' => {
+  if (typeof window !== 'undefined') {
+    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    if (savedTheme === 'light' || savedTheme === 'dark') {
+      return savedTheme;
+    }
+    // Prüfe System-Präferenz
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+  }
+  return 'light';
+};
+
 const initialState: UIState = {
   sidebarOpen: false,
-  theme: 'light',
+  theme: getInitialTheme(),
   notifications: [],
   loading: false,
   snackbar: {
@@ -45,6 +60,17 @@ const uiSlice = createSlice({
     },
     setTheme: (state, action: PayloadAction<'light' | 'dark'>) => {
       state.theme = action.payload;
+      // Speichere Theme-Präferenz im localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('theme', action.payload);
+      }
+    },
+    toggleTheme: (state) => {
+      state.theme = state.theme === 'light' ? 'dark' : 'light';
+      // Speichere Theme-Präferenz im localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('theme', state.theme);
+      }
     },
     addNotification: (state, action: PayloadAction<Omit<Notification, 'id' | 'timestamp' | 'read'>>) => {
       const notification: Notification = {
@@ -87,6 +113,7 @@ export const {
   toggleSidebar,
   setSidebarOpen,
   setTheme,
+  toggleTheme,
   addNotification,
   markNotificationAsRead,
   removeNotification,

@@ -53,6 +53,14 @@ interface StaffUtilization {
   utilizationRate: number;
 }
 
+// Hilfsfunktion zum Entfernen von HTML-Tags
+const stripHtmlTags = (html: string): string => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
 const Availability: React.FC = () => {
   const [staffId, setStaffId] = useState<string>('');
   const [serviceId, setServiceId] = useState<string>('');
@@ -306,7 +314,10 @@ const Availability: React.FC = () => {
             <Grid size={{ xs: 12, md: 4 }}>
               <Autocomplete
                 options={serviceList}
-                getOptionLabel={(option: any) => option.name || option.code || 'Unbekannt'}
+                getOptionLabel={(option: any) => {
+                  const cleanName = stripHtmlTags(option.name || '');
+                  return cleanName || option.code || 'Unbekannt';
+                }}
                 value={serviceList.find((s: any) => s._id === serviceId) || null}
                 onChange={(_, newValue: any) => setServiceId(newValue?._id || '')}
                 renderInput={(params) => <TextField {...params} label="Service" />}
@@ -317,10 +328,11 @@ const Availability: React.FC = () => {
                 renderOption={(props, option: any) => {
                   const { key, ...restProps } = props;
                   const uniqueKey = option._id || option.id || key;
+                  const cleanName = stripHtmlTags(option.name || '');
                   return (
                     <Box component="li" key={uniqueKey} {...restProps}>
                       <Typography variant="body2">
-                        {option.name || option.code || 'Unbekannt'}
+                        {cleanName || option.code || 'Unbekannt'}
                       </Typography>
                     </Box>
                   );
