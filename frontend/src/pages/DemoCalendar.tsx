@@ -82,6 +82,7 @@ import DiagnosisManager from '../components/DiagnosisManager';
 import CreateTaskDialog from '../components/Tasks/CreateTaskDialog';
 import api from '../utils/api';
 import { useTimeSlotSelection } from '../hooks/useTimeSlotSelection';
+import { eventBus, EVENTS } from '../utils/eventBus';
 
 // Hilfsfunktion zum Entfernen von HTML-Tags
 const stripHtmlTags = (html: string): string => {
@@ -251,7 +252,21 @@ const DemoCalendar: React.FC = () => {
     start?: Date;
     end?: Date;
     staffId?: string;
+    day?: Date;
   } | null>(null);
+  
+  // LocationException State
+  const [locationExceptions, setLocationExceptions] = useState<any[]>([]);
+  const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
+  const [selectedException, setSelectedException] = useState<any | null>(null);
+  const [exceptionFormData, setExceptionFormData] = useState({
+    date: '',
+    startTime: '08:00',
+    endTime: '17:00',
+    breakStart: '',
+    breakEnd: '',
+    label: 'Sonderöffnung'
+  });
   
   // Drag-Selection Hook
   const {
@@ -856,11 +871,78 @@ const DemoCalendar: React.FC = () => {
     }
   }, [currentDate]);
 
-  // Load TimeBlocks when currentDate changes
+  const loadLocationExceptions = useCallback(async () => {
+    try {
+      if (!selectedLocation || selectedLocation === 'all') {
+        setLocationExceptions([]);
+        return;
+      }
+      
+      const startDate = startOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+      const endDate = endOfWeek(currentDate, { locale: de, weekStartsOn: 1 });
+      
+      const response = await api.get('/locations/exceptions', {
+        location_id: selectedLocation,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+      });
+      
+      if (response.success && response.data) {
+        const exceptions = Array.isArray(response.data) ? response.data : [];
+        setLocationExceptions(exceptions);
+      } else {
+        setLocationExceptions([]);
+      }
+    } catch (error) {
+      console.error('Error loading location exceptions:', error);
+    }
+  }, [currentDate, selectedLocation]);
+  
+  // Load TimeBlocks and LocationExceptions when currentDate changes
   useEffect(() => {
     loadTimeBlocks();
-  }, [loadTimeBlocks]);
-
+    loadLocationExceptions();
+  }, [loadTimeBlocks, loadLocationExceptions]);
+  
+  // Load LocationExceptions when selectedLocation changes
+  useEffect(() => {
+    loadLocationExceptions();
+  }, [selectedLocation, loadLocationExceptions]);
+  
+  // Listen for location exception events to reload data
+  useEffect(() => {
+    const handleExceptionCreated = (exceptionData: any) => {
+      console.log('📢 Received LOCATION_EXCEPTION_CREATED event:', exceptionData);
+      console.log('📢 Current selectedLocation:', selectedLocation);
+      // Always reload, regardless of location - the filtering will happen in the rendering
+      console.log('📢 Reloading location exceptions after creation...');
+      loadLocationExceptions();
+    };
+    const handleExceptionUpdated = (exceptionData: any) => {
+      console.log('📢 Received LOCATION_EXCEPTION_UPDATED event:', exceptionData);
+      console.log('📢 Current selectedLocation:', selectedLocation);
+      // Always reload, regardless of location - the filtering will happen in the rendering
+      console.log('📢 Reloading location exceptions after update...');
+      loadLocationExceptions();
+    };
+    const handleExceptionDeleted = (exceptionId: any) => {
+      console.log('📢 Received LOCATION_EXCEPTION_DELETED event:', exceptionId);
+      // Always reload on delete, as we don't know which location it was for
+      console.log('📢 Reloading location exceptions after deletion...');
+      loadLocationExceptions();
+    };
+    
+    eventBus.on(EVENTS.LOCATION_EXCEPTION_CREATED, handleExceptionCreated);
+    eventBus.on(EVENTS.LOCATION_EXCEPTION_UPDATED, handleExceptionUpdated);
+    eventBus.on(EVENTS.LOCATION_EXCEPTION_DELETED, handleExceptionDeleted);
+    
+    return () => {
+      eventBus.off(EVENTS.LOCATION_EXCEPTION_CREATED, handleExceptionCreated);
+      eventBus.off(EVENTS.LOCATION_EXCEPTION_UPDATED, handleExceptionUpdated);
+      eventBus.off(EVENTS.LOCATION_EXCEPTION_DELETED, handleExceptionDeleted);
+    };
+  }, [loadLocationExceptions, selectedLocation]);
+  
   // Handle Block Time
   const handleBlockTime = (start: Date, end: Date, staffId?: string) => {
     // Öffne Dialog für Namenseingabe
@@ -967,6 +1049,159 @@ const DemoCalendar: React.FC = () => {
       setSnackbar({
         open: true,
         message: error.response?.data?.message || 'Fehler beim Zusammenführen',
+        severity: 'error'
+      });
+    }
+  };
+  
+  // Handle LocationException
+  const handleSaveException = async () => {
+    try {
+      if (!selectedLocation || selectedLocation === 'all') {
+        setSnackbar({
+          open: true,
+          message: 'Bitte wählen Sie einen Standort aus',
+          severity: 'warning'
+        });
+        return;
+      }
+      
+      if (!exceptionFormData.date || !exceptionFormData.startTime || !exceptionFormData.endTime) {
+        setSnackbar({
+          open: true,
+          message: 'Bitte füllen Sie alle erforderlichen Felder aus',
+          severity: 'warning'
+        });
+        return;
+      }
+      
+      const exceptionData = {
+        date: exceptionFormData.date,
+        startTime: exceptionFormData.startTime,
+        endTime: exceptionFormData.endTime,
+        breakStart: exceptionFormData.breakStart || undefined,
+        breakEnd: exceptionFormData.breakEnd || undefined,
+        label: exceptionFormData.label || 'Sonderöffnung'
+      };
+      
+      let response;
+      if (selectedException) {
+        // Update
+        response = await api.put(`/locations/${selectedLocation}/exceptions/${selectedException._id}`, exceptionData);
+      } else {
+        // Create
+        response = await api.post(`/locations/${selectedLocation}/exceptions`, exceptionData);
+      }
+      
+      if (response.success) {
+        setSnackbar({
+          open: true,
+          message: selectedException ? 'Ausnahme erfolgreich aktualisiert' : 'Sonderöffnung erfolgreich erstellt',
+          severity: 'success'
+        });
+        
+        await loadLocationExceptions();
+        // Emit event to notify other components
+        const eventData = (response.data as any)?.data || response.data;
+        console.log('📢 Emitting location exception event:', selectedException ? EVENTS.LOCATION_EXCEPTION_UPDATED : EVENTS.LOCATION_EXCEPTION_CREATED, eventData);
+        eventBus.emit(selectedException ? EVENTS.LOCATION_EXCEPTION_UPDATED : EVENTS.LOCATION_EXCEPTION_CREATED, eventData);
+        setExceptionDialogOpen(false);
+        setSelectedException(null);
+        setExceptionFormData({
+          date: '',
+          startTime: '08:00',
+          endTime: '17:00',
+          breakStart: '',
+          breakEnd: '',
+          label: 'Sonderöffnung'
+        });
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Fehler beim Speichern der Ausnahme';
+      
+      // Wenn die Exception bereits existiert, versuche sie zu laden und im Edit-Modus zu öffnen
+      if (errorMessage.includes('existiert bereits')) {
+        try {
+          // Lade alle Exceptions für diese Location und dieses Datum
+          const startDate = new Date(exceptionFormData.date);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(exceptionFormData.date);
+          endDate.setHours(23, 59, 59, 999);
+          
+          const exceptionsResponse = await api.get('/locations/exceptions', {
+            location_id: selectedLocation,
+            startDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
+          });
+          
+          if (exceptionsResponse.success && exceptionsResponse.data) {
+            const exceptions = Array.isArray(exceptionsResponse.data) ? exceptionsResponse.data : [];
+            const existingException = exceptions.find((exc: any) => {
+              const excDate = new Date(exc.date);
+              return excDate.toDateString() === startDate.toDateString();
+            });
+            
+            if (existingException) {
+              // Öffne Dialog im Edit-Modus
+              setSelectedException(existingException);
+              setExceptionFormData({
+                date: format(new Date(existingException.date), 'yyyy-MM-dd'),
+                startTime: existingException.startTime,
+                endTime: existingException.endTime,
+                breakStart: existingException.breakStart || '',
+                breakEnd: existingException.breakEnd || '',
+                label: existingException.label || 'Sonderöffnung'
+              });
+              setExceptionDialogOpen(true);
+              setSnackbar({
+                open: true,
+                message: 'Eine Ausnahme für dieses Datum existiert bereits. Sie können sie jetzt bearbeiten.',
+                severity: 'info'
+              });
+              return;
+            }
+          }
+        } catch (loadError) {
+          console.error('Error loading existing exception:', loadError);
+        }
+      }
+      
+      setSnackbar({
+        open: true,
+        message: errorMessage,
+        severity: 'error'
+      });
+    }
+  };
+  
+  const handleDeleteException = async (exceptionId: string) => {
+    try {
+      if (!selectedLocation || selectedLocation === 'all') {
+        return;
+      }
+      
+      const confirmed = window.confirm('Möchten Sie diese Sonderöffnung wirklich löschen?');
+      if (!confirmed) {
+        return;
+      }
+      
+      const response = await api.delete(`/locations/${selectedLocation}/exceptions/${exceptionId}`);
+      
+      if (response.success) {
+        setSnackbar({
+          open: true,
+          message: 'Sonderöffnung erfolgreich gelöscht',
+          severity: 'success'
+        });
+        
+        await loadLocationExceptions();
+        // Emit event to notify other components
+        eventBus.emit(EVENTS.LOCATION_EXCEPTION_DELETED, exceptionId);
+      }
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Fehler beim Löschen der Ausnahme',
         severity: 'error'
       });
     }
@@ -1801,6 +2036,18 @@ const DemoCalendar: React.FC = () => {
                     borderColor: 'divider',
                     position: 'relative',
                   }}
+                  onContextMenu={(e) => {
+                    // Context-Menü für Tag-Header (Sonderöffnung setzen)
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (selectedLocation && selectedLocation !== 'all') {
+                      setContextMenuAnchor({
+                        x: e.clientX,
+                        y: e.clientY,
+                        day: day
+                      });
+                    }
+                  }}
                 >
                   {timeSlots.map((time, index) => {
                     const isInSelection = isSlotInSelection(day, time);
@@ -1825,8 +2072,9 @@ const DemoCalendar: React.FC = () => {
                           }
                         }}
                         onContextMenu={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation(); // Verhindere Event-Bubbling zum Tag-Header
                           if (selectionStart && selectionEnd) {
-                            e.preventDefault();
                             const range = getSelectionRange();
                             if (range) {
                               // Übergebe selectedStaff als staffId, wenn eine Person ausgewählt ist
@@ -1839,6 +2087,9 @@ const DemoCalendar: React.FC = () => {
                                 staffId: staffIdForBlock
                               });
                             }
+                          } else {
+                            // Wenn keine Auswahl vorhanden ist, zeige kein Context-Menü
+                            setContextMenuAnchor(null);
                           }
                         }}
                         onClick={() => {
@@ -1869,12 +2120,19 @@ const DemoCalendar: React.FC = () => {
                   })}
 
                   {/* TimeBlocks */}
+                  {/* WICHTIG: Zusammengeführte TimeBlocks (status='merged') werden NICHT mehr als TimeBlocks angezeigt, 
+                      da sie bereits als normale Appointments erscheinen */}
                   {(() => {
                     const filteredBlocks = timeBlocks.filter((block: any) => {
                       const blockDate = new Date(block.startTime);
                       const isSameDayResult = isSameDay(blockDate, day);
                       
                       if (!isSameDayResult) return false;
+                      
+                      // Nur blocked TimeBlocks anzeigen (zusammengeführte werden nicht mehr angezeigt)
+                      if (block.status !== 'blocked') {
+                        return false;
+                      }
                       
                       // Filter nach Personal: Wenn eine Person ausgewählt ist, zeige nur TimeBlocks für diese Person oder TimeBlocks ohne Personal (für alle)
                       // WICHTIG: Wenn ein TimeBlock ein staffId-Feld hat (nicht null/undefined), soll es NUR bei dieser Person angezeigt werden
@@ -1998,6 +2256,136 @@ const DemoCalendar: React.FC = () => {
                       );
                     });
                   })()}
+
+                  {/* LocationExceptions (Sonderöffnungen) */}
+                  {locationExceptions
+                    .filter((exception: any) => {
+                      if (!selectedLocation || selectedLocation === 'all') {
+                        return false;
+                      }
+                      
+                      const exceptionDate = new Date(exception.date);
+                      const isSameDayResult = isSameDay(exceptionDate, day);
+                      
+                      if (!isSameDayResult) return false;
+                      
+                      // Prüfe ob Exception für den ausgewählten Standort ist
+                      const exceptionLocationId = typeof exception.location_id === 'object' && exception.location_id !== null
+                        ? exception.location_id._id || exception.location_id
+                        : exception.location_id;
+                      
+                      if (String(exceptionLocationId) !== String(selectedLocation)) {
+                        return false;
+                      }
+                      
+                      return exception.isActive !== false; // Nur aktive Ausnahmen anzeigen
+                    })
+                    .map((exception: any) => {
+                      const exceptionDate = new Date(exception.date);
+                      const [startHours, startMinutes] = exception.startTime.split(':').map(Number);
+                      const [endHours, endMinutes] = exception.endTime.split(':').map(Number);
+                      
+                      const startTime = new Date(exceptionDate);
+                      startTime.setHours(startHours, startMinutes, 0, 0);
+                      
+                      const endTime = new Date(exceptionDate);
+                      endTime.setHours(endHours, endMinutes, 0, 0);
+                      
+                      const startTotalMinutes = startHours * 60 + startMinutes;
+                      const endTotalMinutes = endHours * 60 + endMinutes;
+                      const duration = endTotalMinutes - startTotalMinutes;
+                      
+                      // Positionierung: 6:00 = 0px, jede 30min = 40px
+                      const top = Math.max(0, ((startTotalMinutes - 360) / 30) * 40);
+                      const height = Math.max(40, (duration / 30) * 40);
+                      
+                      // Nur rendern wenn im sichtbaren Bereich
+                      if (top >= timeSlots.length * 40 || top + height <= 0) {
+                        return null;
+                      }
+                      
+                      return (
+                        <Tooltip
+                          key={exception._id}
+                          title={
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                                {exception.label || 'Sonderöffnung'}
+                              </Typography>
+                              <Typography variant="caption" display="block">
+                                {exception.startTime} - {exception.endTime}
+                              </Typography>
+                              {exception.breakStart && exception.breakEnd && (
+                                <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                                  Pause: {exception.breakStart} - {exception.breakEnd}
+                                </Typography>
+                              )}
+                            </Box>
+                          }
+                          arrow
+                        >
+                          <Box
+                            onContextMenu={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setSelectedException(exception);
+                              setExceptionFormData({
+                                date: format(exceptionDate, 'yyyy-MM-dd'),
+                                startTime: exception.startTime,
+                                endTime: exception.endTime,
+                                breakStart: exception.breakStart || '',
+                                breakEnd: exception.breakEnd || '',
+                                label: exception.label || 'Sonderöffnung'
+                              });
+                              setExceptionDialogOpen(true);
+                            }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedException(exception);
+                              setExceptionFormData({
+                                date: format(exceptionDate, 'yyyy-MM-dd'),
+                                startTime: exception.startTime,
+                                endTime: exception.endTime,
+                                breakStart: exception.breakStart || '',
+                                breakEnd: exception.breakEnd || '',
+                                label: exception.label || 'Sonderöffnung'
+                              });
+                              setExceptionDialogOpen(true);
+                            }}
+                            sx={{
+                              position: 'absolute',
+                              left: 4,
+                              right: 4,
+                              top: `${Math.max(0, top)}px`,
+                              height: `${height}px`,
+                              minHeight: '40px',
+                              bgcolor: 'rgba(33, 150, 243, 0.7)', // Blau für Sonderöffnungen
+                              border: '3px solid #2196f3',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'center',
+                              alignItems: 'center',
+                              zIndex: 9, // Unter TimeBlocks, aber über Zeitslots
+                              pointerEvents: 'auto',
+                              '&:hover': {
+                                bgcolor: 'rgba(33, 150, 243, 0.5)',
+                                boxShadow: 2
+                              }
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+                              {exception.label || 'Sonderöffnung'}
+                            </Typography>
+                            <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'white', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>
+                              {exception.startTime} - {exception.endTime}
+                            </Typography>
+                          </Box>
+                        </Tooltip>
+                      );
+                    })}
 
                   {/* Appointments */}
                   {getAppointmentsForDay(day).map((appointment) => {
@@ -3503,6 +3891,57 @@ const DemoCalendar: React.FC = () => {
           </MenuItem>
         )}
         
+        {/* Option: Wenn auf Tag geklickt → "Sonderöffnung setzen" */}
+        {contextMenuAnchor?.day && !contextMenuAnchor?.timeBlock && !contextMenuAnchor?.start && (
+          <MenuItem 
+            onClick={() => {
+              if (contextMenuAnchor?.day && selectedLocation && selectedLocation !== 'all') {
+                const dayDate = contextMenuAnchor.day;
+                const dayDateString = format(dayDate, 'yyyy-MM-dd');
+                
+                // Prüfe ob bereits eine Ausnahme für dieses Datum existiert
+                const existingException = locationExceptions.find((exception: any) => {
+                  const exceptionDate = new Date(exception.date);
+                  const exceptionDateString = format(exceptionDate, 'yyyy-MM-dd');
+                  return exceptionDateString === dayDateString && exception.isActive !== false;
+                });
+                
+                if (existingException) {
+                  // Bearbeitungsmodus: Öffne Dialog mit bestehender Ausnahme
+                  const exceptionDate = new Date(existingException.date);
+                  setSelectedException(existingException);
+                  setExceptionFormData({
+                    date: format(exceptionDate, 'yyyy-MM-dd'),
+                    startTime: existingException.startTime,
+                    endTime: existingException.endTime,
+                    breakStart: existingException.breakStart || '',
+                    breakEnd: existingException.breakEnd || '',
+                    label: existingException.label || 'Sonderöffnung'
+                  });
+                } else {
+                  // Erstellungsmodus: Öffne Dialog mit Standardwerten
+                  setSelectedException(null);
+                  setExceptionFormData({
+                    date: dayDateString,
+                    startTime: '08:00',
+                    endTime: '17:00',
+                    breakStart: '',
+                    breakEnd: '',
+                    label: 'Sonderöffnung'
+                  });
+                }
+                setExceptionDialogOpen(true);
+                setContextMenuAnchor(null);
+              }
+            }}
+          >
+            <ListItemIcon>
+              <Schedule fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Sonderöffnung für diesen Tag setzen</ListItemText>
+          </MenuItem>
+        )}
+        
         {/* Option 2: Wenn auf TimeBlock geklickt → "Zusammenführen" */}
         {contextMenuAnchor?.timeBlock && contextMenuAnchor.timeBlock.status === 'blocked' && (
           <MenuItem 
@@ -3554,7 +3993,189 @@ const DemoCalendar: React.FC = () => {
             <ListItemText>Termin erstellen</ListItemText>
           </MenuItem>
         )}
+        
+        {/* Option 5: Wenn auf Selection geklickt → "Sonderöffnung setzen" */}
+        {contextMenuAnchor?.start && contextMenuAnchor?.end && selectedLocation && selectedLocation !== 'all' && (
+          <MenuItem 
+            onClick={() => {
+              if (contextMenuAnchor?.start && selectedLocation && selectedLocation !== 'all') {
+                const dayDate = new Date(contextMenuAnchor.start);
+                const dayDateString = format(dayDate, 'yyyy-MM-dd');
+                
+                // Prüfe ob bereits eine Ausnahme für dieses Datum existiert
+                const existingException = locationExceptions.find((exception: any) => {
+                  const exceptionDate = new Date(exception.date);
+                  const exceptionDateString = format(exceptionDate, 'yyyy-MM-dd');
+                  return exceptionDateString === dayDateString && exception.isActive !== false;
+                });
+                
+                if (existingException) {
+                  // Bearbeitungsmodus: Öffne Dialog mit bestehender Ausnahme
+                  const exceptionDate = new Date(existingException.date);
+                  setSelectedException(existingException);
+                  setExceptionFormData({
+                    date: format(exceptionDate, 'yyyy-MM-dd'),
+                    startTime: existingException.startTime,
+                    endTime: existingException.endTime,
+                    breakStart: existingException.breakStart || '',
+                    breakEnd: existingException.breakEnd || '',
+                    label: existingException.label || 'Sonderöffnung'
+                  });
+                } else {
+                  // Erstellungsmodus: Öffne Dialog mit Standardwerten basierend auf der Auswahl
+                  const startTime = contextMenuAnchor.start ? format(contextMenuAnchor.start, 'HH:mm') : '08:00';
+                  const endTime = contextMenuAnchor.end ? format(contextMenuAnchor.end, 'HH:mm') : '17:00';
+                  setSelectedException(null);
+                  setExceptionFormData({
+                    date: dayDateString,
+                    startTime: startTime,
+                    endTime: endTime,
+                    breakStart: '',
+                    breakEnd: '',
+                    label: 'Sonderöffnung'
+                  });
+                }
+                setExceptionDialogOpen(true);
+                setContextMenuAnchor(null);
+              }
+            }}
+          >
+            <ListItemIcon>
+              <Schedule fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Sonderöffnung für diesen Tag setzen</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
+
+      {/* Dialog für LocationException (Sonderöffnung) */}
+      <Dialog 
+        open={exceptionDialogOpen} 
+        onClose={() => {
+          setExceptionDialogOpen(false);
+          setSelectedException(null);
+          setExceptionFormData({
+            date: '',
+            startTime: '08:00',
+            endTime: '17:00',
+            breakStart: '',
+            breakEnd: '',
+            label: 'Sonderöffnung'
+          });
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedException ? 'Sonderöffnung bearbeiten' : 'Sonderöffnung für Tag setzen'}
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            label="Datum"
+            type="date"
+            fullWidth
+            margin="normal"
+            value={exceptionFormData.date}
+            onChange={(e) => setExceptionFormData({ ...exceptionFormData, date: e.target.value })}
+            InputLabelProps={{ shrink: true }}
+            required
+          />
+          
+          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+            <TextField
+              label="Startzeit"
+              type="time"
+              fullWidth
+              value={exceptionFormData.startTime}
+              onChange={(e) => setExceptionFormData({ ...exceptionFormData, startTime: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+              required
+            />
+            
+            <TextField
+              label="Endzeit"
+              type="time"
+              fullWidth
+              value={exceptionFormData.endTime}
+              onChange={(e) => setExceptionFormData({ ...exceptionFormData, endTime: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+              required
+            />
+          </Box>
+          
+          <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+            <TextField
+              label="Pause von (optional)"
+              type="time"
+              fullWidth
+              value={exceptionFormData.breakStart}
+              onChange={(e) => setExceptionFormData({ ...exceptionFormData, breakStart: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+            />
+            
+            <TextField
+              label="Pause bis (optional)"
+              type="time"
+              fullWidth
+              value={exceptionFormData.breakEnd}
+              onChange={(e) => setExceptionFormData({ ...exceptionFormData, breakEnd: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Box>
+          
+          <TextField
+            label="Beschreibung"
+            fullWidth
+            margin="normal"
+            value={exceptionFormData.label}
+            onChange={(e) => setExceptionFormData({ ...exceptionFormData, label: e.target.value })}
+            placeholder="z.B. Sonderöffnung"
+          />
+          
+          {selectedException && (
+            <Box sx={{ mt: 2 }}>
+              <Button
+                variant="outlined"
+                color="error"
+                fullWidth
+                onClick={() => {
+                  if (selectedException) {
+                    handleDeleteException(selectedException._id);
+                    setExceptionDialogOpen(false);
+                    setSelectedException(null);
+                  }
+                }}
+              >
+                Sonderöffnung löschen
+              </Button>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button 
+            onClick={() => {
+              setExceptionDialogOpen(false);
+              setSelectedException(null);
+              setExceptionFormData({
+                date: '',
+                startTime: '08:00',
+                endTime: '17:00',
+                breakStart: '',
+                breakEnd: '',
+                label: 'Sonderöffnung'
+              });
+            }}
+          >
+            Abbrechen
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSaveException}
+          >
+            {selectedException ? 'Aktualisieren' : 'Erstellen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Merge-Dialog für TimeBlock */}
       <Dialog 

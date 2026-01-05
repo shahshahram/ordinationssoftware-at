@@ -74,7 +74,16 @@ router.post('/check-staff-availability', [
   body('location_id').optional().isMongoId().withMessage('Ungültige Standort-ID')
 ], async (req, res) => {
   try {
-    if (!req.user.permissions.includes('staff.read')) {
+    // Verwende RBAC-System statt direkter Permission-Prüfung
+    const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Personalverwaltung'

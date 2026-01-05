@@ -421,10 +421,43 @@ router.post('/:id/merge', auth, checkPermission('appointments.write'), async (re
       });
     }
 
+    // Lade Service-Daten, um assigned_users und andere Felder zu übernehmen
+    let assignedUsers = [];
+    let assignedRooms = timeBlock.assigned_rooms || [];
+    let assignedDevices = timeBlock.assigned_devices || [];
+    
+    if (serviceId) {
+      const ServiceCatalog = require('../models/ServiceCatalog');
+      const service = await ServiceCatalog.findById(serviceId);
+      if (service) {
+        // Übernehme assigned_users aus der Leistung
+        if (service.assigned_users && Array.isArray(service.assigned_users)) {
+          assignedUsers = service.assigned_users.map(u => u._id || u);
+        }
+        
+        // Übernehme assigned_rooms aus der Leistung, falls vorhanden
+        if (service.assigned_rooms && Array.isArray(service.assigned_rooms)) {
+          assignedRooms = service.assigned_rooms.map(r => r._id || r);
+        }
+        
+        // Übernehme assigned_devices aus der Leistung, falls vorhanden
+        if (service.assigned_devices && Array.isArray(service.assigned_devices)) {
+          assignedDevices = service.assigned_devices.map(d => d._id || d);
+        }
+      }
+    }
+    
+    // Füge staffId aus TimeBlock zu assigned_users hinzu, falls nicht bereits vorhanden
+    const timeBlockStaffId = timeBlock.staffId || timeBlock.doctor;
+    if (timeBlockStaffId && !assignedUsers.includes(timeBlockStaffId)) {
+      assignedUsers.push(timeBlockStaffId);
+    }
+
     // Appointment erstellen
     const appointment = new Appointment({
       patient: patientId,
-      doctor: timeBlock.staffId || timeBlock.doctor || req.user._id, // Verwende staffId, fallback zu doctor für Rückwärtskompatibilität
+      doctor: timeBlockStaffId || req.user._id, // Verwende staffId, fallback zu doctor für Rückwärtskompatibilität
+      assigned_users: assignedUsers, // Übernehme assigned_users aus der Leistung
       startTime: timeBlock.startTime,
       endTime: timeBlock.endTime,
       service: serviceId,
@@ -432,10 +465,10 @@ router.post('/:id/merge', auth, checkPermission('appointments.write'), async (re
       notes: notes,
       type: type || 'konsultation',
       status: status || 'geplant',
-      room: room || timeBlock.assigned_rooms?.[0],
-      devices: devices || timeBlock.assigned_devices || [],
-      assigned_rooms: timeBlock.assigned_rooms || [],
-      assigned_devices: timeBlock.assigned_devices || [],
+      room: room || assignedRooms?.[0] || timeBlock.assigned_rooms?.[0],
+      devices: devices || assignedDevices || timeBlock.assigned_devices || [],
+      assigned_rooms: assignedRooms,
+      assigned_devices: assignedDevices,
       locationId: timeBlock.locationId,
       bookingType: 'internal',
       createdBy: req.user._id,

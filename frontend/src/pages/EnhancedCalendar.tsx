@@ -1255,14 +1255,16 @@ const EnhancedCalendar: React.FC = () => {
         })}
 
         {/* TimeBlocks (gesperrte Zeitslots) */}
+        {/* WICHTIG: Zusammengeführte TimeBlocks (status='merged') werden NICHT mehr als TimeBlocks angezeigt, 
+            da sie bereits als normale Appointments erscheinen */}
         {timeBlocks
           .filter((block: any) => {
             const blockDate = new Date(block.startTime);
             const isSameDayResult = isSameDay(blockDate, day);
             if (!isSameDayResult) return false;
             
-            // Filter nach Status
-            if (block.status !== 'blocked' && block.status !== 'merged') {
+            // Filter nach Status - nur blocked anzeigen
+            if (block.status !== 'blocked') {
               return false;
             }
             

@@ -18,6 +18,7 @@ const AvailabilityService = require('../services/availabilityService');
 const { generateICSFromBooking } = require('../utils/icsGenerator');
 const InternalMessage = require('../models/InternalMessage');
 const TimeBlock = require('../models/TimeBlock');
+const LocationException = require('../models/LocationException');
 const auth = require('../middleware/auth');
 const router = express.Router();
 
@@ -34,7 +35,7 @@ try {
 // @access  Public
 router.get('/availability', async (req, res) => {
   try {
-    const { date, doctorId, duration = 30, serviceId } = req.query;
+    const { date, doctorId, duration = 30, serviceId, locationId } = req.query;
     
     if (!date || !doctorId) {
       return res.status(400).json({
@@ -152,6 +153,40 @@ router.get('/availability', async (req, res) => {
           message: 'Vergangene Daten sind nicht verfügbar'
         }
       });
+    }
+
+    // Prüfe ob eine LocationException für dieses Datum existiert (überschreibt normale Öffnungszeiten)
+    if (locationId) {
+      try {
+        const exceptionDate = new Date(date);
+        exceptionDate.setHours(0, 0, 0, 0);
+        const exceptionEndDate = new Date(exceptionDate);
+        exceptionEndDate.setHours(23, 59, 59, 999);
+        
+        const locationException = await LocationException.findOne({
+          location_id: locationId,
+          date: {
+            $gte: exceptionDate,
+            $lte: exceptionEndDate
+          },
+          isActive: true
+        });
+        
+        if (locationException) {
+          console.log(`[OnlineBooking] Found LocationException for ${date}: ${locationException.startTime} - ${locationException.endTime}`);
+          // Überschreibe workingDay mit Exception-Daten
+          workingHours[dayOfWeek] = {
+            start: locationException.startTime,
+            end: locationException.endTime,
+            isWorking: true,
+            breakStart: locationException.breakStart,
+            breakEnd: locationException.breakEnd
+          };
+        }
+      } catch (exceptionError) {
+        console.warn('[OnlineBooking] Error checking LocationException:', exceptionError);
+        // Weiter mit normalen Öffnungszeiten
+      }
     }
 
     const workingDay = workingHours[dayOfWeek];

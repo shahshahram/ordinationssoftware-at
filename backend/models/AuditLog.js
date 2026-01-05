@@ -54,6 +54,7 @@ const AuditLogSchema = new mongoose.Schema({
       'staff-location-assignments.read', 'staff-location-assignments.create', 'staff-location-assignments.update', 'staff-location-assignments.delete',
       'location-hours.read', 'location-hours.create', 'location-hours.update', 'location-hours.delete',
       'location-closures.read', 'location-closures.create', 'location-closures.update', 'location-closures.delete',
+      'location-exceptions.read', 'location-exceptions.create', 'location-exceptions.update', 'location-exceptions.delete',
       'weekly_schedules.read', 'weekly_schedules.create', 'weekly_schedules.update', 'weekly_schedules.delete',
       'location-weekly-schedules.read', 'location-weekly-schedules.create', 'location-weekly-schedules.update', 'location-weekly-schedules.delete',
       'service-catalog.read', 'service-catalog.create', 'service-catalog.update', 'service-catalog.delete',

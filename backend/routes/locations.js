@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
 const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
 const Location = require('../models/Location');
 const LocationHours = require('../models/LocationHours');
 const LocationClosure = require('../models/LocationClosure');
+const LocationException = require('../models/LocationException');
 const StaffLocationAssignment = require('../models/StaffLocationAssignment');
 const Room = require('../models/Room');
 const Device = require('../models/Device');
@@ -853,6 +855,136 @@ router.post('/:id/letter-templates/import', [
   }
 });
 
+// ==================== LocationException Routes ====================
+// WICHTIG: Diese Route muss VOR router.get('/:id') stehen, damit '/exceptions' nicht als ':id' interpretiert wird
+
+// Alle Ausnahmen abrufen (optional gefiltert nach Standort und Datum)
+router.get('/exceptions', auth, async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung für Standortverwaltung'
+      });
+    }
+
+    const { location_id, startDate, endDate } = req.query;
+    const query = { isActive: true };
+    
+    if (location_id) {
+      // Konvertiere location_id zu ObjectId, falls es ein String ist
+      if (mongoose.Types.ObjectId.isValid(location_id)) {
+        query.location_id = new mongoose.Types.ObjectId(location_id);
+      } else {
+        return res.status(400).json({
+          success: false,
+          message: 'Ungültige Standort-ID'
+        });
+      }
+    }
+    
+    if (startDate || endDate) {
+      query.date = {};
+      if (startDate) {
+        query.date.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        query.date.$lte = new Date(endDate);
+      }
+    }
+
+    console.log('🔍 Fetching location exceptions with query:', JSON.stringify(query, null, 2));
+    console.log('🔍 Query parameters:', { location_id, startDate, endDate });
+    
+    const exceptions = await LocationException.find(query)
+      .populate({
+        path: 'location_id',
+        select: 'name code',
+        strictPopulate: false
+      })
+      .populate({
+        path: 'createdBy',
+        select: 'firstName lastName email',
+        strictPopulate: false
+      })
+      .sort({ date: 1, startTime: 1 });
+
+    console.log('✅ Found location exceptions:', exceptions.length);
+    if (exceptions.length > 0) {
+      console.log('📅 Exception details:', exceptions.map(ex => ({
+        _id: ex._id,
+        date: ex.date,
+        location_id: ex.location_id?._id || ex.location_id,
+        startTime: ex.startTime,
+        endTime: ex.endTime,
+        isActive: ex.isActive
+      })));
+    } else {
+      // Prüfe, ob es Exceptions für andere Locations gibt
+      const allExceptions = await LocationException.find({ isActive: true })
+        .populate('location_id', 'name code')
+        .sort({ date: 1 });
+      console.log('🔍 Total active exceptions in database:', allExceptions.length);
+      if (allExceptions.length > 0) {
+        console.log('📅 All exceptions in database:', allExceptions.map(ex => ({
+          _id: ex._id,
+          date: ex.date ? new Date(ex.date).toISOString().split('T')[0] : 'N/A',
+          location_id: ex.location_id?._id || ex.location_id,
+          location_name: ex.location_id?.name || 'N/A',
+          startTime: ex.startTime,
+          endTime: ex.endTime,
+          requested_location_id: location_id
+        })));
+        
+        // Prüfe, ob es Exceptions im Datumsbereich gibt, aber für andere Locations
+        if (startDate || endDate) {
+          const dateQuery = {};
+          if (startDate) dateQuery.$gte = new Date(startDate);
+          if (endDate) dateQuery.$lte = new Date(endDate);
+          const exceptionsInDateRange = await LocationException.find({
+            isActive: true,
+            date: dateQuery
+          })
+            .populate('location_id', 'name code')
+            .sort({ date: 1 });
+          console.log('📅 Exceptions in date range (all locations):', exceptionsInDateRange.length);
+          if (exceptionsInDateRange.length > 0) {
+            console.log('📅 Exceptions in date range:', exceptionsInDateRange.map(ex => ({
+              _id: ex._id,
+              date: ex.date ? new Date(ex.date).toISOString().split('T')[0] : 'N/A',
+              location_id: ex.location_id?._id || ex.location_id,
+              location_name: ex.location_id?.name || 'N/A',
+              startTime: ex.startTime,
+              endTime: ex.endTime
+            })));
+          }
+        }
+      }
+    }
+    
+    res.json({
+      success: true,
+      data: exceptions
+    });
+  } catch (error) {
+    console.error('❌ Error fetching location exceptions:', error);
+    console.error('Error stack:', error.stack);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Ausnahmen',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
 // Einzelnen Standort abrufen
 router.get('/:id', auth, async (req, res) => {
   try {
@@ -1449,6 +1581,234 @@ router.put('/:id/closures/:closureId', [
     res.status(500).json({
       success: false,
       message: 'Fehler beim Aktualisieren der Schließzeit'
+    });
+  }
+});
+
+// ==================== LocationException Routes ====================
+
+// Ausnahme für einen Standort erstellen
+router.post('/:id/exceptions', [
+  auth,
+  body('date').isISO8601().withMessage('Ungültiges Datum'),
+  body('startTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Startzeit'),
+  body('endTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Endzeit'),
+  body('breakStart').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Startzeit'),
+  body('breakEnd').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Endzeit'),
+  body('label').optional().trim()
+], async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Verwalten von Ausnahmen'
+      });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const location = await Location.findById(req.params.id);
+    if (!location) {
+      return res.status(404).json({
+        success: false,
+        message: 'Standort nicht gefunden'
+      });
+    }
+
+    // Prüfe ob bereits eine Ausnahme für dieses Datum existiert
+    const existingException = await LocationException.findOne({
+      location_id: location._id,
+      date: new Date(req.body.date),
+      isActive: true
+    });
+
+    if (existingException) {
+      return res.status(400).json({
+        success: false,
+        message: 'Für dieses Datum existiert bereits eine Ausnahme'
+      });
+    }
+
+    const exception = new LocationException({
+      location_id: location._id,
+      date: new Date(req.body.date),
+      startTime: req.body.startTime,
+      endTime: req.body.endTime,
+      breakStart: req.body.breakStart,
+      breakEnd: req.body.breakEnd,
+      label: req.body.label || 'Sonderöffnung',
+      createdBy: req.user._id
+    });
+
+    await exception.save();
+
+    // Audit-Log
+    await AuditLog.create({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: 'location-exceptions.create',
+      resource: 'LocationException',
+      resourceId: exception._id,
+      description: `Ausnahme für Standort ${location.name} erstellt`,
+      details: { locationId: location._id, date: req.body.date, startTime: req.body.startTime, endTime: req.body.endTime },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    const populatedException = await LocationException.findById(exception._id)
+      .populate('location_id', 'name code')
+      .populate('createdBy', 'firstName lastName email');
+
+    res.status(201).json({
+      success: true,
+      data: populatedException,
+      message: 'Ausnahme erfolgreich hinzugefügt'
+    });
+  } catch (error) {
+    console.error('Error creating location exception:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Erstellen der Ausnahme'
+    });
+  }
+});
+
+// Ausnahme aktualisieren
+router.put('/:id/exceptions/:exceptionId', [
+  auth,
+  body('date').optional().isISO8601().withMessage('Ungültiges Datum'),
+  body('startTime').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Startzeit'),
+  body('endTime').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Endzeit'),
+  body('breakStart').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Startzeit'),
+  body('breakEnd').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Endzeit'),
+  body('label').optional().trim(),
+  body('isActive').optional().isBoolean()
+], async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Verwalten von Ausnahmen'
+      });
+    }
+
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const updateData = { ...req.body };
+    if (updateData.date) {
+      updateData.date = new Date(updateData.date);
+    }
+
+    const exception = await LocationException.findOneAndUpdate(
+      { _id: req.params.exceptionId, location_id: req.params.id },
+      updateData,
+      { new: true, runValidators: true }
+    )
+      .populate('location_id', 'name code')
+      .populate('createdBy', 'firstName lastName email');
+
+    if (!exception) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ausnahme nicht gefunden'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: exception,
+      message: 'Ausnahme erfolgreich aktualisiert'
+    });
+  } catch (error) {
+    console.error('Error updating location exception:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Aktualisieren der Ausnahme'
+    });
+  }
+});
+
+// Ausnahme löschen
+router.delete('/:id/exceptions/:exceptionId', auth, async (req, res) => {
+  try {
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Verwalten von Ausnahmen'
+      });
+    }
+
+    const exception = await LocationException.findOneAndDelete({
+      _id: req.params.exceptionId,
+      location_id: req.params.id
+    });
+
+    if (!exception) {
+      return res.status(404).json({
+        success: false,
+        message: 'Ausnahme nicht gefunden'
+      });
+    }
+
+    // Audit-Log
+    await AuditLog.create({
+      userId: req.user.id,
+      userEmail: req.user.email,
+      userRole: req.user.role,
+      action: 'location-exceptions.delete',
+      resource: 'LocationException',
+      resourceId: exception._id,
+      description: `Ausnahme für Standort ${req.params.id} gelöscht`,
+      details: { locationId: req.params.id, exceptionId: req.params.exceptionId },
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    res.json({
+      success: true,
+      message: 'Ausnahme erfolgreich gelöscht'
+    });
+  } catch (error) {
+    console.error('Error deleting location exception:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen der Ausnahme'
     });
   }
 });

@@ -121,6 +121,7 @@ const RESOURCES = {
   LOCATION: 'location',
   SERVICE: 'service',
   TEMPLATE: 'template',
+  STAFF: 'staff',
   AUDIT_LOG: 'audit_log',
   SYSTEM: 'system',
   INVENTORY: 'inventory',

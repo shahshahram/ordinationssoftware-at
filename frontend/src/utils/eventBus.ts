@@ -32,4 +32,7 @@ export const EVENTS = {
   SCHEDULE_UPDATED: 'schedule_updated',
   STAFF_PROFILE_DELETED: 'staff_profile_deleted',
   STAFF_PROFILE_UPDATED: 'staff_profile_updated',
+  LOCATION_EXCEPTION_CREATED: 'location_exception_created',
+  LOCATION_EXCEPTION_UPDATED: 'location_exception_updated',
+  LOCATION_EXCEPTION_DELETED: 'location_exception_deleted',
 } as const;
