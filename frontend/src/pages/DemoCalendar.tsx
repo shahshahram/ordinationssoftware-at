@@ -33,6 +33,7 @@ import {
   List,
   Menu,
   useTheme,
+  Tooltip,
 } from '@mui/material';
 import {
   Favorite,
@@ -877,7 +878,8 @@ const DemoCalendar: React.FC = () => {
       const timeBlock = {
         startTime: pendingBlockTime.start.toISOString(),
         endTime: pendingBlockTime.end.toISOString(),
-        doctor: selectedBlockStaff && selectedBlockStaff !== '' ? selectedBlockStaff : null,
+        staffId: selectedBlockStaff && selectedBlockStaff !== '' ? selectedBlockStaff : null, // Neues Feld für alle Berufsgruppen
+        doctor: selectedBlockStaff && selectedBlockStaff !== '' ? selectedBlockStaff : null, // Rückwärtskompatibilität
         locationId: selectedLocation || undefined,
         reason: blockName.trim() || 'Manuelle Sperre',
         status: 'blocked'
@@ -1827,11 +1829,14 @@ const DemoCalendar: React.FC = () => {
                             e.preventDefault();
                             const range = getSelectionRange();
                             if (range) {
+                              // Übergebe selectedStaff als staffId, wenn eine Person ausgewählt ist
+                              const staffIdForBlock = selectedStaff && selectedStaff !== 'all' ? selectedStaff : undefined;
                               setContextMenuAnchor({
                                 x: e.clientX,
                                 y: e.clientY,
                                 start: range.start,
-                                end: range.end
+                                end: range.end,
+                                staffId: staffIdForBlock
                               });
                             }
                           }
@@ -1872,15 +1877,22 @@ const DemoCalendar: React.FC = () => {
                       if (!isSameDayResult) return false;
                       
                       // Filter nach Personal: Wenn eine Person ausgewählt ist, zeige nur TimeBlocks für diese Person oder TimeBlocks ohne Personal (für alle)
-                      if (selectedStaff && selectedStaff !== 'all') {
-                        const blockDoctorId = block.doctor?._id || block.doctor || null;
-                        // Zeige TimeBlock nur wenn:
-                        // 1. TimeBlock hat kein Personal (blockiert alle) ODER
-                        // 2. TimeBlock ist für die ausgewählte Person
-                        if (blockDoctorId && String(blockDoctorId) !== String(selectedStaff)) {
-                          return false;
+                      // WICHTIG: Wenn ein TimeBlock ein staffId-Feld hat (nicht null/undefined), soll es NUR bei dieser Person angezeigt werden
+                      // TimeBlocks ohne staffId (null/undefined) werden bei allen angezeigt
+                      // Unterstütze sowohl staffId als auch doctor (für Rückwärtskompatibilität)
+                      const blockStaffId = block.staffId?._id || block.staffId || block.doctor?._id || block.doctor || null;
+                      if (blockStaffId) {
+                        // TimeBlock hat ein Personal zugewiesen - zeige nur bei dieser Person
+                        // Wenn selectedStaff gesetzt ist, zeige nur wenn es übereinstimmt
+                        if (selectedStaff && selectedStaff !== 'all') {
+                          if (String(blockStaffId) !== String(selectedStaff)) {
+                            return false;
+                          }
                         }
+                        // Wenn keine Person ausgewählt ist (selectedStaff === 'all' oder leer), 
+                        // zeige TimeBlocks mit Personal trotzdem (für Übersicht)
                       }
+                      // Wenn blockStaffId null/undefined ist, wird der Block bei allen angezeigt (korrekt)
                       
                       // Filter nach Location wenn vorhanden
                       if (selectedLocation && block.locationId) {
@@ -1990,31 +2002,105 @@ const DemoCalendar: React.FC = () => {
                   {/* Appointments */}
                   {getAppointmentsForDay(day).map((appointment) => {
                     const { top, height } = getAppointmentPosition(appointment);
+                    
+                    // Sammle Informationen für Tooltip
+                    const apt = appointment.appointment;
+                    const patient = apt?.patient;
+                    let patientId: string | null = null;
+                    let patientObj: any = null;
+                    
+                    if (patient) {
+                      if (typeof patient === 'string') {
+                        patientId = patient;
+                      } else if (typeof patient === 'object' && patient !== null) {
+                        patientId = (patient as any)._id || (patient as any).id || null;
+                        patientObj = patient;
+                      }
+                    }
+                    
+                    // Finde Hauptdiagnose
+                    const diagnoses = patientId ? patientDiagnoses.filter((d: PatientDiagnosis) => d.patientId === patientId) : [];
+                    let primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary && d.status === 'active');
+                    if (!primaryDiagnosis) {
+                      primaryDiagnosis = diagnoses.find((d: PatientDiagnosis) => d.isPrimary);
+                    }
+                    
+                    // Prüfe Allergien
+                    const hasAllergies = patientObj && patientObj.allergies && Array.isArray(patientObj.allergies) && patientObj.allergies.length > 0;
+                    
+                    // Erstelle Tooltip-Text
+                    let tooltipText = `${appointment.patientName}\n${format(appointment.start, 'HH:mm')} - ${format(appointment.end, 'HH:mm')}\nLeistung: ${appointment.type || 'Unbekannt'}`;
+                    
+                    // Finde Staff-Name aus appointment
+                    const staffName = (apt as any)?.assigned_users?.[0] 
+                      ? `${(apt as any).assigned_users[0].firstName || (apt as any).assigned_users[0].first_name || ''} ${(apt as any).assigned_users[0].lastName || (apt as any).assigned_users[0].last_name || ''}`.trim()
+                      : (apt as any)?.doctor 
+                        ? (typeof (apt as any).doctor === 'object' 
+                          ? `${(apt as any).doctor.firstName || ''} ${(apt as any).doctor.lastName || ''}`.trim()
+                          : 'Unbekannt')
+                        : 'Unbekannt';
+                    
+                    if (staffName && staffName !== 'Unbekannt') {
+                      tooltipText += `\nPersonal: ${staffName}`;
+                    }
+                    
+                    // Finde Raum
+                    const room = rooms.find(r => r._id === apt?.room);
+                    if (room) {
+                      tooltipText += `\nRaum: ${room.name || 'Unbekannt'}`;
+                    }
+                    
+                    // Status
+                    if (apt?.status) {
+                      tooltipText += `\nStatus: ${apt.status}`;
+                    }
+                    
+                    // Allergien
+                    if (hasAllergies) {
+                      tooltipText += '\n⚠️ Allergien vorhanden';
+                    }
+                    
+                    // Hauptdiagnose
+                    if (primaryDiagnosis) {
+                      tooltipText += `\n✓ Hauptdiagnose: ${primaryDiagnosis.display || primaryDiagnosis.code}`;
+                    }
+                    
+                    // Notizen
+                    const notes = apt?.description || (apt as any)?.notes;
+                    if (notes && typeof notes === 'string' && notes.length > 0) {
+                      tooltipText += `\nNotizen: ${notes.substring(0, 50)}${notes.length > 50 ? '...' : ''}`;
+                    }
+                    
                     return (
-                      <Paper
+                      <Tooltip
                         key={appointment.id}
-                        elevation={2}
-                        onClick={() => handleAppointmentClick(appointment)}
-                        sx={{
-                          position: 'absolute',
-                          left: 4,
-                          right: 4,
-                          top: `${top}px`,
-                          height: `${height}px`,
-                          bgcolor: appointment.color,
-                          color: 'white',
-                          p: 0.5,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'space-between',
-                          minHeight: 40,
-                          '&:hover': {
-                            boxShadow: 4,
-                            zIndex: 10,
-                          },
-                        }}
+                        title={tooltipText}
+                        arrow
                       >
+                        <Box>
+                          <Paper
+                            elevation={2}
+                            onClick={() => handleAppointmentClick(appointment)}
+                            sx={{
+                              position: 'absolute',
+                              left: 4,
+                              right: 4,
+                              top: `${top}px`,
+                              height: `${height}px`,
+                              bgcolor: appointment.color,
+                              color: 'white',
+                              p: 0.5,
+                              cursor: 'pointer',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              justifyContent: 'space-between',
+                              minHeight: 40,
+                              '&:hover': {
+                                boxShadow: 4,
+                                zIndex: 10,
+                              },
+                            }}
+                          >
                         {/* Online-Badge oben rechts */}
                         {(() => {
                           const apt = appointment.appointment;
@@ -2117,6 +2203,8 @@ const DemoCalendar: React.FC = () => {
                         })()}
                         </Box>
                       </Paper>
+                        </Box>
+                      </Tooltip>
                     );
                   })}
                 </Box>
@@ -3324,7 +3412,13 @@ const DemoCalendar: React.FC = () => {
                 if (!value || value === '') {
                   return <em>Keine Auswahl (für alle)</em>;
                 }
-                const selectedStaff = staffProfiles?.find((staff: any) => (staff._id || staff.id) === value);
+                // Suche nach user_id statt _id, da value die User ID ist
+                const selectedStaff = staffProfiles?.find((staff: any) => {
+                  const staffUserId = typeof staff.user_id === 'string' 
+                    ? staff.user_id 
+                    : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                  return staffUserId === value;
+                });
                 if (selectedStaff) {
                   return `${selectedStaff.first_name || (selectedStaff as any).firstName || ''} ${selectedStaff.last_name || (selectedStaff as any).lastName || ''}`;
                 }
@@ -3335,11 +3429,21 @@ const DemoCalendar: React.FC = () => {
                 <em>Keine Auswahl (für alle)</em>
               </MenuItem>
               {staffProfiles && Array.isArray(staffProfiles) && staffProfiles.length > 0 ? (
-                staffProfiles.map((staff: any) => (
-                  <MenuItem key={staff._id || staff.id} value={staff._id || staff.id}>
-                    {staff.firstName || staff.first_name} {staff.lastName || staff.last_name}
-                  </MenuItem>
-                ))
+                staffProfiles.map((staff: any) => {
+                  // Verwende user_id statt _id, da das Backend die User ID erwartet (nicht StaffProfile ID)
+                  const staffUserId = typeof staff.user_id === 'string' 
+                    ? staff.user_id 
+                    : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                  
+                  // Nur anzeigen wenn user_id vorhanden ist
+                  if (!staffUserId) return null;
+                  
+                  return (
+                    <MenuItem key={staff._id || staff.id} value={staffUserId}>
+                      {staff.firstName || staff.first_name} {staff.lastName || staff.last_name}
+                    </MenuItem>
+                  );
+                })
               ) : (
                 <MenuItem value="" disabled>
                   Kein Personal verfügbar

@@ -200,9 +200,10 @@ router.post('/', [
     // Prüfe TimeBlocks: TimeBlocks mit Personal blockieren nur dieses Personal, TimeBlocks ohne Personal blockieren alle
     const conflictingTimeBlocks = await TimeBlock.find({
       $or: [
-        { doctor: doctorId }, // TimeBlock für dieses Personal
-        { doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
-        { doctor: null } // Oder TimeBlocks mit null (blockieren alle)
+        { staffId: doctorId }, // TimeBlock für dieses Personal (neues Feld)
+        { doctor: doctorId }, // TimeBlock für dieses Personal (Rückwärtskompatibilität)
+        { staffId: { $exists: false }, doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
+        { staffId: null, doctor: null } // Oder TimeBlocks mit null (blockieren alle)
       ],
       startTime: { $lt: appointmentEnd },
       endTime: { $gt: appointmentStart },

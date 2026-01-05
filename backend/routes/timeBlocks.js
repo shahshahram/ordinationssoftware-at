@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const TimeBlock = require('../models/TimeBlock');
@@ -12,6 +13,7 @@ router.get('/', auth, async (req, res) => {
   try {
     const { 
       doctorId, 
+      staffId,
       locationId, 
       startDate, 
       endDate, 
@@ -22,7 +24,14 @@ router.get('/', auth, async (req, res) => {
 
     const filter = {};
     
-    if (doctorId) filter.doctor = doctorId;
+    // Unterstütze sowohl staffId als auch doctorId (für Rückwärtskompatibilität)
+    const targetStaffId = staffId || doctorId;
+    if (targetStaffId) {
+      filter.$or = [
+        { staffId: targetStaffId },
+        { doctor: targetStaffId } // Rückwärtskompatibilität
+      ];
+    }
     if (locationId) filter.locationId = locationId;
     if (status) filter.status = status;
     
@@ -51,7 +60,8 @@ router.get('/', auth, async (req, res) => {
       .sort({ startTime: 1 })
       .limit(parsedLimit)
       .skip((parsedPage - 1) * parsedLimit)
-      .populate('doctor', 'firstName lastName email')
+      .populate('staffId', 'firstName lastName email')
+      .populate('doctor', 'firstName lastName email') // Rückwärtskompatibilität
       .populate('locationId', 'name code')
       .populate('assigned_rooms', 'name number location')
       .populate('assigned_devices', 'name type status location')
@@ -122,7 +132,8 @@ router.post('/', auth, checkPermission('appointments.write'), async (req, res) =
     const {
       startTime,
       endTime,
-      doctor,
+      staffId, // Neues Feld für alle Berufsgruppen
+      doctor, // Altes Feld für Rückwärtskompatibilität
       locationId,
       resourceId,
       assigned_rooms,
@@ -149,12 +160,18 @@ router.post('/', auth, checkPermission('appointments.write'), async (req, res) =
       });
     }
 
+    // Unterstütze sowohl staffId als auch doctor (für Rückwärtskompatibilität)
+    const targetStaffId = staffId || doctor;
+    
     // Prüfe auf Überschneidungen mit bestehenden Appointments
     // Nur prüfen wenn ein spezifisches Personal ausgewählt wurde
-    if (doctor) {
+    if (targetStaffId) {
       const overlappingAppointments = await Appointment.find({
-        doctor: doctor,
         $or: [
+          { doctor: targetStaffId },
+          { assigned_users: targetStaffId }
+        ],
+        $and: [
           {
             startTime: { $lt: end },
             endTime: { $gt: start }
@@ -177,12 +194,23 @@ router.post('/', auth, checkPermission('appointments.write'), async (req, res) =
     }
 
     // TimeBlock erstellen
-    // Wenn doctor nicht gesetzt ist (null/undefined/leer), wird die Sperre für alle gültig
-    // Wenn doctor gesetzt ist, gilt die Sperre nur für diese Person
-    const timeBlock = new TimeBlock({
+    // Wenn staffId nicht gesetzt ist (null/undefined/leer), wird die Sperre für alle gültig
+    // Wenn staffId gesetzt ist, gilt die Sperre nur für diese Person (alle Berufsgruppen)
+    // Stelle sicher, dass leere Strings oder undefined zu null werden
+    const staffIdValue = (targetStaffId && targetStaffId !== '' && targetStaffId !== 'null') ? targetStaffId : null;
+    
+    // Validiere staffId, wenn es gesetzt ist
+    if (staffIdValue && !mongoose.Types.ObjectId.isValid(staffIdValue)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültige staffId',
+        error: 'staffId muss eine gültige ObjectId sein'
+      });
+    }
+    
+    const timeBlockData = {
       startTime: start,
       endTime: end,
-      doctor: doctor || null, // null bedeutet: Sperre für alle
       locationId,
       resourceId,
       assigned_rooms: assigned_rooms || [],
@@ -191,12 +219,21 @@ router.post('/', auth, checkPermission('appointments.write'), async (req, res) =
       status: 'blocked',
       metadata: metadata || {},
       createdBy: req.user._id
-    });
+    };
+    
+    // Nur staffId und doctor setzen, wenn sie nicht null sind
+    if (staffIdValue) {
+      timeBlockData.staffId = staffIdValue;
+      timeBlockData.doctor = staffIdValue; // Rückwärtskompatibilität
+    }
+    
+    const timeBlock = new TimeBlock(timeBlockData);
 
     await timeBlock.save();
 
     const populatedTimeBlock = await TimeBlock.findById(timeBlock._id)
-      .populate('doctor', 'firstName lastName email')
+      .populate('staffId', 'firstName lastName email')
+      .populate('doctor', 'firstName lastName email') // Rückwärtskompatibilität
       .populate('locationId', 'name code')
       .populate('assigned_rooms', 'name number location')
       .populate('assigned_devices', 'name type status location')
@@ -209,10 +246,13 @@ router.post('/', auth, checkPermission('appointments.write'), async (req, res) =
     });
   } catch (error) {
     console.error('Fehler beim Erstellen des TimeBlocks:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Request body:', req.body);
     res.status(500).json({ 
       success: false, 
       message: 'Fehler beim Erstellen des TimeBlocks',
-      error: error.message 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -244,6 +284,7 @@ router.put('/:id', auth, checkPermission('appointments.write'), async (req, res)
       startTime,
       endTime,
       doctor,
+      staffId,
       locationId,
       resourceId,
       assigned_rooms,
@@ -254,7 +295,12 @@ router.put('/:id', auth, checkPermission('appointments.write'), async (req, res)
 
     if (startTime) timeBlock.startTime = new Date(startTime);
     if (endTime) timeBlock.endTime = new Date(endTime);
-    if (doctor !== undefined) timeBlock.doctor = doctor;
+    // Unterstütze sowohl staffId als auch doctor (für Rückwärtskompatibilität)
+    const targetStaffId = staffId || doctor;
+    if (targetStaffId !== undefined) {
+      timeBlock.staffId = targetStaffId;
+      timeBlock.doctor = targetStaffId; // Rückwärtskompatibilität
+    }
     if (locationId !== undefined) timeBlock.locationId = locationId;
     if (resourceId !== undefined) timeBlock.resourceId = resourceId;
     if (assigned_rooms !== undefined) timeBlock.assigned_rooms = assigned_rooms;
@@ -273,7 +319,8 @@ router.put('/:id', auth, checkPermission('appointments.write'), async (req, res)
     await timeBlock.save();
 
     const populatedTimeBlock = await TimeBlock.findById(timeBlock._id)
-      .populate('doctor', 'firstName lastName email')
+      .populate('staffId', 'firstName lastName email')
+      .populate('doctor', 'firstName lastName email') // Rückwärtskompatibilität
       .populate('locationId', 'name code')
       .populate('assigned_rooms', 'name number location')
       .populate('assigned_devices', 'name type status location')
@@ -377,7 +424,7 @@ router.post('/:id/merge', auth, checkPermission('appointments.write'), async (re
     // Appointment erstellen
     const appointment = new Appointment({
       patient: patientId,
-      doctor: timeBlock.doctor || req.user._id,
+      doctor: timeBlock.staffId || timeBlock.doctor || req.user._id, // Verwende staffId, fallback zu doctor für Rückwärtskompatibilität
       startTime: timeBlock.startTime,
       endTime: timeBlock.endTime,
       service: serviceId,

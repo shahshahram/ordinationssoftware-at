@@ -238,9 +238,10 @@ router.get('/availability', async (req, res) => {
       // TimeBlocks ohne Personal blockieren alle
       const timeBlocks = await TimeBlock.find({
         $or: [
-          { doctor: doctorId }, // TimeBlock für dieses Personal
-          { doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
-          { doctor: null } // Oder TimeBlocks mit null (blockieren alle)
+          { staffId: doctorId }, // TimeBlock für dieses Personal (neues Feld)
+          { doctor: doctorId }, // TimeBlock für dieses Personal (Rückwärtskompatibilität)
+          { staffId: { $exists: false }, doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
+          { staffId: null, doctor: null } // Oder TimeBlocks mit null (blockieren alle)
         ],
         startTime: {
           $gte: new Date(`${date}T00:00:00`),

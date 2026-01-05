@@ -1433,7 +1433,8 @@ const ServiceDemoCalendar: React.FC = () => {
       const timeBlock = {
         startTime: pendingBlockTime.start.toISOString(),
         endTime: pendingBlockTime.end.toISOString(),
-        doctor: selectedBlockStaff && selectedBlockStaff !== '' ? selectedBlockStaff : null,
+        staffId: selectedBlockStaff && selectedBlockStaff !== '' ? selectedBlockStaff : null, // Neues Feld für alle Berufsgruppen
+        doctor: selectedBlockStaff && selectedBlockStaff !== '' ? selectedBlockStaff : null, // Rückwärtskompatibilität
         locationId: selectedLocation !== 'all' ? selectedLocation : undefined,
         reason: blockName.trim() || 'Manuelle Sperre',
         status: 'blocked'
@@ -2920,12 +2921,21 @@ const ServiceDemoCalendar: React.FC = () => {
                                     e.preventDefault();
                                     const range = getSelectionRange();
                                     if (range) {
+                                      // WICHTIG: staffId aus selectedStaffForColumns ist eine StaffProfile ID
+                                      // Wir müssen die StaffProfile ID in User ID umwandeln
+                                      const staff = filteredStaff.find(s => s._id === staffId);
+                                      const staffUserId = staff ? (
+                                        typeof staff.user_id === 'string' 
+                                          ? staff.user_id 
+                                          : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null)
+                                      ) : null;
+                                      
                                       setContextMenuAnchor({
                                         x: e.clientX,
                                         y: e.clientY,
                                         start: range.start,
                                         end: range.end,
-                                        staffId: staffId
+                                        staffId: staffUserId || undefined
                                       });
                                     }
                                   }
@@ -2973,13 +2983,31 @@ const ServiceDemoCalendar: React.FC = () => {
                               
                               // Staff-Filter: TimeBlocks mit Personal nur für das entsprechende Personal anzeigen
                               // TimeBlocks ohne Personal werden für alle angezeigt
-                              if (block.doctor) {
-                                const blockDoctorId = typeof block.doctor === 'object' ? block.doctor._id : block.doctor;
-                                if (blockDoctorId !== staffId) {
-                                  return false;
+                              // Unterstütze sowohl staffId als auch doctor (für Rückwärtskompatibilität)
+                              const blockStaffId = block.staffId?._id || block.staffId || block.doctor?._id || block.doctor || null;
+                              
+                              // WICHTIG: staffId aus selectedStaffForColumns ist eine StaffProfile ID
+                              // blockStaffId ist eine User ID
+                              // Wir müssen die StaffProfile ID in User ID umwandeln
+                              const staff = filteredStaff.find(s => s._id === staffId);
+                              const staffUserId = staff ? (
+                                typeof staff.user_id === 'string' 
+                                  ? staff.user_id 
+                                  : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null)
+                              ) : null;
+                              
+                              
+                              if (blockStaffId) {
+                                // TimeBlock hat ein Personal zugewiesen - zeige NUR bei dieser Person
+                                // Vergleiche blockStaffId (User ID) mit staffUserId (User ID)
+                                if (!staffUserId || String(blockStaffId) !== String(staffUserId)) {
+                                  return false; // Nicht für diese Person - nicht anzeigen
                                 }
+                                // Wenn blockStaffId === staffUserId, dann anzeigen (return true weiter unten)
+                              } else {
+                                // Wenn kein Personal zugewiesen ist (blockStaffId === null), wird der Block für alle angezeigt
+                                // Das ist korrekt - TimeBlocks ohne Personal blockieren alle
                               }
-                              // Wenn kein Personal zugewiesen ist, wird der Block für alle angezeigt
                               
                               return true;
                             })
@@ -3423,15 +3451,18 @@ const ServiceDemoCalendar: React.FC = () => {
                         }
                         
                         // Filter nach Personal: Wenn eine Person ausgewählt ist, zeige nur TimeBlocks für diese Person oder TimeBlocks ohne Personal (für alle)
-                        if (selectedStaff && selectedStaff !== 'all') {
-                          const blockDoctorId = block.doctor?._id || block.doctor || null;
-                          // Zeige TimeBlock nur wenn:
-                          // 1. TimeBlock hat kein Personal (blockiert alle) ODER
-                          // 2. TimeBlock ist für die ausgewählte Person
-                          if (blockDoctorId && String(blockDoctorId) !== String(selectedStaff)) {
-                            return false;
+                        // WICHTIG: Wenn ein TimeBlock ein staffId-Feld hat (nicht null/undefined/leer), soll es NUR bei dieser Person angezeigt werden
+                        // Unterstütze sowohl staffId als auch doctor (für Rückwärtskompatibilität)
+                        const blockStaffId = block.staffId?._id || block.staffId || block.doctor?._id || block.doctor || null;
+                        if (blockStaffId && blockStaffId !== null && blockStaffId !== '') {
+                          // TimeBlock hat ein Personal zugewiesen - zeige nur bei dieser Person
+                          if (selectedStaff && selectedStaff !== 'all') {
+                            if (String(blockStaffId) !== String(selectedStaff)) {
+                              return false;
+                            }
                           }
                         }
+                        // Wenn blockStaffId null/undefined/leer ist, wird der Block bei allen angezeigt (korrekt)
                         
                         // Location-Filter: TimeBlocks werden immer angezeigt, unabhängig von der Location
                         // (TimeBlocks sind standortübergreifend und sollten für alle Locations sichtbar sein)
@@ -3509,24 +3540,71 @@ const ServiceDemoCalendar: React.FC = () => {
                         );
                       })}
                     
-                  {timeSlots.map((time, index) => (
-                    <Box
-                      key={time}
-                      onClick={() => {
-                        const [hour, minute] = time.split(':').map(Number);
-                        const slotDate = new Date(day);
-                        slotDate.setHours(hour, minute, 0, 0);
-                        handleOpenNewEventDialog(slotDate, hour);
-                      }}
-                      sx={{
-                        height: 40,
-                        borderBottom: '1px solid',
-                        borderColor: 'divider',
-                        cursor: 'pointer',
-                        '&:hover': { bgcolor: 'action.hover' },
-                      }}
-                    />
-                  ))}
+                  {timeSlots.map((time, index) => {
+                    const isInSelection = isSlotInSelection(day, time);
+                    
+                    return (
+                      <Box
+                        key={time}
+                        onMouseDown={(e) => {
+                          if (e.button === 0) { // Nur linke Maustaste
+                            e.preventDefault();
+                            startSelection(day, time);
+                          }
+                        }}
+                        onMouseMove={(e) => {
+                          if (isSelecting) {
+                            updateSelection(day, time);
+                          }
+                        }}
+                        onMouseUp={(e) => {
+                          if (e.button === 0 && isSelecting) {
+                            endSelection();
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          if (selectionStart && selectionEnd) {
+                            e.preventDefault();
+                            const range = getSelectionRange();
+                            if (range) {
+                              // Übergebe selectedStaff als staffId, wenn eine Person ausgewählt ist
+                              const staffIdForBlock = selectedStaff && selectedStaff !== 'all' ? selectedStaff : undefined;
+                              setContextMenuAnchor({
+                                x: e.clientX,
+                                y: e.clientY,
+                                start: range.start,
+                                end: range.end,
+                                staffId: staffIdForBlock
+                              });
+                            }
+                          }
+                        }}
+                        onClick={() => {
+                          if (!isSelecting) {
+                            const [hour, minute] = time.split(':').map(Number);
+                            const slotDate = new Date(day);
+                            slotDate.setHours(hour, minute, 0, 0);
+                            handleOpenNewEventDialog(slotDate, hour);
+                          }
+                        }}
+                        sx={{
+                          height: 40,
+                          borderBottom: '1px solid',
+                          borderColor: 'divider',
+                          cursor: isSelecting ? 'crosshair' : 'pointer',
+                          bgcolor: isInSelection ? 'rgba(25, 118, 210, 0.2)' : 'transparent',
+                          borderLeft: isInSelection ? '3px solid #1976d2' : 'none',
+                          '&:hover': { 
+                            bgcolor: isSelecting 
+                              ? 'rgba(25, 118, 210, 0.3)' 
+                              : isInSelection 
+                                ? 'rgba(25, 118, 210, 0.25)' 
+                                : 'action.hover' 
+                          },
+                        }}
+                      />
+                    );
+                  })}
 
                   {/* Appointments */}
                   {getAppointmentsForDay(day).map((appointment) => {
@@ -4941,7 +5019,13 @@ const ServiceDemoCalendar: React.FC = () => {
                 if (!value || value === '') {
                   return <em>Keine Auswahl (für alle)</em>;
                 }
-                const selectedStaff = staffProfiles?.find((staff: any) => (staff._id || staff.id) === value);
+                // Suche nach user_id statt _id, da value die User ID ist
+                const selectedStaff = staffProfiles?.find((staff: any) => {
+                  const staffUserId = typeof staff.user_id === 'string' 
+                    ? staff.user_id 
+                    : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                  return staffUserId === value;
+                });
                 if (selectedStaff) {
                   return `${selectedStaff.first_name || (selectedStaff as any).firstName || ''} ${selectedStaff.last_name || (selectedStaff as any).lastName || ''}`;
                 }
@@ -4952,11 +5036,21 @@ const ServiceDemoCalendar: React.FC = () => {
                 <em>Keine Auswahl (für alle)</em>
               </MenuItem>
               {staffProfiles && Array.isArray(staffProfiles) && staffProfiles.length > 0 ? (
-                staffProfiles.map((staff: any) => (
-                  <MenuItem key={staff._id || staff.id} value={staff._id || staff.id}>
-                    {staff.firstName || staff.first_name} {staff.lastName || staff.last_name}
-                  </MenuItem>
-                ))
+                staffProfiles.map((staff: any) => {
+                  // Verwende user_id statt _id, da das Backend die User ID erwartet (nicht StaffProfile ID)
+                  const staffUserId = typeof staff.user_id === 'string' 
+                    ? staff.user_id 
+                    : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                  
+                  // Nur anzeigen wenn user_id vorhanden ist
+                  if (!staffUserId) return null;
+                  
+                  return (
+                    <MenuItem key={staff._id || staff.id} value={staffUserId}>
+                      {staff.firstName || staff.first_name} {staff.lastName || staff.last_name}
+                    </MenuItem>
+                  );
+                })
               ) : (
                 <MenuItem value="" disabled>
                   Kein Personal verfügbar
