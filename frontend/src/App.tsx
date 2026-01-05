@@ -319,14 +319,14 @@ const AppContent: React.FC = () => {
                           </ProtectedRoute>
                         } 
                       />
-                      <Route 
+                      {/* <Route 
                         path="/enhanced-calendar" 
                         element={
                           <ProtectedRoute requiredPermissions={['appointments.read']}>
                             <EnhancedCalendar />
                           </ProtectedRoute>
                         } 
-                      />
+                      /> */}
                       <Route 
                         path="/service-demo-calendar" 
                         element={

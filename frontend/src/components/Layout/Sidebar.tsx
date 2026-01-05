@@ -86,7 +86,7 @@ const menuItems = [
       { text: 'Online-Buchungen', icon: <BookOnline />, path: '/online-bookings' },
       { text: 'Terminkalender', icon: <CalendarToday />, path: '/demo-calendar' },
       { text: 'Dienstkalender', icon: <CalendarToday />, path: '/service-demo-calendar' },
-      { text: 'Dienst-Kalender (Enhanced)', icon: <CalendarToday />, path: '/enhanced-calendar' },
+      // { text: 'Dienst-Kalender (Enhanced)', icon: <CalendarToday />, path: '/enhanced-calendar' },
       { text: 'Verfügbarkeiten', icon: <Schedule />, path: '/availability' },
       { text: 'Warteliste', icon: <PendingActions />, path: '/waiting-list' },
     ]

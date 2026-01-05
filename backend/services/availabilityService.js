@@ -3,6 +3,8 @@ const Absence = require('../models/Absence');
 const Appointment = require('../models/Appointment');
 const AppointmentParticipant = require('../models/AppointmentParticipant');
 const ServiceCatalog = require('../models/ServiceCatalog');
+const TimeBlock = require('../models/TimeBlock');
+const StaffProfile = require('../models/StaffProfile');
 
 class AvailabilityService {
   /**
@@ -51,6 +53,33 @@ class AvailabilityService {
         startsAt: { $lte: endDate },
         endsAt: { $gte: startDate },
         status: 'approved'
+      });
+      
+      // 2.5. TimeBlocks (gesperrte Zeitslots) für den Zeitraum abrufen
+      // TimeBlocks mit Personal blockieren nur dieses Personal
+      // TimeBlocks ohne Personal blockieren alle
+      // staffId ist eine StaffProfile-ID, aber TimeBlock.staffId ist eine User-ID
+      // Wir müssen die User-ID aus dem StaffProfile holen
+      const staffProfile = await StaffProfile.findById(staffId);
+      const userId = staffProfile?.user_id 
+        ? (typeof staffProfile.user_id === 'object' ? staffProfile.user_id._id || staffProfile.user_id : staffProfile.user_id)
+        : null;
+      
+      // Erstelle $or-Array für TimeBlock-Abfrage
+      const timeBlockOrConditions = [];
+      if (userId) {
+        timeBlockOrConditions.push({ staffId: userId }); // TimeBlock für dieses Personal (neues Feld, User-ID)
+        timeBlockOrConditions.push({ doctor: userId }); // TimeBlock für dieses Personal (Rückwärtskompatibilität, User-ID)
+      }
+      // TimeBlocks ohne Personal blockieren alle
+      timeBlockOrConditions.push({ staffId: { $exists: false }, doctor: { $exists: false } });
+      timeBlockOrConditions.push({ staffId: null, doctor: null });
+      
+      const timeBlocks = await TimeBlock.find({
+        $or: timeBlockOrConditions,
+        startTime: { $lte: endDate },
+        endTime: { $gte: startDate },
+        status: { $in: ['blocked', 'reserved'] } // Nur aktive Sperren
       });
       
       // 3. Bereits gebuchte Termine abrufen
@@ -103,7 +132,8 @@ class AvailabilityService {
               absences,
               existingAppointments,
               service,
-              schedule.staffId
+              schedule.staffId,
+              timeBlocks
             );
             availableSlots.push(...slots);
           }
@@ -132,7 +162,7 @@ class AvailabilityService {
   /**
    * Berechnet Slots für einen einzelnen Tag basierend auf wöchentlichen Arbeitszeiten
    */
-  static calculateSlotsForDay(date, daySchedule, absences, existingAppointments, service, staffId) {
+  static calculateSlotsForDay(date, daySchedule, absences, existingAppointments, service, staffId, timeBlocks = []) {
     const slots = [];
     // Verwende die korrekten Feldnamen aus ServiceCatalog
     const baseDuration = service.base_duration_min || service.duration || 30;
@@ -157,8 +187,8 @@ class AvailabilityService {
     while (currentTime < dayEnd) {
       const slotEnd = new Date(currentTime.getTime() + slotDuration * 60000);
       
-      // Prüfen ob Slot verfügbar ist (inkl. Pausenzeiten)
-      if (this.isSlotAvailableForDay(currentTime, slotEnd, daySchedule, absences, existingAppointments, date)) {
+      // Prüfen ob Slot verfügbar ist (inkl. Pausenzeiten und TimeBlocks)
+      if (this.isSlotAvailableForDay(currentTime, slotEnd, daySchedule, absences, existingAppointments, date, timeBlocks)) {
         slots.push({
           start: new Date(currentTime),
           end: new Date(slotEnd),
@@ -186,9 +216,9 @@ class AvailabilityService {
   }
   
   /**
-   * Prüft ob ein Slot für einen Tag verfügbar ist (inkl. Pausenzeiten)
+   * Prüft ob ein Slot für einen Tag verfügbar ist (inkl. Pausenzeiten und TimeBlocks)
    */
-  static isSlotAvailableForDay(startTime, endTime, daySchedule, absences, existingAppointments, date) {
+  static isSlotAvailableForDay(startTime, endTime, daySchedule, absences, existingAppointments, date, timeBlocks = []) {
     // 1. Prüfen ob Slot innerhalb der Arbeitszeiten liegt
     const startTimeStr = startTime.toTimeString().substring(0, 5);
     const endTimeStr = endTime.toTimeString().substring(0, 5);
@@ -368,6 +398,37 @@ class AvailabilityService {
             appointment.appointmentId._id.toString() !== excludeAppointmentId &&
             this.timesOverlap(startTime, endTime, appointment.appointmentId.startsAt, appointment.appointmentId.endsAt)) {
           return { available: false, reason: 'Termin kollidiert mit bestehendem Termin' };
+        }
+      }
+      
+      // 6. Prüfen ob Termin mit TimeBlocks (gesperrten Zeitslots) kollidiert
+      // staffId ist eine StaffProfile-ID, aber TimeBlock.staffId ist eine User-ID
+      // Wir müssen die User-ID aus dem StaffProfile holen
+      const staffProfileForCheck = await StaffProfile.findById(staffId);
+      const userIdForCheck = staffProfileForCheck?.user_id 
+        ? (typeof staffProfileForCheck.user_id === 'object' ? staffProfileForCheck.user_id._id || staffProfileForCheck.user_id : staffProfileForCheck.user_id)
+        : null;
+      
+      // Erstelle $or-Array für TimeBlock-Abfrage
+      const timeBlockOrConditionsForCheck = [];
+      if (userIdForCheck) {
+        timeBlockOrConditionsForCheck.push({ staffId: userIdForCheck }); // TimeBlock für dieses Personal (neues Feld, User-ID)
+        timeBlockOrConditionsForCheck.push({ doctor: userIdForCheck }); // TimeBlock für dieses Personal (Rückwärtskompatibilität, User-ID)
+      }
+      // TimeBlocks ohne Personal blockieren alle
+      timeBlockOrConditionsForCheck.push({ staffId: { $exists: false }, doctor: { $exists: false } });
+      timeBlockOrConditionsForCheck.push({ staffId: null, doctor: null });
+      
+      const timeBlocksForCheck = await TimeBlock.find({
+        $or: timeBlockOrConditionsForCheck,
+        startTime: { $lte: endTime },
+        endTime: { $gte: startTime },
+        status: { $in: ['blocked', 'reserved'] } // Nur aktive Sperren
+      });
+      
+      for (const block of timeBlocksForCheck) {
+        if (this.timesOverlap(startTime, endTime, block.startTime, block.endTime)) {
+          return { available: false, reason: 'Termin fällt in gesperrten Zeitslot' };
         }
       }
       

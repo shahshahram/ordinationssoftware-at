@@ -281,8 +281,8 @@ const EnhancedCalendar: React.FC = () => {
       
       const response = await api.get('/time-blocks', {
         startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
-        status: 'blocked'
+        endDate: endDate.toISOString()
+        // status wird nicht als Filter übergeben, da wir alle TimeBlocks laden und dann filtern
       });
       
       if (response.success && response.data) {
@@ -1046,11 +1046,15 @@ const EnhancedCalendar: React.FC = () => {
       return;
     }
 
+    // Verwende assigned_users statt doctor für alle Berufsgruppen
+    const assignedUsers = newEvent.staffId ? [newEvent.staffId] : [];
+    
     const eventData = {
       title: newEvent.title,
       startTime: startTime.toISOString(),
       endTime: endTime.toISOString(),
-      doctor: newEvent.staffId,
+      assigned_users: assignedUsers, // Neues Feld für alle Berufsgruppen
+      doctor: newEvent.staffId || undefined, // Rückwärtskompatibilität
       room: newEvent.roomId || undefined,
       patient: newEvent.patientId || undefined,
       type: newEvent.type,
@@ -1249,6 +1253,83 @@ const EnhancedCalendar: React.FC = () => {
             </Tooltip>
           );
         })}
+
+        {/* TimeBlocks (gesperrte Zeitslots) */}
+        {timeBlocks
+          .filter((block: any) => {
+            const blockDate = new Date(block.startTime);
+            const isSameDayResult = isSameDay(blockDate, day);
+            if (!isSameDayResult) return false;
+            
+            // Filter nach Status
+            if (block.status !== 'blocked' && block.status !== 'merged') {
+              return false;
+            }
+            
+            // Filter nach Location wenn vorhanden
+            if (selectedLocation !== 'all' && block.locationId) {
+              const blockLocationId = typeof block.locationId === 'object' && block.locationId !== null
+                ? block.locationId._id || block.locationId
+                : block.locationId;
+              if (String(blockLocationId) !== String(selectedLocation)) {
+                return false;
+              }
+            }
+            
+            return true;
+          })
+          .map((block: any, blockIndex: number) => {
+            const blockStart = new Date(block.startTime);
+            const blockEnd = new Date(block.endTime);
+            const startMinutes = blockStart.getHours() * 60 + blockStart.getMinutes();
+            const endMinutes = blockEnd.getHours() * 60 + blockEnd.getMinutes();
+            const topPosition = startMinutes - (minHour * 60);
+            const height = endMinutes - startMinutes;
+            
+            return (
+              <Tooltip
+                key={`timeblock-${block._id}-${blockIndex}`}
+                title={`Gesperrt: ${block.reason || 'Manuelle Sperre'}\n${format(blockStart, 'HH:mm')} - ${format(blockEnd, 'HH:mm')}`}
+                arrow
+              >
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: `${topPosition}px`,
+                    left: 0,
+                    right: 0,
+                    height: `${height}px`,
+                    backgroundColor: block.status === 'merged' ? '#4caf50' : '#f44336',
+                    border: `3px solid ${block.status === 'merged' ? '#2e7d32' : '#c62828'}`,
+                    borderRadius: '4px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    zIndex: 15,
+                    pointerEvents: 'auto',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    cursor: 'pointer',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                  }}
+                >
+                  <Typography variant="caption" sx={{ fontWeight: 'bold', color: 'white', fontSize: '0.75rem' }}>
+                    {block.status === 'merged' ? 'Zusammengeführt' : 'Gesperrt'}
+                  </Typography>
+                  {block.reason && (
+                    <Typography variant="caption" sx={{ fontSize: '0.7rem', color: 'white', mt: 0.5 }}>
+                      {block.reason}
+                    </Typography>
+                  )}
+                  <Typography variant="caption" sx={{ fontSize: '0.65rem', color: 'white', mt: 0.5 }}>
+                    {format(blockStart, 'HH:mm')} - {format(blockEnd, 'HH:mm')}
+                  </Typography>
+                </Box>
+              </Tooltip>
+            );
+          })}
 
         {/* Calendar events bars */}
         {dayCalendarEvents.map((event, index) => {
