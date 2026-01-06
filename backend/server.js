@@ -272,6 +272,7 @@ function registerStaticRoutes(app) {
   app.use('/api/resources', resourceRoutes);
   app.use('/api/billing', billingRoutes);
   app.use('/api/billing-reports', billingReportsRoutes);
+  app.use('/api/journal', require('./routes/journal'));
   app.use('/api/checkin', require('./routes/checkin'));
   app.use('/api/documents', documentRoutes);
   app.use('/api/online-booking', onlineBookingRoutes);

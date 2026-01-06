@@ -238,6 +238,7 @@ const authSlice = createSlice({
       selectedStaffForColumns?: string[];
       selectedStaff?: string;
       selectedLocation?: string;
+      selectedLocations?: string[];
       showOpeningHours?: boolean;
       showWorkingHours?: boolean;
       showBreaks?: boolean;
