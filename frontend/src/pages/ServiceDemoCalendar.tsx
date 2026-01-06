@@ -289,13 +289,15 @@ const ServiceDemoCalendar: React.FC = () => {
   const [locationExceptions, setLocationExceptions] = useState<any[]>([]);
   const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
   const [selectedException, setSelectedException] = useState<any | null>(null);
+  const [exceptionLocationId, setExceptionLocationId] = useState<string>('');
   const [exceptionFormData, setExceptionFormData] = useState({
     date: '',
     startTime: '08:00',
     endTime: '17:00',
     breakStart: '',
     breakEnd: '',
-    label: 'Sonderöffnung'
+    label: 'Sonderöffnung',
+    assignedStaff: [] as string[]
   });
   
   // Drag-Selection Hook
@@ -310,6 +312,20 @@ const ServiceDemoCalendar: React.FC = () => {
     isSlotInSelection,
     getSelectionRange
   } = useTimeSlotSelection();
+  
+  // ESC-Taste zum Entfernen der Markierung
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && (selectionStart || selectionEnd)) {
+        clearSelection();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectionStart, selectionEnd, clearSelection]);
   
   const settingsLoadedRef = useRef(false);
   const isSavingRef = useRef(false); // Flag um Endlosschleife zu verhindern
@@ -1693,7 +1709,10 @@ const ServiceDemoCalendar: React.FC = () => {
   // Handle LocationException
   const handleSaveException = async () => {
     try {
-      if (!selectedLocation || selectedLocation === 'all') {
+      // Verwende exceptionLocationId aus dem Dialog, falls gesetzt, sonst selectedLocation
+      const locationIdToUse = exceptionLocationId || selectedLocation;
+      
+      if (!locationIdToUse || locationIdToUse === 'all') {
         setSnackbar({
           open: true,
           message: 'Bitte wählen Sie einen Standort aus',
@@ -1717,16 +1736,22 @@ const ServiceDemoCalendar: React.FC = () => {
         endTime: exceptionFormData.endTime,
         breakStart: exceptionFormData.breakStart || undefined,
         breakEnd: exceptionFormData.breakEnd || undefined,
-        label: exceptionFormData.label || 'Sonderöffnung'
+        label: exceptionFormData.label || 'Sonderöffnung',
+        assignedStaff: exceptionFormData.assignedStaff && exceptionFormData.assignedStaff.length > 0 
+          ? exceptionFormData.assignedStaff 
+          : undefined
       };
       
       let response;
       if (selectedException) {
-        // Update
-        response = await api.put(`/locations/${selectedLocation}/exceptions/${selectedException._id}`, exceptionData);
+        // Update - verwende die Location-ID aus der Exception, falls vorhanden
+        const updateLocationId = (selectedException.location_id && typeof selectedException.location_id === 'object' && selectedException.location_id !== null)
+          ? selectedException.location_id._id || selectedException.location_id
+          : selectedException.location_id || locationIdToUse;
+        response = await api.put(`/locations/${updateLocationId}/exceptions/${selectedException._id}`, exceptionData);
       } else {
         // Create
-        response = await api.post(`/locations/${selectedLocation}/exceptions`, exceptionData);
+        response = await api.post(`/locations/${locationIdToUse}/exceptions`, exceptionData);
       }
       
       if (response.success) {
@@ -1743,13 +1768,15 @@ const ServiceDemoCalendar: React.FC = () => {
         eventBus.emit(selectedException ? EVENTS.LOCATION_EXCEPTION_UPDATED : EVENTS.LOCATION_EXCEPTION_CREATED, eventData);
         setExceptionDialogOpen(false);
         setSelectedException(null);
+        setExceptionLocationId('');
         setExceptionFormData({
           date: '',
           startTime: '08:00',
           endTime: '17:00',
           breakStart: '',
           breakEnd: '',
-          label: 'Sonderöffnung'
+          label: 'Sonderöffnung',
+          assignedStaff: []
         });
       }
     } catch (error: any) {
@@ -1788,7 +1815,11 @@ const ServiceDemoCalendar: React.FC = () => {
                 endTime: existingException.endTime,
                 breakStart: existingException.breakStart || '',
                 breakEnd: existingException.breakEnd || '',
-                label: existingException.label || 'Sonderöffnung'
+                label: existingException.label || 'Sonderöffnung',
+                assignedStaff: existingException.assignedStaff ? 
+                  existingException.assignedStaff.map((staff: any) => 
+                    typeof staff === 'object' && staff !== null ? (staff._id || staff) : staff
+                  ) : []
               });
               setExceptionDialogOpen(true);
               setSnackbar({
@@ -3271,6 +3302,22 @@ const ServiceDemoCalendar: React.FC = () => {
                             return (
                               <Box
                                 key={time}
+                                onClick={(e) => {
+                                  if (!isSelecting) {
+                                    // Wenn eine Markierung existiert und man auf einen nicht-markierten Slot klickt, entferne die Markierung
+                                    if ((selectionStart || selectionEnd) && !isInSelection) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      clearSelection();
+                                      return;
+                                    }
+                                    // Ansonsten öffne den Dialog für neue Termine
+                                    const [hour, minute] = time.split(':').map(Number);
+                                    const slotDate = new Date(day);
+                                    slotDate.setHours(hour, minute, 0, 0);
+                                    handleOpenNewEventDialog(slotDate, hour);
+                                  }
+                                }}
                                 onMouseDown={(e) => {
                                   if (e.button === 0) { // Nur linke Maustaste
                                     e.preventDefault();
@@ -3313,14 +3360,6 @@ const ServiceDemoCalendar: React.FC = () => {
                                   } else {
                                     // Wenn keine Auswahl vorhanden ist, zeige kein Context-Menü
                                     setContextMenuAnchor(null);
-                                  }
-                                }}
-                                onClick={() => {
-                                  if (!isSelecting) {
-                                    const [hour, minute] = time.split(':').map(Number);
-                                    const slotDate = new Date(day);
-                                    slotDate.setHours(hour, minute, 0, 0);
-                                    handleOpenNewEventDialog(slotDate, hour);
                                   }
                                 }}
                                 sx={{
@@ -3505,11 +3544,41 @@ const ServiceDemoCalendar: React.FC = () => {
                                 return false;
                               }
                               
+                              // Prüfe ob Exception für diese Person gilt (assignedStaff)
+                              const hasAssignedStaff = exception.assignedStaff && Array.isArray(exception.assignedStaff) && exception.assignedStaff.length > 0;
+                              if (hasAssignedStaff) {
+                                // Exception gilt nur für bestimmte Personen
+                                const assignedStaffIds = exception.assignedStaff.map((staff: any) => {
+                                  // assignedStaff kann User-IDs als Strings oder als Objekte sein
+                                  if (typeof staff === 'string') {
+                                    return staff;
+                                  }
+                                  if (typeof staff === 'object' && staff !== null) {
+                                    return staff._id || staff;
+                                  }
+                                  return null;
+                                }).filter((id: string | null) => id !== null);
+                                
+                                // Prüfe ob staffUserId in assignedStaffIds ist
+                                if (!staffUserId || !assignedStaffIds.includes(staffUserId.toString())) {
+                                  console.log('🔍 LocationException filtered out - staff not in assignedStaff:', {
+                                    staffUserId,
+                                    assignedStaffIds,
+                                    exceptionDate: exceptionDateString,
+                                    dayDate: dayDateString
+                                  });
+                                  return false;
+                                }
+                              }
+                              // Wenn assignedStaff leer ist, gilt die Exception für alle Personen
+                              
                               console.log('✅ LocationException passed filter:', {
                                 exceptionDate: exceptionDateString,
                                 dayDate: dayDateString,
                                 locationMatch,
-                                isActive
+                                isActive,
+                                hasAssignedStaff,
+                                staffUserId
                               });
                               return true;
                             });
@@ -3577,7 +3646,11 @@ const ServiceDemoCalendar: React.FC = () => {
                                         endTime: exception.endTime,
                                         breakStart: exception.breakStart || '',
                                         breakEnd: exception.breakEnd || '',
-                                        label: exception.label || 'Sonderöffnung'
+                                        label: exception.label || 'Sonderöffnung',
+                                        assignedStaff: exception.assignedStaff ? 
+                                          exception.assignedStaff.map((staff: any) => 
+                                            typeof staff === 'object' && staff !== null ? (staff._id || staff) : staff
+                                          ) : []
                                       });
                                       setExceptionDialogOpen(true);
                                     }}
@@ -3590,7 +3663,11 @@ const ServiceDemoCalendar: React.FC = () => {
                                         endTime: exception.endTime,
                                         breakStart: exception.breakStart || '',
                                         breakEnd: exception.breakEnd || '',
-                                        label: exception.label || 'Sonderöffnung'
+                                        label: exception.label || 'Sonderöffnung',
+                                        assignedStaff: exception.assignedStaff ? 
+                                          exception.assignedStaff.map((staff: any) => 
+                                            typeof staff === 'object' && staff !== null ? (staff._id || staff) : staff
+                                          ) : []
                                       });
                                       setExceptionDialogOpen(true);
                                     }}
@@ -4200,7 +4277,11 @@ const ServiceDemoCalendar: React.FC = () => {
                                   endTime: exception.endTime,
                                   breakStart: exception.breakStart || '',
                                   breakEnd: exception.breakEnd || '',
-                                  label: exception.label || 'Sonderöffnung'
+                                  label: exception.label || 'Sonderöffnung',
+                                  assignedStaff: exception.assignedStaff ? 
+                                    exception.assignedStaff.map((staff: any) => 
+                                      typeof staff === 'object' && staff !== null ? (staff._id || staff) : staff
+                                    ) : []
                                 });
                                 setExceptionDialogOpen(true);
                               }}
@@ -4245,6 +4326,22 @@ const ServiceDemoCalendar: React.FC = () => {
                     return (
                       <Box
                         key={time}
+                        onClick={(e) => {
+                          if (!isSelecting) {
+                            // Wenn eine Markierung existiert und man auf einen nicht-markierten Slot klickt, entferne die Markierung
+                            if ((selectionStart || selectionEnd) && !isInSelection) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              clearSelection();
+                              return;
+                            }
+                            // Ansonsten öffne den Dialog für neue Termine
+                            const [hour, minute] = time.split(':').map(Number);
+                            const slotDate = new Date(day);
+                            slotDate.setHours(hour, minute, 0, 0);
+                            handleOpenNewEventDialog(slotDate, hour);
+                          }
+                        }}
                         onMouseDown={(e) => {
                           if (e.button === 0) { // Nur linke Maustaste
                             e.preventDefault();
@@ -4281,14 +4378,6 @@ const ServiceDemoCalendar: React.FC = () => {
                             // Wenn keine Auswahl vorhanden ist, zeige kein Context-Menü
                             // (oder zeige ein Menü zum Starten einer Auswahl)
                             setContextMenuAnchor(null);
-                          }
-                        }}
-                        onClick={() => {
-                          if (!isSelecting) {
-                            const [hour, minute] = time.split(':').map(Number);
-                            const slotDate = new Date(day);
-                            slotDate.setHours(hour, minute, 0, 0);
-                            handleOpenNewEventDialog(slotDate, hour);
                           }
                         }}
                         sx={{
@@ -5838,7 +5927,11 @@ const ServiceDemoCalendar: React.FC = () => {
                     endTime: existingException.endTime,
                     breakStart: existingException.breakStart || '',
                     breakEnd: existingException.breakEnd || '',
-                    label: existingException.label || 'Sonderöffnung'
+                    label: existingException.label || 'Sonderöffnung',
+                    assignedStaff: existingException.assignedStaff ? 
+                      existingException.assignedStaff.map((staff: any) => 
+                        typeof staff === 'object' && staff !== null ? (staff._id || staff) : staff
+                      ) : []
                   });
                 } else {
                   // Erstellungsmodus: Öffne Dialog mit Standardwerten
@@ -5849,7 +5942,8 @@ const ServiceDemoCalendar: React.FC = () => {
                     endTime: '17:00',
                     breakStart: '',
                     breakEnd: '',
-                    label: 'Sonderöffnung'
+                    label: 'Sonderöffnung',
+                    assignedStaff: []
                   });
                 }
                 setExceptionDialogOpen(true);
@@ -5941,7 +6035,11 @@ const ServiceDemoCalendar: React.FC = () => {
                     endTime: existingException.endTime,
                     breakStart: existingException.breakStart || '',
                     breakEnd: existingException.breakEnd || '',
-                    label: existingException.label || 'Sonderöffnung'
+                    label: existingException.label || 'Sonderöffnung',
+                    assignedStaff: existingException.assignedStaff ? 
+                      existingException.assignedStaff.map((staff: any) => 
+                        typeof staff === 'object' && staff !== null ? (staff._id || staff) : staff
+                      ) : []
                   });
                 } else {
                   // Erstellungsmodus: Öffne Dialog mit Standardwerten basierend auf der Auswahl
@@ -5954,7 +6052,8 @@ const ServiceDemoCalendar: React.FC = () => {
                     endTime: endTime,
                     breakStart: '',
                     breakEnd: '',
-                    label: 'Sonderöffnung'
+                    label: 'Sonderöffnung',
+                    assignedStaff: []
                   });
                 }
                 setExceptionDialogOpen(true);
@@ -5976,13 +6075,15 @@ const ServiceDemoCalendar: React.FC = () => {
         onClose={() => {
           setExceptionDialogOpen(false);
           setSelectedException(null);
+          setExceptionLocationId('');
           setExceptionFormData({
             date: '',
             startTime: '08:00',
             endTime: '17:00',
             breakStart: '',
             breakEnd: '',
-            label: 'Sonderöffnung'
+            label: 'Sonderöffnung',
+            assignedStaff: []
           });
         }}
         maxWidth="sm"
@@ -5991,7 +6092,24 @@ const ServiceDemoCalendar: React.FC = () => {
         <DialogTitle>
           {selectedException ? 'Sonderöffnung bearbeiten' : 'Sonderöffnung für Tag setzen'}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent dividers sx={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          <FormControl fullWidth margin="normal" required>
+            <InputLabel id="exception-location-label">Standort</InputLabel>
+            <Select
+              labelId="exception-location-label"
+              id="exception-location-select"
+              value={exceptionLocationId || selectedLocation || ''}
+              onChange={(e) => setExceptionLocationId(e.target.value)}
+              label="Standort"
+            >
+              {locations.map((location) => (
+                <MenuItem key={location._id} value={location._id}>
+                  {location.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          
           <TextField
             label="Datum"
             type="date"
@@ -6054,6 +6172,92 @@ const ServiceDemoCalendar: React.FC = () => {
             placeholder="z.B. Sonderöffnung"
           />
           
+          <Divider sx={{ my: 3 }} />
+          
+          <Box sx={{ mt: 2, mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.primary', fontWeight: 600 }}>
+              Personal zuweisen (optional)
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+              Wenn Personal ausgewählt wird, gilt diese Sonderöffnung nur für die ausgewählten Personen. Wenn leer, gilt sie für alle.
+            </Typography>
+            {staffProfiles && staffProfiles.length > 0 ? (
+              <Autocomplete
+                multiple
+                options={staffProfiles}
+                getOptionLabel={(option: any) => option.display_name || `${option.first_name || ''} ${option.last_name || ''}`.trim() || option._id}
+                isOptionEqualToValue={(option: any, value: any) => {
+                  const optionUserId = typeof option.user_id === 'string' 
+                    ? option.user_id 
+                    : (typeof option.user_id === 'object' && option.user_id !== null ? (option.user_id as any)?._id : null);
+                  const valueUserId = typeof value.user_id === 'string' 
+                    ? value.user_id 
+                    : (typeof value.user_id === 'object' && value.user_id !== null ? (value.user_id as any)?._id : null);
+                  return optionUserId === valueUserId || option._id === value._id;
+                }}
+                value={staffProfiles.filter((staff: any) => {
+                  const staffUserId = typeof staff.user_id === 'string' 
+                    ? staff.user_id 
+                    : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                  return staffUserId && exceptionFormData.assignedStaff.includes(staffUserId);
+                })}
+                onChange={(event, newValue) => {
+                  const staffUserIds = newValue.map((staff: any) => {
+                    const staffUserId = typeof staff.user_id === 'string' 
+                      ? staff.user_id 
+                      : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                    return staffUserId;
+                  }).filter((id: string | null) => id !== null);
+                  setExceptionFormData({ ...exceptionFormData, assignedStaff: staffUserIds });
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Personal auswählen"
+                    placeholder="Personal auswählen (optional)"
+                    fullWidth
+                    margin="normal"
+                  />
+                )}
+                renderOption={(props, option: any) => {
+                  const { key, ...restProps } = props;
+                  const uniqueKey = option._id || key;
+                  return (
+                    <Box component="li" key={uniqueKey} {...restProps}>
+                      <Typography variant="body2">
+                        {option.display_name || `${option.first_name || ''} ${option.last_name || ''}`.trim() || option._id}
+                      </Typography>
+                    </Box>
+                  );
+                }}
+                renderTags={(value, getTagProps) =>
+                  value.map((option: any, index: number) => {
+                    const staffUserId = typeof option.user_id === 'string' 
+                      ? option.user_id 
+                      : (typeof option.user_id === 'object' && option.user_id !== null ? (option.user_id as any)?._id : null);
+                    return (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={staffUserId || option._id || `staff-${index}`}
+                        label={option.display_name || `${option.first_name || ''} ${option.last_name || ''}`.trim() || option._id}
+                        size="small"
+                      />
+                    );
+                  })
+                }
+              />
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+                Kein Personal verfügbar
+              </Typography>
+            )}
+            {exceptionFormData.assignedStaff.length > 0 && (
+              <Typography variant="caption" sx={{ mt: 2, color: 'info.main', fontStyle: 'italic', display: 'block' }}>
+                ⓘ Diese Sonderöffnung gilt nur für das ausgewählte Personal. Online-Buchungen sind nur für diese Personen möglich.
+              </Typography>
+            )}
+          </Box>
+          
           {selectedException && (
             <Box sx={{ mt: 2 }}>
               <Button
@@ -6084,7 +6288,8 @@ const ServiceDemoCalendar: React.FC = () => {
                 endTime: '17:00',
                 breakStart: '',
                 breakEnd: '',
-                label: 'Sonderöffnung'
+                label: 'Sonderöffnung',
+                assignedStaff: []
               });
             }}
           >

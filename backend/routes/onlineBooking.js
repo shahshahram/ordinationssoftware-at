@@ -170,18 +170,54 @@ router.get('/availability', async (req, res) => {
             $lte: exceptionEndDate
           },
           isActive: true
-        });
+        })
+        .populate('assignedStaff', '_id');
         
         if (locationException) {
-          console.log(`[OnlineBooking] Found LocationException for ${date}: ${locationException.startTime} - ${locationException.endTime}`);
-          // Überschreibe workingDay mit Exception-Daten
-          workingHours[dayOfWeek] = {
-            start: locationException.startTime,
-            end: locationException.endTime,
-            isWorking: true,
-            breakStart: locationException.breakStart,
-            breakEnd: locationException.breakEnd
-          };
+          // Prüfe, ob assignedStaff gesetzt ist und ob der angefragte Arzt darin enthalten ist
+          const hasAssignedStaff = locationException.assignedStaff && 
+            Array.isArray(locationException.assignedStaff) && 
+            locationException.assignedStaff.length > 0;
+          
+          if (hasAssignedStaff) {
+            // Prüfe, ob der angefragte Arzt (doctorId ist User-ID) in assignedStaff ist
+            // assignedStaff enthält User-IDs
+            const assignedStaffIds = locationException.assignedStaff.map((staff) => 
+              staff._id ? staff._id.toString() : staff.toString()
+            );
+            const doctorIdString = doctorId.toString();
+            
+            if (!assignedStaffIds.includes(doctorIdString)) {
+              console.log(`[OnlineBooking] LocationException exists but doctor ${doctorId} is not in assignedStaff list`);
+              // Diese Exception gilt nicht für diesen Arzt - verwende normale Öffnungszeiten
+              // Setze isWorking auf false, damit keine Slots generiert werden
+              workingHours[dayOfWeek] = {
+                ...workingHours[dayOfWeek],
+                isWorking: false
+              };
+            } else {
+              console.log(`[OnlineBooking] Found LocationException for ${date} with assignedStaff: ${locationException.startTime} - ${locationException.endTime}`);
+              // Überschreibe workingDay mit Exception-Daten
+              workingHours[dayOfWeek] = {
+                start: locationException.startTime,
+                end: locationException.endTime,
+                isWorking: true,
+                breakStart: locationException.breakStart,
+                breakEnd: locationException.breakEnd
+              };
+            }
+          } else {
+            // Kein assignedStaff gesetzt - Exception gilt für alle
+            console.log(`[OnlineBooking] Found LocationException for ${date} (no assignedStaff, applies to all): ${locationException.startTime} - ${locationException.endTime}`);
+            // Überschreibe workingDay mit Exception-Daten
+            workingHours[dayOfWeek] = {
+              start: locationException.startTime,
+              end: locationException.endTime,
+              isWorking: true,
+              breakStart: locationException.breakStart,
+              breakEnd: locationException.breakEnd
+            };
+          }
         }
       } catch (exceptionError) {
         console.warn('[OnlineBooking] Error checking LocationException:', exceptionError);

@@ -40,6 +40,12 @@ const locationExceptionSchema = new mongoose.Schema({
     trim: true,
     default: 'Sonderöffnung'
   },
+  // Zugewiesenes Personal (optional - wenn leer, gilt für alle)
+  assignedStaff: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    index: true
+  }],
   // Status (für zukünftige Erweiterungen)
   isActive: {
     type: Boolean,
@@ -98,4 +104,5 @@ locationExceptionSchema.pre('save', function(next) {
 });
 
 module.exports = mongoose.model('LocationException', locationExceptionSchema);
+
 

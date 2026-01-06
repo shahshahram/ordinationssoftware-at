@@ -1595,7 +1595,9 @@ router.post('/:id/exceptions', [
   body('endTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Endzeit'),
   body('breakStart').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Startzeit'),
   body('breakEnd').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Endzeit'),
-  body('label').optional().trim()
+  body('label').optional().trim(),
+  body('assignedStaff').optional().isArray().withMessage('assignedStaff muss ein Array sein'),
+  body('assignedStaff.*').optional().isMongoId().withMessage('Ungültige Personal-ID')
 ], async (req, res) => {
   try {
     const context = {
@@ -1630,27 +1632,91 @@ router.post('/:id/exceptions', [
     }
 
     // Prüfe ob bereits eine Ausnahme für dieses Datum existiert
+    // Normalisiere das Datum auf Mitternacht (00:00:00) in der lokalen Zeitzone
+    const exceptionDate = new Date(req.body.date);
+    exceptionDate.setHours(0, 0, 0, 0);
+    const exceptionEndDate = new Date(exceptionDate);
+    exceptionEndDate.setHours(23, 59, 59, 999);
+    
+    console.log('🔍 Checking for existing exception:', {
+      location_id: location._id,
+      date: req.body.date,
+      exceptionDate: exceptionDate.toISOString(),
+      exceptionEndDate: exceptionEndDate.toISOString()
+    });
+    
+    // Prüfe zuerst, ob es überhaupt Exceptions für diese Location gibt
+    const allExceptionsForLocation = await LocationException.find({
+      location_id: location._id
+    });
+    console.log('📊 Total exceptions for location (including inactive):', allExceptionsForLocation.length);
+    
+    // Prüfe nur nach aktiven Exceptions
     const existingException = await LocationException.findOne({
       location_id: location._id,
-      date: new Date(req.body.date),
+      date: {
+        $gte: exceptionDate,
+        $lte: exceptionEndDate
+      },
       isActive: true
     });
 
     if (existingException) {
+      console.log('⚠️ Found existing ACTIVE exception:', {
+        _id: existingException._id,
+        date: existingException.date,
+        dateISO: existingException.date ? new Date(existingException.date).toISOString() : 'N/A',
+        location_id: existingException.location_id,
+        isActive: existingException.isActive
+      });
+      
+      // Prüfe auch, ob es inaktive Exceptions gibt (für Debugging)
+      const inactiveExceptions = await LocationException.find({
+        location_id: location._id,
+        date: {
+          $gte: exceptionDate,
+          $lte: exceptionEndDate
+        },
+        isActive: false
+      });
+      console.log('📊 Inactive exceptions for same date:', inactiveExceptions.length);
+      
       return res.status(400).json({
         success: false,
-        message: 'Für dieses Datum existiert bereits eine Ausnahme'
+        message: `Für dieses Datum existiert bereits eine Ausnahme (ID: ${existingException._id})`,
+        existingException: {
+          _id: existingException._id,
+          date: existingException.date,
+          startTime: existingException.startTime,
+          endTime: existingException.endTime
+        }
       });
     }
+    
+    // Prüfe auch, ob es inaktive Exceptions gibt (für Debugging)
+    const inactiveExceptions = await LocationException.find({
+      location_id: location._id,
+      date: {
+        $gte: exceptionDate,
+        $lte: exceptionEndDate
+      },
+      isActive: false
+    });
+    console.log('📊 Inactive exceptions for same date:', inactiveExceptions.length);
+    
+    console.log('✅ No existing ACTIVE exception found, creating new one');
 
     const exception = new LocationException({
       location_id: location._id,
-      date: new Date(req.body.date),
+      date: exceptionDate, // Verwende das normalisierte Datum
       startTime: req.body.startTime,
       endTime: req.body.endTime,
       breakStart: req.body.breakStart,
       breakEnd: req.body.breakEnd,
       label: req.body.label || 'Sonderöffnung',
+      assignedStaff: req.body.assignedStaff && Array.isArray(req.body.assignedStaff) && req.body.assignedStaff.length > 0
+        ? req.body.assignedStaff
+        : [],
       createdBy: req.user._id
     });
 
@@ -1672,7 +1738,9 @@ router.post('/:id/exceptions', [
 
     const populatedException = await LocationException.findById(exception._id)
       .populate('location_id', 'name code')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('assignedStaff', '_id firstName lastName email')
+      .populate('assignedStaff', '_id firstName lastName email');
 
     res.status(201).json({
       success: true,
@@ -1697,7 +1765,9 @@ router.put('/:id/exceptions/:exceptionId', [
   body('breakStart').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Startzeit'),
   body('breakEnd').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('Ungültige Pausen-Endzeit'),
   body('label').optional().trim(),
-  body('isActive').optional().isBoolean()
+  body('isActive').optional().isBoolean(),
+  body('assignedStaff').optional().isArray().withMessage('assignedStaff muss ein Array sein'),
+  body('assignedStaff.*').optional().isMongoId().withMessage('Ungültige Personal-ID')
 ], async (req, res) => {
   try {
     const context = {
@@ -1727,6 +1797,12 @@ router.put('/:id/exceptions/:exceptionId', [
     if (updateData.date) {
       updateData.date = new Date(updateData.date);
     }
+    // Normalisiere assignedStaff: Wenn undefined oder leeres Array, setze auf leeres Array
+    if (updateData.assignedStaff !== undefined) {
+      updateData.assignedStaff = Array.isArray(updateData.assignedStaff) && updateData.assignedStaff.length > 0
+        ? updateData.assignedStaff
+        : [];
+    }
 
     const exception = await LocationException.findOneAndUpdate(
       { _id: req.params.exceptionId, location_id: req.params.id },
@@ -1734,7 +1810,8 @@ router.put('/:id/exceptions/:exceptionId', [
       { new: true, runValidators: true }
     )
       .populate('location_id', 'name code')
-      .populate('createdBy', 'firstName lastName email');
+      .populate('createdBy', 'firstName lastName email')
+      .populate('assignedStaff', '_id firstName lastName email');
 
     if (!exception) {
       return res.status(404).json({
@@ -1774,16 +1851,56 @@ router.delete('/:id/exceptions/:exceptionId', auth, async (req, res) => {
       });
     }
 
-    const exception = await LocationException.findOneAndDelete({
+    console.log('🗑️ Deleting exception:', {
+      exceptionId: req.params.exceptionId,
+      locationId: req.params.id
+    });
+
+    // Prüfe zuerst, ob die Exception existiert
+    const existingException = await LocationException.findOne({
       _id: req.params.exceptionId,
       location_id: req.params.id
     });
 
-    if (!exception) {
+    if (!existingException) {
+      console.log('⚠️ Exception not found for deletion:', {
+        exceptionId: req.params.exceptionId,
+        locationId: req.params.id
+      });
       return res.status(404).json({
         success: false,
         message: 'Ausnahme nicht gefunden'
       });
+    }
+
+    console.log('📋 Exception found before deletion:', {
+      _id: existingException._id,
+      date: existingException.date,
+      dateISO: existingException.date ? new Date(existingException.date).toISOString() : 'N/A',
+      location_id: existingException.location_id,
+      isActive: existingException.isActive
+    });
+
+    // Lösche die Exception
+    const deletedException = await LocationException.findOneAndDelete({
+      _id: req.params.exceptionId,
+      location_id: req.params.id
+    });
+
+    if (!deletedException) {
+      console.error('❌ Exception was not deleted despite being found');
+      return res.status(500).json({
+        success: false,
+        message: 'Fehler beim Löschen der Ausnahme'
+      });
+    }
+
+    // Verifiziere, dass die Exception wirklich gelöscht wurde
+    const verifyDeleted = await LocationException.findById(req.params.exceptionId);
+    if (verifyDeleted) {
+      console.error('❌ Exception still exists after deletion!');
+    } else {
+      console.log('✅ Exception successfully deleted and verified');
     }
 
     // Audit-Log
@@ -1793,22 +1910,33 @@ router.delete('/:id/exceptions/:exceptionId', auth, async (req, res) => {
       userRole: req.user.role,
       action: 'location-exceptions.delete',
       resource: 'LocationException',
-      resourceId: exception._id,
+      resourceId: deletedException._id,
       description: `Ausnahme für Standort ${req.params.id} gelöscht`,
-      details: { locationId: req.params.id, exceptionId: req.params.exceptionId },
+      details: { 
+        locationId: req.params.id, 
+        exceptionId: req.params.exceptionId,
+        deletedDate: deletedException.date,
+        deletedDateISO: deletedException.date ? new Date(deletedException.date).toISOString() : 'N/A'
+      },
       ipAddress: req.ip,
       userAgent: req.get('User-Agent')
     });
 
     res.json({
       success: true,
-      message: 'Ausnahme erfolgreich gelöscht'
+      message: 'Ausnahme erfolgreich gelöscht',
+      deletedException: {
+        _id: deletedException._id,
+        date: deletedException.date
+      }
     });
   } catch (error) {
     console.error('Error deleting location exception:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Löschen der Ausnahme'
+      message: 'Fehler beim Löschen der Ausnahme',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });

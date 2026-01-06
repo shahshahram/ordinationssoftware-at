@@ -197,6 +197,7 @@ const DemoCalendar: React.FC = () => {
   const { rooms } = useAppSelector((state) => state.rooms);
   const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
   const { count: waitingListCount } = useAppSelector((state) => state.waitingList);
+  const { user } = useAppSelector((state) => state.auth);
 
   // Local State
   const dateInitializedRef = useRef(false);
@@ -259,13 +260,15 @@ const DemoCalendar: React.FC = () => {
   const [locationExceptions, setLocationExceptions] = useState<any[]>([]);
   const [exceptionDialogOpen, setExceptionDialogOpen] = useState(false);
   const [selectedException, setSelectedException] = useState<any | null>(null);
+  const [exceptionLocationId, setExceptionLocationId] = useState<string>('');
   const [exceptionFormData, setExceptionFormData] = useState({
     date: '',
     startTime: '08:00',
     endTime: '17:00',
     breakStart: '',
     breakEnd: '',
-    label: 'Sonderöffnung'
+    label: 'Sonderöffnung',
+    assignedStaff: [] as string[]
   });
   
   // Drag-Selection Hook
@@ -280,6 +283,20 @@ const DemoCalendar: React.FC = () => {
     isSlotInSelection,
     getSelectionRange
   } = useTimeSlotSelection();
+  
+  // ESC-Taste zum Entfernen der Markierung
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && (selectionStart || selectionEnd)) {
+        clearSelection();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [selectionStart, selectionEnd, clearSelection]);
   
   const [formData, setFormData] = useState<AppointmentFormData>({
     patientId: '',
@@ -378,17 +395,57 @@ const DemoCalendar: React.FC = () => {
     }
   }, [locations, selectedLocation]);
 
-  // Initialize selected locations - start with no locations selected
-  // User must explicitly select locations to filter appointments
+  // Initialize selected locations - load from localStorage if available
   const hasInitializedLocations = useRef(false);
+  const lastUserId = useRef<string | null>(null);
+  
   useEffect(() => {
-    if (locations.length > 0 && !hasInitializedLocations.current) {
-      // Start with no locations selected - show all appointments by default
-      // User can then select specific locations to filter
+    // Reset initialization flag if user changed
+    if (user?._id && lastUserId.current !== user._id) {
+      hasInitializedLocations.current = false;
+      lastUserId.current = user._id;
+    } else if (!user?._id && lastUserId.current !== null) {
+      hasInitializedLocations.current = false;
+      lastUserId.current = null;
+    }
+    
+    if (locations.length > 0 && !hasInitializedLocations.current && user?._id) {
+      // Lade gespeicherte Standort-Auswahl aus localStorage
+      try {
+        const storageKey = `demoCalendar_selectedLocations_${user._id}`;
+        const saved = localStorage.getItem(storageKey);
+        console.log('🔍 Loading location selections from localStorage:', { storageKey, saved, locationsCount: locations.length });
+        if (saved) {
+          const savedLocations = JSON.parse(saved);
+          console.log('📥 Parsed saved locations:', savedLocations);
+          // Prüfe, ob alle gespeicherten Standorte noch existieren
+          const validLocations = savedLocations.filter((id: string) => 
+            locations.some(loc => loc._id === id)
+          );
+          console.log('✅ Valid locations after filtering:', validLocations);
+          if (validLocations.length > 0) {
+            setSelectedLocations(validLocations);
+            console.log('📥 Loaded saved location selections:', validLocations);
+          } else {
+            console.log('⚠️ No valid locations found, starting with empty selection');
+            setSelectedLocations([]);
+          }
+        } else {
+          // Keine gespeicherten Einstellungen - starte mit leerer Auswahl
+          console.log('ℹ️ No saved location selections found, starting with empty selection');
+          setSelectedLocations([]);
+        }
+      } catch (error) {
+        console.error('❌ Error loading saved location selections:', error);
+        setSelectedLocations([]);
+      }
+      hasInitializedLocations.current = true;
+    } else if (locations.length > 0 && !hasInitializedLocations.current && !user?._id) {
+      // Kein User vorhanden - starte mit leerer Auswahl
       setSelectedLocations([]);
       hasInitializedLocations.current = true;
     }
-  }, [locations]);
+  }, [locations, user]);
 
   // Note: Removed auto-selection of currentLocation to allow user control
   // User must explicitly select locations via checkboxes
@@ -623,11 +680,24 @@ const DemoCalendar: React.FC = () => {
   }, []);
 
   const handleLocationToggle = (locationId: string) => {
-    setSelectedLocations(prev =>
-      prev.includes(locationId)
+    setSelectedLocations(prev => {
+      const newLocations = prev.includes(locationId)
         ? prev.filter(id => id !== locationId)
-        : [...prev, locationId]
-    );
+        : [...prev, locationId];
+      
+      // Speichere die Auswahl in localStorage (user-spezifisch)
+      if (user?._id) {
+        try {
+          const storageKey = `demoCalendar_selectedLocations_${user._id}`;
+          localStorage.setItem(storageKey, JSON.stringify(newLocations));
+          console.log('💾 Saved location selections:', newLocations);
+        } catch (error) {
+          console.error('Error saving location selections:', error);
+        }
+      }
+      
+      return newLocations;
+    });
   };
 
   const handleDateNavigation = (direction: 'prev' | 'next' | 'today') => {
@@ -711,7 +781,12 @@ const DemoCalendar: React.FC = () => {
     });
     setPatientSearchValue(null);
     setPatientSearchInput('');
-    setSelectedLocation(locations.length === 1 ? locations[0]._id : (selectedLocation || locations[0]?._id || ''));
+    // Wenn genau ein Standort über die Checkboxen ausgewählt ist, verwende diesen
+    // Sonst verwende den aktuell ausgewählten Standort oder den ersten verfügbaren
+    const defaultLocation = selectedLocations.length === 1 
+      ? selectedLocations[0] 
+      : (locations.length === 1 ? locations[0]._id : (selectedLocation || locations[0]?._id || ''));
+    setSelectedLocation(defaultLocation);
     setSelectedStaff('');
     setDialogMode('add');
     setActiveTab(0);
@@ -1057,7 +1132,10 @@ const DemoCalendar: React.FC = () => {
   // Handle LocationException
   const handleSaveException = async () => {
     try {
-      if (!selectedLocation || selectedLocation === 'all') {
+      // Verwende exceptionLocationId aus dem Dialog, falls gesetzt, sonst selectedLocation
+      const locationIdToUse = exceptionLocationId || selectedLocation;
+      
+      if (!locationIdToUse || locationIdToUse === 'all') {
         setSnackbar({
           open: true,
           message: 'Bitte wählen Sie einen Standort aus',
@@ -1081,16 +1159,22 @@ const DemoCalendar: React.FC = () => {
         endTime: exceptionFormData.endTime,
         breakStart: exceptionFormData.breakStart || undefined,
         breakEnd: exceptionFormData.breakEnd || undefined,
-        label: exceptionFormData.label || 'Sonderöffnung'
+        label: exceptionFormData.label || 'Sonderöffnung',
+        assignedStaff: exceptionFormData.assignedStaff && exceptionFormData.assignedStaff.length > 0 
+          ? exceptionFormData.assignedStaff 
+          : undefined
       };
       
       let response;
       if (selectedException) {
-        // Update
-        response = await api.put(`/locations/${selectedLocation}/exceptions/${selectedException._id}`, exceptionData);
+        // Update - verwende die Location-ID aus der Exception, falls vorhanden
+        const updateLocationId = (selectedException.location_id && typeof selectedException.location_id === 'object' && selectedException.location_id !== null)
+          ? selectedException.location_id._id || selectedException.location_id
+          : selectedException.location_id || locationIdToUse;
+        response = await api.put(`/locations/${updateLocationId}/exceptions/${selectedException._id}`, exceptionData);
       } else {
         // Create
-        response = await api.post(`/locations/${selectedLocation}/exceptions`, exceptionData);
+        response = await api.post(`/locations/${locationIdToUse}/exceptions`, exceptionData);
       }
       
       if (response.success) {
@@ -1107,13 +1191,15 @@ const DemoCalendar: React.FC = () => {
         eventBus.emit(selectedException ? EVENTS.LOCATION_EXCEPTION_UPDATED : EVENTS.LOCATION_EXCEPTION_CREATED, eventData);
         setExceptionDialogOpen(false);
         setSelectedException(null);
+        setExceptionLocationId('');
         setExceptionFormData({
           date: '',
           startTime: '08:00',
           endTime: '17:00',
           breakStart: '',
           breakEnd: '',
-          label: 'Sonderöffnung'
+          label: 'Sonderöffnung',
+          assignedStaff: []
         });
       }
     } catch (error: any) {
@@ -1135,22 +1221,52 @@ const DemoCalendar: React.FC = () => {
           });
           
           if (exceptionsResponse.success && exceptionsResponse.data) {
-            const exceptions = Array.isArray(exceptionsResponse.data) ? exceptionsResponse.data : [];
+            // Die API gibt {success: true, data: [...]} zurück, aber api.js wrappt es in {data: {success: true, data: [...]}}
+            // Daher müssen wir response.data.data verwenden, wenn response.data.data existiert, sonst response.data
+            const responseData = exceptionsResponse.data as any;
+            const data = (responseData && responseData.data) ? responseData.data : responseData;
+            const exceptions = Array.isArray(data) ? data : [];
+            
+            console.log('🔍 Loading existing exception for edit mode:', {
+              selectedLocation,
+              date: exceptionFormData.date,
+              foundExceptions: exceptions.length,
+              exceptions: exceptions.map((exc: any) => ({
+                _id: exc._id,
+                date: exc.date ? format(new Date(exc.date), 'yyyy-MM-dd') : 'no date',
+                location_id: typeof exc.location_id === 'object' && exc.location_id !== null
+                  ? exc.location_id._id || exc.location_id
+                  : exc.location_id
+              }))
+            });
+            
             const existingException = exceptions.find((exc: any) => {
               const excDate = new Date(exc.date);
               return excDate.toDateString() === startDate.toDateString();
             });
             
             if (existingException) {
+              console.log('✅ Found existing exception, opening in edit mode:', existingException);
               // Öffne Dialog im Edit-Modus
+              const exceptionLocationId = typeof existingException.location_id === 'object' && existingException.location_id !== null
+                ? existingException.location_id._id || existingException.location_id
+                : existingException.location_id || selectedLocation;
               setSelectedException(existingException);
+              setExceptionLocationId(exceptionLocationId || '');
               setExceptionFormData({
                 date: format(new Date(existingException.date), 'yyyy-MM-dd'),
                 startTime: existingException.startTime,
                 endTime: existingException.endTime,
                 breakStart: existingException.breakStart || '',
                 breakEnd: existingException.breakEnd || '',
-                label: existingException.label || 'Sonderöffnung'
+                label: existingException.label || 'Sonderöffnung',
+                assignedStaff: existingException.assignedStaff ? 
+                  existingException.assignedStaff.map((staff: any) => {
+                    if (typeof staff === 'object' && staff !== null) {
+                      return staff._id || staff;
+                    }
+                    return staff;
+                  }) : []
               });
               setExceptionDialogOpen(true);
               setSnackbar({
@@ -1159,6 +1275,8 @@ const DemoCalendar: React.FC = () => {
                 severity: 'info'
               });
               return;
+            } else {
+              console.log('⚠️ No matching exception found in loaded exceptions');
             }
           }
         } catch (loadError) {
@@ -1174,9 +1292,26 @@ const DemoCalendar: React.FC = () => {
     }
   };
   
-  const handleDeleteException = async (exceptionId: string) => {
+  const handleDeleteException = async (exceptionId: string, exception?: any) => {
     try {
-      if (!selectedLocation || selectedLocation === 'all') {
+      // Verwende die Location-ID aus der Exception, falls vorhanden, sonst die ausgewählte Location
+      let locationId = selectedLocation;
+      
+      if (exception) {
+        const exceptionLocationId = typeof exception.location_id === 'object' && exception.location_id !== null
+          ? exception.location_id._id || exception.location_id
+          : exception.location_id;
+        if (exceptionLocationId) {
+          locationId = exceptionLocationId;
+        }
+      }
+      
+      if (!locationId || locationId === 'all') {
+        setSnackbar({
+          open: true,
+          message: 'Bitte wählen Sie einen Standort aus',
+          severity: 'warning'
+        });
         return;
       }
       
@@ -1185,7 +1320,7 @@ const DemoCalendar: React.FC = () => {
         return;
       }
       
-      const response = await api.delete(`/locations/${selectedLocation}/exceptions/${exceptionId}`);
+      const response = await api.delete(`/locations/${locationId}/exceptions/${exceptionId}`);
       
       if (response.success) {
         setSnackbar({
@@ -2055,6 +2190,22 @@ const DemoCalendar: React.FC = () => {
                     return (
                       <Box
                         key={time}
+                        onClick={(e) => {
+                          if (!isSelecting) {
+                            // Wenn eine Markierung existiert und man auf einen nicht-markierten Slot klickt, entferne die Markierung
+                            if ((selectionStart || selectionEnd) && !isInSelection) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              clearSelection();
+                              return;
+                            }
+                            // Ansonsten öffne den Dialog für neue Termine
+                            const [hour, minute] = time.split(':').map(Number);
+                            const slotDate = new Date(day);
+                            slotDate.setHours(hour, minute, 0, 0);
+                            handleOpenNewEventDialog(slotDate, hour);
+                          }
+                        }}
                         onMouseDown={(e) => {
                           if (e.button === 0) { // Nur linke Maustaste
                             e.preventDefault();
@@ -2090,14 +2241,6 @@ const DemoCalendar: React.FC = () => {
                           } else {
                             // Wenn keine Auswahl vorhanden ist, zeige kein Context-Menü
                             setContextMenuAnchor(null);
-                          }
-                        }}
-                        onClick={() => {
-                          if (!isSelecting) {
-                            const [hour, minute] = time.split(':').map(Number);
-                            const slotDate = new Date(day);
-                            slotDate.setHours(hour, minute, 0, 0);
-                            handleOpenNewEventDialog(slotDate, hour);
                           }
                         }}
                         sx={{
@@ -2278,7 +2421,44 @@ const DemoCalendar: React.FC = () => {
                         return false;
                       }
                       
-                      return exception.isActive !== false; // Nur aktive Ausnahmen anzeigen
+                      const isActive = exception.isActive !== false;
+                      if (!isActive) {
+                        return false;
+                      }
+                      
+                      // Prüfe ob Exception für die ausgewählte Person gilt (assignedStaff)
+                      const hasAssignedStaff = exception.assignedStaff && Array.isArray(exception.assignedStaff) && exception.assignedStaff.length > 0;
+                      if (hasAssignedStaff) {
+                        // Exception gilt nur für bestimmte Personen
+                        const assignedStaffIds = exception.assignedStaff.map((staff: any) => {
+                          // assignedStaff kann User-IDs als Strings oder als Objekte sein
+                          if (typeof staff === 'string') {
+                            return staff;
+                          }
+                          if (typeof staff === 'object' && staff !== null) {
+                            return staff._id || staff;
+                          }
+                          return null;
+                        }).filter((id: string | null) => id !== null);
+                        
+                        // Wenn eine Person ausgewählt ist, prüfe ob sie in assignedStaffIds ist
+                        if (selectedStaff && selectedStaff !== 'all') {
+                          if (!assignedStaffIds.includes(selectedStaff.toString())) {
+                            return false; // Exception gilt nicht für die ausgewählte Person
+                          }
+                        }
+                        // Wenn keine Person ausgewählt ist (selectedStaff === 'all' oder leer),
+                        // zeige Exception nur wenn sie für alle gilt (aber assignedStaff ist nicht leer, also nicht anzeigen)
+                        // Eigentlich sollten wir sie nicht anzeigen, wenn assignedStaff vorhanden ist und keine Person ausgewählt ist
+                        // Aber für Übersicht zeigen wir sie trotzdem, wenn selectedStaff === 'all'
+                        // Wenn selectedStaff leer ist, zeigen wir sie nicht
+                        if (!selectedStaff || selectedStaff === '') {
+                          return false; // Keine Person ausgewählt, aber Exception ist personenspezifisch
+                        }
+                      }
+                      // Wenn assignedStaff leer ist, gilt die Exception für alle Personen
+                      
+                      return true;
                     })
                     .map((exception: any) => {
                       const exceptionDate = new Date(exception.date);
@@ -2328,27 +2508,49 @@ const DemoCalendar: React.FC = () => {
                             onContextMenu={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
+                              const exceptionLocationId = typeof exception.location_id === 'object' && exception.location_id !== null
+                                ? exception.location_id._id || exception.location_id
+                                : exception.location_id || selectedLocation;
                               setSelectedException(exception);
+                              setExceptionLocationId(exceptionLocationId || '');
                               setExceptionFormData({
                                 date: format(exceptionDate, 'yyyy-MM-dd'),
                                 startTime: exception.startTime,
                                 endTime: exception.endTime,
                                 breakStart: exception.breakStart || '',
                                 breakEnd: exception.breakEnd || '',
-                                label: exception.label || 'Sonderöffnung'
+                                label: exception.label || 'Sonderöffnung',
+                                assignedStaff: exception.assignedStaff ? 
+                                  exception.assignedStaff.map((staff: any) => {
+                                    if (typeof staff === 'object' && staff !== null) {
+                                      return staff._id || staff;
+                                    }
+                                    return staff;
+                                  }) : []
                               });
                               setExceptionDialogOpen(true);
                             }}
                             onClick={(e) => {
                               e.stopPropagation();
+                              const exceptionLocationId = typeof exception.location_id === 'object' && exception.location_id !== null
+                                ? exception.location_id._id || exception.location_id
+                                : exception.location_id || selectedLocation;
                               setSelectedException(exception);
+                              setExceptionLocationId(exceptionLocationId || '');
                               setExceptionFormData({
                                 date: format(exceptionDate, 'yyyy-MM-dd'),
                                 startTime: exception.startTime,
                                 endTime: exception.endTime,
                                 breakStart: exception.breakStart || '',
                                 breakEnd: exception.breakEnd || '',
-                                label: exception.label || 'Sonderöffnung'
+                                label: exception.label || 'Sonderöffnung',
+                                assignedStaff: exception.assignedStaff ? 
+                                  exception.assignedStaff.map((staff: any) => {
+                                    if (typeof staff === 'object' && staff !== null) {
+                                      return staff._id || staff;
+                                    }
+                                    return staff;
+                                  }) : []
                               });
                               setExceptionDialogOpen(true);
                             }}
@@ -3916,18 +4118,31 @@ const DemoCalendar: React.FC = () => {
                     endTime: existingException.endTime,
                     breakStart: existingException.breakStart || '',
                     breakEnd: existingException.breakEnd || '',
-                    label: existingException.label || 'Sonderöffnung'
+                    label: existingException.label || 'Sonderöffnung',
+                    assignedStaff: existingException.assignedStaff ? 
+                      existingException.assignedStaff.map((staff: any) => {
+                        if (typeof staff === 'object' && staff !== null) {
+                          return staff._id || staff;
+                        }
+                        return staff;
+                      }) : []
                   });
                 } else {
                   // Erstellungsmodus: Öffne Dialog mit Standardwerten
                   setSelectedException(null);
+                  // Wenn nur ein Standort vorhanden ist, wähle diesen automatisch
+                  const defaultLocationId = locations.length === 1 
+                    ? locations[0]._id 
+                    : (selectedLocation && selectedLocation !== 'all' ? selectedLocation : '');
+                  setExceptionLocationId(defaultLocationId);
                   setExceptionFormData({
                     date: dayDateString,
                     startTime: '08:00',
                     endTime: '17:00',
                     breakStart: '',
                     breakEnd: '',
-                    label: 'Sonderöffnung'
+                    label: 'Sonderöffnung',
+                    assignedStaff: []
                   });
                 }
                 setExceptionDialogOpen(true);
@@ -4012,27 +4227,44 @@ const DemoCalendar: React.FC = () => {
                 if (existingException) {
                   // Bearbeitungsmodus: Öffne Dialog mit bestehender Ausnahme
                   const exceptionDate = new Date(existingException.date);
+                  const exceptionLocationId = typeof existingException.location_id === 'object' && existingException.location_id !== null
+                    ? existingException.location_id._id || existingException.location_id
+                    : existingException.location_id || selectedLocation;
                   setSelectedException(existingException);
+                  setExceptionLocationId(exceptionLocationId || '');
                   setExceptionFormData({
                     date: format(exceptionDate, 'yyyy-MM-dd'),
                     startTime: existingException.startTime,
                     endTime: existingException.endTime,
                     breakStart: existingException.breakStart || '',
                     breakEnd: existingException.breakEnd || '',
-                    label: existingException.label || 'Sonderöffnung'
+                    label: existingException.label || 'Sonderöffnung',
+                    assignedStaff: existingException.assignedStaff ? 
+                      existingException.assignedStaff.map((staff: any) => {
+                        if (typeof staff === 'object' && staff !== null) {
+                          return staff._id || staff;
+                        }
+                        return staff;
+                      }) : []
                   });
                 } else {
                   // Erstellungsmodus: Öffne Dialog mit Standardwerten basierend auf der Auswahl
                   const startTime = contextMenuAnchor.start ? format(contextMenuAnchor.start, 'HH:mm') : '08:00';
                   const endTime = contextMenuAnchor.end ? format(contextMenuAnchor.end, 'HH:mm') : '17:00';
                   setSelectedException(null);
+                  // Wenn nur ein Standort vorhanden ist, wähle diesen automatisch
+                  const defaultLocationId = locations.length === 1 
+                    ? locations[0]._id 
+                    : (selectedLocation && selectedLocation !== 'all' ? selectedLocation : '');
+                  setExceptionLocationId(defaultLocationId);
                   setExceptionFormData({
                     date: dayDateString,
                     startTime: startTime,
                     endTime: endTime,
                     breakStart: '',
                     breakEnd: '',
-                    label: 'Sonderöffnung'
+                    label: 'Sonderöffnung',
+                    assignedStaff: []
                   });
                 }
                 setExceptionDialogOpen(true);
@@ -4054,13 +4286,15 @@ const DemoCalendar: React.FC = () => {
         onClose={() => {
           setExceptionDialogOpen(false);
           setSelectedException(null);
+          setExceptionLocationId('');
           setExceptionFormData({
             date: '',
             startTime: '08:00',
             endTime: '17:00',
             breakStart: '',
             breakEnd: '',
-            label: 'Sonderöffnung'
+            label: 'Sonderöffnung',
+            assignedStaff: []
           });
         }}
         maxWidth="sm"
@@ -4069,7 +4303,24 @@ const DemoCalendar: React.FC = () => {
         <DialogTitle>
           {selectedException ? 'Sonderöffnung bearbeiten' : 'Sonderöffnung für Tag setzen'}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent dividers sx={{ maxHeight: '70vh', overflowY: 'auto' }}>
+          <FormControl fullWidth margin="normal" required>
+            <InputLabel id="exception-location-label">Standort</InputLabel>
+            <Select
+              labelId="exception-location-label"
+              id="exception-location-select"
+              value={exceptionLocationId}
+              onChange={(e) => setExceptionLocationId(e.target.value)}
+              label="Standort"
+            >
+              {locations.map((location) => (
+                <MenuItem key={location._id} value={location._id}>
+                  {location.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          
           <TextField
             label="Datum"
             type="date"
@@ -4132,6 +4383,92 @@ const DemoCalendar: React.FC = () => {
             placeholder="z.B. Sonderöffnung"
           />
           
+          <Divider sx={{ my: 3 }} />
+          
+          <Box sx={{ mt: 2, mb: 3 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1.5, color: 'text.primary', fontWeight: 600 }}>
+              Personal zuweisen (optional)
+            </Typography>
+            <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
+              Wenn Personal ausgewählt wird, gilt diese Sonderöffnung nur für die ausgewählten Personen. Wenn leer, gilt sie für alle.
+            </Typography>
+            {staffProfiles && staffProfiles.length > 0 ? (
+              <Autocomplete
+                multiple
+                options={staffProfiles}
+                getOptionLabel={(option: any) => option.display_name || `${option.first_name || ''} ${option.last_name || ''}`.trim() || option._id}
+                isOptionEqualToValue={(option: any, value: any) => {
+                  const optionUserId = typeof option.user_id === 'string' 
+                    ? option.user_id 
+                    : (typeof option.user_id === 'object' && option.user_id !== null ? (option.user_id as any)?._id : null);
+                  const valueUserId = typeof value.user_id === 'string' 
+                    ? value.user_id 
+                    : (typeof value.user_id === 'object' && value.user_id !== null ? (value.user_id as any)?._id : null);
+                  return optionUserId === valueUserId || option._id === value._id;
+                }}
+                value={staffProfiles.filter((staff: any) => {
+                  const staffUserId = typeof staff.user_id === 'string' 
+                    ? staff.user_id 
+                    : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                  return staffUserId && exceptionFormData.assignedStaff.includes(staffUserId);
+                })}
+                onChange={(event, newValue) => {
+                  const staffUserIds = newValue.map((staff: any) => {
+                    const staffUserId = typeof staff.user_id === 'string' 
+                      ? staff.user_id 
+                      : (typeof staff.user_id === 'object' && staff.user_id !== null ? (staff.user_id as any)?._id : null);
+                    return staffUserId;
+                  }).filter((id: string | null) => id !== null);
+                  setExceptionFormData({ ...exceptionFormData, assignedStaff: staffUserIds });
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Personal auswählen"
+                    placeholder="Personal auswählen (optional)"
+                    fullWidth
+                    margin="normal"
+                  />
+                )}
+                renderOption={(props, option: any) => {
+                  const { key, ...restProps } = props;
+                  const uniqueKey = option._id || key;
+                  return (
+                    <Box component="li" key={uniqueKey} {...restProps}>
+                      <Typography variant="body2">
+                        {option.display_name || `${option.first_name || ''} ${option.last_name || ''}`.trim() || option._id}
+                      </Typography>
+                    </Box>
+                  );
+                }}
+                renderTags={(value, getTagProps) =>
+                  value.map((option: any, index: number) => {
+                    const staffUserId = typeof option.user_id === 'string' 
+                      ? option.user_id 
+                      : (typeof option.user_id === 'object' && option.user_id !== null ? (option.user_id as any)?._id : null);
+                    return (
+                      <Chip
+                        {...getTagProps({ index })}
+                        key={staffUserId || option._id || `staff-${index}`}
+                        label={option.display_name || `${option.first_name || ''} ${option.last_name || ''}`.trim() || option._id}
+                        size="small"
+                      />
+                    );
+                  })
+                }
+              />
+            ) : (
+              <Typography variant="body2" sx={{ color: 'text.secondary', fontStyle: 'italic', p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+                Kein Personal verfügbar
+              </Typography>
+            )}
+            {exceptionFormData.assignedStaff.length > 0 && (
+              <Typography variant="caption" sx={{ mt: 2, color: 'info.main', fontStyle: 'italic', display: 'block' }}>
+                ⓘ Diese Sonderöffnung gilt nur für das ausgewählte Personal. Online-Buchungen sind nur für diese Personen möglich.
+              </Typography>
+            )}
+          </Box>
+          
           {selectedException && (
             <Box sx={{ mt: 2 }}>
               <Button
@@ -4140,7 +4477,7 @@ const DemoCalendar: React.FC = () => {
                 fullWidth
                 onClick={() => {
                   if (selectedException) {
-                    handleDeleteException(selectedException._id);
+                    handleDeleteException(selectedException._id, selectedException);
                     setExceptionDialogOpen(false);
                     setSelectedException(null);
                   }
@@ -4156,13 +4493,15 @@ const DemoCalendar: React.FC = () => {
             onClick={() => {
               setExceptionDialogOpen(false);
               setSelectedException(null);
+              setExceptionLocationId('');
               setExceptionFormData({
                 date: '',
                 startTime: '08:00',
                 endTime: '17:00',
                 breakStart: '',
                 breakEnd: '',
-                label: 'Sonderöffnung'
+                label: 'Sonderöffnung',
+                assignedStaff: []
               });
             }}
           >
