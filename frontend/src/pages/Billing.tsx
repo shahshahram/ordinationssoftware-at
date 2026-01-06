@@ -200,21 +200,100 @@ const Billing: React.FC = () => {
     setOpenDialog(true);
   };
 
-  const handleEdit = (invoice: Invoice) => {
-    setFormData(invoice);
-    setDialogMode('edit');
-    setActiveTab(0);
-    setOpenDialog(true);
+  const handleEdit = async (invoice: Invoice) => {
+    try {
+      // Lade vollständige Rechnungsdetails von der API (ähnlich wie handleView)
+      const response = await api.get<any>(`/billing/invoices/${invoice._id || invoice.id}`);
+      
+      // API-Antwort-Struktur: { data: { success: true, data: invoice }, success: true }
+      let invoiceData = null;
+      if (response.data?.success && response.data.data) {
+        invoiceData = response.data.data;
+      } else if (response.data) {
+        invoiceData = response.data;
+      } else {
+        invoiceData = invoice;
+      }
+      
+      // Normalisiere patient.id - kann ein Objekt (populated) oder String sein
+      if (invoiceData.patient?.id && typeof invoiceData.patient.id === 'object') {
+        invoiceData.patient = {
+          ...invoiceData.patient,
+          id: invoiceData.patient.id._id || invoiceData.patient.id,
+          name: invoiceData.patient.name || 
+                (invoiceData.patient.id.firstName && invoiceData.patient.id.lastName 
+                  ? `${invoiceData.patient.id.firstName} ${invoiceData.patient.id.lastName}`
+                  : invoiceData.patient.name || '')
+        };
+      }
+      
+      // Stelle sicher, dass services ein Array ist
+      if (!Array.isArray(invoiceData.services)) {
+        invoiceData.services = invoiceData.services || [];
+      }
+      
+      setFormData(invoiceData);
+      setDialogMode('edit');
+      setActiveTab(0);
+      setOpenDialog(true);
+    } catch (error: any) {
+      console.error('Fehler beim Laden der Rechnungsdetails zum Bearbeiten:', error);
+      // Fallback auf vorhandene Daten
+      // Normalisiere patient.id auch im Fallback
+      const normalizedInvoice: any = { ...invoice };
+      if (normalizedInvoice.patient?.id && typeof normalizedInvoice.patient.id === 'object') {
+        const patientIdObj = normalizedInvoice.patient.id as any;
+        normalizedInvoice.patient = {
+          ...normalizedInvoice.patient,
+          id: patientIdObj._id || normalizedInvoice.patient.id,
+          name: normalizedInvoice.patient.name || 
+                (patientIdObj.firstName && patientIdObj.lastName 
+                  ? `${patientIdObj.firstName} ${patientIdObj.lastName}`
+                  : normalizedInvoice.patient.name || '')
+        };
+      }
+      setFormData(normalizedInvoice);
+      setDialogMode('edit');
+      setActiveTab(0);
+      setOpenDialog(true);
+    }
   };
 
   const handleView = async (invoice: Invoice) => {
     try {
       // Lade vollständige Rechnungsdetails von der API
-      const token = localStorage.getItem('token');
       const response = await api.get<any>(`/billing/invoices/${invoice._id || invoice.id}`);
       
-      if (response.success && response.data) {
-        setFormData(response.data);
+      // API-Antwort-Struktur: { data: { success: true, data: invoice }, success: true }
+      // Oder: { data: invoice, success: true }
+      let invoiceData = null;
+      if (response.data?.success && response.data.data) {
+        // Backend gibt { success: true, data: invoice } zurück
+        invoiceData = response.data.data;
+      } else if (response.data) {
+        // Backend gibt direkt invoice zurück
+        invoiceData = response.data;
+      }
+      
+      if (invoiceData) {
+        // Normalisiere patient.id - kann ein Objekt (populated) oder String sein
+        if (invoiceData.patient?.id && typeof invoiceData.patient.id === 'object') {
+          invoiceData.patient = {
+            ...invoiceData.patient,
+            id: invoiceData.patient.id._id || invoiceData.patient.id,
+            name: invoiceData.patient.name || 
+                  (invoiceData.patient.id.firstName && invoiceData.patient.id.lastName 
+                    ? `${invoiceData.patient.id.firstName} ${invoiceData.patient.id.lastName}`
+                    : invoiceData.patient.name || '')
+          };
+        }
+        
+        // Stelle sicher, dass services ein Array ist
+        if (!Array.isArray(invoiceData.services)) {
+          invoiceData.services = invoiceData.services || [];
+        }
+        
+        setFormData(invoiceData);
         setDialogMode('view');
         setActiveTab(0);
         setOpenDialog(true);
