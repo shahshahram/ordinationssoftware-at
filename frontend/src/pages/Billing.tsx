@@ -1101,33 +1101,29 @@ const Billing: React.FC = () => {
           <Article sx={{ mr: 1 }} />
           ÖGK-XML exportieren
         </MenuItem>
-        {selectedInvoice?.patient?.insuranceProvider && (
-          <>
-            {selectedInvoice.patient.insuranceProvider.includes('SVS') && (
-              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'SVS'); setAnchorEl(null); }}>
-                <Article sx={{ mr: 1 }} />
-                SVS-XML exportieren
-              </MenuItem>
-            )}
-            {selectedInvoice.patient.insuranceProvider.includes('BVAEB') && (
-              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'BVAEB'); setAnchorEl(null); }}>
-                <Article sx={{ mr: 1 }} />
-                BVAEB-XML exportieren
-              </MenuItem>
-            )}
-            {selectedInvoice.patient.insuranceProvider.includes('KFA') && (
-              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'KFA'); setAnchorEl(null); }}>
-                <Article sx={{ mr: 1 }} />
-                KFA-XML exportieren
-              </MenuItem>
-            )}
-            {selectedInvoice.patient.insuranceProvider.includes('PVA') && (
-              <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'PVA'); setAnchorEl(null); }}>
-                <Article sx={{ mr: 1 }} />
-                PVA-XML exportieren
-              </MenuItem>
-            )}
-          </>
+        {selectedInvoice?.patient?.insuranceProvider?.includes('SVS') && (
+          <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'SVS'); setAnchorEl(null); }}>
+            <Article sx={{ mr: 1 }} />
+            SVS-XML exportieren
+          </MenuItem>
+        )}
+        {selectedInvoice?.patient?.insuranceProvider?.includes('BVAEB') && (
+          <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'BVAEB'); setAnchorEl(null); }}>
+            <Article sx={{ mr: 1 }} />
+            BVAEB-XML exportieren
+          </MenuItem>
+        )}
+        {selectedInvoice?.patient?.insuranceProvider?.includes('KFA') && (
+          <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'KFA'); setAnchorEl(null); }}>
+            <Article sx={{ mr: 1 }} />
+            KFA-XML exportieren
+          </MenuItem>
+        )}
+        {selectedInvoice?.patient?.insuranceProvider?.includes('PVA') && (
+          <MenuItem onClick={() => { handleExportInsurance(selectedInvoice!, 'PVA'); setAnchorEl(null); }}>
+            <Article sx={{ mr: 1 }} />
+            PVA-XML exportieren
+          </MenuItem>
         )}
         <Divider />
         <MenuItem onClick={() => {

@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const Invoice = require('../models/Invoice');
+const InvoiceJournal = require('../models/InvoiceJournal');
 const Performance = require('../models/Performance');
 const ServiceCatalog = require('../models/ServiceCatalog');
 const Patient = require('../models/Patient');
@@ -196,6 +197,58 @@ router.post('/invoices', auth, [
       }
     }
 
+    // Journaling: Automatische Protokollierung der Rechnung
+    try {
+      await InvoiceJournal.createFromInvoice(invoice, 'created', req.user.id);
+      console.log(`✅ Rechnung ${invoice.invoiceNumber} wurde im Journal protokolliert`);
+    } catch (journalError) {
+      console.error(`⚠️ Fehler beim Journaling der Rechnung ${invoice.invoiceNumber}:`, journalError.message);
+      console.error(`⚠️ Journaling Error Stack:`, journalError.stack);
+      // Fehler nicht an Client weitergeben, da Rechnung bereits erstellt wurde
+    }
+
+    // RKSVO: Automatische Beleggenerierung für Barzahlungen
+    const isCashTransaction = invoice.paymentDetails?.isCashTransaction || 
+      ['cash', 'card', 'bankomat', 'creditcard', 'mobile'].includes(invoice.paymentMethod);
+    
+    if (isCashTransaction) {
+      try {
+        // Finde aktive Registrierkasse
+        const CashRegister = require('../models/CashRegister');
+        const cashRegister = await CashRegister.findOne({ 
+          isActive: true,
+          locationId: invoice.locationId || { $exists: false }
+        });
+        
+        if (cashRegister && cashRegister.tse?.initialized) {
+          console.log(`[RKSVO] Automatische Beleggenerierung für Rechnung ${invoice.invoiceNumber}`);
+          
+          // Generiere RKSVO-Beleg
+          const rksvoData = await rksvoEnhanced.generateRKSVInvoiceEnhanced(
+            invoice,
+            cashRegister._id,
+            req.user.id
+          );
+          
+          // Aktualisiere Rechnung mit RKSVO-Daten
+          invoice.rksvoData = {
+            tseSignature: rksvoData.tseSignature,
+            qrCode: rksvoData.qrCodeData,
+            generatedAt: new Date(),
+            receiptChainId: rksvoData.receiptChainEntry._id
+          };
+          await invoice.save();
+          
+          console.log(`✅ RKSVO-Beleg für Rechnung ${invoice.invoiceNumber} automatisch generiert`);
+        } else {
+          console.log(`ℹ️ Keine aktive Registrierkasse gefunden oder TSE nicht initialisiert für Rechnung ${invoice.invoiceNumber}`);
+        }
+      } catch (rksvoError) {
+        console.error(`⚠️ Fehler bei automatischer RKSVO-Beleggenerierung für Rechnung ${invoice.invoiceNumber}:`, rksvoError.message);
+        // Fehler nicht an Client weitergeben, da Rechnung bereits erstellt wurde
+      }
+    }
+
     res.status(201).json({
       success: true,
       message: 'Rechnung erfolgreich erstellt',
@@ -218,17 +271,29 @@ router.post('/invoices', auth, [
 // @access  Private
 router.put('/invoices/:id', auth, async (req, res) => {
   try {
+    const oldInvoice = await Invoice.findById(req.params.id);
+    if (!oldInvoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rechnung nicht gefunden'
+      });
+    }
+
     const invoice = await Invoice.findByIdAndUpdate(
       req.params.id,
       { ...req.body, lastModifiedBy: req.user.id },
       { new: true, runValidators: true }
     );
 
-    if (!invoice) {
-      return res.status(404).json({
-        success: false,
-        message: 'Rechnung nicht gefunden'
+    // Journaling: Protokolliere Änderung
+    try {
+      await InvoiceJournal.createFromInvoice(invoice, 'updated', req.user.id, {
+        originalStatus: oldInvoice.status,
+        changeReason: 'Rechnung aktualisiert'
       });
+      console.log(`✅ Rechnung ${invoice.invoiceNumber} wurde im Journal als Update protokolliert`);
+    } catch (journalError) {
+      console.error(`⚠️ Fehler beim Journaling der Rechnungsänderung:`, journalError.message);
     }
 
     res.json({

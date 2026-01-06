@@ -32,6 +32,7 @@ import ELGA from './pages/ELGA';
 import Users from './pages/Users';
 import Reports from './pages/Reports';
 import BillingReports from './pages/BillingReports';
+import Journal from './pages/Journal';
 import Security from './pages/Security';
 import StaffManagement from './pages/StaffManagement';
 import Calendar from './pages/Calendar';
@@ -543,6 +544,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['billing.read']}>
                             <BillingReports />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/journal" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <Journal />
                           </ProtectedRoute>
                         } 
                       />
