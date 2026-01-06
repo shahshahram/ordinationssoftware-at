@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import api from '../utils/api';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useTheme } from '@mui/material/styles';
 import {
   Box,
   Card,
@@ -263,6 +264,7 @@ interface User {
 }
 
 const ServiceCatalog: React.FC = () => {
+  const theme = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
   
@@ -1077,18 +1079,64 @@ const ServiceCatalog: React.FC = () => {
         }}>
           <Table sx={{ minWidth: '1400px' }}>
             <TableHead>
-              <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                <TableCell sx={{ fontWeight: 'bold', width: '80px' }}>Code</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '200px' }}>Name</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '100px' }}>Kategorie</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '130px' }}>Standort</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '90px' }}>Dauer</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '90px' }}>Preis</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '90px' }}>Rolle</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '120px' }}>Zuordnung</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '80px' }}>Farbe</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', width: '100px' }}>Einstellungen</TableCell>
-                <TableCell align="right" sx={{ fontWeight: 'bold', width: '100px' }}>Aktionen</TableCell>
+              <TableRow sx={{ 
+                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : '#f5f5f5' 
+              }}>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '80px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Code</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '200px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Name</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '100px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Kategorie</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '130px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Standort</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '90px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Dauer</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '90px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Preis</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '90px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Rolle</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '120px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Zuordnung</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '80px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Farbe</TableCell>
+                <TableCell sx={{ 
+                  fontWeight: 'bold', 
+                  width: '100px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Einstellungen</TableCell>
+                <TableCell align="right" sx={{ 
+                  fontWeight: 'bold', 
+                  width: '100px',
+                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
+                }}>Aktionen</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1097,8 +1145,14 @@ const ServiceCatalog: React.FC = () => {
                   key={service._id}
                   sx={{
                     '&:hover': {
-                      backgroundColor: '#f9f9f9',
+                      backgroundColor: theme.palette.mode === 'dark' 
+                        ? 'rgba(255, 255, 255, 0.05)' 
+                        : 'rgba(0, 0, 0, 0.04)',
                       cursor: 'pointer'
+                    },
+                    '& td': {
+                      verticalAlign: 'top',
+                      padding: '12px 16px'
                     }
                   }}
                 >
@@ -1158,7 +1212,7 @@ const ServiceCatalog: React.FC = () => {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minHeight: '60px' }}>
                       {/* Benutzer */}
                       {service.assigned_users && service.assigned_users.length > 0 ? (
                         <Box>
@@ -1172,6 +1226,12 @@ const ServiceCatalog: React.FC = () => {
                                 label={`${user.firstName} ${user.lastName}`}
                                 size="small"
                                 variant="outlined"
+                                sx={{ 
+                                  maxWidth: '100%',
+                                  '&:hover': {
+                                    transform: 'none'
+                                  }
+                                }}
                               />
                             ))}
                             {service.assigned_users.length > 2 && (
@@ -1180,6 +1240,11 @@ const ServiceCatalog: React.FC = () => {
                                 size="small"
                                 variant="outlined"
                                 color="secondary"
+                                sx={{ 
+                                  '&:hover': {
+                                    transform: 'none'
+                                  }
+                                }}
                               />
                             )}
                           </Box>
@@ -1198,6 +1263,12 @@ const ServiceCatalog: React.FC = () => {
                                 label={device.name}
                                 size="small"
                                 variant="outlined"
+                                sx={{ 
+                                  maxWidth: '100%',
+                                  '&:hover': {
+                                    transform: 'none'
+                                  }
+                                }}
                               />
                             ))}
                             {service.assigned_devices.length > 2 && (
@@ -1206,6 +1277,11 @@ const ServiceCatalog: React.FC = () => {
                                 size="small"
                                 variant="outlined"
                                 color="info"
+                                sx={{ 
+                                  '&:hover': {
+                                    transform: 'none'
+                                  }
+                                }}
                               />
                             )}
                           </Box>
@@ -1224,6 +1300,12 @@ const ServiceCatalog: React.FC = () => {
                                 label={room.name}
                                 size="small"
                                 variant="outlined"
+                                sx={{ 
+                                  maxWidth: '100%',
+                                  '&:hover': {
+                                    transform: 'none'
+                                  }
+                                }}
                               />
                             ))}
                             {service.assigned_rooms.length > 2 && (
@@ -1232,6 +1314,11 @@ const ServiceCatalog: React.FC = () => {
                                 size="small"
                                 variant="outlined"
                                 color="success"
+                                sx={{ 
+                                  '&:hover': {
+                                    transform: 'none'
+                                  }
+                                }}
                               />
                             )}
                           </Box>
