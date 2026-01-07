@@ -117,6 +117,24 @@ interface ReceiptJournalEntry {
   };
 }
 
+// Helper-Funktion zum Entfernen von HTML-Tags
+const stripHtmlTags = (html: string): string => {
+  if (!html) return '';
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
+
+// Helper-Funktion: Konvertiert Wert zu Euro (automatische Erkennung)
+// Wenn Wert > 100000, wird angenommen, dass es in Cent ist (alte Daten)
+// Beispiel: 150000 Cent = 1500 Euro, aber 1500 Euro bleibt 1500 Euro
+const toEuro = (value: number | undefined | null): number => {
+  if (!value && value !== 0) return 0;
+  // Wenn Wert sehr groß ist (> 100000), ist es wahrscheinlich in Cent (alte Daten)
+  // Normale Preise in Euro sind meist < 100000
+  return value > 100000 ? value / 100 : value;
+};
+
 const Journal: React.FC = () => {
   const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
@@ -712,7 +730,7 @@ const Journal: React.FC = () => {
                   Gesamtbetrag
                 </Typography>
                 <Typography variant="h5" fontWeight="bold" color="success.main">
-                  €{(invoiceEntries.reduce((sum, entry) => sum + (entry.totalAmount || 0), 0) / 100).toFixed(2)}
+                  €{invoiceEntries.reduce((sum, entry) => sum + toEuro(entry.totalAmount || 0), 0).toFixed(2)}
                 </Typography>
               </Box>
               <Box sx={{ textAlign: 'center' }}>
@@ -720,9 +738,9 @@ const Journal: React.FC = () => {
                   Bezahlt
                 </Typography>
                 <Typography variant="h5" fontWeight="bold" color="success.main">
-                  €{(invoiceEntries
+                  €{invoiceEntries
                     .filter(e => e.status === 'paid')
-                    .reduce((sum, entry) => sum + (entry.totalAmount || 0), 0) / 100).toFixed(2)}
+                    .reduce((sum, entry) => sum + toEuro(entry.totalAmount || 0), 0).toFixed(2)}
                 </Typography>
               </Box>
               <Box sx={{ textAlign: 'center' }}>
@@ -730,9 +748,9 @@ const Journal: React.FC = () => {
                   Offen
                 </Typography>
                 <Typography variant="h5" fontWeight="bold" color="warning.main">
-                  €{(invoiceEntries
+                  €{invoiceEntries
                     .filter(e => e.status !== 'paid' && e.status !== 'cancelled')
-                    .reduce((sum, entry) => sum + (entry.totalAmount || 0), 0) / 100).toFixed(2)}
+                    .reduce((sum, entry) => sum + toEuro(entry.totalAmount || 0), 0).toFixed(2)}
                 </Typography>
               </Box>
             </Box>
@@ -757,7 +775,7 @@ const Journal: React.FC = () => {
                   Gesamtbetrag
                 </Typography>
                 <Typography variant="h5" fontWeight="bold" color="success.main">
-                  €{(receiptEntries.reduce((sum, entry) => sum + (entry.receiptData?.amount || 0), 0) / 100).toFixed(2)}
+                  €{receiptEntries.reduce((sum, entry) => sum + toEuro(entry.receiptData?.amount || 0), 0).toFixed(2)}
                 </Typography>
               </Box>
             </Box>
@@ -848,7 +866,7 @@ const Journal: React.FC = () => {
                         <TableCell>{entry.invoiceNumber}</TableCell>
                         <TableCell>{formatDate(new Date(entry.invoiceDate), 'dd.MM.yyyy')}</TableCell>
                         <TableCell>{entry.patient?.name || ''}</TableCell>
-                        <TableCell>€{(entry.totalAmount / 100).toFixed(2)}</TableCell>
+                        <TableCell>€{toEuro(entry.totalAmount).toFixed(2)}</TableCell>
                         <TableCell>
                           <Chip 
                             label={entry.status} 
@@ -958,7 +976,7 @@ const Journal: React.FC = () => {
                         <TableCell>
                           {formatDate(new Date(entry.receiptData.timestamp), 'dd.MM.yyyy HH:mm')}
                         </TableCell>
-                        <TableCell>€{(entry.receiptData.amount / 100).toFixed(2)}</TableCell>
+                        <TableCell>€{toEuro(entry.receiptData.amount).toFixed(2)}</TableCell>
                         <TableCell>{entry.paymentMethod || '-'}</TableCell>
                         <TableCell>{entry.cashBoxId}</TableCell>
                         <TableCell>{entry.tseSignature?.tseSerial || '-'}</TableCell>
@@ -1042,7 +1060,7 @@ const Journal: React.FC = () => {
                     <Box sx={{ minWidth: '200px', flex: '1 1 200px' }}>
                       <Typography variant="body2" color="text.secondary">Betrag</Typography>
                       <Typography variant="body1" fontWeight="medium">
-                        €{(selectedReceiptEntry.receiptData.amount / 100).toFixed(2)}
+                        €{toEuro(selectedReceiptEntry.receiptData.amount).toFixed(2)}
                       </Typography>
                     </Box>
                     <Box sx={{ minWidth: '200px', flex: '1 1 200px' }}>
@@ -1236,10 +1254,10 @@ const Journal: React.FC = () => {
                                   {service.date ? formatDate(new Date(service.date), 'dd.MM.yyyy') : '-'}
                                 </TableCell>
                                 <TableCell>{service.serviceCode || service.code || '-'}</TableCell>
-                                <TableCell>{service.description || service.name || '-'}</TableCell>
+                                <TableCell>{stripHtmlTags(service.description || service.name || '-')}</TableCell>
                                 <TableCell align="right">{service.quantity || 1}</TableCell>
-                                <TableCell align="right">€{((service.unitPrice || service.price_cents || 0) / 100).toFixed(2)}</TableCell>
-                                <TableCell align="right">€{((service.totalPrice || (service.unitPrice || service.price_cents || 0) * (service.quantity || 1)) / 100).toFixed(2)}</TableCell>
+                                <TableCell align="right">€{toEuro(service.unitPrice || service.price_cents || 0).toFixed(2)}</TableCell>
+                                <TableCell align="right">€{toEuro(service.totalPrice || (service.unitPrice || service.price_cents || 0) * (service.quantity || 1)).toFixed(2)}</TableCell>
                               </TableRow>
                             ))}
                           </TableBody>
@@ -1260,7 +1278,7 @@ const Journal: React.FC = () => {
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                     <Typography variant="body2" color="text.secondary">Zwischensumme</Typography>
                     <Typography variant="body1">
-                      €{((fullInvoiceDetails.subtotal || selectedEntry?.subtotal || fullInvoiceDetails.totalAmount || selectedEntry?.totalAmount || 0) / 100).toFixed(2)}
+                      €{toEuro(fullInvoiceDetails.subtotal || selectedEntry?.subtotal || fullInvoiceDetails.totalAmount || selectedEntry?.totalAmount || 0).toFixed(2)}
                     </Typography>
                   </Box>
                   {(fullInvoiceDetails.taxAmount || selectedEntry?.taxAmount) && (
@@ -1269,7 +1287,7 @@ const Journal: React.FC = () => {
                         MwSt. ({fullInvoiceDetails.taxRate || selectedEntry?.taxRate || 0}%)
                       </Typography>
                       <Typography variant="body1">
-                        €{((fullInvoiceDetails.taxAmount || selectedEntry?.taxAmount || 0) / 100).toFixed(2)}
+                        €{toEuro(fullInvoiceDetails.taxAmount || selectedEntry?.taxAmount || 0).toFixed(2)}
                       </Typography>
                     </Box>
                   )}
@@ -1277,7 +1295,7 @@ const Journal: React.FC = () => {
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                     <Typography variant="h6" fontWeight="bold">Gesamtbetrag</Typography>
                     <Typography variant="h6" fontWeight="bold" color="primary">
-                      €{((fullInvoiceDetails.totalAmount || selectedEntry?.totalAmount || 0) / 100).toFixed(2)}
+                      €{toEuro(fullInvoiceDetails.totalAmount || selectedEntry?.totalAmount || 0).toFixed(2)}
                     </Typography>
                   </Box>
                 </Box>

@@ -1,8 +1,16 @@
 // Berechnungsutilities für Österreichische Abrechnungen
 
+// Helper-Funktion: Konvertiert Preis zu Euro (automatische Erkennung)
+// Wenn Wert > 1000, wird angenommen, dass es in Cent ist
+const toEuro = (value) => {
+  if (!value && value !== 0) return 0;
+  // Wenn Wert > 1000, ist es wahrscheinlich in Cent (alte Daten)
+  return value > 1000 ? value / 100 : value;
+};
+
 const SELBSTBEHALT_RATES = {
-  STANDARD: { rate: 0.10, max: 2850 }, // 10%, max 28,50€
-  EXTENDED: { rate: 0.20, max: 34300 } // 20%, max 343,00€
+  STANDARD: { rate: 0.10, max: 28.50 }, // 10%, max 28,50€ (jetzt in Euro)
+  EXTENDED: { rate: 0.20, max: 343.00 } // 20%, max 343,00€ (jetzt in Euro)
 };
 
 /**
@@ -16,7 +24,7 @@ function getInsuranceCopayRule(insuranceProvider, billingType) {
   if (billingType === 'kassenarzt') {
     // SVS hat 20% Selbstbehalt auch bei Kassenarzt
     if (insuranceProvider && insuranceProvider.includes('SVS')) {
-      return { rate: 0.20, max: 34300, applicable: true };
+      return { rate: 0.20, max: 343.00, applicable: true }; // Jetzt in Euro
     }
     // ÖGK, BVAEB, KFA, PVA: Kein Selbstbehalt beim Kassenarzt
     const noCopayInsurances = ['ÖGK', 'BVAEB', 'KFA', 'PVA', 'VAEB', 'BVA', 'AUVA', 'GKK', 'VA'];
@@ -65,16 +73,19 @@ function calculateCopay(service, patient, grossAmount, billingType = 'kassenarzt
     
     // Prozentsatz-basiert
     if (service.copay.percentage > 0) {
+      // copay.maxAmount ist jetzt in Euro (oder in Cent für Backward Compatibility)
+      const maxAmountInEuro = toEuro(service.copay.maxAmount || Infinity);
       const copay = Math.min(
         grossAmount * (service.copay.percentage / 100),
-        service.copay.maxAmount || Infinity
+        maxAmountInEuro
       );
-      return Math.round(copay);
+      return copay; // Bereits in Euro
     }
     
     // Festbetrag
     if (service.copay.amount) {
-      return service.copay.amount;
+      // copay.amount ist jetzt in Euro (oder in Cent für Backward Compatibility)
+      return toEuro(service.copay.amount);
     }
   }
   
@@ -190,12 +201,20 @@ function checkInsuranceCoverage(patient, service) {
   return coverage;
 }
 
+// Helper-Funktion: Konvertiert Preis zu Euro (automatische Erkennung)
+// Wenn Wert > 1000, wird angenommen, dass es in Cent ist
+const toEuro = (value) => {
+  if (!value && value !== 0) return 0;
+  // Wenn Wert > 1000, ist es wahrscheinlich in Cent (alte Daten)
+  return value > 1000 ? value / 100 : value;
+};
+
 /**
  * Berechnet die Abrechnung für einen Service
  * @param {Object} patient - Patient Object
  * @param {Object} service - ServiceCatalog Eintrag
  * @param {String} billingType - 'kassenarzt', 'wahlarzt', 'privat', 'sonderklasse'
- * @returns {Object} Berechnungsdetails
+ * @returns {Object} Berechnungsdetails (alle Beträge in Euro)
  */
 function calculateBilling(patient, service, billingType) {
   const coverage = checkInsuranceCoverage(patient, service);
@@ -219,7 +238,8 @@ function calculateBilling(patient, service, billingType) {
       if (!coverage.canBillAsKassenarzt) {
         result.warnings.push('Patient hat keine gesetzliche Versicherung oder Service ist nicht als Kassenarzt abrechenbar');
       }
-      result.grossAmount = service.ogk?.ebmPrice || 0;
+      // ebmPrice ist jetzt in Euro (oder in Cent für Backward Compatibility)
+      result.grossAmount = toEuro(service.ogk?.ebmPrice || 0);
       result.ebmCode = service.ogk?.ebmCode || null;
       result.copay = calculateCopay(service, patient, result.grossAmount, 'kassenarzt');
       result.insuranceAmount = result.grossAmount - result.copay;
@@ -230,7 +250,10 @@ function calculateBilling(patient, service, billingType) {
       if (!coverage.canBillAsWahlarzt) {
         result.warnings.push('Patient hat keine Versicherung oder Service ist nicht als Wahlarzt abrechenbar');
       }
-      result.grossAmount = service.wahlarzt?.price || service.private?.price || 0;
+      // Preise sind jetzt in Euro (oder in Cent für Backward Compatibility)
+      const wahlarztPrice = toEuro(service.wahlarzt?.price || 0);
+      const privatePrice = toEuro(service.private?.price || 0);
+      result.grossAmount = wahlarztPrice || privatePrice || 0;
       result.goaeCode = service.wahlarzt?.goaeCode || null;
       result.goaeMultiplier = service.wahlarzt?.goaeMultiplier || 1.0;
       result.copay = calculateCopay(service, patient, result.grossAmount, 'wahlarzt');

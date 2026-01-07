@@ -858,8 +858,8 @@ const Resources: React.FC = () => {
                         fullWidth
                         label="Preis (€)"
                         type="number"
-                        value={formData.onlineBooking.price || 0}
-                        onChange={(e) => handleOnlineBookingChange('price', parseFloat(e.target.value))}
+                        value={formData.onlineBooking.price && formData.onlineBooking.price !== 0 ? formData.onlineBooking.price : ''}
+                        onChange={(e) => handleOnlineBookingChange('price', parseFloat(e.target.value) || 0)}
                         disabled={dialogMode === 'view'}
                       />
                     </Grid>

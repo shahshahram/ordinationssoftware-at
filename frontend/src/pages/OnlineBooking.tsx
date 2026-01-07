@@ -75,7 +75,8 @@ interface Service {
   base_duration_min?: number;
   buffer_before_min?: number;
   buffer_after_min?: number;
-  price_cents?: number;
+  price?: number; // Preis in Euro
+  price_cents?: number; // Legacy: Für Backward Compatibility
   assignedUsers?: Array<{
     _id: string;
     firstName: string;
@@ -143,13 +144,6 @@ interface AnamnesisQuestion {
   defaultValue?: any;
 }
 
-interface Service {
-  _id: string;
-  code: string;
-  name: string;
-  anamnesisQuestions?: AnamnesisQuestion[];
-}
-
 interface BookingData {
   patient: {
     firstName: string;
@@ -179,6 +173,15 @@ interface BookingData {
     id: string;
   };
 }
+
+// Helper-Funktion: Konvertiert Wert zu Euro (automatische Erkennung)
+// Wenn Wert > 100000, wird angenommen, dass es in Cent ist (alte Daten)
+// Normale Preise in Euro sind meist < 100000
+const toEuro = (value: number | undefined | null): number => {
+  if (!value && value !== 0) return 0;
+  // Wenn Wert sehr groß ist (> 100000), ist es wahrscheinlich in Cent (alte Daten)
+  return value > 100000 ? value / 100 : value;
+};
 
 const OnlineBooking: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -1238,9 +1241,9 @@ const OnlineBooking: React.FC = () => {
                                   variant="outlined"
                                   title={`Grunddauer: ${service.base_duration_min || service.duration || 30} Min.${(service.buffer_before_min || 0) + (service.buffer_after_min || 0) > 0 ? ` + Puffer: ${(service.buffer_before_min || 0) + (service.buffer_after_min || 0)} Min.` : ''}`}
                                 />
-                                {service.price_cents && (
+                                {(service.price_cents || service.price) && (
                                   <Chip
-                                    label={`€${(service.price_cents / 100).toFixed(2)}`}
+                                    label={`€${toEuro(service.price || service.price_cents || 0).toFixed(2)}`}
                                     size="small"
                                     color="secondary"
                                     variant="outlined"
@@ -1281,7 +1284,7 @@ const OnlineBooking: React.FC = () => {
                           </Typography>
                           {selectedService.price_cents && (
                             <Typography variant="body2">
-                              <strong>Preis:</strong> €{(selectedService.price_cents / 100).toFixed(2)}
+                              <strong>Preis:</strong> €{toEuro(selectedService.price_cents || selectedService.price || 0).toFixed(2)}
                             </Typography>
                           )}
                         </Box>
@@ -2124,7 +2127,7 @@ const OnlineBooking: React.FC = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <LocalHospital color="secondary" />
                         <Typography variant="h6" fontWeight="bold" color="secondary.main">
-                          €{(pendingService.price_cents / 100).toFixed(2)}
+                          €{toEuro(pendingService.price_cents || pendingService.price || 0).toFixed(2)}
                         </Typography>
                       </Box>
                     </Box>

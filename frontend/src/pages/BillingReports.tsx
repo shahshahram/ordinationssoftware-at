@@ -506,12 +506,21 @@ const BillingReports: React.FC = () => {
     }
   };
 
+  // Helper-Funktion: Konvertiert Wert zu Euro (automatische Erkennung)
+  // Wenn Wert > 100000, wird angenommen, dass es in Cent ist (alte Daten)
+  // Normale Preise in Euro sind meist < 100000
+  const toEuro = (value: number | undefined | null): number => {
+    if (!value && value !== 0) return 0;
+    // Wenn Wert sehr groß ist (> 100000), ist es wahrscheinlich in Cent (alte Daten)
+    return value > 100000 ? value / 100 : value;
+  };
+
   const formatAmount = (euros: number) => {
-    return euros.toFixed(2).replace('.', ',') + ' €';
+    return toEuro(euros).toFixed(2).replace('.', ',') + ' €';
   };
 
   const formatAmountFromCents = (euros: number) => {
-    return euros.toFixed(2).replace('.', ',') + ' €';
+    return toEuro(euros).toFixed(2).replace('.', ',') + ' €';
   };
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d'];
@@ -1323,14 +1332,14 @@ const BillingReports: React.FC = () => {
                         <RechartsBarChart
                           data={patientAnalysis.slice(0, 10).map(p => ({
                             name: p.patientName.length > 20 ? p.patientName.substring(0, 20) + '...' : p.patientName,
-                            umsatz: p.totalAmount / 100,
+                            umsatz: toEuro(p.totalAmount),
                             rechnungen: p.totalInvoices
                           }))}
                         >
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                           <YAxis />
-                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value * 100)} />
+                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value)} />
                           <Legend />
                           <Bar dataKey="umsatz" fill="#0088FE" name="Umsatz (€)" />
                         </RechartsBarChart>
@@ -1569,14 +1578,14 @@ const BillingReports: React.FC = () => {
                           layout="vertical"
                           data={serviceAnalysis.slice(0, 15).map(s => ({
                             name: s.description.length > 40 ? s.description.substring(0, 40) + '...' : s.description,
-                            umsatz: s.totalAmount / 100,
+                            umsatz: toEuro(s.totalAmount),
                             anzahl: s.count
                           }))}
                         >
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis type="number" />
                           <YAxis dataKey="name" type="category" width={200} />
-                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value * 100)} />
+                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value)} />
                           <Legend />
                           <Bar dataKey="umsatz" fill="#00C49F" name="Umsatz (€)" />
                         </RechartsBarChart>
@@ -1601,7 +1610,7 @@ const BillingReports: React.FC = () => {
                                 acc[cat] = (acc[cat] || 0) + s.totalAmount;
                                 return acc;
                               }, {} as Record<string, number>)
-                            ).map(([name, value]) => ({ name, value: value / 100 }))}
+                            ).map(([name, value]) => ({ name, value: toEuro(value) }))}
                             cx="50%"
                             cy="50%"
                             labelLine={false}
@@ -1624,7 +1633,7 @@ const BillingReports: React.FC = () => {
                               <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                             ))}
                           </Pie>
-                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value * 100)} />
+                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value)} />
                           <Legend />
                         </RechartsPieChart>
                       </ResponsiveContainer>
@@ -1836,9 +1845,9 @@ const BillingReports: React.FC = () => {
                       <ResponsiveContainer width="100%" height={400}>
                         <AreaChart data={trends.map(t => ({
                           period: t.period,
-                          umsatz: t.totalAmount / 100,
+                          umsatz: toEuro(t.totalAmount),
                           rechnungen: t.totalInvoices,
-                          durchschnitt: t.averageInvoiceAmount / 100
+                          durchschnitt: toEuro(t.averageInvoiceAmount)
                         }))}>
                           <defs>
                             <linearGradient id="colorUmsatz" x1="0" y1="0" x2="0" y2="1">
@@ -1851,7 +1860,7 @@ const BillingReports: React.FC = () => {
                           <YAxis />
                           <RechartsTooltip formatter={(value: any, name: string) => {
                             if (name === 'umsatz' || name === 'durchschnitt') {
-                              return formatAmountFromCents(value * 100);
+                              return formatAmountFromCents(value);
                             }
                             return value;
                           }} />
@@ -1898,7 +1907,7 @@ const BillingReports: React.FC = () => {
                         <RechartsBarChart
                           data={trends.map(t => {
                             const byType = t.byBillingType.reduce((acc, item) => {
-                              acc[item.type] = item.totalAmount / 100;
+                              acc[item.type] = toEuro(item.totalAmount);
                               return acc;
                             }, {} as Record<string, number>);
                             return {
@@ -1910,7 +1919,7 @@ const BillingReports: React.FC = () => {
                           <CartesianGrid strokeDasharray="3 3" />
                           <XAxis dataKey="period" />
                           <YAxis />
-                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value * 100)} />
+                          <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value)} />
                           <Legend />
                           <Bar dataKey="kassenarzt" stackId="a" fill="#0088FE" name="Kassenarzt" />
                           <Bar dataKey="wahlarzt" stackId="a" fill="#00C49F" name="Wahlarzt" />
@@ -2068,7 +2077,7 @@ const BillingReports: React.FC = () => {
                           data={profitability.slice(0, 20).map(p => ({
                             name: p.description.length > 40 ? p.description.substring(0, 40) + '...' : p.description,
                             score: p.profitabilityScore / 1000000, // Normalisiert für bessere Darstellung
-                            umsatz: p.totalAmount / 100,
+                            umsatz: toEuro(p.totalAmount),
                             anzahl: p.count
                           }))}
                         >
@@ -2081,7 +2090,7 @@ const BillingReports: React.FC = () => {
                                 return `${(value * 1000000 / 100).toFixed(2)} €`;
                               }
                               if (name === 'umsatz') {
-                                return formatAmountFromCents(value * 100);
+                                return formatAmountFromCents(value);
                               }
                               return value;
                             }}
@@ -2365,7 +2374,7 @@ const BillingReports: React.FC = () => {
                                 </TableCell>
                                 <TableCell align="right">
                                   <Chip 
-                                    label={formatAmountFromCents(item.efficiencyScore * 100)} 
+                                    label={formatAmountFromCents(item.efficiencyScore)} 
                                     size="small" 
                                     color={index < 5 ? 'primary' : 'default'}
                                   />
@@ -2500,7 +2509,7 @@ const BillingReports: React.FC = () => {
                             <CartesianGrid strokeDasharray="3 3" />
                             <XAxis dataKey="month" />
                             <YAxis />
-                            <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value * 100)} />
+                            <RechartsTooltip formatter={(value: any) => formatAmountFromCents(value)} />
                             <Legend />
                             <Area type="monotone" dataKey="verlorenerUmsatz" stroke="#FF8042" fillOpacity={1} fill="url(#colorLostRevenue)" name="Verlorener Umsatz (€)" />
                           </AreaChart>
@@ -2598,7 +2607,7 @@ const BillingReports: React.FC = () => {
                                 <TableCell>{code.suggestedService}</TableCell>
                                 <TableCell align="right">
                                   <Chip 
-                                    label={formatAmountFromCents(code.potentialRevenue * 100)} 
+                                    label={formatAmountFromCents(code.potentialRevenue)} 
                                     size="small" 
                                     color="success"
                                   />

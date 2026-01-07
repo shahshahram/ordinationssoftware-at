@@ -519,8 +519,8 @@ const Settings: React.FC = () => {
                     label="Ziel-Stundensatz (€)"
                     type="number"
                     inputProps={{ min: 0, step: 10 }}
-                    value={targetHourlyRate}
-                    onChange={(e) => setTargetHourlyRate(parseFloat(e.target.value) || 150)}
+                    value={targetHourlyRate && targetHourlyRate !== 0 ? targetHourlyRate : ''}
+                    onChange={(e) => setTargetHourlyRate(parseFloat(e.target.value) || 0)}
                     helperText="Zielwert für Umsatz pro Stunde (für Geld-Uhr)"
                   />
                   
@@ -529,8 +529,8 @@ const Settings: React.FC = () => {
                     label="Customer Acquisition Cost (CAC) (€)"
                     type="number"
                     inputProps={{ min: 0, step: 1 }}
-                    value={customerAcquisitionCost}
-                    onChange={(e) => setCustomerAcquisitionCost(parseFloat(e.target.value) || 50)}
+                    value={customerAcquisitionCost && customerAcquisitionCost !== 0 ? customerAcquisitionCost : ''}
+                    onChange={(e) => setCustomerAcquisitionCost(parseFloat(e.target.value) || 0)}
                     helperText="Durchschnittliche Kosten für Neupatienten-Akquise"
                   />
                   

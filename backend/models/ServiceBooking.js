@@ -93,6 +93,12 @@ const ServiceBookingSchema = new mongoose.Schema({
     default: 'pending',
     index: true
   },
+  // Abrechnungsbetrag in Euro
+  billing_amount: {
+    type: Number,
+    min: 0
+  },
+  // Legacy: Altes Feld für Backward Compatibility (wird automatisch migriert)
   billing_amount_cents: {
     type: Number,
     min: 0
@@ -202,7 +208,7 @@ ServiceBookingSchema.methods.isPast = function() {
   return this.end_time < new Date();
 };
 
-// Pre-Save Hook für Validierung
+// Pre-Save Hook für Validierung und Preis-Migration
 ServiceBookingSchema.pre('save', function(next) {
   // Endzeit muss nach Startzeit liegen
   if (this.end_time <= this.start_time) {
@@ -212,6 +218,15 @@ ServiceBookingSchema.pre('save', function(next) {
   // Einwilligung erforderlich wenn Service es verlangt
   if (this.consent_given && !this.consent_date) {
     this.consent_date = new Date();
+  }
+  
+  // Preis-Migration: Wenn billing_amount_cents vorhanden ist, aber billing_amount nicht, migriere automatisch
+  if (this.billing_amount_cents && (this.billing_amount === undefined || this.billing_amount === null)) {
+    this.billing_amount = this.billing_amount_cents / 100;
+  }
+  // Wenn billing_amount vorhanden ist, aber billing_amount_cents nicht, setze billing_amount_cents für Backward Compatibility
+  if (this.billing_amount !== undefined && this.billing_amount !== null && (!this.billing_amount_cents || this.billing_amount_cents === 0)) {
+    this.billing_amount_cents = Math.round(this.billing_amount * 100);
   }
   
   next();

@@ -11,6 +11,8 @@ export interface Service {
   description: string;
   category: 'konsultation' | 'behandlung' | 'medikament' | 'labor' | 'bildgebung' | 'sonstiges';
   subcategory?: string;
+  price?: number; // Preis in Euro
+  price_cents?: number; // Legacy: Für Backward Compatibility
   prices: {
     kassenarzt: number;
     wahlarzt: number;

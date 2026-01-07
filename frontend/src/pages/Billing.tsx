@@ -83,6 +83,25 @@ const stripHtmlTags = (html: string): string => {
   return tmp.textContent || tmp.innerText || '';
 };
 
+// Hilfsfunktion: Konvertiert Service-Preis zu Euro
+// Prüft zuerst service.price (bereits in Euro), dann service.price_cents (in Cent), dann service.prices?.privat
+const getServicePriceInEuro = (service: Service): number => {
+  // Wenn service.price vorhanden ist, verwende es direkt (bereits in Euro)
+  if (service.price !== undefined && service.price !== null) {
+    return service.price;
+  }
+  // Wenn service.price_cents vorhanden ist, umrechnen von Cent zu Euro
+  if (service.price_cents !== undefined && service.price_cents !== null) {
+    return service.price_cents / 100;
+  }
+  // Wenn service.prices?.privat vorhanden ist, prüfe ob es in Cent oder Euro ist
+  if (service.prices?.privat !== undefined && service.prices?.privat !== null) {
+    // Wenn Wert > 1000, ist es wahrscheinlich in Cent (alte Daten)
+    return service.prices.privat > 1000 ? service.prices.privat / 100 : service.prices.privat;
+  }
+  return 0;
+};
+
 const Billing: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
@@ -481,6 +500,47 @@ const Billing: React.FC = () => {
 
   const handleSave = async () => {
     try {
+      // Bereite Services-Daten vor: Stelle sicher, dass alle Felder korrekt formatiert sind
+      // Filtere nur komplett leere Services heraus (beide Felder müssen leer sein)
+      const preparedServices = (formData.services || [])
+        .filter((service: any) => {
+          // Behalte Service, wenn mindestens Code ODER Beschreibung vorhanden ist
+          const hasCode = service.serviceCode && service.serviceCode.toString().trim() !== '';
+          const hasDescription = service.description && service.description.toString().trim() !== '';
+          return hasCode || hasDescription;
+        })
+        .map((service: any) => {
+          // Berechne totalPrice neu, um sicherzustellen, dass es korrekt ist
+          const unitPrice = service.unitPrice || 0;
+          const quantity = service.quantity || 1;
+          const totalPrice = unitPrice * quantity;
+          
+          return {
+            date: service.date ? new Date(service.date) : new Date(),
+            serviceCode: (service.serviceCode || '').toString().trim() || 'MANUELL',
+            description: (service.description || '').toString().trim() || 'Manuelle Position',
+            quantity: quantity,
+            unitPrice: unitPrice,
+            totalPrice: totalPrice, // Immer neu berechnen
+            category: service.category || ''
+          };
+        });
+      
+      // Prüfe, ob mindestens eine gültige Service vorhanden ist
+      if (preparedServices.length === 0) {
+        setSnackbar({ 
+          open: true, 
+          message: 'Bitte fügen Sie mindestens eine Leistung mit Code und Beschreibung hinzu', 
+          severity: 'error' 
+        });
+        return;
+      }
+
+      // Berechne Gesamtbetrag aus Services (immer neu berechnen)
+      const calculatedSubtotal = preparedServices.reduce((sum: number, s: any) => sum + (s.totalPrice || 0), 0);
+      const calculatedTaxAmount = calculatedSubtotal * ((formData.taxRate || 0) / 100);
+      const calculatedTotal = calculatedSubtotal + calculatedTaxAmount;
+
       if (dialogMode === 'add') {
         // Generate invoice number if not provided
         if (!formData.invoiceNumber) {
@@ -492,21 +552,32 @@ const Billing: React.FC = () => {
         const invoiceToCreate = {
           ...formData,
           invoiceNumber: formData.invoiceNumber || `INV-${Date.now()}`,
-          invoiceDate: formData.invoiceDate || new Date(),
-          dueDate: formData.dueDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-          subtotal: formData.subtotal || 0,
-          taxAmount: formData.taxAmount || 0,
+          invoiceDate: formData.invoiceDate ? new Date(formData.invoiceDate) : new Date(),
+          dueDate: formData.dueDate ? new Date(formData.dueDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          services: preparedServices,
+          subtotal: calculatedSubtotal, // Verwende berechneten Wert
+          taxAmount: calculatedTaxAmount, // Verwende berechneten Wert
           taxRate: formData.taxRate || 0,
-          totalAmount: formData.totalAmount || formData.services?.reduce((sum: number, s: any) => sum + s.totalPrice, 0) || 0,
+          totalAmount: calculatedTotal, // Verwende berechneten Wert
           status: formData.status || 'draft'
         };
         
         await dispatch(createInvoice(invoiceToCreate)).unwrap();
         setSnackbar({ open: true, message: 'Rechnung erfolgreich erstellt', severity: 'success' });
       } else if (dialogMode === 'edit') {
+        const invoiceToUpdate = {
+          ...formData,
+          services: preparedServices,
+          subtotal: calculatedSubtotal, // Verwende berechneten Wert
+          taxAmount: calculatedTaxAmount, // Verwende berechneten Wert
+          totalAmount: calculatedTotal, // Verwende berechneten Wert
+          invoiceDate: formData.invoiceDate ? new Date(formData.invoiceDate) : formData.invoiceDate,
+          dueDate: formData.dueDate ? new Date(formData.dueDate) : formData.dueDate
+        };
+        
         await dispatch(updateInvoice({ 
           id: formData._id || formData.id || '', 
-          invoiceData: formData 
+          invoiceData: invoiceToUpdate 
         })).unwrap();
         setSnackbar({ open: true, message: 'Rechnung erfolgreich aktualisiert', severity: 'success' });
       }
@@ -536,13 +607,17 @@ const Billing: React.FC = () => {
         );
         
         if (calculation) {
+          // calculation.grossAmount sollte bereits in Euro sein, aber prüfe es
+          const grossAmountInEuro = calculation.grossAmount && calculation.grossAmount > 1000 
+            ? calculation.grossAmount / 100 
+            : calculation.grossAmount || getServicePriceInEuro(service);
           const newService = {
             date: new Date(),
             serviceCode: service.code,
             description: service.name,
             quantity: 1,
-            unitPrice: calculation.grossAmount || service.prices?.privat || 0,
-            totalPrice: calculation.grossAmount || service.prices?.privat || 0,
+            unitPrice: grossAmountInEuro,
+            totalPrice: grossAmountInEuro,
             category: service.category,
             calculation: calculation // Speichere Berechnungsergebnis
           };
@@ -564,13 +639,14 @@ const Billing: React.FC = () => {
           }
         } else {
           // Fallback auf Standard-Preis
+          const priceInEuro = getServicePriceInEuro(service);
           const newService = {
             date: new Date(),
             serviceCode: service.code,
             description: service.name,
             quantity: 1,
-            unitPrice: service.prices?.privat || 0,
-            totalPrice: service.prices?.privat || 0,
+            unitPrice: priceInEuro,
+            totalPrice: priceInEuro,
             category: service.category
           };
           
@@ -581,13 +657,14 @@ const Billing: React.FC = () => {
         }
       } catch (error) {
         // Fallback auf Standard-Preis bei Fehler
+        const priceInEuro = getServicePriceInEuro(service);
         const newService = {
           date: new Date(),
           serviceCode: service.code,
           description: service.name,
           quantity: 1,
-          unitPrice: service.prices?.privat || 0,
-          totalPrice: service.prices?.privat || 0,
+          unitPrice: priceInEuro,
+          totalPrice: priceInEuro,
           category: service.category
         };
         
@@ -598,13 +675,14 @@ const Billing: React.FC = () => {
       }
     } else {
       // Keine automatische Berechnung möglich, Standard-Preis verwenden
+      const priceInEuro = getServicePriceInEuro(service);
       const newService = {
         date: new Date(),
         serviceCode: service.code,
         description: service.name,
         quantity: 1,
-        unitPrice: service.prices?.privat || 0,
-        totalPrice: service.prices?.privat || 0,
+        unitPrice: priceInEuro,
+        totalPrice: priceInEuro,
         category: service.category
       };
       
@@ -617,6 +695,7 @@ const Billing: React.FC = () => {
 
   const handleQuickBill = (service: Service) => {
     // Öffne Dialog mit vorausgefüllter Schnell-Leistung
+    const priceInEuro = getServicePriceInEuro(service);
     setDialogMode('add');
     setFormData({
       billingType: 'privat',
@@ -625,8 +704,8 @@ const Billing: React.FC = () => {
         serviceCode: service.code,
         description: service.name,
         quantity: 1,
-        unitPrice: service.prices?.privat || 0,
-        totalPrice: service.prices?.privat || 0,
+        unitPrice: priceInEuro,
+        totalPrice: priceInEuro,
         category: service.category
       }],
       doctor: {
@@ -653,10 +732,10 @@ const Billing: React.FC = () => {
         }
       } as any,
       status: 'draft',
-      subtotal: service.prices?.privat || 0,
+      subtotal: priceInEuro,
       taxRate: 0,
       taxAmount: 0,
-      totalAmount: service.prices?.privat || 0,
+      totalAmount: priceInEuro,
     });
     setActiveTab(0);
     setOpenDialog(true);
@@ -1018,7 +1097,7 @@ const Billing: React.FC = () => {
                       {service.code}
                     </Typography>
                     <Chip 
-                      label={`€${((service.prices?.privat || 0) / 100).toFixed(2)}`}
+                      label={`€${getServicePriceInEuro(service).toFixed(2)}`}
                       size="small"
                       color="success"
                       sx={{ mt: 0.5 }}
@@ -1389,27 +1468,48 @@ const Billing: React.FC = () => {
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <Typography variant="h6">Leistungen</Typography>
                   {dialogMode !== 'view' && (
-                    <Autocomplete
-                      options={services || []}
-                      getOptionLabel={(option) => {
-                        const cleanName = stripHtmlTags(option.name || '');
-                        return `${option.code} - ${cleanName}`;
-                      }}
-                      onChange={(event, newValue) => {
-                        if (newValue) {
-                          handleServiceAdd(newValue);
-                        }
-                      }}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Leistung hinzufügen"
-                          variant="outlined"
-                          size="small"
-                          sx={{ minWidth: 300 }}
-                        />
-                      )}
-                    />
+                    <Box display="flex" gap={1}>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={<Add />}
+                        onClick={() => {
+                          const newService = {
+                            date: new Date(),
+                            serviceCode: '',
+                            description: '',
+                            quantity: 1,
+                            unitPrice: 0,
+                            totalPrice: 0,
+                            category: ''
+                          };
+                          handleFormChange('services', [...(formData.services || []), newService]);
+                        }}
+                      >
+                        Neue Position
+                      </Button>
+                      <Autocomplete
+                        options={services || []}
+                        getOptionLabel={(option) => {
+                          const cleanName = stripHtmlTags(option.name || '');
+                          return `${option.code} - ${cleanName}`;
+                        }}
+                        onChange={(event, newValue) => {
+                          if (newValue) {
+                            handleServiceAdd(newValue);
+                          }
+                        }}
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            label="Leistung hinzufügen"
+                            variant="outlined"
+                            size="small"
+                            sx={{ minWidth: 300 }}
+                          />
+                        )}
+                      />
+                    </Box>
                   )}
                 </Box>
                 <TableContainer component={Paper}>
@@ -1426,33 +1526,111 @@ const Billing: React.FC = () => {
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {formData.services?.map((service, index) => (
-                        <TableRow key={index}>
-                          <TableCell>
-                            {new Date(service.date).toLocaleDateString('de-DE')}
-                          </TableCell>
-                          <TableCell>{service.serviceCode}</TableCell>
-                          <TableCell>
-                            <span dangerouslySetInnerHTML={{ __html: service.description || '' }} />
-                          </TableCell>
-                          <TableCell>{service.quantity}</TableCell>
-                          <TableCell>€{service.unitPrice.toFixed(2)}</TableCell>
-                          <TableCell>€{service.totalPrice.toFixed(2)}</TableCell>
-                          {dialogMode !== 'view' && (
+                      {formData.services?.map((service, index) => {
+                        const updateService = (field: string, value: any) => {
+                          const updatedServices = [...(formData.services || [])];
+                          updatedServices[index] = {
+                            ...updatedServices[index],
+                            [field]: value
+                          };
+                          // Berechne totalPrice automatisch
+                          if (field === 'quantity' || field === 'unitPrice') {
+                            updatedServices[index].totalPrice = 
+                              (updatedServices[index].quantity || 1) * (updatedServices[index].unitPrice || 0);
+                          }
+                          handleFormChange('services', updatedServices);
+                        };
+
+                        return (
+                          <TableRow key={index}>
                             <TableCell>
-                              <IconButton
-                                onClick={() => {
-                                  const newServices = formData.services?.filter((_, i) => i !== index);
-                                  handleFormChange('services', newServices);
-                                }}
-                                size="small"
-                              >
-                                <Delete />
-                              </IconButton>
+                              {dialogMode !== 'view' ? (
+                                <TextField
+                                  type="date"
+                                  size="small"
+                                  value={service.date ? new Date(service.date).toISOString().split('T')[0] : ''}
+                                  onChange={(e) => updateService('date', new Date(e.target.value))}
+                                  InputLabelProps={{ shrink: true }}
+                                  sx={{ width: 150 }}
+                                />
+                              ) : (
+                                new Date(service.date).toLocaleDateString('de-DE')
+                              )}
                             </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
+                            <TableCell>
+                              {dialogMode !== 'view' ? (
+                                <TextField
+                                  size="small"
+                                  value={service.serviceCode || ''}
+                                  onChange={(e) => updateService('serviceCode', e.target.value)}
+                                  placeholder="Code"
+                                  sx={{ width: 100 }}
+                                />
+                              ) : (
+                                service.serviceCode
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {dialogMode !== 'view' ? (
+                                <TextField
+                                  size="small"
+                                  fullWidth
+                                  value={stripHtmlTags(service.description || '')}
+                                  onChange={(e) => updateService('description', e.target.value)}
+                                  placeholder="Beschreibung"
+                                />
+                              ) : (
+                                <span dangerouslySetInnerHTML={{ __html: service.description || '' }} />
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {dialogMode !== 'view' ? (
+                                <TextField
+                                  type="number"
+                                  size="small"
+                                  value={service.quantity || 1}
+                                  onChange={(e) => updateService('quantity', parseInt(e.target.value) || 1)}
+                                  inputProps={{ min: 1, step: 1 }}
+                                  sx={{ width: 80 }}
+                                />
+                              ) : (
+                                service.quantity
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {dialogMode !== 'view' ? (
+                                <TextField
+                                  type="number"
+                                  size="small"
+                                  value={service.unitPrice && service.unitPrice !== 0 ? service.unitPrice : ''}
+                                  onChange={(e) => updateService('unitPrice', parseFloat(e.target.value) || 0)}
+                                  inputProps={{ min: 0, step: 0.01 }}
+                                  InputProps={{
+                                    startAdornment: <InputAdornment position="start">€</InputAdornment>
+                                  }}
+                                  sx={{ width: 120 }}
+                                />
+                              ) : (
+                                `€${service.unitPrice.toFixed(2)}`
+                              )}
+                            </TableCell>
+                            <TableCell>€{service.totalPrice.toFixed(2)}</TableCell>
+                            {dialogMode !== 'view' && (
+                              <TableCell>
+                                <IconButton
+                                  onClick={() => {
+                                    const newServices = formData.services?.filter((_, i) => i !== index);
+                                    handleFormChange('services', newServices);
+                                  }}
+                                  size="small"
+                                >
+                                  <Delete />
+                                </IconButton>
+                              </TableCell>
+                            )}
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </TableContainer>

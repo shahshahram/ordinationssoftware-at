@@ -208,8 +208,17 @@ const TariffManagement: React.FC = () => {
     }
   };
 
-  const formatAmount = (cents: number) => {
-    return (cents / 100).toFixed(2).replace('.', ',') + ' €';
+  // Helper-Funktion: Konvertiert Wert zu Euro (automatische Erkennung)
+  // Wenn Wert > 100000, wird angenommen, dass es in Cent ist (alte Daten)
+  // Normale Preise in Euro sind meist < 100000
+  const toEuro = (value: number | undefined | null): number => {
+    if (!value && value !== 0) return 0;
+    // Wenn Wert sehr groß ist (> 100000), ist es wahrscheinlich in Cent (alte Daten)
+    return value > 100000 ? value / 100 : value;
+  };
+
+  const formatAmount = (amount: number) => {
+    return toEuro(amount).toFixed(2).replace('.', ',') + ' €';
   };
 
   const formatFileSize = (bytes: number | null) => {

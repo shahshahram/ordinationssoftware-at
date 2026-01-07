@@ -255,7 +255,12 @@ const ServiceCatalogSchema = new mongoose.Schema({
     }
   }],
   
-  // Abrechnung
+  // Abrechnung - Preis in Euro
+  price: { 
+    type: Number, 
+    min: 0 
+  },
+  // Legacy: Altes Feld für Backward Compatibility (wird automatisch migriert)
   price_cents: { 
     type: Number, 
     min: 0 
@@ -272,10 +277,10 @@ const ServiceCatalogSchema = new mongoose.Schema({
     default: 'both' 
   },
   
-  // ÖGK-Kassenarzt-Abrechnung
+  // ÖGK-Kassenarzt-Abrechnung - alle Preise in Euro
   ogk: {
     ebmCode: { type: String, trim: true },
-    ebmPrice: { type: Number, min: 0 },
+    ebmPrice: { type: Number, min: 0 }, // Preis in Euro
     requiresApproval: { type: Boolean, default: false },
     billingFrequency: { type: String, enum: ['once', 'periodic'], default: 'once' },
     // Fachspezifische EBM-Gruppen
@@ -289,26 +294,26 @@ const ServiceCatalogSchema = new mongoose.Schema({
     }]
   },
   
-  // Wahlarzt-Abrechnung
+  // Wahlarzt-Abrechnung - alle Preise in Euro
   wahlarzt: {
-    price: { type: Number, min: 0 },
+    price: { type: Number, min: 0 }, // Preis in Euro
     reimbursementRate: { type: Number, default: 0.80, min: 0, max: 1 },
-    maxReimbursement: { type: Number, min: 0 },
+    maxReimbursement: { type: Number, min: 0 }, // Erstattung in Euro
     requiresPreApproval: { type: Boolean, default: false }
   },
   
-  // Privatärztliche Abrechnung
+  // Privatärztliche Abrechnung - Preis in Euro
   private: {
-    price: { type: Number, min: 0 },
+    price: { type: Number, min: 0 }, // Preis in Euro
     noInsurance: { type: Boolean, default: true }
   },
   
-  // Selbstbehalt
+  // Selbstbehalt - alle Beträge in Euro
   copay: {
     applicable: { type: Boolean, default: false },
-    amount: { type: Number, default: 0, min: 0 },
+    amount: { type: Number, default: 0, min: 0 }, // Betrag in Euro
     percentage: { type: Number, default: 0, min: 0, max: 100 },
-    maxAmount: { type: Number, min: 0 },
+    maxAmount: { type: Number, min: 0 }, // Maximalbetrag in Euro
     exempt: { type: Boolean, default: false }
   },
   
@@ -401,9 +406,27 @@ ServiceCatalogSchema.virtual('total_duration_min').get(function() {
   return this.base_duration_min + this.buffer_before_min + this.buffer_after_min;
 });
 
-// Virtual für Preis in Euro
+// Virtual für Preis (bereits in Euro, für Backward Compatibility)
 ServiceCatalogSchema.virtual('price_euro').get(function() {
+  // Wenn price vorhanden, verwende es direkt (bereits in Euro)
+  if (this.price !== undefined && this.price !== null) {
+    return this.price.toFixed(2);
+  }
+  // Fallback: Altes price_cents Feld (in Cent) umrechnen
   return this.price_cents ? (this.price_cents / 100).toFixed(2) : null;
+});
+
+// Pre-Hook: Migriere price_cents zu price beim Laden (falls price_cents vorhanden, aber price nicht)
+ServiceCatalogSchema.pre('save', function(next) {
+  // Wenn price_cents vorhanden ist, aber price nicht, migriere automatisch
+  if (this.price_cents && (this.price === undefined || this.price === null)) {
+    this.price = this.price_cents / 100;
+  }
+  // Wenn price vorhanden ist, aber price_cents nicht, setze price_cents für Backward Compatibility
+  if (this.price !== undefined && this.price !== null && (!this.price_cents || this.price_cents === 0)) {
+    this.price_cents = Math.round(this.price * 100);
+  }
+  next();
 });
 
 // Methoden

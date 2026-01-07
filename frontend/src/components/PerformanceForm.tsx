@@ -427,7 +427,7 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
                 fullWidth
                 label="Einzelpreis (€) *"
                 type="number"
-                value={formData.unitPrice}
+                value={formData.unitPrice && formData.unitPrice !== 0 ? formData.unitPrice : ''}
                 onChange={(e) => handleFieldChange('unitPrice', parseFloat(e.target.value) || 0)}
                 error={!!errors.unitPrice}
                 helperText={errors.unitPrice}

@@ -10,6 +10,14 @@ const ServiceCatalog = require('../models/ServiceCatalog');
 const Appointment = require('../models/Appointment');
 const ServiceBooking = require('../models/ServiceBooking');
 
+// Helper-Funktion: Konvertiert Cent zu Euro (automatische Erkennung)
+// Wenn Wert > 1000, wird angenommen, dass es in Cent ist
+const toEuro = (value) => {
+  if (!value && value !== 0) return 0;
+  // Wenn Wert > 1000, ist es wahrscheinlich in Cent (alte Daten)
+  return value > 1000 ? value / 100 : value;
+};
+
 // GET /api/billing-reports/summary - Zusammenfassung
 router.get('/summary', auth, async (req, res) => {
   try {
@@ -159,14 +167,15 @@ router.get('/by-insurance', auth, async (req, res) => {
         };
       }
       byInsurance[provider].count++;
-      byInsurance[provider].totalAmount += invoice.totalAmount || 0;
+      // totalAmount ist in Cent, umrechnen in Euro
+      byInsurance[provider].totalAmount += toEuro(invoice.totalAmount || 0);
       
       const billingType = invoice.billingType || 'unknown';
       if (!byInsurance[provider].byBillingType[billingType]) {
         byInsurance[provider].byBillingType[billingType] = { count: 0, totalAmount: 0 };
       }
       byInsurance[provider].byBillingType[billingType].count++;
-      byInsurance[provider].byBillingType[billingType].totalAmount += invoice.totalAmount || 0;
+      byInsurance[provider].byBillingType[billingType].totalAmount += toEuro(invoice.totalAmount || 0);
     });
     
     res.json({
@@ -272,14 +281,15 @@ router.get('/monthly', auth, async (req, res) => {
         };
       }
       dailyStats[day].count++;
-      dailyStats[day].totalAmount += invoice.totalAmount || 0;
+      // totalAmount ist in Cent, umrechnen in Euro
+      dailyStats[day].totalAmount += toEuro(invoice.totalAmount || 0);
       
       const billingType = invoice.billingType || 'unknown';
       if (!dailyStats[day].byBillingType[billingType]) {
         dailyStats[day].byBillingType[billingType] = { count: 0, totalAmount: 0 };
       }
       dailyStats[day].byBillingType[billingType].count++;
-      dailyStats[day].byBillingType[billingType].totalAmount += invoice.totalAmount || 0;
+      dailyStats[day].byBillingType[billingType].totalAmount += toEuro(invoice.totalAmount || 0);
     });
     
     res.json({
@@ -289,7 +299,7 @@ router.get('/monthly', auth, async (req, res) => {
         daily: Object.values(dailyStats).sort((a, b) => a.date - b.date),
         totals: {
           totalInvoices: invoices.length,
-          totalAmount: invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0)
+          totalAmount: invoices.reduce((sum, inv) => sum + toEuro(inv.totalAmount || 0), 0)
         }
       }
     });
@@ -341,8 +351,9 @@ router.get('/export/excel', auth, async (req, res) => {
     
     // Daten
     invoices.forEach(invoice => {
-      const copay = invoice.services?.reduce((sum, s) => sum + (s.copay || 0), 0) || 0;
-      const insuranceAmount = (invoice.totalAmount || 0) - copay;
+      // copay und totalAmount sind in Cent, umrechnen in Euro
+      const copay = toEuro(invoice.services?.reduce((sum, s) => sum + (s.copay || 0), 0) || 0);
+      const insuranceAmount = toEuro(invoice.totalAmount || 0) - copay;
       
       worksheet.addRow({
         invoiceNumber: invoice.invoiceNumber,
@@ -350,7 +361,7 @@ router.get('/export/excel', auth, async (req, res) => {
         patientName: invoice.patient?.id ? `${invoice.patient.id.firstName} ${invoice.patient.id.lastName}` : 'Unbekannt',
         insurance: invoice.patient?.id?.insuranceProvider || 'Unbekannt',
         billingType: invoice.billingType,
-        totalAmount: (invoice.totalAmount || 0) / 100,
+        totalAmount: toEuro(invoice.totalAmount || 0),
         copay: copay / 100,
         insuranceAmount: insuranceAmount / 100,
         status: invoice.status
@@ -428,10 +439,12 @@ router.get('/patient-analysis', auth, async (req, res) => {
       }
       
       patientStats[patientId].totalInvoices++;
-      patientStats[patientId].totalAmount += invoice.totalAmount || 0;
+      // totalAmount ist in Cent, umrechnen in Euro
+      const invoiceAmountInEuro = toEuro(invoice.totalAmount || 0);
+      patientStats[patientId].totalAmount += invoiceAmountInEuro; // Direkt in Euro
       patientStats[patientId].invoices.push({
         invoiceDate: invoice.invoiceDate,
-        totalAmount: invoice.totalAmount,
+        totalAmount: invoiceAmountInEuro, // Direkt in Euro
         billingType: invoice.billingType,
         status: invoice.status
       });
@@ -442,7 +455,7 @@ router.get('/patient-analysis', auth, async (req, res) => {
         patientStats[patientId].byBillingType[billingType] = { count: 0, totalAmount: 0 };
       }
       patientStats[patientId].byBillingType[billingType].count++;
-      patientStats[patientId].byBillingType[billingType].totalAmount += invoice.totalAmount || 0;
+      patientStats[patientId].byBillingType[billingType].totalAmount += invoiceAmountInEuro; // Direkt in Euro
       
       // Gruppiere nach Monat
       const monthKey = invoice.invoiceDate ? 
@@ -452,7 +465,7 @@ router.get('/patient-analysis', auth, async (req, res) => {
         patientStats[patientId].byMonth[monthKey] = { count: 0, totalAmount: 0 };
       }
       patientStats[patientId].byMonth[monthKey].count++;
-      patientStats[patientId].byMonth[monthKey].totalAmount += invoice.totalAmount || 0;
+      patientStats[patientId].byMonth[monthKey].totalAmount += invoiceAmountInEuro; // Direkt in Euro
       
       // Analysiere Services
       if (invoice.services && Array.isArray(invoice.services)) {
@@ -468,7 +481,8 @@ router.get('/patient-analysis', auth, async (req, res) => {
             };
           }
           patientStats[patientId].services[serviceKey].count += service.quantity || 1;
-          patientStats[patientId].services[serviceKey].totalAmount += service.totalPrice || 0;
+          // totalPrice ist in Cent, umrechnen in Euro
+          patientStats[patientId].services[serviceKey].totalAmount += toEuro(service.totalPrice || 0); // Direkt in Euro
         });
       }
     });
@@ -538,7 +552,8 @@ router.get('/service-analysis', auth, async (req, res) => {
           
           serviceStats[serviceKey].count++;
           serviceStats[serviceKey].totalQuantity += service.quantity || 1;
-          serviceStats[serviceKey].totalAmount += service.totalPrice || 0;
+          // totalPrice ist in Cent, umrechnen in Euro
+          serviceStats[serviceKey].totalAmount += toEuro(service.totalPrice || 0); // Direkt in Euro
           
           // Gruppiere nach Monat
           const monthKey = invoice.invoiceDate ? 
@@ -548,7 +563,7 @@ router.get('/service-analysis', auth, async (req, res) => {
             serviceStats[serviceKey].byMonth[monthKey] = { count: 0, totalAmount: 0 };
           }
           serviceStats[serviceKey].byMonth[monthKey].count++;
-          serviceStats[serviceKey].byMonth[monthKey].totalAmount += service.totalPrice || 0;
+          serviceStats[serviceKey].byMonth[monthKey].totalAmount += toEuro(service.totalPrice || 0) * 100; // Für Kompatibilität
           
           // Gruppiere nach Abrechnungstyp
           const billingType = invoice.billingType || 'unknown';
@@ -556,7 +571,7 @@ router.get('/service-analysis', auth, async (req, res) => {
             serviceStats[serviceKey].byBillingType[billingType] = { count: 0, totalAmount: 0 };
           }
           serviceStats[serviceKey].byBillingType[billingType].count++;
-          serviceStats[serviceKey].byBillingType[billingType].totalAmount += service.totalPrice || 0;
+          serviceStats[serviceKey].byBillingType[billingType].totalAmount += toEuro(service.totalPrice || 0) * 100; // Für Kompatibilität
         });
       }
     });
@@ -648,7 +663,9 @@ router.get('/trends', auth, async (req, res) => {
       }
       
       trends[periodKey].totalInvoices++;
-      trends[periodKey].totalAmount += invoice.totalAmount || 0;
+      // totalAmount ist in Cent, umrechnen in Euro
+      const trendAmountInEuro = toEuro(invoice.totalAmount || 0);
+      trends[periodKey].totalAmount += trendAmountInEuro; // Direkt in Euro
       
       // Gruppiere nach Abrechnungstyp
       const billingType = invoice.billingType || 'unknown';
@@ -656,7 +673,7 @@ router.get('/trends', auth, async (req, res) => {
         trends[periodKey].byBillingType[billingType] = { count: 0, totalAmount: 0 };
       }
       trends[periodKey].byBillingType[billingType].count++;
-      trends[periodKey].byBillingType[billingType].totalAmount += invoice.totalAmount || 0;
+      trends[periodKey].byBillingType[billingType].totalAmount += trendAmountInEuro; // Direkt in Euro
       
       // Gruppiere nach Status
       const status = invoice.status || 'unknown';
@@ -664,7 +681,7 @@ router.get('/trends', auth, async (req, res) => {
         trends[periodKey].byStatus[status] = { count: 0, totalAmount: 0 };
       }
       trends[periodKey].byStatus[status].count++;
-      trends[periodKey].byStatus[status].totalAmount += invoice.totalAmount || 0;
+      trends[periodKey].byStatus[status].totalAmount += trendAmountInEuro; // Direkt in Euro
     });
     
     // Berechne Durchschnitte und konvertiere zu Array
@@ -735,7 +752,8 @@ router.get('/profitability', auth, async (req, res) => {
           
           serviceStats[serviceKey].count++;
           serviceStats[serviceKey].totalQuantity += service.quantity || 1;
-          serviceStats[serviceKey].totalAmount += service.totalPrice || 0;
+          // totalPrice ist in Cent, umrechnen in Euro
+          serviceStats[serviceKey].totalAmount += toEuro(service.totalPrice || 0); // Direkt in Euro
           
           const unitPrice = service.unitPrice || 0;
           if (unitPrice < serviceStats[serviceKey].minPrice) {
@@ -918,26 +936,36 @@ router.get('/no-show', auth, async (req, res) => {
     
     noShowAppointments.forEach(apt => {
       const service = apt.service;
-      const price = service?.price_cents || 0;
-      lostRevenue += price;
+      // Preise sind jetzt in Euro (oder in Cent für Backward Compatibility)
+      const price = service?.price !== undefined && service?.price !== null
+        ? service.price
+        : service?.price_cents ? service.price_cents / 100 : 0;
+      lostRevenue += price; // Direkt in Euro
       noShowDetails.push({
         date: apt.startTime,
         type: 'appointment',
         serviceName: service?.name || apt.type || 'Unbekannt',
-        lostRevenue: price,
+        lostRevenue: price, // Direkt in Euro
         duration: service?.base_duration_min || 0
       });
     });
     
     noShowBookings.forEach(booking => {
       const service = booking.service_id;
-      const price = booking.billing_amount_cents || service?.price_cents || 0;
-      lostRevenue += price;
+      // Preise sind jetzt in Euro (oder in Cent für Backward Compatibility)
+      const priceInEuro = booking.billing_amount !== undefined && booking.billing_amount !== null
+        ? booking.billing_amount
+        : booking.billing_amount_cents ? booking.billing_amount_cents / 100 : 0;
+      const servicePriceInEuro = service?.price !== undefined && service?.price !== null
+        ? service.price
+        : service?.price_cents ? service.price_cents / 100 : 0;
+      const price = priceInEuro || servicePriceInEuro || 0;
+      lostRevenue += price; // Direkt in Euro
       noShowDetails.push({
         date: booking.start_time,
         type: 'service_booking',
         serviceName: service?.name || 'Unbekannt',
-        lostRevenue: price,
+        lostRevenue: price, // Direkt in Euro
         duration: service?.base_duration_min || 0
       });
     });
@@ -1197,7 +1225,7 @@ router.get('/bi-dashboard', auth, async (req, res) => {
           const serviceData = serviceCatalogMap[serviceCode];
           
           // Revenue ist in Cent, umrechnen in Euro
-          const revenue = (service.totalPrice || 0) / 100;
+          const revenue = toEuro(service.totalPrice || 0);
           // Kosten sind jetzt in Euro
           const materialCosts = serviceData?.costs?.materialCosts || (serviceData?.costs?.materialCostsCents ? serviceData.costs.materialCostsCents / 100 : 0);
           const equipmentCosts = serviceData?.costs?.equipmentCosts || (serviceData?.costs?.equipmentCostsCents ? serviceData.costs.equipmentCostsCents / 100 : 0);
@@ -1288,7 +1316,13 @@ router.get('/bi-dashboard', auth, async (req, res) => {
     // Berechne verlorenen Umsatz durch No-Shows
     const noShowServiceBookingsLostRevenue = serviceBookings
       .filter(sb => sb.status === 'no_show' || sb.status === 'cancelled')
-      .reduce((sum, sb) => sum + (sb.billing_amount_cents || 0), 0);
+      .reduce((sum, sb) => {
+        // Preise sind jetzt in Euro (oder in Cent für Backward Compatibility)
+        const priceInEuro = sb.billing_amount !== undefined && sb.billing_amount !== null
+          ? sb.billing_amount
+          : sb.billing_amount_cents ? sb.billing_amount_cents / 100 : 0;
+        return sum + priceInEuro; // Direkt in Euro
+      }, 0);
     
     const noShowAppointmentsList = await Appointment.find({
       ...appointmentFilter,
@@ -1332,13 +1366,21 @@ router.get('/bi-dashboard', auth, async (req, res) => {
       if (serviceCode) {
         const serviceData = noShowServiceCatalogMap[serviceCode];
         if (serviceData) {
-          // price_cents ist in Cent, umrechnen in Euro
-          const price = serviceData.price_cents ? serviceData.price_cents / 100 : 
-                       serviceData.wahlarzt?.price ? serviceData.wahlarzt.price / 100 : 
-                       serviceData.private?.price ? serviceData.private.price / 100 : 
-                       serviceData.ogk?.ebmPrice ? serviceData.ogk.ebmPrice / 100 : 
-                       0;
-          return sum + price;
+          // Preise sind jetzt in Euro (oder in Cent für Backward Compatibility)
+          const price = serviceData.price !== undefined && serviceData.price !== null
+            ? serviceData.price
+            : serviceData.price_cents ? serviceData.price_cents / 100 : 0;
+          const wahlarztPrice = serviceData.wahlarzt?.price !== undefined && serviceData.wahlarzt?.price !== null
+            ? (serviceData.wahlarzt.price > 1000 ? serviceData.wahlarzt.price / 100 : serviceData.wahlarzt.price)
+            : 0;
+          const privatePrice = serviceData.private?.price !== undefined && serviceData.private?.price !== null
+            ? (serviceData.private.price > 1000 ? serviceData.private.price / 100 : serviceData.private.price)
+            : 0;
+          const ebmPrice = serviceData.ogk?.ebmPrice !== undefined && serviceData.ogk?.ebmPrice !== null
+            ? (serviceData.ogk.ebmPrice > 1000 ? serviceData.ogk.ebmPrice / 100 : serviceData.ogk.ebmPrice)
+            : 0;
+          const finalPrice = price || wahlarztPrice || privatePrice || ebmPrice || 0;
+          return sum + finalPrice; // Direkt in Euro
         }
       }
       return sum;

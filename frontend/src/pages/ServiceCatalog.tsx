@@ -172,7 +172,8 @@ interface ServiceCatalog {
   max_age_years?: number;
   requires_consent: boolean;
   online_bookable: boolean;
-  price_cents?: number;
+  price?: number; // Preis in Euro
+  price_cents?: number; // Legacy: Für Backward Compatibility
   billing_code?: string;
   notes?: string;
   is_active: boolean;
@@ -351,7 +352,8 @@ const ServiceCatalog: React.FC = () => {
       isRequired: boolean;
       defaultValue?: any;
     }>,
-    price_cents: 0,
+    price: 0, // Preis in Euro
+    price_cents: 0, // Legacy: Für Backward Compatibility
     billing_code: '',
     notes: '',
     is_active: true,
@@ -696,7 +698,8 @@ const ServiceCatalog: React.FC = () => {
       requires_confirmation: false,
       requires_scheduling_confirmation: false,
       max_waitlist: 0,
-      price_cents: 0,
+      price: 0, // Preis in Euro
+      price_cents: 0, // Legacy: Für Backward Compatibility
       billing_code: '',
       notes: '',
       is_active: true,
@@ -804,7 +807,8 @@ const ServiceCatalog: React.FC = () => {
       max_waitlist: (service as any).max_waitlist ?? 0,
       online_contingents: (service as any).online_contingents || [],
       anamnesisQuestions: (service as any).anamnesisQuestions || [],
-      price_cents: service.price_cents || 0,
+      price: service.price !== undefined && service.price !== null ? service.price : (service.price_cents ? service.price_cents / 100 : 0),
+      price_cents: service.price_cents || (service.price ? Math.round(service.price * 100) : 0),
       billing_code: service.billing_code || '',
       notes: service.notes || '',
       is_active: service.is_active,
@@ -815,23 +819,33 @@ const ServiceCatalog: React.FC = () => {
       billingType: service.billingType || 'both',
       ogk: {
         ebmCode: service.ogk?.ebmCode || '',
-        ebmPrice: service.ogk?.ebmPrice || 0,
+        ebmPrice: service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
+          ? (service.ogk.ebmPrice > 1000 ? service.ogk.ebmPrice / 100 : service.ogk.ebmPrice)
+          : 0,
         requiresApproval: service.ogk?.requiresApproval || false,
         billingFrequency: service.ogk?.billingFrequency || 'once'
       },
       wahlarzt: {
-        price: service.wahlarzt?.price || 0,
+        price: service.wahlarzt?.price !== undefined && service.wahlarzt?.price !== null
+          ? (service.wahlarzt.price > 1000 ? service.wahlarzt.price / 100 : service.wahlarzt.price)
+          : 0,
         reimbursementRate: service.wahlarzt?.reimbursementRate || 80,
-        maxReimbursement: service.wahlarzt?.maxReimbursement || 0,
+        maxReimbursement: service.wahlarzt?.maxReimbursement !== undefined && service.wahlarzt?.maxReimbursement !== null
+          ? (service.wahlarzt.maxReimbursement > 1000 ? service.wahlarzt.maxReimbursement / 100 : service.wahlarzt.maxReimbursement)
+          : 0,
         requiresPreApproval: service.wahlarzt?.requiresPreApproval || false
       },
       private: {
-        price: service.private?.price || 0,
+        price: service.private?.price !== undefined && service.private?.price !== null
+          ? (service.private.price > 1000 ? service.private.price / 100 : service.private.price)
+          : 0,
         noInsurance: service.private?.noInsurance ?? true
       },
       copay: {
         applicable: service.copay?.applicable ?? true,
-        amount: service.copay?.amount || 0,
+        amount: service.copay?.amount !== undefined && service.copay?.amount !== null
+          ? (service.copay.amount > 1000 ? service.copay.amount / 100 : service.copay.amount)
+          : 0,
         percentage: service.copay?.percentage || 10,
         maxAmount: service.copay?.maxAmount || 28.50,
         exempt: service.copay?.exempt || false
@@ -952,9 +966,18 @@ const ServiceCatalog: React.FC = () => {
     setPage(0);
   };
 
-  const formatPrice = (priceCents?: number) => {
-    if (!priceCents) return '-';
-    return `€${(priceCents / 100).toFixed(2)}`;
+  // Helper-Funktion: Konvertiert Wert zu Euro (automatische Erkennung)
+  // Wenn Wert > 100000, wird angenommen, dass es in Cent ist (alte Daten)
+  // Normale Preise in Euro sind meist < 100000
+  const toEuro = (value: number | undefined | null): number => {
+    if (!value && value !== 0) return 0;
+    // Wenn Wert sehr groß ist (> 100000), ist es wahrscheinlich in Cent (alte Daten)
+    return value > 100000 ? value / 100 : value;
+  };
+
+  const formatPrice = (price?: number) => {
+    if (!price && price !== 0) return '-';
+    return `€${toEuro(price).toFixed(2)}`;
   };
 
   const formatDuration = (service: ServiceCatalog) => {
@@ -1231,7 +1254,7 @@ const ServiceCatalog: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <Typography variant="body2">
-                      {formatPrice(service.price_cents || service.prices?.privat)}
+                      {formatPrice(service.price || service.price_cents || service.prices?.privat)}
                     </Typography>
                   </TableCell>
                   <TableCell>
@@ -1821,6 +1844,37 @@ const ServiceCatalog: React.FC = () => {
             {/* Tab 4: Preis & Billing */}
             {activeTab === 3 && (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                {/* Hauptpreis */}
+                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Hauptpreis
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Dieser Preis wird in der Übersichtstabelle angezeigt und als Standardpreis verwendet.
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="Preis (Euro)"
+                    type="number"
+                    inputProps={{ step: "0.01" }}
+                    value={formData.price !== undefined && formData.price !== null && formData.price !== 0
+                      ? formData.price 
+                      : formData.price_cents && formData.price_cents !== 0
+                        ? (formData.price_cents / 100) 
+                        : ''}
+                    onChange={(e) => {
+                      const euroValue = parseFloat(e.target.value) || 0;
+                      setFormData({ 
+                        ...formData, 
+                        price: euroValue,
+                        // Für Backward Compatibility auch price_cents setzen
+                        price_cents: Math.round(euroValue * 100)
+                      });
+                    }}
+                    helperText="Dieser Preis wird in der ServiceCatalog-Übersicht angezeigt"
+                  />
+                </Box>
+
                 {/* Abrechnungstyp */}
                 <FormControl fullWidth required>
                   <InputLabel>Abrechnungstyp</InputLabel>
@@ -1854,13 +1908,19 @@ const ServiceCatalog: React.FC = () => {
                       />
                       <TextField
                         fullWidth
-                        label="EBM-Preis (Cent)"
+                        label="EBM-Preis (Euro)"
                         type="number"
-                        value={formData.ogk?.ebmPrice || 0}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          ogk: { ...formData.ogk, ebmPrice: parseInt(e.target.value) || 0 }
-                        })}
+                        inputProps={{ step: "0.01" }}
+                        value={formData.ogk?.ebmPrice !== undefined && formData.ogk?.ebmPrice !== null && formData.ogk?.ebmPrice !== 0
+                          ? (formData.ogk.ebmPrice > 1000 ? formData.ogk.ebmPrice / 100 : formData.ogk.ebmPrice)
+                          : ''}
+                        onChange={(e) => {
+                          const euroValue = parseFloat(e.target.value) || 0;
+                          setFormData({ 
+                            ...formData, 
+                            ogk: { ...formData.ogk, ebmPrice: euroValue }
+                          });
+                        }}
                       />
                       <FormControlLabel
                         control={
@@ -1904,12 +1964,14 @@ const ServiceCatalog: React.FC = () => {
                         label="Preis (Euro)"
                         type="number"
                         inputProps={{ step: "0.01" }}
-                        value={formData.wahlarzt?.price ? (formData.wahlarzt.price / 100).toFixed(2) : ''}
+                        value={formData.wahlarzt?.price !== undefined && formData.wahlarzt?.price !== null && formData.wahlarzt?.price !== 0
+                          ? (formData.wahlarzt.price > 1000 ? formData.wahlarzt.price / 100 : formData.wahlarzt.price)
+                          : ''}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
                           setFormData({ 
                             ...formData, 
-                            wahlarzt: { ...formData.wahlarzt, price: Math.round(euroValue * 100) }
+                            wahlarzt: { ...formData.wahlarzt, price: euroValue }
                           });
                         }}
                       />
@@ -1928,12 +1990,14 @@ const ServiceCatalog: React.FC = () => {
                         label="Max. Erstattung (Euro)"
                         type="number"
                         inputProps={{ step: "0.01" }}
-                        value={formData.wahlarzt?.maxReimbursement ? (formData.wahlarzt.maxReimbursement / 100).toFixed(2) : ''}
+                        value={formData.wahlarzt?.maxReimbursement !== undefined && formData.wahlarzt?.maxReimbursement !== null && formData.wahlarzt?.maxReimbursement !== 0
+                          ? (formData.wahlarzt.maxReimbursement > 1000 ? formData.wahlarzt.maxReimbursement / 100 : formData.wahlarzt.maxReimbursement)
+                          : ''}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
                           setFormData({ 
                             ...formData, 
-                            wahlarzt: { ...formData.wahlarzt, maxReimbursement: Math.round(euroValue * 100) }
+                            wahlarzt: { ...formData.wahlarzt, maxReimbursement: euroValue }
                           });
                         }}
                       />
@@ -1965,12 +2029,14 @@ const ServiceCatalog: React.FC = () => {
                         label="Preis (Euro)"
                         type="number"
                         inputProps={{ step: "0.01" }}
-                        value={formData.private?.price ? (formData.private.price / 100).toFixed(2) : ''}
+                        value={formData.private?.price !== undefined && formData.private?.price !== null && formData.private?.price !== 0
+                          ? (formData.private.price > 1000 ? formData.private.price / 100 : formData.private.price)
+                          : ''}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
                           setFormData({ 
                             ...formData, 
-                            private: { ...formData.private, price: Math.round(euroValue * 100) }
+                            private: { ...formData.private, price: euroValue }
                           });
                         }}
                       />
@@ -2013,12 +2079,14 @@ const ServiceCatalog: React.FC = () => {
                       label="Selbstbehalt (Euro)"
                       type="number"
                       inputProps={{ step: "0.01" }}
-                      value={formData.copay?.amount ? (formData.copay.amount / 100).toFixed(2) : ''}
+                      value={formData.copay?.amount !== undefined && formData.copay?.amount !== null && formData.copay?.amount !== 0
+                        ? (formData.copay.amount > 1000 ? formData.copay.amount / 100 : formData.copay.amount)
+                        : ''}
                       onChange={(e) => {
                         const euroValue = parseFloat(e.target.value) || 0;
                         setFormData({ 
                           ...formData, 
-                          copay: { ...formData.copay, amount: Math.round(euroValue * 100) }
+                          copay: { ...formData.copay, amount: euroValue }
                         });
                       }}
                       disabled={!formData.copay?.applicable}
@@ -2039,10 +2107,12 @@ const ServiceCatalog: React.FC = () => {
                       label="Max. Selbstbehalt (Euro)"
                       type="number"
                       inputProps={{ step: "0.01" }}
-                      value={formData.copay?.maxAmount ? formData.copay.maxAmount.toFixed(2) : '28.50'}
+                      value={formData.copay?.maxAmount !== undefined && formData.copay?.maxAmount !== null && formData.copay?.maxAmount !== 0
+                        ? (formData.copay.maxAmount > 1000 ? formData.copay.maxAmount / 100 : formData.copay.maxAmount)
+                        : ''}
                       onChange={(e) => setFormData({ 
                         ...formData, 
-                        copay: { ...formData.copay, maxAmount: parseFloat(e.target.value) || 28.50 }
+                        copay: { ...formData.copay, maxAmount: parseFloat(e.target.value) || 0 }
                       })}
                       disabled={!formData.copay?.applicable}
                     />
@@ -2076,7 +2146,7 @@ const ServiceCatalog: React.FC = () => {
                       label="Materialkosten (Euro)"
                       type="number"
                       inputProps={{ step: "0.01" }}
-                      value={formData.costs?.materialCosts || 0}
+                      value={formData.costs?.materialCosts && formData.costs.materialCosts !== 0 ? formData.costs.materialCosts : ''}
                       onChange={(e) => setFormData({ 
                         ...formData, 
                         costs: { 
@@ -2090,7 +2160,7 @@ const ServiceCatalog: React.FC = () => {
                       label="Gerätekosten (Euro)"
                       type="number"
                       inputProps={{ step: "0.01" }}
-                      value={formData.costs?.equipmentCosts || 0}
+                      value={formData.costs?.equipmentCosts && formData.costs.equipmentCosts !== 0 ? formData.costs.equipmentCosts : ''}
                       onChange={(e) => setFormData({ 
                         ...formData, 
                         costs: { 
@@ -2104,7 +2174,7 @@ const ServiceCatalog: React.FC = () => {
                       label="Variable Kosten (Euro)"
                       type="number"
                       inputProps={{ step: "0.01" }}
-                      value={formData.costs?.variableCosts || 0}
+                      value={formData.costs?.variableCosts && formData.costs.variableCosts !== 0 ? formData.costs.variableCosts : ''}
                       onChange={(e) => setFormData({ 
                         ...formData, 
                         costs: { 
@@ -2118,7 +2188,7 @@ const ServiceCatalog: React.FC = () => {
                       label="Fixkostenanteil (Euro)"
                       type="number"
                       inputProps={{ step: "0.01" }}
-                      value={formData.costs?.fixedCosts || 0}
+                      value={formData.costs?.fixedCosts && formData.costs.fixedCosts !== 0 ? formData.costs.fixedCosts : ''}
                       onChange={(e) => setFormData({ 
                         ...formData, 
                         costs: { 

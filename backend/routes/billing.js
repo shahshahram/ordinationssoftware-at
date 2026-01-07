@@ -97,19 +97,39 @@ router.post('/invoices', auth, [
   body('patient.id').optional().isMongoId(),
   body('billingType').isIn(['kassenarzt', 'wahlarzt', 'privat']),
   body('services').isArray().notEmpty(),
-  body('services.*.serviceCode').notEmpty(),
-  body('services.*.description').notEmpty(),
-  body('services.*.quantity').isNumeric(),
-  body('services.*.unitPrice').isNumeric()
+  body('services.*.serviceCode').optional().notEmpty(),
+  body('services.*.description').optional().notEmpty(),
+  body('services.*.quantity').optional().isNumeric(),
+  body('services.*.unitPrice').optional().isNumeric()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.error('Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         message: 'Validierungsfehler',
         errors: errors.array()
       });
+    }
+    
+    // Zusätzliche Validierung: Filtere leere Services und validiere die restlichen
+    if (req.body.services && Array.isArray(req.body.services)) {
+      const validServices = req.body.services.filter(service => 
+        service.serviceCode && service.serviceCode.trim() !== '' &&
+        service.description && service.description.trim() !== ''
+      );
+      
+      if (validServices.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Validierungsfehler',
+          errors: [{ msg: 'Mindestens eine Leistung mit Code und Beschreibung ist erforderlich' }]
+        });
+      }
+      
+      // Ersetze services mit validierten Services
+      req.body.services = validServices;
     }
 
     const invoiceData = {
@@ -271,6 +291,9 @@ router.post('/invoices', auth, [
 // @access  Private
 router.put('/invoices/:id', auth, async (req, res) => {
   try {
+    console.log(`📝 Update invoice request for ID: ${req.params.id}`);
+    console.log(`📝 Request body keys:`, Object.keys(req.body));
+    
     const oldInvoice = await Invoice.findById(req.params.id);
     if (!oldInvoice) {
       return res.status(404).json({
@@ -279,11 +302,110 @@ router.put('/invoices/:id', auth, async (req, res) => {
       });
     }
 
+    console.log(`📝 Old invoice number: ${oldInvoice.invoiceNumber}`);
+    console.log(`📝 Old invoice services count: ${oldInvoice.services?.length || 0}`);
+
+    // Bereite Update-Daten vor - starte mit den alten Daten und überschreibe mit neuen
+    const oldInvoiceData = oldInvoice.toObject();
+    const updateData = {
+      ...oldInvoiceData,
+      ...req.body,
+      lastModifiedBy: req.user.id
+    };
+    
+    console.log(`📝 Update data services count: ${updateData.services?.length || 0}`);
+    
+    // Stelle sicher, dass services ein Array ist und korrekt formatiert
+    if (req.body.services && Array.isArray(req.body.services)) {
+      updateData.services = req.body.services.map(service => ({
+        date: service.date ? new Date(service.date) : new Date(),
+        serviceCode: service.serviceCode || '',
+        description: service.description || '',
+        quantity: service.quantity || 1,
+        unitPrice: service.unitPrice || 0,
+        totalPrice: service.totalPrice || (service.unitPrice || 0) * (service.quantity || 1),
+        category: service.category || ''
+      }));
+    }
+
+    // Berechne subtotal und totalAmount neu, falls services vorhanden
+    if (updateData.services && Array.isArray(updateData.services)) {
+      updateData.subtotal = updateData.services.reduce((sum, s) => sum + (s.totalPrice || 0), 0);
+      updateData.taxAmount = updateData.subtotal * (updateData.taxRate || 0) / 100;
+      updateData.totalAmount = updateData.subtotal + updateData.taxAmount;
+    }
+
+    // Konvertiere Datum-Felder zu Date-Objekten
+    if (req.body.invoiceDate) {
+      updateData.invoiceDate = new Date(req.body.invoiceDate);
+    }
+    if (req.body.dueDate) {
+      updateData.dueDate = new Date(req.body.dueDate);
+    }
+
+    // Stelle sicher, dass alle required Felder vorhanden sind
+    if (!updateData.invoiceNumber) updateData.invoiceNumber = oldInvoice.invoiceNumber;
+    if (!updateData.invoiceDate) updateData.invoiceDate = oldInvoice.invoiceDate;
+    if (!updateData.dueDate) updateData.dueDate = oldInvoice.dueDate;
+    if (!updateData.doctor) updateData.doctor = oldInvoice.doctor;
+    if (!updateData.patient) updateData.patient = oldInvoice.patient;
+    if (!updateData.createdBy) updateData.createdBy = oldInvoice.createdBy;
+    
+    // Stelle sicher, dass patient.id ein ObjectId ist
+    if (updateData.patient && updateData.patient.id) {
+      if (typeof updateData.patient.id === 'string') {
+        try {
+          updateData.patient.id = new mongoose.Types.ObjectId(updateData.patient.id);
+        } catch (error) {
+          console.error('Invalid patient.id format:', updateData.patient.id);
+          updateData.patient.id = oldInvoice.patient.id;
+        }
+      } else if (updateData.patient.id._id) {
+        updateData.patient.id = updateData.patient.id._id;
+      } else if (updateData.patient.id.toString) {
+        // Bereits ein ObjectId
+        updateData.patient.id = updateData.patient.id;
+      }
+    }
+    
+    if (!updateData.billingType) updateData.billingType = oldInvoice.billingType;
+    if (!updateData.services || !Array.isArray(updateData.services) || updateData.services.length === 0) {
+      updateData.services = oldInvoice.services;
+    }
+    if (updateData.subtotal === undefined || updateData.subtotal === null) {
+      updateData.subtotal = oldInvoice.subtotal;
+    }
+    if (updateData.totalAmount === undefined || updateData.totalAmount === null) {
+      updateData.totalAmount = oldInvoice.totalAmount;
+    }
+
+    // Entferne _id und __v, da diese nicht aktualisiert werden sollten
+    delete updateData._id;
+    delete updateData.__v;
+
+    console.log(`📝 Final update data:`, {
+      invoiceNumber: updateData.invoiceNumber,
+      servicesCount: updateData.services?.length || 0,
+      subtotal: updateData.subtotal,
+      totalAmount: updateData.totalAmount,
+      patientId: updateData.patient?.id,
+      billingType: updateData.billingType
+    });
+
     const invoice = await Invoice.findByIdAndUpdate(
       req.params.id,
-      { ...req.body, lastModifiedBy: req.user.id },
+      updateData,
       { new: true, runValidators: true }
     );
+    
+    console.log(`✅ Invoice updated successfully: ${invoice?.invoiceNumber}`);
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rechnung nicht gefunden nach Update'
+      });
+    }
 
     // Journaling: Protokolliere Änderung
     try {
@@ -302,9 +424,14 @@ router.put('/invoices/:id', auth, async (req, res) => {
       data: invoice
     });
   } catch (error) {
+    console.error('Invoice update error:', error);
+    console.error('Error stack:', error.stack);
+    console.error('Request body:', JSON.stringify(req.body, null, 2));
     res.status(500).json({
       success: false,
-      message: 'Fehler beim Aktualisieren der Rechnung'
+      message: 'Fehler beim Aktualisieren der Rechnung',
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
