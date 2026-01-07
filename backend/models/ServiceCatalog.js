@@ -6,8 +6,8 @@ const ServiceCatalogSchema = new mongoose.Schema({
     type: String, 
     required: true, 
     unique: true, 
-    trim: true,
-    index: true
+    trim: true
+    // unique: true erstellt automatisch einen Index, daher kein index: true nötig
   },
   name: { 
     type: String, 

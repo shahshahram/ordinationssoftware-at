@@ -118,14 +118,16 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
     const parsedLimit = limit ? parseInt(limit.toString(), 10) : 50;
     const parsedPage = page ? parseInt(page.toString(), 10) : 1;
     
-    console.log('🔍 Service Catalog Request:', {
-      limit: limit,
-      parsedLimit,
-      page: page,
-      parsedPage,
-      is_active,
-      search
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Service Catalog Request:', {
+        limit: limit,
+        parsedLimit,
+        page: page,
+        parsedPage,
+        is_active,
+        search
+      });
+    }
 
     // Filter aufbauen
     const filter = {};
@@ -145,7 +147,9 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       ];
     }
 
-    console.log('🔍 Filter:', JSON.stringify(filter, null, 2));
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Filter:', JSON.stringify(filter, null, 2));
+    }
 
     // Pagination
     const skip = (parsedPage - 1) * parsedLimit;
@@ -268,7 +272,9 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
                 code: roomDoc.location_id.code || ''
               } : undefined
             };
-            console.log('Found room in Room model:', transformedRoom);
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Found room in Room model:', transformedRoom);
+            }
             return transformedRoom;
           }
           
@@ -287,11 +293,15 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
                 code: ''
               } : undefined
             };
-            console.log('Found room in Resource model:', transformedRoom);
+            if (process.env.NODE_ENV === 'development') {
+              console.log('Found room in Resource model:', transformedRoom);
+            }
             return transformedRoom;
           }
           
-          console.log('Could not find room with ID:', roomId);
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Could not find room with ID:', roomId);
+          }
           return null;
         }));
         
@@ -301,26 +311,28 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       return serviceObj;
     }));
 
-    console.log('🔍 Service Catalog Results:', {
-      total,
-      returned: transformedServices.length,
-      limit: parsedLimit,
-      page: parsedPage,
-      skip
-    });
-
-    // Debug: Check for K001 in results
-    const k001Service = transformedServices.find(s => s.code === 'K001' || s.code === 'KONS006');
-    if (k001Service) {
-      console.log('✅ K001/Tribella gefunden in Ergebnissen:', {
-        name: k001Service.name,
-        code: k001Service.code,
-        is_active: k001Service.is_active,
-        quick_select: k001Service.quick_select
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 Service Catalog Results:', {
+        total,
+        returned: transformedServices.length,
+        limit: parsedLimit,
+        page: parsedPage,
+        skip
       });
-    } else {
-      console.log('❌ K001/Tribella NICHT in Ergebnissen gefunden');
-      console.log('🔍 Erste 5 Codes:', transformedServices.slice(0, 5).map(s => s.code));
+
+      // Debug: Check for K001 in results
+      const k001Service = transformedServices.find(s => s.code === 'K001' || s.code === 'KONS006');
+      if (k001Service) {
+        console.log('✅ K001/Tribella gefunden in Ergebnissen:', {
+          name: k001Service.name,
+          code: k001Service.code,
+          is_active: k001Service.is_active,
+          quick_select: k001Service.quick_select
+        });
+      } else {
+        console.log('❌ K001/Tribella NICHT in Ergebnissen gefunden');
+        console.log('🔍 Erste 5 Codes:', transformedServices.slice(0, 5).map(s => s.code));
+      }
     }
 
     res.json({

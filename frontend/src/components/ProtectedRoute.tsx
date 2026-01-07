@@ -37,7 +37,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   useEffect(() => {
     // If we have a token but no user, try to load user (only once)
     if (token && !user && !loading && !hasLoadedUser) {
-      console.log('ProtectedRoute: Loading user with token');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ProtectedRoute: Loading user with token');
+      }
       setHasLoadedUser(true);
       dispatch(loadUser());
     }
@@ -59,27 +61,33 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Redirect to login if not authenticated
   if (!isAuthenticated || !user) {
-    console.log('ProtectedRoute: Not authenticated, redirecting to login', {
-      isAuthenticated,
-      hasUser: !!user,
-      token: !!token,
-      location: location.pathname
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('ProtectedRoute: Not authenticated, redirecting to login', {
+        isAuthenticated,
+        hasUser: !!user,
+        token: !!token,
+        location: location.pathname
+      });
+    }
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // Check role-based access
   if (requiredRole) {
-    console.log('ProtectedRoute: Checking role access', { 
-      requiredRole, 
-      userRole: user.role, 
-      user: user,
-      isAuthenticated,
-      token: !!token
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('ProtectedRoute: Checking role access', { 
+        requiredRole, 
+        userRole: user.role, 
+        user: user,
+        isAuthenticated,
+        token: !!token
+      });
+    }
     
     if (Array.isArray(requiredRole) ? !requiredRole.some(role => rbac.hasRole(role)) : !rbac.hasRole(requiredRole)) {
-      console.log('ProtectedRoute: Access denied - insufficient role');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ProtectedRoute: Access denied - insufficient role');
+      }
       if (showAccessDenied) {
         return (
           <Box sx={{ p: 3 }}>
@@ -139,12 +147,14 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     });
     
     if (!hasRequiredPermission) {
-      console.log('ProtectedRoute: Permission check failed', {
-        requiredPermissions,
-        rbacPermissions,
-        userRole: user.role,
-        userPermissions: user.permissions
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ProtectedRoute: Permission check failed', {
+          requiredPermissions,
+          rbacPermissions,
+          userRole: user.role,
+          userPermissions: user.permissions
+        });
+      }
       if (showAccessDenied) {
         // Get available permissions for the first required resource
         const firstResource = rbacPermissions[0]?.resource || 'user';
@@ -181,12 +191,14 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Check action-resource based access
   if (requiredAction && requiredResource) {
     if (!rbac.can(requiredAction, requiredResource, resourceId)) {
-      console.log('ProtectedRoute: Action-Resource check failed', {
-        requiredAction,
-        requiredResource,
-        resourceId,
-        userRole: user.role
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ProtectedRoute: Action-Resource check failed', {
+          requiredAction,
+          requiredResource,
+          resourceId,
+          userRole: user.role
+        });
+      }
       if (showAccessDenied) {
         return (
           <Box sx={{ p: 3 }}>
@@ -210,10 +222,12 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   if (sensitivityLevel) {
     // For now, only super_admin can access highly sensitive data
     if (sensitivityLevel === 'highly_sensitive' && user.role !== 'super_admin') {
-      console.log('ProtectedRoute: Sensitivity level check failed', {
-        sensitivityLevel,
-        userRole: user.role
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('ProtectedRoute: Sensitivity level check failed', {
+          sensitivityLevel,
+          userRole: user.role
+        });
+      }
       if (showAccessDenied) {
         return (
           <Box sx={{ p: 3 }}>
@@ -235,16 +249,18 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   }
 
   // Debug log for successful authentication
-  console.log('ProtectedRoute: Access granted', { 
-    userRole: user.role, 
-    requiredRole, 
-    requiredPermissions,
-    requiredAction,
-    requiredResource,
-    sensitivityLevel,
-    user: user,
-    location: location.pathname
-  });
+  if (process.env.NODE_ENV === 'development') {
+    console.log('ProtectedRoute: Access granted', { 
+      userRole: user.role, 
+      requiredRole, 
+      requiredPermissions,
+      requiredAction,
+      requiredResource,
+      sensitivityLevel,
+      user: user,
+      location: location.pathname
+    });
+  }
 
   return <>{children}</>;
 };

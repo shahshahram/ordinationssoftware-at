@@ -298,12 +298,14 @@ const WorkShifts: React.FC = () => {
                 label="Von"
                 value={formData.startsAt}
                 onChange={(newValue) => newValue && setFormData({ ...formData, startsAt: newValue })}
+                format="dd.MM.yyyy HH:mm"
                 slotProps={{ textField: { fullWidth: true } }}
               />
               <DateTimePicker
                 label="Bis"
                 value={formData.endsAt}
                 onChange={(newValue) => newValue && setFormData({ ...formData, endsAt: newValue })}
+                format="dd.MM.yyyy HH:mm"
                 slotProps={{ textField: { fullWidth: true } }}
               />
               <FormControl fullWidth>

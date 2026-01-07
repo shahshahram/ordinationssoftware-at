@@ -90,9 +90,15 @@ export const fetchMessages = createAsyncThunk(
 
 export const fetchUnreadCount = createAsyncThunk(
   'internalMessages/fetchUnreadCount',
-  async () => {
-    const response = await api.get('/internal-messages/unread-count');
-    return (response.data as any).data?.count || 0;
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/internal-messages/unread-count');
+      return (response.data as any).data?.count || 0;
+    } catch (error: any) {
+      // Stille Fehlerbehandlung - nicht kritisch wenn unreadCount nicht geladen werden kann
+      console.warn('Fehler beim Laden der ungelesenen Nachrichten:', error?.message || error);
+      return rejectWithValue(0); // Fallback auf 0
+    }
   }
 );
 
@@ -182,6 +188,10 @@ const internalMessagesSlice = createSlice({
       // Fetch Unread Count
       .addCase(fetchUnreadCount.fulfilled, (state, action) => {
         state.unreadCount = action.payload;
+      })
+      .addCase(fetchUnreadCount.rejected, (state) => {
+        // Bei Fehler unreadCount auf 0 setzen (Fallback)
+        state.unreadCount = 0;
       })
       // Send Message
       .addCase(sendMessage.fulfilled, (state, action) => {

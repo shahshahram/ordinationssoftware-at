@@ -205,9 +205,8 @@ const RadiologyReportProviderSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Index
-RadiologyReportProviderSchema.index({ code: 1 });
-RadiologyReportProviderSchema.index({ isActive: 1 });
+// code hat bereits unique: true, daher kein zusätzlicher Index nötig
+// isActive hat bereits index: true, daher kein zusätzlicher Index nötig
 
 // Method: Validiere API-Key
 RadiologyReportProviderSchema.methods.validateApiKey = function(apiKey) {
@@ -233,6 +232,7 @@ RadiologyReportProviderSchema.methods.updateStats = function(success = true, err
 };
 
 module.exports = mongoose.model('RadiologyReportProvider', RadiologyReportProviderSchema);
+
 
 
 

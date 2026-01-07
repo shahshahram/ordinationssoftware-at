@@ -208,3 +208,4 @@ curl -X POST http://localhost:5001/api/ecard/patient/PATIENT_ID/validate \
 
 
 
+

@@ -794,6 +794,7 @@ const ServiceBookings: React.FC = () => {
                   label="Startzeit *"
                   value={formData.start_time}
                   onChange={(newValue) => newValue && setFormData({ ...formData, start_time: newValue })}
+                  format="dd.MM.yyyy HH:mm"
                   slotProps={{ textField: { fullWidth: true } }}
                 />
               </Box>
@@ -802,6 +803,7 @@ const ServiceBookings: React.FC = () => {
                   label="Endzeit *"
                   value={formData.end_time}
                   onChange={(newValue) => newValue && setFormData({ ...formData, end_time: newValue })}
+                  format="dd.MM.yyyy HH:mm"
                   slotProps={{ textField: { fullWidth: true } }}
                 />
               </Box>

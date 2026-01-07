@@ -372,7 +372,7 @@ const DekursEntrySchema = new mongoose.Schema({
 
 // Index für schnelle Abfragen
 DekursEntrySchema.index({ patientId: 1, entryDate: -1 });
-DekursEntrySchema.index({ encounterId: 1 });
+// encounterId hat bereits index: true, daher kein zusätzlicher Index nötig
 DekursEntrySchema.index({ createdBy: 1, entryDate: -1 });
 DekursEntrySchema.index({ status: 1, entryDate: -1 });
 

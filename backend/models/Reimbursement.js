@@ -160,7 +160,7 @@ const ReimbursementSchema = new mongoose.Schema({
 
 // Indizes
 ReimbursementSchema.index({ patientId: 1, status: 1 });
-ReimbursementSchema.index({ invoiceId: 1 });
+// invoiceId hat bereits index: true, daher kein zusätzlicher Index nötig
 ReimbursementSchema.index({ insuranceProvider: 1, status: 1 });
 ReimbursementSchema.index({ submittedDate: -1 });
 ReimbursementSchema.index({ status: 1, submittedDate: -1 });
@@ -219,6 +219,7 @@ ReimbursementSchema.statics.getPendingCount = function(patientId = null) {
 };
 
 module.exports = mongoose.model('Reimbursement', ReimbursementSchema);
+
 
 
 

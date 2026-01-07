@@ -170,11 +170,11 @@ const LaborProviderSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Index
-LaborProviderSchema.index({ code: 1 });
-LaborProviderSchema.index({ isActive: 1 });
+// code hat bereits unique: true, daher kein zusätzlicher Index nötig
+// isActive hat bereits index: true, daher kein zusätzlicher Index nötig
 
 module.exports = mongoose.model('LaborProvider', LaborProviderSchema);
+
 
 
 

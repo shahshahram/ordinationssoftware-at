@@ -448,6 +448,7 @@ const LocationCalendar: React.FC = () => {
                 label="Woche"
                 value={selectedDate}
                 onChange={(newValue) => newValue && setSelectedDate(newValue)}
+                format="dd.MM.yyyy"
                 slotProps={{
                   textField: {
                     fullWidth: true,
@@ -608,6 +609,7 @@ const LocationCalendar: React.FC = () => {
                 label="Startdatum"
                 value={closureForm.starts_at}
                 onChange={(newValue) => newValue && setClosureForm({ ...closureForm, starts_at: newValue })}
+                format="dd.MM.yyyy"
                 slotProps={{
                   textField: {
                     fullWidth: true
@@ -618,6 +620,7 @@ const LocationCalendar: React.FC = () => {
                 label="Enddatum"
                 value={closureForm.ends_at}
                 onChange={(newValue) => newValue && setClosureForm({ ...closureForm, ends_at: newValue })}
+                format="dd.MM.yyyy"
                 slotProps={{
                   textField: {
                     fullWidth: true

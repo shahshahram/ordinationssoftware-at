@@ -252,10 +252,9 @@ const InsuranceProviderSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Indexes
-InsuranceProviderSchema.index({ code: 1 });
-InsuranceProviderSchema.index({ name: 1 });
-InsuranceProviderSchema.index({ isActive: 1 });
+// code hat bereits unique: true und index: true, daher kein zusätzlicher Index nötig
+// name hat bereits unique: true und index: true, daher kein zusätzlicher Index nötig
+// isActive hat bereits index: true, daher kein zusätzlicher Index nötig
 InsuranceProviderSchema.index({ 'integration.protocol': 1 });
 
 // Virtual: Unterstützte Methoden

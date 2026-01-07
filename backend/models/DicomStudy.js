@@ -183,7 +183,7 @@ const DicomStudySchema = new mongoose.Schema({
 
 // Indizes für schnelle Suche
 DicomStudySchema.index({ patientId: 1, studyDate: -1 });
-DicomStudySchema.index({ studyInstanceUID: 1 });
+// studyInstanceUID hat bereits unique: true, daher kein zusätzlicher Index nötig
 DicomStudySchema.index({ modality: 1, studyDate: -1 });
 DicomStudySchema.index({ uploadedAt: -1 });
 

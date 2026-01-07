@@ -37,9 +37,9 @@ function getInsuranceCopayRule(insuranceProvider, billingType) {
   if (billingType === 'wahlarzt') {
     // SVS hat 20% Selbstbehalt auch bei Wahlarzt
     if (insuranceProvider && insuranceProvider.includes('SVS')) {
-      return { rate: 0.20, max: 34300, applicable: true };
+      return { rate: 0.20, max: 343.00, applicable: true }; // Jetzt in Euro
     }
-    return { rate: 0.10, max: 2850, applicable: true };
+    return { rate: 0.10, max: 28.50, applicable: true }; // Jetzt in Euro
   }
   
   // Privat: Kein Selbstbehalt
@@ -48,7 +48,7 @@ function getInsuranceCopayRule(insuranceProvider, billingType) {
   }
   
   // Standard: 10%
-  return { rate: 0.10, max: 2850, applicable: true };
+  return { rate: 0.10, max: 28.50, applicable: true }; // Jetzt in Euro
 }
 
 /**
@@ -200,14 +200,6 @@ function checkInsuranceCoverage(patient, service) {
   
   return coverage;
 }
-
-// Helper-Funktion: Konvertiert Preis zu Euro (automatische Erkennung)
-// Wenn Wert > 1000, wird angenommen, dass es in Cent ist
-const toEuro = (value) => {
-  if (!value && value !== 0) return 0;
-  // Wenn Wert > 1000, ist es wahrscheinlich in Cent (alte Daten)
-  return value > 1000 ? value / 100 : value;
-};
 
 /**
  * Berechnet die Abrechnung für einen Service

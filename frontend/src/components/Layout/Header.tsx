@@ -45,13 +45,21 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [messagesDialogOpen, setMessagesDialogOpen] = React.useState(false);
   
-  // Lade unreadCount beim Mount und alle 10 Sekunden (häufiger für bessere Aktualisierung)
+  // Lade unreadCount beim Mount und alle 30 Sekunden
   useEffect(() => {
-    dispatch(fetchUnreadCount());
+    // Warte kurz, damit der User-Token gesetzt ist
+    const timer = setTimeout(() => {
+      dispatch(fetchUnreadCount());
+    }, 1000);
+    
     const interval = setInterval(() => {
       dispatch(fetchUnreadCount());
-    }, 10000); // Alle 10 Sekunden aktualisieren
-    return () => clearInterval(interval);
+    }, 30000); // Alle 30 Sekunden aktualisieren (reduziert von 10 Sekunden)
+    
+    return () => {
+      clearTimeout(timer);
+      clearInterval(interval);
+    };
   }, [dispatch]);
 
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
@@ -101,7 +109,13 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
         <IconButton
           color="inherit"
           aria-label="open drawer"
-          onClick={onMenuClick}
+          onClick={(e) => {
+            // Entferne Focus vor dem Öffnen des Drawers, um aria-hidden Warnung zu vermeiden
+            if (e.currentTarget) {
+              e.currentTarget.blur();
+            }
+            onMenuClick();
+          }}
           edge="start"
           sx={{ mr: 2 }}
         >

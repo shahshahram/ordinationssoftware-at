@@ -53,6 +53,8 @@ import {
   Cloud,
   Image,
   Science,
+  CloudDownload,
+  Sync,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -134,6 +136,7 @@ const menuItems = [
     path: '/settings',
     subItems: [
       { text: 'Allgemeine Einstellungen', icon: <Settings />, path: '/settings' },
+      { text: 'Update-Monitoring', icon: <CloudDownload />, path: '/update-monitoring' },
       { 
         text: 'Standorte', 
         icon: <LocationOn />, 

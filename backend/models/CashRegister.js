@@ -90,9 +90,8 @@ const CashRegisterSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index für schnelle Suche
-CashRegisterSchema.index({ cashBoxId: 1 });
-CashRegisterSchema.index({ locationId: 1 });
+// cashBoxId hat bereits unique: true, daher kein zusätzlicher Index nötig
+// locationId hat bereits index: true, daher kein zusätzlicher Index nötig
 CashRegisterSchema.index({ 'tse.initialized': 1 });
 
 module.exports = mongoose.model('CashRegister', CashRegisterSchema);

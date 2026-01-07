@@ -129,7 +129,7 @@ const xdsSubmissionSetSchema = new mongoose.Schema({
 // Indizes
 xdsSubmissionSetSchema.index({ patientId: 1, submissionTime: -1 });
 xdsSubmissionSetSchema.index({ locationId: 1, status: 1 });
-xdsSubmissionSetSchema.index({ entryUUID: 1 });
+// entryUUID hat bereits unique: true, daher kein zusätzlicher Index nötig
 
 module.exports = mongoose.model('XdsSubmissionSet', xdsSubmissionSetSchema);
 

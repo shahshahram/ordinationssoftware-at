@@ -22,6 +22,7 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
+  useTheme,
 } from '@mui/material';
 import {
   Warning,
@@ -41,6 +42,7 @@ import api from '../utils/api';
 const PatientsHints: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const theme = useTheme();
   const { patients, loading } = useAppSelector((state: any) => state.patients);
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -214,18 +216,22 @@ const PatientsHints: React.FC = () => {
               <React.Fragment key={patient._id || patient.id}>
                 <ListItem
                   sx={{
-                    bgcolor: 'warning.light',
+                    bgcolor: theme.palette.mode === 'dark' 
+                      ? 'rgba(255, 152, 0, 0.15)' 
+                      : 'warning.light',
                     border: '2px solid',
                     borderColor: 'warning.main',
                     borderRadius: 1,
                     mb: 1,
                     '&:hover': {
-                      bgcolor: 'warning.main',
+                      bgcolor: theme.palette.mode === 'dark'
+                        ? 'rgba(255, 152, 0, 0.25)'
+                        : 'warning.main',
                       '& .MuiListItemText-primary': {
-                        color: 'white',
+                        color: theme.palette.mode === 'dark' ? 'text.primary' : 'white',
                       },
                       '& .MuiListItemText-secondary': {
-                        color: 'white',
+                        color: theme.palette.mode === 'dark' ? 'text.secondary' : 'white',
                       },
                     },
                   }}
@@ -240,7 +246,13 @@ const PatientsHints: React.FC = () => {
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       {/* Primary Content */}
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
-                        <Typography variant="h6" fontWeight="bold">
+                        <Typography 
+                          variant="h6" 
+                          fontWeight="bold"
+                          sx={{ 
+                            color: theme.palette.mode === 'dark' ? 'text.primary' : 'text.primary',
+                          }}
+                        >
                           {patient.firstName} {patient.lastName}
                         </Typography>
                         <Chip
@@ -260,25 +272,38 @@ const PatientsHints: React.FC = () => {
                       
                       {/* Secondary Content */}
                       <Box>
-                        <Stack direction="row" spacing={2} sx={{ mb: 1 }}>
+                        <Stack direction="row" spacing={2} sx={{ mb: 1, flexWrap: 'wrap' }}>
                           {patient.socialSecurityNumber && (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Person fontSize="small" />
-                              <Typography variant="body2">
+                              <Person fontSize="small" sx={{ color: 'text.secondary' }} />
+                              <Typography 
+                                variant="body2"
+                                sx={{ color: 'text.primary' }}
+                              >
                                 SV-Nr: {patient.socialSecurityNumber}
                               </Typography>
                             </Box>
                           )}
                           {patient.phone && (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Phone fontSize="small" />
-                              <Typography variant="body2">{patient.phone}</Typography>
+                              <Phone fontSize="small" sx={{ color: 'text.secondary' }} />
+                              <Typography 
+                                variant="body2"
+                                sx={{ color: 'text.primary' }}
+                              >
+                                {patient.phone}
+                              </Typography>
                             </Box>
                           )}
                           {patient.email && (
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              <Email fontSize="small" />
-                              <Typography variant="body2">{patient.email}</Typography>
+                              <Email fontSize="small" sx={{ color: 'text.secondary' }} />
+                              <Typography 
+                                variant="body2"
+                                sx={{ color: 'text.primary' }}
+                              >
+                                {patient.email}
+                              </Typography>
                             </Box>
                           )}
                         </Stack>
@@ -287,9 +312,28 @@ const PatientsHints: React.FC = () => {
                         {patient.hintText && (
                           <Alert 
                             severity="warning" 
-                            sx={{ mt: 1, bgcolor: 'warning.light', color: 'warning.dark' }}
+                            sx={{ 
+                              mt: 1, 
+                              bgcolor: theme.palette.mode === 'dark' 
+                                ? 'rgba(255, 152, 0, 0.2)' 
+                                : 'warning.light',
+                              color: theme.palette.mode === 'dark' 
+                                ? 'warning.light' 
+                                : 'warning.dark',
+                              '& .MuiAlert-icon': {
+                                color: 'warning.main',
+                              },
+                            }}
                           >
-                            <Typography variant="body2" fontWeight="bold">
+                            <Typography 
+                              variant="body2" 
+                              fontWeight="bold"
+                              sx={{ 
+                                color: theme.palette.mode === 'dark' 
+                                  ? 'warning.light' 
+                                  : 'warning.dark',
+                              }}
+                            >
                               Hinweis: {patient.hintText}
                             </Typography>
                           </Alert>
@@ -298,8 +342,11 @@ const PatientsHints: React.FC = () => {
                         {/* Geburtsdatum */}
                         {patient.dateOfBirth && (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
-                            <CalendarToday fontSize="small" />
-                            <Typography variant="body2">
+                            <CalendarToday fontSize="small" sx={{ color: 'text.secondary' }} />
+                            <Typography 
+                              variant="body2"
+                              sx={{ color: 'text.primary' }}
+                            >
                               Geboren: {new Date(patient.dateOfBirth).toLocaleDateString('de-DE')}
                             </Typography>
                           </Box>

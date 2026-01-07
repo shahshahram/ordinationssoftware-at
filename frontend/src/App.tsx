@@ -47,6 +47,7 @@ import DekursVorlagenAdmin from './pages/DekursVorlagenAdmin';
 import ServiceCatalog from './pages/ServiceCatalog';
 import ServiceBookings from './pages/ServiceBookings';
 import Settings from './pages/Settings';
+import UpdateMonitoringPage from './pages/UpdateMonitoringPage';
 import ICD10Demo from './pages/ICD10Demo';
 import ICD10CatalogManagement from './pages/ICD10CatalogManagement';
 import ELGAValuesetManagement from './pages/ELGAValuesetManagement';
@@ -168,17 +169,39 @@ const getTheme = (mode: 'light' | 'dark') => createTheme({
       },
     },
     MuiDrawer: {
+      defaultProps: {
+        ModalProps: {
+          disableEnforceFocus: true,
+          disableAutoFocus: true,
+          disableRestoreFocus: true,
+        },
+      },
+    },
+    MuiDialog: {
+      defaultProps: {
+        disableEnforceFocus: false,
+        disableAutoFocus: false,
+        disableRestoreFocus: false,
+        hideBackdrop: false,
+      },
       styleOverrides: {
         root: {
-          // Removed aria-hidden CSS to prevent accessibility issues
+          // Verhindere aria-hidden auf root-Element, wenn Dialog geöffnet ist
+          '&[aria-hidden="true"]': {
+            '&:focus-within': {
+              '& *': {
+                pointerEvents: 'auto',
+              },
+            },
+          },
         },
       },
     },
     MuiModal: {
-      styleOverrides: {
-        root: {
-          // Removed aria-hidden CSS to prevent accessibility issues
-        },
+      defaultProps: {
+        disableEnforceFocus: false,
+        disableAutoFocus: false,
+        disableRestoreFocus: false,
       },
     },
     MuiAppBar: {
@@ -660,6 +683,14 @@ const AppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['settings.read']}>
                             <Settings />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/update-monitoring" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <UpdateMonitoringPage />
                           </ProtectedRoute>
                         } 
                       />

@@ -228,5 +228,146 @@ router.post('/trigger/:serviceType', auth, checkPermission('settings.write'), as
   }
 });
 
+/**
+ * GET /api/update-monitoring/history
+ * Gibt die Historie aller Update-Aktionen zurück
+ */
+router.get('/history', auth, checkPermission('settings.read'), async (req, res) => {
+  try {
+    const { page = 1, limit = 50, action } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Alle Update-bezogenen Actions
+    const updateActions = [
+      'SERVICE_CATALOG_ANNUAL_UPDATE',
+      'SERVICE_CATALOG_UPDATE',
+      'SERVICE_CATALOG_PRICE_UPDATE',
+      'TARIFF_UPDATE',
+      'TARIFF_DOWNLOAD',
+      'EBM_UPDATE',
+      'KHO_UPDATE',
+      'GOAE_UPDATE'
+    ];
+
+    // Filter für Actions
+    const actionFilter = action 
+      ? { action: action }
+      : { action: { $in: updateActions } };
+
+    // Query mit Pagination
+    // Hinweis: AuditLog kann 'changes' haben (auch wenn nicht im Schema), oder 'details'
+    const updates = await AuditLog.find(actionFilter)
+      .sort({ timestamp: -1 })
+      .skip(skip)
+      .limit(parseInt(limit))
+      .select('timestamp action description details success errorMessage userId userEmail userRole metadata')
+      .populate('userId', 'firstName lastName email')
+      .lean();
+
+    const total = await AuditLog.countDocuments(actionFilter);
+
+    // Formatiere die Updates für bessere Lesbarkeit
+    const formattedUpdates = updates.map(update => {
+      const updateType = getUpdateTypeName(update.action);
+      const status = update.success !== false ? 'success' : 'error';
+      
+      // Extrahiere Details - kann in changes.details, details.details oder direkt in details sein
+      // Prüfe auch metadata für zusätzliche Informationen
+      let details = {};
+      
+      // Prüfe ob 'changes' existiert (auch wenn nicht im Schema, kann es in der DB sein)
+      if (update.changes) {
+        if (update.changes.details && typeof update.changes.details === 'object') {
+          details = update.changes.details;
+        } else if (typeof update.changes === 'object') {
+          details = update.changes;
+        }
+      }
+      
+      // Falls noch keine Details gefunden, prüfe 'details' Feld
+      if (Object.keys(details).length === 0 && update.details) {
+        if (update.details.details && typeof update.details.details === 'object') {
+          details = update.details.details;
+        } else if (typeof update.details === 'object') {
+          details = update.details;
+        }
+      }
+      
+      // Ergänze mit metadata falls vorhanden
+      if (update.metadata) {
+        details = { ...details, ...update.metadata };
+      }
+      
+      return {
+        id: update._id.toString(),
+        timestamp: update.timestamp,
+        action: update.action,
+        updateType,
+        description: update.description || '',
+        status,
+        errorMessage: update.errorMessage,
+        user: update.userId && typeof update.userId === 'object' ? {
+          name: `${update.userId.firstName || ''} ${update.userId.lastName || ''}`.trim() || update.userEmail || 'Unbekannt',
+          email: update.userEmail || '',
+          role: update.userRole || ''
+        } : {
+          name: 'System',
+          email: update.userEmail || 'system',
+          role: update.userRole || 'system'
+        },
+        details: {
+          newServices: details.newServices || details.newServicesCount || 0,
+          updatedServices: details.updatedServices || details.updatedServicesCount || 0,
+          deprecatedServices: details.deprecatedServices || details.deprecatedServicesCount || 0,
+          updatedPrices: details.updatedPrices || details.updatedPricesCount || 0,
+          newCategories: details.newCategories || details.newCategoriesCount || 0,
+          errors: Array.isArray(details.errors) ? details.errors : [],
+          warnings: Array.isArray(details.warnings) ? details.warnings : [],
+          filesDownloaded: Array.isArray(details.filesDownloaded) ? details.filesDownloaded : [],
+          recordsProcessed: details.recordsProcessed || details.totalProcessed || 0,
+          recordsUpdated: details.recordsUpdated || details.totalUpdated || 0,
+          recordsCreated: details.recordsCreated || details.totalCreated || 0
+        }
+      };
+    });
+
+    res.json({
+      success: true,
+      data: formattedUpdates,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+
+  } catch (error) {
+    console.error('Fehler beim Abrufen der Update-Historie:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Update-Historie',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Hilfsfunktion: Gibt einen lesbaren Namen für den Update-Typ zurück
+ */
+const getUpdateTypeName = (action) => {
+  const typeMap = {
+    'SERVICE_CATALOG_ANNUAL_UPDATE': 'Jährliches Service-Katalog Update',
+    'SERVICE_CATALOG_UPDATE': 'Service-Katalog Update',
+    'SERVICE_CATALOG_PRICE_UPDATE': 'Preis-Update',
+    'TARIFF_UPDATE': 'Tarif-Update',
+    'TARIFF_DOWNLOAD': 'Tarif-Download',
+    'EBM_UPDATE': 'EBM-Update',
+    'KHO_UPDATE': 'KHO-Update',
+    'GOAE_UPDATE': 'GOÄ-Update'
+  };
+  return typeMap[action] || action;
+};
+
 module.exports = router;
 

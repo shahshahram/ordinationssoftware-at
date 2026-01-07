@@ -557,12 +557,14 @@ const BillingReports: React.FC = () => {
               label="Von"
               value={startDate}
               onChange={(newValue) => setStartDate(newValue)}
+              format="dd.MM.yyyy"
               slotProps={{ textField: { size: 'small' } }}
             />
             <DatePicker
               label="Bis"
               value={endDate}
               onChange={(newValue) => setEndDate(newValue)}
+              format="dd.MM.yyyy"
               slotProps={{ textField: { size: 'small' } }}
             />
             {activeTab === 1 && (

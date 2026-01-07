@@ -103,10 +103,9 @@ const StaffProfileSchema = new mongoose.Schema({
   }
 });
 
-// Indexes
-StaffProfileSchema.index({ userId: 1 });
+// userId hat bereits unique: true, daher kein zusätzlicher Index nötig
 StaffProfileSchema.index({ roleHint: 1 });
-StaffProfileSchema.index({ isActive: 1 });
+// isActive hat bereits index: true, daher kein zusätzlicher Index nötig
 
 // Pre-save middleware
 StaffProfileSchema.pre('save', function(next) {

@@ -344,7 +344,7 @@ const DekursVorlageSchema = new mongoose.Schema({
 });
 
 // Indizes
-DekursVorlageSchema.index({ code: 1 }, { unique: true });
+// code hat bereits unique: true und index: true, daher kein zusätzlicher Index nötig
 DekursVorlageSchema.index({ icd10: 1, specialty: 1 });
 DekursVorlageSchema.index({ specialty: 1, isActive: 1 });
 DekursVorlageSchema.index({ locationIds: 1 });

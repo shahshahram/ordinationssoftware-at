@@ -103,7 +103,7 @@ const xdsAssociationSchema = new mongoose.Schema({
 // Indizes
 xdsAssociationSchema.index({ sourceObject: 1, associationType: 1 });
 xdsAssociationSchema.index({ targetObject: 1, associationType: 1 });
-xdsAssociationSchema.index({ locationId: 1 });
+// locationId hat bereits index: true, daher kein zusätzlicher Index nötig
 
 module.exports = mongoose.model('XdsAssociation', xdsAssociationSchema);
 

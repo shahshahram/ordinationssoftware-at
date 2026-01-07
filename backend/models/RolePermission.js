@@ -41,8 +41,7 @@ const RolePermissionSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Index für schnelle Suche
-RolePermissionSchema.index({ roleId: 1 });
+// roleId hat bereits unique: true und index: true, daher kein zusätzlicher Index nötig
 
 // Statische Methode: Lade angepasste Permissions für eine Rolle
 RolePermissionSchema.statics.getRolePermissions = async function(roleId) {
@@ -99,6 +98,7 @@ RolePermissionSchema.statics.saveRolePermissions = async function(roleId, permis
 };
 
 module.exports = mongoose.model('RolePermission', RolePermissionSchema);
+
 
 
 

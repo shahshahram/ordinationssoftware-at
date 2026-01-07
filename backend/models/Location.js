@@ -363,8 +363,7 @@ const locationSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indizes
-locationSchema.index({ code: 1 });
+// code hat bereits unique: true, daher kein zusätzlicher Index nötig
 locationSchema.index({ is_active: 1 });
 locationSchema.index({ city: 1, state: 1 });
 

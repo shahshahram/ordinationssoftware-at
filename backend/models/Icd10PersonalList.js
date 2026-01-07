@@ -165,7 +165,7 @@ const Icd10PersonalListSchema = new mongoose.Schema({
 Icd10PersonalListSchema.index({ userId: 1, type: 1 });
 Icd10PersonalListSchema.index({ userId: 1, isActive: 1 });
 Icd10PersonalListSchema.index({ 'codes.code': 1 });
-Icd10PersonalListSchema.index({ 'sharing.shareToken': 1 });
+// sharing.shareToken hat bereits unique: true, daher kein zusätzlicher Index nötig
 Icd10PersonalListSchema.index({ name: 'text', description: 'text' });
 
 // Virtual for code count

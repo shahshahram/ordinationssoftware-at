@@ -214,6 +214,7 @@ const WeeklySchedule: React.FC<WeeklyScheduleProps> = ({
                   label="Gültig ab"
                   value={validFrom}
                   onChange={(newValue) => newValue && setValidFrom(newValue)}
+                  format="dd.MM.yyyy"
                   slotProps={{ textField: { fullWidth: true } }}
                 />
               </Box>
@@ -222,6 +223,7 @@ const WeeklySchedule: React.FC<WeeklyScheduleProps> = ({
                   label="Gültig bis (optional)"
                   value={validTo}
                   onChange={(newValue) => setValidTo(newValue)}
+                  format="dd.MM.yyyy"
                   slotProps={{ textField: { fullWidth: true } }}
                 />
               </Box>

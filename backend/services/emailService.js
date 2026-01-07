@@ -102,7 +102,7 @@ class EmailService {
 
       // Erstelle Transporter nur wenn User vorhanden ist
       if (smtpConfig.auth.user) {
-        this.transporter = nodemailer.createTransporter(smtpConfig);
+        this.transporter = nodemailer.createTransport(smtpConfig);
 
         // Teste Verbindung
         await this.transporter.verify();

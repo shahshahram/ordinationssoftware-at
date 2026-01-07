@@ -520,16 +520,7 @@ const DemoCalendar: React.FC = () => {
           }
         }
         
-        // Debug logging
-        if (process.env.NODE_ENV === 'development') {
-          console.log('DemoCalendar - Location Filter:', {
-            appointmentId: apt._id,
-            aptLocationId,
-            selectedLocations,
-            hasLocationId: !!aptLocationId,
-            locationIdMatch: aptLocationId ? selectedLocations.some(id => String(id) === String(aptLocationId)) : false
-          });
-        }
+        // Debug logging entfernt - zu viele Logs in der Konsole
         
         // If appointment has no locationId, hide it when locations are selected
         if (!aptLocationId) {

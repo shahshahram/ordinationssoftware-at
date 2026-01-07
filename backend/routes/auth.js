@@ -267,7 +267,9 @@ router.post('/login', [
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    console.log('Load user request for ID:', req.user._id || req.user.id);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Load user request for ID:', req.user._id || req.user.id);
+    }
     
     // Mock users for fallback
     const mockUsers = {
@@ -303,8 +305,10 @@ router.get('/me', auth, async (req, res) => {
       // Try to find user in MongoDB first
       const dbUser = await User.findById(req.user._id || req.user.id).select('-password').lean();
       if (dbUser) {
-        console.log('Found user in MongoDB:', dbUser.email);
-        console.log('📥 User profile from DB:', JSON.stringify(dbUser.profile, null, 2));
+        if (process.env.NODE_ENV === 'development') {
+          console.log('Found user in MongoDB:', dbUser.email);
+          console.log('📥 User profile from DB:', JSON.stringify(dbUser.profile, null, 2));
+        }
         // Convert MongoDB user to the expected format, including profile
         user = {
           id: dbUser._id.toString(),

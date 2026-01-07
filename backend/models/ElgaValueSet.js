@@ -108,6 +108,7 @@ const ElgaValueSetSchema = new mongoose.Schema({
 // Indizes für effiziente Suche
 ElgaValueSetSchema.index({ title: 1, version: 1 });
 // OID-Index wird bereits durch "index: true" erstellt - hier nicht duplizieren
+// category und status haben bereits index: true, daher kein zusätzlicher Index nötig (Compound-Index bleibt)
 ElgaValueSetSchema.index({ category: 1, status: 1 });
 ElgaValueSetSchema.index({ 'codes.code': 1 });
 ElgaValueSetSchema.index({ 'codes.system': 1 });

@@ -637,10 +637,10 @@ PatientExtendedSchema.virtual('addressString').get(function() {
 });
 
 // Indizes
-PatientExtendedSchema.index({ socialSecurityNumber: 1 });
+// socialSecurityNumber hat bereits index: true, daher kein zusätzlicher Index nötig
 PatientExtendedSchema.index({ lastName: 1, firstName: 1 });
 PatientExtendedSchema.index({ 'address.zipCode': 1 });
-PatientExtendedSchema.index({ status: 1 });
+// status hat bereits index: true, daher kein zusätzlicher Index nötig
 PatientExtendedSchema.index({ createdAt: -1 });
 
 // Pre-save Middleware

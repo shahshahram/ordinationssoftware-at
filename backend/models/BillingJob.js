@@ -109,7 +109,7 @@ const BillingJobSchema = new mongoose.Schema({
 // Indizes
 BillingJobSchema.index({ status: 1, nextRetryAt: 1 });
 BillingJobSchema.index({ doctorId: 1, createdAt: -1 });
-BillingJobSchema.index({ performanceId: 1 });
+// performanceId hat bereits index: true, daher kein zusätzlicher Index nötig
 BillingJobSchema.index({ target: 1, status: 1 });
 
 // Pre-save Hook für updatedAt

@@ -145,14 +145,14 @@ const LaborMappingSchema = new mongoose.Schema({
 });
 
 // Compound Index für schnelle Suche
-LaborMappingSchema.index({ providerId: 1, externalCode: 1 });
-LaborMappingSchema.index({ loincCode: 1 });
+// loincCode hat bereits index: true, daher kein zusätzlicher Index nötig
 LaborMappingSchema.index({ category: 1, isActive: 1 });
 
 // Unique Constraint für Provider + External Code
 LaborMappingSchema.index({ providerId: 1, externalCode: 1 }, { unique: true, sparse: true });
 
 module.exports = mongoose.model('LaborMapping', LaborMappingSchema);
+
 
 
 

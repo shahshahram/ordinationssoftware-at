@@ -4,10 +4,14 @@
  * Jährliches Update des Service-Katalogs
  * 
  * Dieses Script sollte jährlich ausgeführt werden, um:
- * 1. EBM-Preise zu aktualisieren
+ * 1. KHO-Preise zu aktualisieren (Kassenhonorarordnung - österreichisches Äquivalent zum deutschen EBM)
  * 2. Neue Leistungen hinzuzufügen
  * 3. Veraltete Leistungen zu deaktivieren
  * 4. Preisanpassungen durchzuführen
+ * 
+ * HINWEIS: Der Begriff "EBM" wird hier historisch verwendet, obwohl in Österreich
+ * eigentlich "KHO" (Kassenhonorarordnung) korrekt wäre. Bei zukünftigen Refactorings
+ * sollte dies zu "KHO" umbenannt werden.
  */
 
 const mongoose = require('mongoose');
@@ -17,7 +21,9 @@ const AuditLog = require('../models/AuditLog');
 const User = require('../models/User');
 require('dotenv').config();
 
-// EBM 2025 Updates (Beispiel - sollte aus offizieller Quelle kommen)
+// KHO 2025 Updates (Beispiel - sollte aus offizieller Quelle kommen)
+// HINWEIS: "EBM" ist historisch bedingt - in Österreich heißt es eigentlich "KHO" (Kassenhonorarordnung)
+// Bei zukünftigen Refactorings sollte dies zu "KHO_UPDATES" umbenannt werden
 const EBM_UPDATES_2025 = {
   // Neue Leistungen
   newServices: [

@@ -15,14 +15,18 @@ router.get('/slots', auth, [
   query('endDate').isISO8601().withMessage('Enddatum muss ein gültiges Datum sein'),
   query('serviceId').notEmpty().withMessage('Service-ID ist erforderlich')
 ], async (req, res) => {
-  console.log('🔍 /availability/slots route called with query:', req.query);
-  console.log('🔍 /availability/slots route called with params:', req.params);
-  console.log('🔍 /availability/slots route called with body:', req.body);
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🔍 /availability/slots route called with query:', req.query);
+    console.log('🔍 /availability/slots route called with params:', req.params);
+    console.log('🔍 /availability/slots route called with body:', req.body);
+  }
   try {
     
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      console.error('❌ Validation errors:', errors.array());
+      if (process.env.NODE_ENV === 'development') {
+        console.error('❌ Validation errors:', errors.array());
+      }
       return res.status(400).json({
         success: false,
         message: 'Validierungsfehler',
@@ -30,9 +34,17 @@ router.get('/slots', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.read')) {
-      console.warn('⚠️ No permission for appointments.read');
+    // Berechtigung prüfen - mehrere Permissions akzeptieren
+    const hasPermission = req.user.permissions.includes('appointments.read') ||
+                         req.user.permissions.includes('appointments.create') ||
+                         req.user.permissions.includes('availability.read') ||
+                         req.user.role === 'admin' ||
+                         req.user.role === 'super_admin';
+    
+    if (!hasPermission) {
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ No permission for availability slots');
+      }
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Abrufen von Verfügbarkeiten'
@@ -40,57 +52,73 @@ router.get('/slots', auth, [
     }
 
     const { staffId, startDate, endDate, serviceId } = req.query;
-    console.log('📋 Request parameters:', { staffId, startDate, endDate, serviceId });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📋 Request parameters:', { staffId, startDate, endDate, serviceId });
+    }
 
     // Prüfen ob Mitarbeiter existiert
     const staffProfile = await StaffProfile.findById(staffId);
     if (!staffProfile) {
-      console.warn('⚠️ StaffProfile not found for ID:', staffId);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ StaffProfile not found for ID:', staffId);
+      }
       return res.status(404).json({
         success: false,
         message: 'Mitarbeiter nicht gefunden'
       });
     }
-    console.log('✅ StaffProfile found:', staffProfile.displayName || staffProfile._id);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ StaffProfile found:', staffProfile.displayName || staffProfile._id);
+    }
 
     // Prüfen ob Service existiert
     const service = await ServiceCatalog.findById(serviceId);
     if (!service) {
-      console.warn('⚠️ Service not found for ID:', serviceId);
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Service not found for ID:', serviceId);
+      }
       return res.status(404).json({
         success: false,
         message: 'Service nicht gefunden'
       });
     }
-    console.log('✅ Service found:', service.name || service.code);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ Service found:', service.name || service.code);
+    }
 
     // Prüfe direkt ob WeeklySchedules existieren
     const weeklySchedulesCheck = await WeeklySchedule.find({
       staffId,
       isActive: true
     }).limit(1);
-    console.log('📅 WeeklySchedules check:', {
-      staffId,
-      found: weeklySchedulesCheck.length > 0,
-      count: weeklySchedulesCheck.length
-    });
-    if (weeklySchedulesCheck.length > 0) {
-      console.log('📅 First WeeklySchedule:', {
-        _id: weeklySchedulesCheck[0]._id,
-        validFrom: weeklySchedulesCheck[0].validFrom,
-        validTo: weeklySchedulesCheck[0].validTo,
-        schedulesCount: weeklySchedulesCheck[0].schedules?.length || 0
+    if (process.env.NODE_ENV === 'development') {
+      console.log('📅 WeeklySchedules check:', {
+        staffId,
+        found: weeklySchedulesCheck.length > 0,
+        count: weeklySchedulesCheck.length
       });
+      if (weeklySchedulesCheck.length > 0) {
+        console.log('📅 First WeeklySchedule:', {
+          _id: weeklySchedulesCheck[0]._id,
+          validFrom: weeklySchedulesCheck[0].validFrom,
+          validTo: weeklySchedulesCheck[0].validTo,
+          schedulesCount: weeklySchedulesCheck[0].schedules?.length || 0
+        });
+      }
     }
 
-    console.log('🔄 Calling AvailabilityService.getAvailableSlots...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔄 Calling AvailabilityService.getAvailableSlots...');
+    }
     const availableSlots = await AvailabilityService.getAvailableSlots(
       staffId,
       new Date(startDate),
       new Date(endDate),
       serviceId
     );
-    console.log('✅ AvailabilityService returned', availableSlots.length, 'slots');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ AvailabilityService returned', availableSlots.length, 'slots');
+    }
 
     // Audit-Log
     await AuditLog.create({
@@ -202,8 +230,14 @@ router.get('/next-available', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.read')) {
+    // Berechtigung prüfen - mehrere Permissions akzeptieren (konsistent mit /slots)
+    const hasPermission = req.user.permissions.includes('appointments.read') ||
+                         req.user.permissions.includes('appointments.create') ||
+                         req.user.permissions.includes('availability.read') ||
+                         req.user.role === 'admin' ||
+                         req.user.role === 'super_admin';
+    
+    if (!hasPermission) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Abrufen von Verfügbarkeiten'
@@ -261,8 +295,14 @@ router.post('/check-booking', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.read')) {
+    // Berechtigung prüfen - mehrere Permissions akzeptieren (konsistent mit anderen Availability-Endpoints)
+    const hasPermission = req.user.permissions.includes('appointments.read') ||
+                         req.user.permissions.includes('appointments.create') ||
+                         req.user.permissions.includes('availability.read') ||
+                         req.user.role === 'admin' ||
+                         req.user.role === 'super_admin';
+    
+    if (!hasPermission) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Prüfen der Buchbarkeit'
@@ -325,8 +365,15 @@ router.get('/utilization/:staffId', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('reports.read')) {
+    // Berechtigung prüfen - mehrere Permissions akzeptieren (konsistent mit anderen Availability-Endpoints)
+    const hasPermission = req.user.permissions.includes('reports.read') ||
+                         req.user.permissions.includes('appointments.read') ||
+                         req.user.permissions.includes('appointments.create') ||
+                         req.user.permissions.includes('availability.read') ||
+                         req.user.role === 'admin' ||
+                         req.user.role === 'super_admin';
+    
+    if (!hasPermission) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Anzeigen von Auslastungsdaten'

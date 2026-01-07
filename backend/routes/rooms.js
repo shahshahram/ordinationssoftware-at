@@ -80,7 +80,9 @@ router.get('/', auth, async (req, res) => {
     const roomResources = await Resource.find({ type: 'room' });
     
     const transformedResources = roomResources.map(resource => {
-      console.log('Transforming room resource:', resource.name, 'Properties:', JSON.stringify(resource.properties));
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Transforming room resource:', resource.name, 'Properties:', JSON.stringify(resource.properties));
+      }
       return {
         _id: resource._id,
         name: resource.name,
@@ -95,13 +97,17 @@ router.get('/', auth, async (req, res) => {
       };
     });
     
-    console.log('Transformed room resources:', transformedResources.length);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Transformed room resources:', transformedResources.length);
+    }
 
     // Merge rooms and resources
     const allRooms = [...transformedRooms, ...transformedResources];
 
-    console.log('Räume API - Anzahl Räume:', allRooms.length);
-    console.log('Räume API - Beispiel Raum mit location:', allRooms[0]?.location);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Räume API - Anzahl Räume:', allRooms.length);
+      console.log('Räume API - Beispiel Raum mit location:', allRooms[0]?.location);
+    }
 
     res.status(200).json({ success: true, data: allRooms });
   } catch (error) {

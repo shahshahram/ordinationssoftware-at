@@ -13,6 +13,7 @@ import {
 } from '@mui/icons-material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { de } from 'date-fns/locale';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
@@ -581,13 +582,14 @@ const Reports: React.FC = () => {
         <DialogTitle>Report generieren: {selectedReport?.name}</DialogTitle>
         <DialogContent>
           {selectedReport?.config?.dateRange?.enabled && (
-            <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
               <Grid container spacing={2} sx={{ mt: 1 }}>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <DatePicker
                     label="Von"
                     value={dateRange.start}
                     onChange={(date) => setDateRange({ ...dateRange, start: date })}
+                    format="dd.MM.yyyy"
                     slotProps={{ textField: { fullWidth: true } }}
                   />
                 </Grid>
@@ -596,6 +598,7 @@ const Reports: React.FC = () => {
                     label="Bis"
                     value={dateRange.end}
                     onChange={(date) => setDateRange({ ...dateRange, end: date })}
+                    format="dd.MM.yyyy"
                     slotProps={{ textField: { fullWidth: true } }}
                   />
                 </Grid>

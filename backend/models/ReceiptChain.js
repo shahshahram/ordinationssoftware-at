@@ -121,7 +121,7 @@ const ReceiptChainSchema = new mongoose.Schema({
 
 // Indexes
 ReceiptChainSchema.index({ cashBoxId: 1, receiptNumber: 1 });
-ReceiptChainSchema.index({ receiptHash: 1 });
+// receiptHash hat bereits unique: true, daher kein zusätzlicher Index nötig
 ReceiptChainSchema.index({ receiptType: 1 });
 ReceiptChainSchema.index({ 'period.year': 1, 'period.month': 1 });
 ReceiptChainSchema.index({ isCashTransaction: 1, receiptData: { timestamp: 1 } });

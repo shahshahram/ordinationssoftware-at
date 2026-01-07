@@ -1183,14 +1183,9 @@ const ServiceCatalog: React.FC = () => {
                   width: '80px',
                   color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
                 }}>Farbe</TableCell>
-                <TableCell sx={{ 
-                  fontWeight: 'bold', 
-                  width: '100px',
-                  color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
-                }}>Einstellungen</TableCell>
                 <TableCell align="right" sx={{ 
                   fontWeight: 'bold', 
-                  width: '100px',
+                  width: '120px',
                   color: theme.palette.mode === 'dark' ? theme.palette.text.primary : 'inherit'
                 }}>Aktionen</TableCell>
               </TableRow>
@@ -1571,8 +1566,8 @@ const ServiceCatalog: React.FC = () => {
               <Tab label="Zeit & Dauer" icon={<AccessTimeIcon />} iconPosition="start" />
               <Tab label="Zuordnung" icon={<GroupIcon />} iconPosition="start" />
               <Tab label="Preis & Billing" icon={<AttachMoneyIcon />} iconPosition="start" />
-              <Tab label="Update-Status" icon={<SettingsIcon />} iconPosition="start" />
               <Tab label="Geräte & Räume" icon={<RoomIcon />} iconPosition="start" />
+              <Tab label="Update-Status" icon={<SettingsIcon />} iconPosition="start" />
               <Tab label="Online-Kontingente" icon={<EventNoteIcon />} iconPosition="start" />
               <Tab label="Anamnese" icon={<QuestionAnswerIcon />} iconPosition="start" />
               <Tab label="Einstellungen" icon={<SettingsIcon />} iconPosition="start" />

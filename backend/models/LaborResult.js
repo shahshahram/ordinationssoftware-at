@@ -203,9 +203,9 @@ const LaborResultSchema = new mongoose.Schema({
 // Index für schnelle Suche
 LaborResultSchema.index({ patientId: 1, resultDate: -1 });
 LaborResultSchema.index({ providerId: 1, resultDate: -1 });
-LaborResultSchema.index({ orderNumber: 1 });
-LaborResultSchema.index({ externalId: 1 });
-LaborResultSchema.index({ 'results.isCritical': 1 });
+// orderNumber hat bereits index: true, daher kein zusätzlicher Index nötig
+// externalId hat bereits index: true, daher kein zusätzlicher Index nötig
+// results.isCritical hat bereits index: true, daher kein zusätzlicher Index nötig
 LaborResultSchema.index({ status: 1, resultDate: -1 });
 
 // Virtual für kritische Werte

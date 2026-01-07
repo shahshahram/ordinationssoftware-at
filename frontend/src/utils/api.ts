@@ -45,16 +45,20 @@ class ApiClient {
 
     if (token) {
       defaultHeaders.Authorization = `Bearer ${token}`;
-      console.log('API Request with token:', {
-        url,
-        method,
-        hasToken: !!token,
-        tokenLength: token.length,
-        tokenStart: token.substring(0, 20) + '...',
-        headers: defaultHeaders
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('API Request with token:', {
+          url,
+          method,
+          hasToken: !!token,
+          tokenLength: token.length,
+          tokenStart: token.substring(0, 20) + '...',
+          headers: defaultHeaders
+        });
+      }
     } else {
-      console.log('API Request without token:', { url, method });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('API Request without token:', { url, method });
+      }
     }
 
     const config: RequestInit = {
@@ -74,9 +78,11 @@ class ApiClient {
     }
 
     try {
-      console.log('Sending fetch request to:', url);
-      console.log('Request config:', config);
-      console.log('Request body:', data ? JSON.stringify(data, null, 2) : 'No body');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Sending fetch request to:', url);
+        console.log('Request config:', config);
+        console.log('Request body:', data ? JSON.stringify(data, null, 2) : 'No body');
+      }
       
       // Add timeout (erhöht auf 30 Sekunden für langsamere Verbindungen)
       const controller = new AbortController();
@@ -101,12 +107,16 @@ class ApiClient {
         throw fetchError;
       }
       
-      console.log('Received response:', response.status, response.statusText);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('Received response:', response.status, response.statusText);
+      }
       
       if (!response.ok) {
         // Handle 401 Unauthorized - token might be expired
         if (response.status === 401) {
-          console.log('Token expired, attempting to refresh...');
+          if (process.env.NODE_ENV === 'development') {
+            console.log('Token expired, attempting to refresh...');
+          }
           const refreshToken = localStorage.getItem('refreshToken');
           
           if (refreshToken) {
@@ -121,7 +131,9 @@ class ApiClient {
 
               if (refreshResponse.ok) {
                 const refreshData = await refreshResponse.json();
-                console.log('Token refresh successful:', refreshData);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('Token refresh successful:', refreshData);
+                }
                 localStorage.setItem('token', refreshData.token);
                 localStorage.setItem('refreshToken', refreshData.refreshToken);
                 
@@ -140,17 +152,23 @@ class ApiClient {
                   retryConfig.body = JSON.stringify(data);
                 }
 
-                console.log('Retrying original request with new token...');
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('Retrying original request with new token...');
+                }
                 const retryResponse = await fetch(url, retryConfig);
                 
                 if (!retryResponse.ok) {
                   const errorData = await retryResponse.json().catch(() => ({}));
-                  console.error('Retry request failed:', retryResponse.status, errorData);
+                  if (process.env.NODE_ENV === 'development') {
+                    console.error('Retry request failed:', retryResponse.status, errorData);
+                  }
                   throw new Error(errorData.message || `HTTP error! status: ${retryResponse.status}`);
                 }
 
                 const result = await retryResponse.json();
-                console.log('Retry request successful:', result);
+                if (process.env.NODE_ENV === 'development') {
+                  console.log('Retry request successful:', result);
+                }
                 return result;
               } else {
                 // Refresh failed - prüfe ob es ein Netzwerkfehler ist
@@ -185,12 +203,16 @@ class ApiClient {
               
               // Bei Netzwerkfehlern: Nicht abmelden, nur Fehler werfen
               if (isNetworkError) {
-                console.warn('Token-Refresh fehlgeschlagen wegen Netzwerkfehler - Benutzer wird nicht abgemeldet');
+                if (process.env.NODE_ENV === 'development') {
+                  console.warn('Token-Refresh fehlgeschlagen wegen Netzwerkfehler - Benutzer wird nicht abgemeldet');
+                }
                 throw new Error('Netzwerkfehler: Verbindung zum Server konnte nicht hergestellt werden. Bitte versuchen Sie es erneut.');
               }
               
               // Bei echten Authentifizierungsfehlern: Abmelden
-              console.log('Token-Refresh fehlgeschlagen - Authentifizierungsfehler erkannt');
+              if (process.env.NODE_ENV === 'development') {
+                console.log('Token-Refresh fehlgeschlagen - Authentifizierungsfehler erkannt');
+              }
               localStorage.removeItem('token');
               localStorage.removeItem('refreshToken');
               window.location.href = '/login';
@@ -209,7 +231,9 @@ class ApiClient {
                   
                   // Wenn Token noch nicht abgelaufen ist, könnte es ein Session-Problem sein
                   if (exp > now) {
-                    console.warn('Token noch gültig, aber kein Refresh-Token vorhanden. Möglicherweise Session-Problem.');
+                    if (process.env.NODE_ENV === 'development') {
+                      console.warn('Token noch gültig, aber kein Refresh-Token vorhanden. Möglicherweise Session-Problem.');
+                    }
                     // Versuche Request trotzdem (Session-Validierung ist jetzt optional)
                     throw new Error('Kein Refresh-Token verfügbar. Bitte melden Sie sich erneut an.');
                   }
@@ -234,7 +258,9 @@ class ApiClient {
       }
 
       const result = await response.json();
-      console.log('API response data:', result);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('API response data:', result);
+      }
       // Return the data wrapped in ApiResponse structure
       return {
         data: result,
@@ -242,12 +268,14 @@ class ApiClient {
         message: result.message
       };
     } catch (error: any) {
-      console.error('API request failed:', error);
-      console.error('Error details:', {
-        name: error?.name || 'Unknown',
-        message: error?.message || 'Unknown error',
-        stack: error?.stack || 'No stack trace'
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.error('API request failed:', error);
+        console.error('Error details:', {
+          name: error?.name || 'Unknown',
+          message: error?.message || 'Unknown error',
+          stack: error?.stack || 'No stack trace'
+        });
+      }
       
       // Unterscheide zwischen Netzwerkfehlern und Authentifizierungsfehlern
       const isNetworkError = 
@@ -264,7 +292,9 @@ class ApiClient {
       // Bei Netzwerkfehlern: Fehler weiterwerfen, aber NICHT abmelden
       // Nur bei echten Authentifizierungsfehlern (401) wird abgemeldet
       if (isNetworkError) {
-        console.warn('Netzwerkfehler erkannt - Benutzer wird nicht abgemeldet:', error.message);
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('Netzwerkfehler erkannt - Benutzer wird nicht abgemeldet:', error.message);
+        }
         // Erstelle einen benutzerdefinierten Fehler für Netzwerkfehler
         const networkError = new Error(`Netzwerkfehler: ${error.message}`);
         (networkError as any).isNetworkError = true;

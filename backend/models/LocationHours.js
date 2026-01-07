@@ -26,7 +26,6 @@ const locationHoursSchema = new mongoose.Schema({
 
 // Indizes
 locationHoursSchema.index({ location_id: 1 });
-locationHoursSchema.index({ location_id: 1, label: 1 });
 
 // Eindeutigkeit pro Standort und Label
 locationHoursSchema.index({ location_id: 1, label: 1 }, { unique: true, sparse: true });

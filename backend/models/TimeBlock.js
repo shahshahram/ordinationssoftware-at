@@ -85,8 +85,9 @@ const TimeBlockSchema = new mongoose.Schema({
 TimeBlockSchema.index({ startTime: 1, endTime: 1 });
 TimeBlockSchema.index({ staffId: 1, startTime: 1, endTime: 1 });
 TimeBlockSchema.index({ doctor: 1, startTime: 1, endTime: 1 }); // Altes Feld für Rückwärtskompatibilität
+// locationId hat bereits index: true, daher kein zusätzlicher Index nötig (Compound-Index bleibt)
 TimeBlockSchema.index({ locationId: 1, startTime: 1, endTime: 1 });
-TimeBlockSchema.index({ status: 1 });
+// status hat bereits index: true, daher kein zusätzlicher Index nötig
 
 // Pre-save Hook: Synchronisiere doctor zu staffId für Rückwärtskompatibilität
 TimeBlockSchema.pre('save', function(next) {

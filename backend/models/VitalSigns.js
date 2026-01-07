@@ -120,7 +120,7 @@ const VitalSignsSchema = new mongoose.Schema({
 
 // Index für schnelle Suche nach Patient und Datum
 VitalSignsSchema.index({ patientId: 1, recordedAt: -1 });
-VitalSignsSchema.index({ appointmentId: 1 });
+// appointmentId hat bereits index: true, daher kein zusätzlicher Index nötig
 
 // Virtual für formatierten Blutdruck
 VitalSignsSchema.virtual('bloodPressureFormatted').get(function() {

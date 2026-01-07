@@ -109,8 +109,7 @@ const ModuleRegistrySchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Indexes
-ModuleRegistrySchema.index({ moduleName: 1 });
+// moduleName hat bereits unique: true, daher kein zusätzlicher Index nötig
 ModuleRegistrySchema.index({ isActive: 1 });
 ModuleRegistrySchema.index({ 'resources.name': 1 });
 

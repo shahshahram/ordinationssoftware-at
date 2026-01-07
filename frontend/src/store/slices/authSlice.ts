@@ -127,14 +127,20 @@ export const loadUser = createAsyncThunk(
   async (_, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      console.log('loadUser: Token found:', !!token);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('loadUser: Token found:', !!token);
+      }
       if (!token) {
         throw new Error('Kein Token vorhanden');
       }
       
-      console.log('loadUser: Making API call to /auth/me');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('loadUser: Making API call to /auth/me');
+      }
       const response = await api.get('/auth/me');
-      console.log('loadUser: API response:', response);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('loadUser: API response:', response);
+      }
       
       // Handle both direct response and wrapped response
       let userData: User;

@@ -208,9 +208,8 @@ const DicomProviderSchema = new mongoose.Schema({
   toObject: { virtuals: true }
 });
 
-// Index
-DicomProviderSchema.index({ code: 1 });
-DicomProviderSchema.index({ isActive: 1 });
+// code hat bereits unique: true, daher kein zusätzlicher Index nötig
+// isActive hat bereits index: true, daher kein zusätzlicher Index nötig
 DicomProviderSchema.index({ 'integration.protocol': 1 });
 
 // Virtual für Webhook-URL
@@ -262,6 +261,7 @@ DicomProviderSchema.methods.updateStats = function(success = true, error = null)
 };
 
 module.exports = mongoose.model('DicomProvider', DicomProviderSchema);
+
 
 
 

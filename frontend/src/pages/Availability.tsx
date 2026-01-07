@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { de } from 'date-fns/locale';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
@@ -82,24 +83,32 @@ const Availability: React.FC = () => {
     try {
       // Lade alle Mitarbeiter mit einem höheren Limit
       const response = await api.get<{data: Array<any>, pagination?: any}>('/staff-profiles', { limit: 500 });
-      console.log('📥 Staff profiles response:', response);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📥 Staff profiles response:', response);
+      }
       
       if (response.success && response.data) {
         // Die API-Antwort ist verschachtelt: response.data.data enthält das Array
         const apiData = response.data as any;
         const staffData = (apiData.data && Array.isArray(apiData.data)) ? apiData.data : (Array.isArray(apiData) ? apiData : []);
         
-        console.log('✅ Loaded staff profiles:', staffData.length);
-        if (staffData.length > 0) {
-          console.log('📋 First staff profile:', staffData[0]);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Loaded staff profiles:', staffData.length);
+          if (staffData.length > 0) {
+            console.log('📋 First staff profile:', staffData[0]);
+          }
         }
         
         // Filtere nur aktive Mitarbeiter im Frontend
         const activeStaff = staffData.filter((staff: any) => staff.isActive !== false);
-        console.log('✅ Active staff profiles:', activeStaff.length);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Active staff profiles:', activeStaff.length);
+        }
         setStaffList(activeStaff);
       } else {
-        console.warn('⚠️ No staff profiles in response');
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ No staff profiles in response');
+        }
         setStaffList([]);
       }
     } catch (error: any) {
@@ -112,24 +121,32 @@ const Availability: React.FC = () => {
     try {
       // Lade alle Services mit einem höheren Limit
       const response = await api.get<{data: Array<any>, pagination?: any}>('/service-catalog', { limit: 500 });
-      console.log('📥 Service catalog response:', response);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📥 Service catalog response:', response);
+      }
       
       if (response.success && response.data) {
         // Die API-Antwort ist verschachtelt: response.data.data enthält das Array
         const apiData = response.data as any;
         const serviceData = (apiData.data && Array.isArray(apiData.data)) ? apiData.data : (Array.isArray(apiData) ? apiData : []);
         
-        console.log('✅ Loaded services:', serviceData.length);
-        if (serviceData.length > 0) {
-          console.log('📋 First service:', serviceData[0]);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Loaded services:', serviceData.length);
+          if (serviceData.length > 0) {
+            console.log('📋 First service:', serviceData[0]);
+          }
         }
         
         // Filtere nur aktive Services im Frontend
         const activeServices = serviceData.filter((service: any) => service.is_active !== false);
-        console.log('✅ Active services:', activeServices.length);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Active services:', activeServices.length);
+        }
         setServiceList(activeServices);
       } else {
-        console.warn('⚠️ No services in response');
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('⚠️ No services in response');
+        }
         setServiceList([]);
       }
     } catch (error: any) {
@@ -139,10 +156,14 @@ const Availability: React.FC = () => {
   };
 
   const handleSearchSlots = async () => {
-    console.log('🔍 handleSearchSlots called with:', { staffId, serviceId, startDate, endDate });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 handleSearchSlots called with:', { staffId, serviceId, startDate, endDate });
+    }
     
     if (!staffId || !serviceId || !startDate || !endDate) {
-      console.warn('⚠️ Missing required fields:', { staffId: !!staffId, serviceId: !!serviceId, startDate: !!startDate, endDate: !!endDate });
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('⚠️ Missing required fields:', { staffId: !!staffId, serviceId: !!serviceId, startDate: !!startDate, endDate: !!endDate });
+      }
       enqueueSnackbar('Bitte alle Felder ausfüllen', { variant: 'warning' });
       return;
     }
@@ -155,18 +176,24 @@ const Availability: React.FC = () => {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
       };
-      console.log('🔍 Searching for available slots with params:', params);
-      console.log('🔍 Making API call to /availability/slots');
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Searching for available slots with params:', params);
+        console.log('🔍 Making API call to /availability/slots');
+      }
       const response = await api.get('/availability/slots', params);
-      console.log('🔍 API call completed, response received');
-      console.log('📥 Available slots full response:', JSON.stringify(response, null, 2));
-      console.log('📥 Available slots response.data:', response.data);
-      console.log('📥 Available slots response.success:', response.success);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 API call completed, response received');
+        console.log('📥 Available slots full response:', JSON.stringify(response, null, 2));
+        console.log('📥 Available slots response.data:', response.data);
+        console.log('📥 Available slots response.success:', response.success);
+      }
       
       if (response.success) {
         const apiData = response.data as any;
-        console.log('📥 API data type:', typeof apiData, 'isArray:', Array.isArray(apiData));
-        console.log('📥 API data keys:', apiData ? Object.keys(apiData) : 'null');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('📥 API data type:', typeof apiData, 'isArray:', Array.isArray(apiData));
+          console.log('📥 API data keys:', apiData ? Object.keys(apiData) : 'null');
+        }
         
         // Die API gibt zurück: { success: true, data: [...] }
         // response.data ist bereits { success: true, data: [...] }
@@ -180,14 +207,16 @@ const Availability: React.FC = () => {
           slots = apiData.data;
         }
         
-        console.log('✅ Found slots:', slots.length);
-        if (slots.length > 0) {
-          console.log('📋 First slot:', slots[0]);
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Found slots:', slots.length);
+          if (slots.length > 0) {
+            console.log('📋 First slot:', slots[0]);
+          }
         }
         
         // Debug-Informationen anzeigen
         const debugInfo = (apiData as any)?.debug;
-        if (debugInfo) {
+        if (debugInfo && process.env.NODE_ENV === 'development') {
           console.log('🔍 Debug info from backend:', debugInfo);
           if (debugInfo.weeklySchedulesCount === 0) {
             console.warn('⚠️ No WeeklySchedules found for staffId:', debugInfo.staffId);
@@ -251,9 +280,13 @@ const Availability: React.FC = () => {
         serviceId,
         fromDate: new Date().toISOString(),
       };
-      console.log('🔍 Searching for next available slot:', params);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('🔍 Searching for next available slot:', params);
+      }
       const response = await api.get('/availability/next-available', params);
-      console.log('📥 Next available slot response:', response);
+      if (process.env.NODE_ENV === 'development') {
+        console.log('📥 Next available slot response:', response);
+      }
       
       if (response.success && response.data && typeof response.data === 'object' && 'start' in response.data) {
         const slot = response.data as { start: string };
@@ -340,21 +373,23 @@ const Availability: React.FC = () => {
               />
             </Grid>
             <Grid size={{ xs: 12, md: 2 }}>
-              <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
                 <DatePicker
                   label="Von"
                   value={startDate}
                   onChange={(newValue) => setStartDate(newValue)}
+                  format="dd.MM.yyyy"
                   slotProps={{ textField: { fullWidth: true } }}
                 />
               </LocalizationProvider>
             </Grid>
             <Grid size={{ xs: 12, md: 2 }}>
-              <LocalizationProvider dateAdapter={AdapterDateFns}>
+              <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
                 <DatePicker
                   label="Bis"
                   value={endDate}
                   onChange={(newValue) => setEndDate(newValue)}
+                  format="dd.MM.yyyy"
                   slotProps={{ textField: { fullWidth: true } }}
                 />
               </LocalizationProvider>

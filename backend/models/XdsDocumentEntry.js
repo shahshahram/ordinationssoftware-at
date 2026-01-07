@@ -281,9 +281,9 @@ xdsDocumentEntrySchema.index({ patientId: 1, creationTime: -1 });
 xdsDocumentEntrySchema.index({ locationId: 1, availabilityStatus: 1 });
 xdsDocumentEntrySchema.index({ classCode: 1, availabilityStatus: 1 });
 xdsDocumentEntrySchema.index({ source: 1, locationId: 1 });
-xdsDocumentEntrySchema.index({ entryUUID: 1 });
-xdsDocumentEntrySchema.index({ uniqueId: 1 });
-xdsDocumentEntrySchema.index({ submissionSetId: 1 });
+// entryUUID hat bereits unique: true, daher kein zusätzlicher Index nötig
+// uniqueId hat bereits index: true, daher kein zusätzlicher Index nötig
+// submissionSetId hat bereits index: true, daher kein zusätzlicher Index nötig
 
 module.exports = mongoose.model('XdsDocumentEntry', xdsDocumentEntrySchema);
 

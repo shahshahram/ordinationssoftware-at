@@ -83,7 +83,7 @@ const PatientDataHistorySchema = new mongoose.Schema({
 
 // Index für schnelle Suche nach Patient und Datum
 PatientDataHistorySchema.index({ patientId: 1, recordedAt: -1 });
-PatientDataHistorySchema.index({ appointmentId: 1 });
+// appointmentId hat bereits index: true, daher kein zusätzlicher Index nötig
 
 const PatientDataHistory = mongoose.model('PatientDataHistory', PatientDataHistorySchema);
 

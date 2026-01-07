@@ -105,7 +105,7 @@ ResourceSchema.index({ name: 1 });
 ResourceSchema.index({ type: 1 });
 ResourceSchema.index({ category: 1 });
 ResourceSchema.index({ 'onlineBooking.enabled': 1 });
-ResourceSchema.index({ isActive: 1 });
+// isActive hat bereits index: true, daher kein zusätzlicher Index nötig
 ResourceSchema.index({ isAvailable: 1 });
 
 // Methoden
