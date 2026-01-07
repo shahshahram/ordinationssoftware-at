@@ -51,6 +51,10 @@ const Settings: React.FC = () => {
   const [eldaStatus, setEldaStatus] = useState<any>(null);
   const [wahonlineEnabled, setWahonlineEnabled] = useState(false);
   const [wahonlineStatus, setWahonlineStatus] = useState<any>(null);
+  const [personnelCostsPercentage, setPersonnelCostsPercentage] = useState<number>(25);
+  const [targetHourlyRate, setTargetHourlyRate] = useState<number>(150);
+  const [customerAcquisitionCost, setCustomerAcquisitionCost] = useState<number>(50);
+  const [workingHoursPerDay, setWorkingHoursPerDay] = useState<number>(8);
 
   // E-Mail-Konfiguration State
   const [emailLoading, setEmailLoading] = useState(false);
@@ -106,7 +110,31 @@ const Settings: React.FC = () => {
     loadWAHonlineStatus();
     loadEmailSettings();
     loadSmsSettings();
+    loadBillingSettings();
   }, [user]);
+
+  const loadBillingSettings = async () => {
+    try {
+      const response = await api.get<{ success: boolean; data: any }>('/settings');
+      if (response.data.success && response.data.data?.billing) {
+        const billing = response.data.data.billing;
+        if (billing.personnelCostsPercentage !== undefined) {
+          setPersonnelCostsPercentage(billing.personnelCostsPercentage);
+        }
+        if (billing.targetHourlyRate !== undefined) {
+          setTargetHourlyRate(billing.targetHourlyRate);
+        }
+        if (billing.customerAcquisitionCost !== undefined) {
+          setCustomerAcquisitionCost(billing.customerAcquisitionCost);
+        }
+        if (billing.workingHoursPerDay !== undefined) {
+          setWorkingHoursPerDay(billing.workingHoursPerDay);
+        }
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Laden der Abrechnungseinstellungen:', error);
+    }
+  };
 
   const loadEmailSettings = async () => {
     try {
@@ -353,7 +381,8 @@ const Settings: React.FC = () => {
     setSuccess(false);
 
     try {
-      const response = await api.put('/auth/profile', {
+      // Speichere User-Profil-Einstellungen
+      const profileResponse = await api.put('/auth/profile', {
         profile: {
           preferences: {
             ...user?.profile?.preferences,
@@ -366,7 +395,17 @@ const Settings: React.FC = () => {
         }
       });
 
-      if (response.success) {
+      // Speichere Abrechnungseinstellungen in Systemeinstellungen
+      const settingsResponse = await api.put('/settings', {
+        billing: {
+          personnelCostsPercentage: personnelCostsPercentage,
+          targetHourlyRate: targetHourlyRate,
+          customerAcquisitionCost: customerAcquisitionCost,
+          workingHoursPerDay: workingHoursPerDay
+        }
+      });
+
+      if (profileResponse.success && settingsResponse.success) {
         setSuccess(true);
         // User-Daten neu laden
         dispatch(loadUser());
@@ -452,6 +491,60 @@ const Settings: React.FC = () => {
                   Leistungen werden automatisch abgerechnet.
                 </Typography>
               </Alert>
+
+              <Divider sx={{ my: 3 }} />
+
+              {/* BI-Dashboard Einstellungen */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  BI-Dashboard Einstellungen
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Diese Werte werden für die Berechnungen im Business Intelligence Dashboard verwendet.
+                </Typography>
+                
+                <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2, mt: 2 }}>
+                  <TextField
+                    fullWidth
+                    label="Personalkostenquote (%)"
+                    type="number"
+                    inputProps={{ min: 0, max: 100, step: 0.1 }}
+                    value={personnelCostsPercentage}
+                    onChange={(e) => setPersonnelCostsPercentage(parseFloat(e.target.value) || 25)}
+                    helperText="Prozentsatz des Gesamtumsatzes für Personalkosten"
+                  />
+                  
+                  <TextField
+                    fullWidth
+                    label="Ziel-Stundensatz (€)"
+                    type="number"
+                    inputProps={{ min: 0, step: 10 }}
+                    value={targetHourlyRate}
+                    onChange={(e) => setTargetHourlyRate(parseFloat(e.target.value) || 150)}
+                    helperText="Zielwert für Umsatz pro Stunde (für Geld-Uhr)"
+                  />
+                  
+                  <TextField
+                    fullWidth
+                    label="Customer Acquisition Cost (CAC) (€)"
+                    type="number"
+                    inputProps={{ min: 0, step: 1 }}
+                    value={customerAcquisitionCost}
+                    onChange={(e) => setCustomerAcquisitionCost(parseFloat(e.target.value) || 50)}
+                    helperText="Durchschnittliche Kosten für Neupatienten-Akquise"
+                  />
+                  
+                  <TextField
+                    fullWidth
+                    label="Arbeitsstunden pro Tag"
+                    type="number"
+                    inputProps={{ min: 1, max: 24, step: 0.5 }}
+                    value={workingHoursPerDay}
+                    onChange={(e) => setWorkingHoursPerDay(parseFloat(e.target.value) || 8)}
+                    helperText="Durchschnittliche Arbeitsstunden pro Tag (für Kapazitätsberechnung)"
+                  />
+                </Box>
+              </Box>
 
               <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
                 <Button

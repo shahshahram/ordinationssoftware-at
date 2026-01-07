@@ -33,6 +33,7 @@ router.get('/', auth, async (req, res) => {
 
     // Lade Settings aus Datenbank
     const onlineBookingSettings = await SystemSettings.getCategorySettings('onlineBooking');
+    const billingSettings = await SystemSettings.getCategorySettings('billing');
     
     // Return basic settings structure mit Datenbank-Settings
     const settings = {
@@ -63,6 +64,12 @@ router.get('/', auth, async (req, res) => {
         cancellationFeeEnabled: onlineBookingSettings.cancellationFeeEnabled || false,
         cancellationFeeAmount: onlineBookingSettings.cancellationFeeAmount || 0,
         cancellationFeeDeadlineHours: onlineBookingSettings.cancellationFeeDeadlineHours || 24
+      },
+      billing: {
+        personnelCostsPercentage: billingSettings.personnelCostsPercentage || 25,
+        targetHourlyRate: billingSettings.targetHourlyRate || 150,
+        customerAcquisitionCost: billingSettings.customerAcquisitionCost || 50,
+        workingHoursPerDay: billingSettings.workingHoursPerDay || 8
       }
     };
 
@@ -105,7 +112,47 @@ router.put('/', auth, async (req, res) => {
     }
 
     // Speichere Settings in Datenbank
-    const { onlineBooking } = req.body;
+    const { onlineBooking, billing } = req.body;
+    
+    // Speichere Billing-Einstellungen
+    if (billing) {
+      if (billing.personnelCostsPercentage !== undefined) {
+        await SystemSettings.setSetting(
+          'billing',
+          'personnelCostsPercentage',
+          billing.personnelCostsPercentage,
+          'number',
+          req.user.id
+        );
+      }
+      if (billing.targetHourlyRate !== undefined) {
+        await SystemSettings.setSetting(
+          'billing',
+          'targetHourlyRate',
+          billing.targetHourlyRate,
+          'number',
+          req.user.id
+        );
+      }
+      if (billing.customerAcquisitionCost !== undefined) {
+        await SystemSettings.setSetting(
+          'billing',
+          'customerAcquisitionCost',
+          billing.customerAcquisitionCost,
+          'number',
+          req.user.id
+        );
+      }
+      if (billing.workingHoursPerDay !== undefined) {
+        await SystemSettings.setSetting(
+          'billing',
+          'workingHoursPerDay',
+          billing.workingHoursPerDay,
+          'number',
+          req.user.id
+        );
+      }
+    }
     
     if (onlineBooking) {
       // Speichere Online-Buchung Einstellungen

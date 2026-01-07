@@ -370,6 +370,13 @@ const ServiceCatalog: React.FC = () => {
       percentage: 10,
       maxAmount: 28.50,
       exempt: false
+    },
+    // Kostenstruktur (für BI-Dashboard)
+    costs: {
+      materialCostsCents: 0,
+      equipmentCostsCents: 0,
+      variableCostsCents: 0,
+      fixedCostsCents: 0
     }
   });
 
@@ -709,6 +716,13 @@ const ServiceCatalog: React.FC = () => {
         maxAmount: 28.50,
         exempt: false
       },
+      // Kostenstruktur (für BI-Dashboard) - alle Werte in Euro
+      costs: {
+        materialCosts: 0,
+        equipmentCosts: 0,
+        variableCosts: 0,
+        fixedCosts: 0
+      },
       online_contingents: [],
       anamnesisQuestions: []
     });
@@ -809,6 +823,13 @@ const ServiceCatalog: React.FC = () => {
         percentage: service.copay?.percentage || 10,
         maxAmount: service.copay?.maxAmount || 28.50,
         exempt: service.copay?.exempt || false
+      },
+      // Kostenstruktur (für BI-Dashboard) - alle Werte in Euro
+      costs: {
+        materialCosts: (service as any).costs?.materialCosts || (service as any).costs?.materialCostsCents ? (service as any).costs.materialCostsCents / 100 : 0,
+        equipmentCosts: (service as any).costs?.equipmentCosts || (service as any).costs?.equipmentCostsCents ? (service as any).costs.equipmentCostsCents / 100 : 0,
+        variableCosts: (service as any).costs?.variableCosts || (service as any).costs?.variableCostsCents ? (service as any).costs.variableCostsCents / 100 : 0,
+        fixedCosts: (service as any).costs?.fixedCosts || (service as any).costs?.fixedCostsCents ? (service as any).costs.fixedCostsCents / 100 : 0
       }
     });
     
@@ -2026,6 +2047,84 @@ const ServiceCatalog: React.FC = () => {
                       label="Selbstbehalt-befreit"
                       disabled={!formData.copay?.applicable}
                     />
+                  </Box>
+                </Box>
+
+                {/* Kostenstruktur (für BI-Dashboard) */}
+                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2, mt: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Kostenstruktur (für BI-Dashboard)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Diese Werte werden für die Profitabilitäts-Berechnung im BI-Dashboard verwendet.
+                  </Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
+                    <TextField
+                      fullWidth
+                      label="Materialkosten (Euro)"
+                      type="number"
+                      inputProps={{ step: "0.01" }}
+                      value={formData.costs?.materialCosts || 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        costs: { 
+                          ...formData.costs, 
+                          materialCosts: parseFloat(e.target.value) || 0 
+                        } 
+                      })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Gerätekosten (Euro)"
+                      type="number"
+                      inputProps={{ step: "0.01" }}
+                      value={formData.costs?.equipmentCosts || 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        costs: { 
+                          ...formData.costs, 
+                          equipmentCosts: parseFloat(e.target.value) || 0 
+                        } 
+                      })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Variable Kosten (Euro)"
+                      type="number"
+                      inputProps={{ step: "0.01" }}
+                      value={formData.costs?.variableCosts || 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        costs: { 
+                          ...formData.costs, 
+                          variableCosts: parseFloat(e.target.value) || 0 
+                        } 
+                      })}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Fixkostenanteil (Euro)"
+                      type="number"
+                      inputProps={{ step: "0.01" }}
+                      value={formData.costs?.fixedCosts || 0}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        costs: { 
+                          ...formData.costs, 
+                          fixedCosts: parseFloat(e.target.value) || 0 
+                        } 
+                      })}
+                    />
+                  </Box>
+                  <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1 }}>
+                    <Typography variant="body2" color="info.contrastText">
+                      <strong>Gesamtkosten:</strong> {(
+                        (formData.costs?.materialCosts || 0) +
+                        (formData.costs?.equipmentCosts || 0) +
+                        (formData.costs?.variableCosts || 0) +
+                        (formData.costs?.fixedCosts || 0)
+                      ).toFixed(2)} €
+                    </Typography>
                   </Box>
                 </Box>
 

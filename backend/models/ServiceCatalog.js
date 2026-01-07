@@ -312,6 +312,30 @@ const ServiceCatalogSchema = new mongoose.Schema({
     exempt: { type: Boolean, default: false }
   },
   
+  // Kostenstruktur (für BI-Dashboard) - alle Werte in Euro
+  costs: {
+    materialCosts: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    equipmentCosts: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    variableCosts: {
+      type: Number,
+      default: 0,
+      min: 0
+    },
+    fixedCosts: {
+      type: Number,
+      default: 0,
+      min: 0
+    }
+  },
+  
   // Zusätzliche Informationen
   notes: { 
     type: String, 
