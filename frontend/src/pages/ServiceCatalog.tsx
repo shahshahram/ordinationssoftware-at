@@ -221,6 +221,18 @@ interface ServiceCatalog {
     maxAmount?: number;
     exempt?: boolean;
   };
+  // Kostenstruktur (für BI-Dashboard) - alle Werte in Euro
+  costs?: {
+    materialCosts?: number;
+    equipmentCosts?: number;
+    variableCosts?: number;
+    fixedCosts?: number;
+    // Legacy: Alte Cent-Felder für Backward Compatibility
+    materialCostsCents?: number;
+    equipmentCostsCents?: number;
+    variableCostsCents?: number;
+    fixedCostsCents?: number;
+  };
   online_contingents?: Array<{
     timeWindow: {
       start: string;
@@ -371,12 +383,12 @@ const ServiceCatalog: React.FC = () => {
       maxAmount: 28.50,
       exempt: false
     },
-    // Kostenstruktur (für BI-Dashboard)
+    // Kostenstruktur (für BI-Dashboard) - alle Werte in Euro
     costs: {
-      materialCostsCents: 0,
-      equipmentCostsCents: 0,
-      variableCostsCents: 0,
-      fixedCostsCents: 0
+      materialCosts: 0,
+      equipmentCosts: 0,
+      variableCosts: 0,
+      fixedCosts: 0
     }
   });
 
