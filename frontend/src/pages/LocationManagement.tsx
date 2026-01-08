@@ -30,6 +30,7 @@ import {
   Tab,
   Autocomplete,
   Stack,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -1102,9 +1103,20 @@ const LocationManagement: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Standortverwaltung
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h4" component="h1">
+            Standortverwaltung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogLocationsOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -1123,11 +1135,111 @@ const LocationManagement: React.FC = () => {
       <Card>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="Standorte" icon={<LocationOnIcon />} />
-            <Tab label="Öffnungszeiten" icon={<ScheduleIcon />} />
-            <Tab label="Wöchentliche Öffnungszeiten" icon={<CalendarTodayIcon />} />
-            <Tab label="Schließtage" icon={<CancelIcon />} />
-            <Tab label="Personal-Zuweisungen" icon={<PeopleIcon />} />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <span>Standorte</span>
+                  <Tooltip title="Hilfe & Leitfaden">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHelpDialogLocationsOpen(true);
+                      }}
+                      color="primary"
+                      size="small"
+                      sx={{ ml: 0.5 }}
+                    >
+                      <HelpOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              } 
+              icon={<LocationOnIcon />} 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <span>Öffnungszeiten</span>
+                  <Tooltip title="Hilfe & Leitfaden">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHelpDialogHoursOpen(true);
+                      }}
+                      color="primary"
+                      size="small"
+                      sx={{ ml: 0.5 }}
+                    >
+                      <HelpOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              } 
+              icon={<ScheduleIcon />} 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <span>Wöchentliche Öffnungszeiten</span>
+                  <Tooltip title="Hilfe & Leitfaden">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHelpDialogWeeklyScheduleOpen(true);
+                      }}
+                      color="primary"
+                      size="small"
+                      sx={{ ml: 0.5 }}
+                    >
+                      <HelpOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              } 
+              icon={<CalendarTodayIcon />} 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <span>Schließtage</span>
+                  <Tooltip title="Hilfe & Leitfaden">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHelpDialogClosuresOpen(true);
+                      }}
+                      color="primary"
+                      size="small"
+                      sx={{ ml: 0.5 }}
+                    >
+                      <HelpOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              } 
+              icon={<CancelIcon />} 
+            />
+            <Tab 
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  <span>Personal-Zuweisungen</span>
+                  <Tooltip title="Hilfe & Leitfaden">
+                    <IconButton
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setHelpDialogAssignmentsOpen(true);
+                      }}
+                      color="primary"
+                      size="small"
+                      sx={{ ml: 0.5 }}
+                    >
+                      <HelpOutlineIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+              } 
+              icon={<PeopleIcon />} 
+            />
           </Tabs>
         </Box>
 
@@ -3515,8 +3627,63 @@ const LocationManagement: React.FC = () => {
                   Konfiguration
                 </Typography>
                 <Typography variant="body2" paragraph>
-                  Detaillierte Konfigurationsanleitung.
+                  Detaillierte Konfigurationsanleitung für Personal-Zuweisungen.
                 </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Standortauswahl
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Wählen Sie den Standort aus, dem das Personal zugewiesen werden soll. 
+                  Ein Standort kann mehrere Personal-Mitglieder haben, und ein Personal-Mitglied 
+                  kann mehreren Standorten zugewiesen sein.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Personalauswahl
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Wählen Sie das Personal-Mitglied aus der Liste aus. Nur aktive Personal-Mitglieder 
+                  werden in der Liste angezeigt.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Zeiträume
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Startdatum:</strong> Datum, ab dem die Zuweisung gültig ist</li>
+                  <li><strong>Enddatum:</strong> Datum, bis zu dem die Zuweisung gültig ist (optional)</li>
+                  <li><strong>Ohne Enddatum:</strong> Die Zuweisung bleibt dauerhaft aktiv</li>
+                  <li><strong>Überlappende Zeiträume:</strong> Ein Personal-Mitglied kann gleichzeitig mehreren Standorten zugewiesen sein</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Zuweisungsarten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔄 <strong>Dauerhaft:</strong> Kein Enddatum - Zuweisung bleibt aktiv</li>
+                  <li>📅 <strong>Zeitlich begrenzt:</strong> Mit Start- und Enddatum</li>
+                  <li>🔄 <strong>Mehrfachzuweisung:</strong> Personal kann mehreren Standorten zugewiesen sein</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✏️ <strong>Bearbeiten:</strong> Klicken Sie auf das Bearbeiten-Icon, um eine Zuweisung zu ändern</li>
+                  <li>🗑️ <strong>Löschen:</strong> Entfernen Sie eine Zuweisung, wenn sie nicht mehr benötigt wird</li>
+                  <li>📋 <strong>Übersicht:</strong> Alle Zuweisungen werden in einer Tabelle angezeigt</li>
+                </Box>
               </Box>
             </Box>
           )}
