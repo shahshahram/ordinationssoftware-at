@@ -34,3 +34,4 @@ backend/certs/*.pem
 !backend/certs/README.md
 
 
+version-2026-01-07-full.bundle
