@@ -40,6 +40,7 @@ import {
   FileUpload as FileUploadIcon,
   FileDownload as FileDownloadIcon,
   Description as DescriptionIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import GradientDialogTitle from '../components/GradientDialogTitle';
@@ -55,6 +56,8 @@ const DekursVorlagenAdmin: React.FC = () => {
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [dialogTab, setDialogTab] = useState(0);
   const [medicalSpecialties, setMedicalSpecialties] = useState<any[]>([]);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   
   const [formData, setFormData] = useState({
     code: '',
@@ -508,9 +511,20 @@ const DekursVorlagenAdmin: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          Dekurs-Vorlagen Verwaltung
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" component="h1">
+            Dekurs-Vorlagen Verwaltung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              sx={{ ml: 1 }}
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box>
           <input
             accept="application/json"
@@ -1039,6 +1053,422 @@ const DekursVorlagenAdmin: React.FC = () => {
             disabled={!selectedMedication}
           >
             {editingMedicationIndex !== null ? 'Speichern' : 'Hinzufügen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Dekurs-Vorlagen" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Übersicht" />
+            <Tab label="Vorlage erstellen" />
+            <Tab label="Import/Export" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was sind Dekurs-Vorlagen?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Dekurs-Vorlagen sind wiederverwendbare Textvorlagen für Arztbriefe und Dekurs-Einträge. 
+                  Sie beschleunigen die Dokumentation erheblich und sorgen für konsistente, standardisierte Formulierungen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptkomponenten
+                </Typography>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  1. Grunddaten (Tab "Allgemein")
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Code:</strong> Eindeutiger Identifikator (z.B. "HYPER-001") - Pflichtfeld</li>
+                  <li><strong>Titel:</strong> Name der Vorlage (z.B. "Hypertonie Erstkonsultation") - Pflichtfeld</li>
+                  <li><strong>ICD-10 Code:</strong> Optional, verknüpft mit Diagnose</li>
+                  <li><strong>ICD-10 Titel:</strong> Beschreibung der Diagnose</li>
+                  <li><strong>Fachrichtungen:</strong> Mehrfachauswahl (z.B. Allgemeinmedizin, Kardiologie)</li>
+                  <li><strong>Sortierreihenfolge:</strong> Nummer für die Anzeigereihenfolge</li>
+                  <li><strong>Status:</strong> Aktiv/Inaktiv - nur aktive Vorlagen werden angezeigt</li>
+                  <li><strong>Standard-Vorlage:</strong> Als Standard markieren</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  2. Vorlageninhalt (Tab "Vorlageninhalt")
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Strukturierte Felder für den Dekurs-Eintrag:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Diagnose (visitReason):</strong> Grund für den Besuch</li>
+                  <li><strong>Klinische Beobachtungen (clinicalObservations):</strong> Befunde, Symptome</li>
+                  <li><strong>Verlaufskontrolle (progressChecks):</strong> Fortschritt seit letztem Besuch</li>
+                  <li><strong>Befunde (findings):</strong> Untersuchungsergebnisse</li>
+                  <li><strong>Medikamentenänderungen (medicationChanges):</strong> Änderungen an Medikation</li>
+                  <li><strong>Behandlungsdetails (treatmentDetails):</strong> Therapie, Maßnahmen</li>
+                  <li><strong>Psychosoziale Faktoren (psychosocialFactors):</strong> Relevante Faktoren</li>
+                  <li><strong>Notizen (notes):</strong> Zusätzliche Informationen</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  3. Verknüpfte Medikamente (Tab "Medikamente")
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Medikamente aus dem Medikamentenkatalog auswählen</li>
+                  <li>Dosierung, Häufigkeit, Dauer festlegen</li>
+                  <li>Änderungstyp: Hinzugefügt, Geändert, Abgesetzt, Unverändert</li>
+                  <li>Werden beim Auslösen der Vorlage automatisch eingefügt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Vorteile
+                </Typography>
+                <Box component="ul" sx={{ pl: 3 }}>
+                  <li>⏱️ <strong>Zeitersparnis:</strong> Standardtexte müssen nicht jedes Mal neu geschrieben werden</li>
+                  <li>📋 <strong>Konsistenz:</strong> Einheitliche Formulierungen in der Dokumentation</li>
+                  <li>✅ <strong>Vollständigkeit:</strong> Strukturierte Felder reduzieren Fehler</li>
+                  <li>♻️ <strong>Wiederverwendbarkeit:</strong> Eine Vorlage kann mehrfach verwendet werden</li>
+                  <li>✏️ <strong>Anpassbarkeit:</strong> Vorlagen können nach Verwendung noch angepasst werden</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Schritt-für-Schritt: Vorlage erstellen
+                </Typography>
+                
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: Grunddaten ausfüllen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neue Vorlage"</li>
+                  <li>Wechseln Sie zum Tab "Allgemein"</li>
+                  <li>Geben Sie einen <strong>eindeutigen Code</strong> ein (z.B. "HYPER-001")</li>
+                  <li>Geben Sie einen <strong>aussagekräftigen Titel</strong> ein</li>
+                  <li>Optional: ICD-10 Code und Titel zuordnen</li>
+                  <li>Wählen Sie die passenden Fachrichtungen aus</li>
+                  <li>Setzen Sie die Sortierreihenfolge (niedrigere Zahlen erscheinen zuerst)</li>
+                  <li>Aktivieren Sie die Vorlage (Status: Aktiv)</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Vorlageninhalt erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab "Vorlageninhalt"</li>
+                  <li>Füllen Sie die relevanten Felder aus:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li>Diagnose: Grund für den Besuch</li>
+                      <li>Klinische Beobachtungen: Befunde, Symptome</li>
+                      <li>Verlaufskontrolle: Fortschritt seit letztem Besuch</li>
+                      <li>Befunde: Untersuchungsergebnisse</li>
+                      <li>Behandlungsdetails: Therapie, Maßnahmen</li>
+                      <li>Notizen: Zusätzliche Informationen</li>
+                    </Box>
+                  </li>
+                  <li>Verwenden Sie Platzhalter für dynamische Inhalte:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><code>{'{patientName}'}</code> - Name des Patienten</li>
+                      <li><code>{'{patientAge}'}</code> - Alter des Patienten</li>
+                    </Box>
+                  </li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 3: Medikamente verknüpfen (Optional)
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab "Medikamente"</li>
+                  <li>Klicken Sie auf "Medikament hinzufügen"</li>
+                  <li>Wählen Sie ein Medikament aus dem Katalog</li>
+                  <li>Geben Sie Dosierung, Häufigkeit, Dauer ein</li>
+                  <li>Wählen Sie den Änderungstyp (Hinzugefügt, Geändert, etc.)</li>
+                  <li>Speichern Sie das Medikament</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 4: Speichern
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Überprüfen Sie alle Eingaben</li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                  <li>Die Vorlage erscheint nun in der Liste</li>
+                </Box>
+
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Tipp:</strong> Beim Erstellen eines Dekurs-Eintrags können Sie die Vorlage auswählen. 
+                    Das System füllt die Felder automatisch aus und Sie können sie noch anpassen, bevor Sie speichern.
+                  </Typography>
+                </Alert>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Import-Funktion
+                </Typography>
+                
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Unterstütztes Format
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  <strong>JSON:</strong> Import von Vorlagen aus JSON-Dateien
+                </Typography>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  So funktioniert der Import
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf den "Import" Button</li>
+                  <li>Wählen Sie eine JSON-Datei aus</li>
+                  <li>Das System prüft die Datei automatisch:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li>Array von Vorlagen: <code>[{'{...}'}, {'{...}'}]</code></li>
+                      <li>Objekt mit vorlagen-Array: <code>{'{vorlagen: [{...}, {...}]}'}</code></li>
+                      <li>Einzelne Vorlage: <code>{'{...}'}</code></li>
+                    </Box>
+                  </li>
+                  <li>Verarbeitung:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li>Existiert eine Vorlage mit demselben Code? → <strong>Update</strong></li>
+                      <li>Sonst → <strong>Neue Vorlage erstellen</strong></li>
+                    </Box>
+                  </li>
+                  <li>Ergebnis: Sie erhalten eine Meldung mit der Anzahl erstellter/aktualisierter Vorlagen</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  JSON-Format für Import
+                </Typography>
+                <Box 
+                  sx={{ 
+                    bgcolor: 'background.paper',
+                    border: 2,
+                    borderColor: 'primary.main',
+                    p: 3,
+                    borderRadius: 2,
+                    fontFamily: 'monospace',
+                    fontSize: '0.95rem',
+                    overflow: 'auto',
+                    maxHeight: '400px',
+                    boxShadow: 2,
+                    position: 'relative'
+                  }}
+                >
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      position: 'absolute',
+                      top: 8,
+                      right: 12,
+                      bgcolor: 'primary.main',
+                      color: 'white',
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      fontSize: '0.7rem',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    JSON
+                  </Typography>
+                  <pre style={{ 
+                    margin: 0,
+                    color: '#1976d2',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word'
+                  }}>{`[
+  {
+    "code": "HYPER-001",
+    "title": "Hypertonie Erstkonsultation",
+    "icd10": "I10",
+    "icd10Title": "Essentielle Hypertonie",
+    "specialty": "allgemeinmedizin",
+    "specialties": ["allgemeinmedizin", "kardiologie"],
+    "diagnose": "Hypertonie",
+    "anamnese": "Patient berichtet über...",
+    "status": "RR 150/95 mmHg",
+    "beurteilung": "Hypertonie Grad 1",
+    "therapie": "Lifestyle-Modifikation empfohlen",
+    "empfehlung": "Kontrolle in 4 Wochen"
+  }
+]`}</pre>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  💡 Tipp: Sie können dieses Format kopieren und als Vorlage für Ihre eigenen JSON-Dateien verwenden.
+                </Typography>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Feld-Mapping beim Import
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System mappt verschiedene Feldnamen automatisch:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><code>diagnose</code> → <code>visitReason</code></li>
+                  <li><code>anamnese</code> → <code>clinicalObservations</code></li>
+                  <li><code>status</code> → <code>findings</code></li>
+                  <li><code>beurteilung</code> → <code>progressChecks</code></li>
+                  <li><code>therapie</code> → <code>treatmentDetails</code></li>
+                  <li><code>empfehlung</code> → <code>notes</code></li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Export-Funktion
+                </Typography>
+                
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Formate
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>JSON-Export:</strong> Einzelne Vorlage als JSON exportieren (für Backup oder Weitergabe)</li>
+                  <li><strong>XML-Export:</strong> Einzelne Vorlage als XML exportieren (für ELGA-Kompatibilität)</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  So funktioniert der Export
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Export-Icon (JSON oder XML) bei der gewünschten Vorlage</li>
+                  <li>Die Datei wird automatisch heruntergeladen</li>
+                  <li>Kann für Backup oder Weitergabe verwendet werden</li>
+                </Box>
+
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Tipp:</strong> Exportieren Sie regelmäßig Ihre Vorlagen als Backup, 
+                    besonders vor größeren Änderungen oder System-Updates.
+                  </Typography>
+                </Alert>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices & Tipps
+                </Typography>
+                
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Code-Vergabe
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie <strong>eindeutige, aussagekräftige Codes</strong> (z.B. "HYPER-001", "DIAB-002")</li>
+                  <li>✅ Verwenden Sie ein konsistentes Format (z.B. "DIAGNOSE-NUMMER")</li>
+                  <li>❌ Vermeiden Sie generische Codes wie "TEMP-001"</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Titel-Formulierung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie <strong>beschreibende Titel</strong> (z.B. "Hypertonie Erstkonsultation")</li>
+                  <li>✅ Fügen Sie den Kontext hinzu (z.B. "Erstkonsultation", "Kontrolle", "Notfall")</li>
+                  <li>❌ Vermeiden Sie zu kurze oder unklare Titel</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  ICD-10 Zuordnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Ordnen Sie <strong>ICD-10 Codes zu</strong>, wenn die Vorlage für eine spezifische Diagnose ist</li>
+                  <li>✅ Verwenden Sie den vollständigen ICD-10 Titel</li>
+                  <li>✅ Dies hilft bei der automatischen Vorlagensuche</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Fachrichtungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Ordnen Sie die Vorlage den <strong>korrekten Fachrichtungen</strong> zu</li>
+                  <li>✅ Wählen Sie mehrere Fachrichtungen, wenn die Vorlage für mehrere Bereiche relevant ist</li>
+                  <li>✅ Dies verbessert die Auffindbarkeit der Vorlage</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Vorlageninhalt
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Füllen Sie die <strong>relevanten Felder vollständig aus</strong></li>
+                  <li>✅ Verwenden Sie Platzhalter für dynamische Inhalte (<code>{'{patientName}'}</code>, <code>{'{patientAge}'}</code>)</li>
+                  <li>✅ Strukturieren Sie den Text übersichtlich (Absätze, Listen)</li>
+                  <li>❌ Vermeiden Sie zu lange, unstrukturierte Texte</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Medikamente
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verknüpfen Sie Medikamente nur, wenn sie <strong>standardmäßig relevant</strong> sind</li>
+                  <li>✅ Geben Sie vollständige Informationen an (Dosierung, Häufigkeit, Dauer)</li>
+                  <li>❌ Vermeiden Sie zu viele Medikamente pro Vorlage (max. 3-5 empfohlen)</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Import/Export
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Prüfen Sie die JSON-Struktur</strong> vor dem Import</li>
+                  <li>✅ <strong>Erstellen Sie regelmäßig Backups</strong> durch Export</li>
+                  <li>✅ Testen Sie den Import mit einer kleinen Datei zuerst</li>
+                  <li>✅ Überprüfen Sie importierte Vorlagen auf Korrektheit</li>
+                </Box>
+
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Allgemeine Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📝 Erstellen Sie Vorlagen für <strong>häufig verwendete Diagnosen</strong></li>
+                  <li>🔄 <strong>Aktualisieren Sie Vorlagen regelmäßig</strong> basierend auf Feedback</li>
+                  <li>🗂️ Verwenden Sie <strong>konsistente Kategorien</strong> für bessere Organisation</li>
+                  <li>👥 <strong>Teilen Sie bewährte Vorlagen</strong> mit dem Team</li>
+                  <li>📊 <strong>Nutzen Sie die Sortierreihenfolge</strong> für häufig verwendete Vorlagen</li>
+                </Box>
+
+                <Alert severity="success" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Erfolgs-Tipp:</strong> Beginnen Sie mit 5-10 häufig verwendeten Vorlagen 
+                    und erweitern Sie die Sammlung schrittweise basierend auf Ihrem Bedarf.
+                  </Typography>
+                </Alert>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

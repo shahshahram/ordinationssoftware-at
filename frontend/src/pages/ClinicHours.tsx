@@ -32,6 +32,9 @@ import {
   Checkbox,
   FormControlLabel,
   Stack,
+  Tooltip,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Add,
@@ -41,10 +44,12 @@ import {
   AccessTime,
   CheckCircle,
   Cancel,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface ClinicHours {
   _id?: string;
@@ -84,6 +89,8 @@ const ClinicHours: React.FC = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const { enqueueSnackbar } = useSnackbar();
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadClinicHours();
@@ -176,7 +183,18 @@ const ClinicHours: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Ordinationszeiten</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h4">Ordinationszeiten</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             variant="outlined"
@@ -353,6 +371,160 @@ const ClinicHours: React.FC = () => {
           <Button onClick={handleCloseDialog}>Abbrechen</Button>
           <Button onClick={handleSave} variant="contained">
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Ordinationszeiten" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Ordinationszeiten erstellen" />
+            <Tab label="RRULE Format" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Ordinationszeiten
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Ordinationszeiten definieren die regulären Öffnungszeiten Ihrer Praxis. 
+                  Sie werden im RRULE-Format (iCalendar) gespeichert.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🕐 <strong>Zeitpläne:</strong> Definieren Sie Ordinationszeiten</li>
+                  <li>📅 <strong>Wiederholungen:</strong> Wöchentliche, monatliche Wiederholungen</li>
+                  <li>📆 <strong>Gültigkeitszeitraum:</strong> Von-Datum bis Datum</li>
+                  <li>✅ <strong>Status:</strong> Aktiv oder inaktiv</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Ordinationszeiten erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie neue Ordinationszeiten:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neue Ordinationszeiten"</li>
+                  <li>Geben Sie die Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Startzeit:</strong> Beginn (z.B. 08:00)</li>
+                      <li><strong>Endzeit:</strong> Ende (z.B. 17:00)</li>
+                      <li><strong>Wochentage:</strong> Wählen Sie die Wochentage</li>
+                      <li><strong>Gültig von:</strong> Startdatum</li>
+                      <li><strong>Gültig bis:</strong> Enddatum (optional)</li>
+                      <li><strong>Beschreibung:</strong> Optional</li>
+                      <li><strong>Aktiv:</strong> Status</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  RRULE Format
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  RRULE (Recurrence Rule) ist ein iCalendar-Standard für wiederkehrende Ereignisse.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Beispiele
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Wochentage:</strong> FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR</li>
+                  <li><strong>Stunden:</strong> BYHOUR=8,9,10,11,13,14,15,16</li>
+                  <li><strong>Kombiniert:</strong> FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=8,9,10,11,13,14,15,16</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Detaillierte Konfigurationsanleitung.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Ordinationszeiten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie realistische Zeiten</li>
+                  <li>✅ Berücksichtigen Sie Pausen</li>
+                  <li>✅ Überprüfen Sie Gültigkeitszeiträume</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

@@ -6,6 +6,7 @@ const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const { format } = require('date-fns');
 const ExcelJS = require('exceljs');
+const { startOfDay, endOfDay, parseDateString } = require('../utils/timezone');
 const router = express.Router();
 
 // CSV-Export ohne csv-stringify (manuell)
@@ -50,10 +51,8 @@ router.get('/invoices', auth, checkPermission('billing.read'), async (req, res) 
     
     if (date) {
       // Einzelner Tag
-      const start = new Date(date);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
+      const start = startOfDay(parseDateString(date));
+      const end = endOfDay(parseDateString(date));
       dateFilter.invoiceDate = { $gte: start, $lte: end };
     } else if (month && year) {
       // Monat
@@ -69,13 +68,11 @@ router.get('/invoices', auth, checkPermission('billing.read'), async (req, res) 
       // Freier Datumsbereich
       dateFilter.invoiceDate = {};
       if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
+        const start = startOfDay(parseDateString(startDate));
         dateFilter.invoiceDate.$gte = start;
       }
       if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
+        const end = endOfDay(parseDateString(endDate));
         dateFilter.invoiceDate.$lte = end;
       }
     }
@@ -148,10 +145,8 @@ router.get('/receipts', auth, checkPermission('billing.read'), async (req, res) 
     
     if (date) {
       // Einzelner Tag
-      const start = new Date(date);
-      start.setHours(0, 0, 0, 0);
-      const end = new Date(date);
-      end.setHours(23, 59, 59, 999);
+      const start = startOfDay(parseDateString(date));
+      const end = endOfDay(parseDateString(date));
       dateFilter['receiptData.timestamp'] = { $gte: start, $lte: end };
     } else if (month && year) {
       // Monat
@@ -167,13 +162,11 @@ router.get('/receipts', auth, checkPermission('billing.read'), async (req, res) 
       // Freier Datumsbereich
       dateFilter['receiptData.timestamp'] = {};
       if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
+        const start = startOfDay(parseDateString(startDate));
         dateFilter['receiptData.timestamp'].$gte = start;
       }
       if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
+        const end = endOfDay(parseDateString(endDate));
         dateFilter['receiptData.timestamp'].$lte = end;
       }
     }

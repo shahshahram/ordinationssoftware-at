@@ -30,7 +30,10 @@ import {
   IconButton,
   CircularProgress,
   Grid,
-  Divider
+  Divider,
+  Tabs,
+  Tab,
+  Tooltip
 } from '@mui/material';
 import {
   Add,
@@ -41,9 +44,11 @@ import {
   Error as ErrorIcon,
   Science,
   Verified,
-  BugReport
+  BugReport,
+  HelpOutline
 } from '@mui/icons-material';
 import api from '../utils/api';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface CashRegister {
   _id: string;
@@ -113,6 +118,11 @@ const CashRegisterManagement: React.FC = () => {
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
   const [selectedReceiptForValidation, setSelectedReceiptForValidation] = useState<ReceiptChainEntry | null>(null);
   const [validationResult, setValidationResult] = useState<any>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
+  const [helpDialogRegistersOpen, setHelpDialogRegistersOpen] = useState(false);
+  const [helpDialogReceiptChainOpen, setHelpDialogReceiptChainOpen] = useState(false);
+  const [helpDialogConfigOpen, setHelpDialogConfigOpen] = useState(false);
 
   useEffect(() => {
     loadCashRegisters();
@@ -339,17 +349,40 @@ const CashRegisterManagement: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Registrierkassen-Verwaltung
-      </Typography>
-      <Typography variant="subtitle1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
-        Verwaltung von Registrierkassen, TSE-Konfiguration und automatischen Belegen
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Registrierkassen-Verwaltung
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Verwaltung von Registrierkassen, TSE-Konfiguration und automatischen Belegen
+          </Typography>
+        </Box>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+          >
+            <HelpOutline />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">Registrierkassen</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6">Registrierkassen</Typography>
+              <Tooltip title="Hilfe & Leitfaden">
+                <IconButton
+                  onClick={() => setHelpDialogRegistersOpen(true)}
+                  color="primary"
+                  size="small"
+                >
+                  <HelpOutline />
+                </IconButton>
+              </Tooltip>
+            </Box>
             <Button
               variant="contained"
               startIcon={<Add />}
@@ -458,13 +491,24 @@ const CashRegisterManagement: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Box>
-              <Typography variant="h6" gutterBottom>
-                Belegverkettung (DEP)
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Chronologische, unveränderbare Speicherung aller Belege
-              </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom>
+                  Belegverkettung (DEP)
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Chronologische, unveränderbare Speicherung aller Belege
+                </Typography>
+              </Box>
+              <Tooltip title="Hilfe & Leitfaden">
+                <IconButton
+                  onClick={() => setHelpDialogReceiptChainOpen(true)}
+                  color="primary"
+                  size="small"
+                >
+                  <HelpOutline />
+                </IconButton>
+              </Tooltip>
             </Box>
             <Button
               variant="outlined"
@@ -535,7 +579,20 @@ const CashRegisterManagement: React.FC = () => {
 
       {/* Dialog für neue Registrierkasse */}
       <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Neue Registrierkasse</DialogTitle>
+        <DialogTitle>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Neue Registrierkasse</Typography>
+            <Tooltip title="Konfigurationshilfe">
+              <IconButton
+                onClick={() => setHelpDialogConfigOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutline />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
             <TextField
@@ -801,6 +858,710 @@ const CashRegisterManagement: React.FC = () => {
         onClose={() => setSnackbar({ ...snackbar, open: false })}
         message={snackbar.message}
       />
+
+      {/* Hilfe-Dialog für Registrierkassen */}
+      <Dialog 
+        open={helpDialogRegistersOpen} 
+        onClose={() => setHelpDialogRegistersOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Registrierkassen" 
+          onClose={() => setHelpDialogRegistersOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Registrierkasse erstellen" />
+            <Tab label="TSE konfigurieren" />
+            <Tab label="Status & Aktionen" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Registrierkassen
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Registrierkassen sind elektronische Kassensysteme, die gemäß RKSVO 
+                  (Registrierkassensicherheitsverordnung) betrieben werden müssen. 
+                  Jede Registrierkasse benötigt eine TSE (Technische Sicherheitseinrichtung).
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🏪 <strong>Registrierkassen verwalten:</strong> Erstellen, bearbeiten, aktivieren</li>
+                  <li>🔐 <strong>TSE konfigurieren:</strong> Technische Sicherheitseinrichtung einrichten</li>
+                  <li>✅ <strong>Status überwachen:</strong> TSE-Status, FinanzOnline-Registrierung</li>
+                  <li>🧾 <strong>Belege erstellen:</strong> Start-, Monats-, Jahresbelege</li>
+                  <li>🌐 <strong>FinanzOnline:</strong> Registrierung bei FinanzOnline</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Kassennummer:</strong> Eindeutige Identifikation (CashBox-ID)</li>
+                  <li><strong>TSE-Provider:</strong> Art der TSE (Software, Fiskaly, etc.)</li>
+                  <li><strong>Status:</strong> Initialisiert oder nicht initialisiert</li>
+                  <li><strong>Signature Counter:</strong> Anzahl der erstellten Signaturen</li>
+                  <li><strong>FinanzOnline:</strong> Registrierungsstatus</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neue Registrierkasse erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie eine neue Registrierkasse:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neue Registrierkasse"</li>
+                  <li>Geben Sie die Kassennummer (CashBox-ID) ein</li>
+                  <li>Wählen Sie einen Standort aus (optional)</li>
+                  <li>Wählen Sie den TSE-Provider aus</li>
+                  <li>Konfigurieren Sie die TSE-Daten (siehe TSE-Konfiguration)</li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                  <li>Initialisieren Sie die TSE (Startbeleg erstellen)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Erforderliche Felder
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Kassennummer (CashBox-ID):</strong> Eindeutige Identifikation, z.B. "KASSE-001"</li>
+                  <li><strong>TSE-Provider:</strong> Muss ausgewählt werden</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Optionale Felder
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Standort:</strong> Standort, an dem die Kasse verwendet wird</li>
+                  <li><strong>TSE Serial Number:</strong> Seriennummer der TSE (falls vorhanden)</li>
+                  <li><strong>TSE Public Key:</strong> Öffentlicher Schlüssel der TSE</li>
+                  <li><strong>TSE Secret:</strong> Geheimer Schlüssel der TSE</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  TSE konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die TSE (Technische Sicherheitseinrichtung) muss für jeden TSE-Provider 
+                  unterschiedlich konfiguriert werden. Für detaillierte Anleitungen siehe 
+                  den Konfigurations-Dialog beim Erstellen einer neuen Registrierkasse.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare TSE-Provider
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Software:</strong> Für Entwicklung und Tests</li>
+                  <li><strong>Fiskaly Cloud:</strong> Cloud-basierte TSE</li>
+                  <li><strong>Fiskaltrust Cloud:</strong> Cloud-basierte TSE</li>
+                  <li><strong>A-Trust Cloud:</strong> Cloud-basierte TSE</li>
+                  <li><strong>Hardware:</strong> Hardware-basierte TSE</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Status & Aktionen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Status einer Registrierkasse bestimmt, welche Aktionen verfügbar sind.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Status-Arten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>
+                    <Chip label="Nicht initialisiert" color="warning" size="small" sx={{ mr: 1 }} />
+                    <strong>Nicht initialisiert:</strong> TSE muss noch initialisiert werden
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li>Verfügbare Aktion: "Startbeleg" erstellen</li>
+                      <li>Startbeleg initialisiert die TSE</li>
+                    </Box>
+                  </li>
+                  <li>
+                    <Chip label="Initialisiert" color="success" size="small" sx={{ mr: 1 }} />
+                    <strong>Initialisiert:</strong> TSE ist bereit für Belege
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li>Verfügbare Aktionen: "Monatsbeleg", "Jahresbeleg"</li>
+                      <li>Normale Belege können erstellt werden</li>
+                    </Box>
+                  </li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Aktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Startbeleg:</strong> Nur wenn TSE nicht initialisiert</li>
+                  <li><strong>Monatsbeleg:</strong> Nur wenn TSE initialisiert</li>
+                  <li><strong>Jahresbeleg:</strong> Nur wenn TSE initialisiert</li>
+                  <li><strong>FinanzOnline:</strong> Nur wenn TSE initialisiert und nicht registriert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Registrierkasse einrichten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Eindeutige Kassennummer:</strong> Verwenden Sie eindeutige IDs</li>
+                  <li>✅ <strong>Korrekter TSE-Provider:</strong> Wählen Sie den richtigen Provider</li>
+                  <li>✅ <strong>Test-Modus:</strong> Nur für Entwicklung verwenden</li>
+                  <li>✅ <strong>TSE initialisieren:</strong> Erstellen Sie Startbeleg nach Erstellung</li>
+                  <li>✅ <strong>FinanzOnline:</strong> Registrieren Sie bei FinanzOnline</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Sicherheit
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔐 <strong>API-Secrets:</strong> Geheim halten, nicht weitergeben</li>
+                  <li>🔐 <strong>Produktion:</strong> Test-Modus in Produktion deaktivieren</li>
+                  <li>🔐 <strong>Backup:</strong> Regelmäßige Backups erstellen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogRegistersOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für Belegverkettung */}
+      <Dialog 
+        open={helpDialogReceiptChainOpen} 
+        onClose={() => setHelpDialogReceiptChainOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Belegverkettung (DEP)" 
+          onClose={() => setHelpDialogReceiptChainOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Belegarten" />
+            <Tab label="Belegverkettung" />
+            <Tab label="Validierung" />
+            <Tab label="Test-Belege" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was ist Belegverkettung (DEP)?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Belegverkettung (DEP - Digitale Erfassungsprotokollierung) ist eine 
+                  chronologische, unveränderbare Speicherung aller Belege gemäß RKSVO.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🧾 <strong>Belege speichern:</strong> Alle Belege werden unveränderlich gespeichert</li>
+                  <li>🔗 <strong>Verkettung:</strong> Belege sind in einer Kette verknüpft</li>
+                  <li>✅ <strong>Validierung:</strong> Belege können validiert werden</li>
+                  <li>🔍 <strong>Übersicht:</strong> Chronologische Liste aller Belege</li>
+                  <li>🧪 <strong>Test-Belege:</strong> Test-Belege für Validierung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Belegarten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System unterstützt verschiedene Belegarten gemäß RKSVO.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Startbeleg
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Wann:</strong> Beim ersten Start der Kasse (TSE-Initialisierung)</li>
+                  <li><strong>Zweck:</strong> Initialisiert die TSE und startet die Belegverkettung</li>
+                  <li><strong>Erstellung:</strong> Automatisch oder manuell über "Startbeleg"-Button</li>
+                  <li><strong>Gesetzlich:</strong> Vorgeschrieben</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Normalbeleg
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Wann:</strong> Bei jedem Verkauf/Vorgang</li>
+                  <li><strong>Zweck:</strong> Dokumentation von Verkäufen</li>
+                  <li><strong>Erstellung:</strong> Automatisch bei Rechnungszahlung</li>
+                  <li><strong>Inhalt:</strong> Betrag, Datum, TSE-Signatur</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Monatsbeleg / Jahresbeleg
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Wann:</strong> Am Monats-/Jahresende</li>
+                  <li><strong>Zweck:</strong> Zusammenfassung</li>
+                  <li><strong>Erstellung:</strong> Über entsprechende Buttons</li>
+                  <li><strong>Gesetzlich:</strong> Vorgeschrieben</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Belegverkettung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Belegverkettung ist eine unveränderliche Kette aller Belege, die 
+                  Manipulationen verhindert und die Integrität sicherstellt.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionsweise
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Jeder Beleg hat einen eindeutigen Hash-Wert</li>
+                  <li>Jeder Beleg verweist auf den Hash des vorherigen Belegs</li>
+                  <li>Eine Änderung würde die gesamte Kette ungültig machen</li>
+                  <li>Die Kette ist unveränderlich und manipulationssicher</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Beleg-Validierung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Belege können auf verschiedene Weise validiert werden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Validierungsmethoden
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>QR-Code-Validierung:</strong> Mit BMF Belegcheck-App</li>
+                  <li><strong>TSE-Signatur-Validierung:</strong> Mit A-SIT Plus Tool</li>
+                  <li><strong>Belegverkettung-Validierung:</strong> Prüft Hash-Verkettung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Test-Belege
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Test-Belege können erstellt werden, um die Funktionalität zu testen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Test-Beleg erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Test-Beleg erstellen"</li>
+                  <li>Ein Test-Beleg mit 100,00 EUR wird erstellt</li>
+                  <li>Der Beleg kann sofort validiert werden</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Belege
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erstellen Sie Startbeleg nach TSE-Initialisierung</li>
+                  <li>✅ Erstellen Sie monatliche Belege regelmäßig</li>
+                  <li>✅ Erstellen Sie jährliche Belege am Jahresende</li>
+                  <li>✅ Validieren Sie Belege regelmäßig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogReceiptChainOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Registrierkassen-Verwaltung" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Registrierkasse erstellen" />
+            <Tab label="TSE" />
+            <Tab label="Belegarten" />
+            <Tab label="Belegverkettung" />
+            <Tab label="FinanzOnline" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was ist Registrierkassen-Verwaltung?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Registrierkassen-Verwaltung ermöglicht die Verwaltung von Registrierkassen, 
+                  TSE (Technische Sicherheitseinrichtung), Belegen und der Belegverkettung gemäß 
+                  der RKSVO (Registrierkassensicherheitsverordnung).
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🏪 <strong>Registrierkassen verwalten:</strong> Erstellen, bearbeiten, aktivieren</li>
+                  <li>🔐 <strong>TSE konfigurieren:</strong> Technische Sicherheitseinrichtung einrichten</li>
+                  <li>🧾 <strong>Belege verwalten:</strong> Start-, Normal-, Monats-, Jahresbelege</li>
+                  <li>🔗 <strong>Belegverkettung:</strong> Unveränderliche Kette aller Belege</li>
+                  <li>🌐 <strong>FinanzOnline:</strong> Registrierung bei FinanzOnline</li>
+                  <li>✅ <strong>Validierung:</strong> Beleg-Validierung und Prüfung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Gesetzliche Grundlage
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>RKSVO:</strong> Registrierkassensicherheitsverordnung</li>
+                  <li><strong>BAO:</strong> Bundesabgabenordnung</li>
+                  <li><strong>DSGVO:</strong> Datenschutz-Grundverordnung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neue Registrierkasse erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie eine neue Registrierkasse:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neue Registrierkasse"</li>
+                  <li>Geben Sie die Kassen-ID (CashBox-ID) ein</li>
+                  <li>Wählen Sie einen Standort aus (optional)</li>
+                  <li>Konfigurieren Sie die TSE (Provider, Daten)</li>
+                  <li>Speichern Sie die Registrierkasse</li>
+                  <li>Initialisieren Sie die TSE (falls erforderlich)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Erforderliche Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Kassen-ID:</strong> Eindeutige Identifikation der Kasse</li>
+                  <li><strong>Standort:</strong> Standort, an dem die Kasse verwendet wird</li>
+                  <li><strong>TSE-Provider:</strong> Art der TSE (Software, Hardware, Cloud)</li>
+                  <li><strong>TSE-Daten:</strong> Abhängig vom Provider</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  TSE (Technische Sicherheitseinrichtung)
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die TSE ist eine gesetzlich vorgeschriebene Einrichtung, die alle Belege 
+                  elektronisch signiert und damit manipulationssicher macht.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Was ist eine TSE?
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Zertifizierte Hardware- oder Software-Lösung</li>
+                  <li>Signiert alle Belege elektronisch</li>
+                  <li>Führt einen Signatur-Zähler</li>
+                  <li>Macht Belege manipulationssicher</li>
+                  <li>Erfüllt gesetzliche Anforderungen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  TSE-Initialisierung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Registrierkasse erstellen</li>
+                  <li>TSE-Daten konfigurieren</li>
+                  <li>TSE initialisieren</li>
+                  <li>Initialisierungsstatus überprüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Belegarten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System unterstützt verschiedene Belegarten gemäß RKSVO.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Belegarten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Startbeleg:</strong> Erster Beleg bei Kassenstart</li>
+                  <li><strong>Normal:</strong> Reguläre Verkaufsbelege</li>
+                  <li><strong>Monatsbeleg:</strong> Monatliche Zusammenfassung</li>
+                  <li><strong>Jahresbeleg:</strong> Jährliche Zusammenfassung</li>
+                  <li><strong>Storno:</strong> Stornierte Belege</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Belegverkettung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Belegverkettung ist eine unveränderliche Kette aller Belege, die 
+                  Manipulationen verhindert und die Integrität sicherstellt.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionsweise
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Jeder Beleg hat einen eindeutigen Hash</li>
+                  <li>Jeder Beleg verweist auf den Hash des vorherigen Belegs</li>
+                  <li>Eine Änderung würde die gesamte Kette ungültig machen</li>
+                  <li>Die Kette ist unveränderlich und manipulationssicher</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  FinanzOnline-Registrierung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Registrierkassen können bei FinanzOnline registriert werden, um die 
+                  gesetzlichen Anforderungen zu erfüllen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Registrierung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie eine Registrierkasse aus</li>
+                  <li>Klicken Sie auf "Bei FinanzOnline registrieren"</li>
+                  <li>Geben Sie die Steuernummer ein</li>
+                  <li>Die Registrierung wird durchgeführt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 6 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Allgemeine Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Initialisieren Sie die TSE nach Erstellung</li>
+                  <li>✅ Registrieren Sie die Kasse bei FinanzOnline</li>
+                  <li>✅ Überprüfen Sie regelmäßig den TSE-Status</li>
+                  <li>✅ Validieren Sie die Belegverkettung regelmäßig</li>
+                  <li>✅ Erstellen Sie regelmäßig Backups</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

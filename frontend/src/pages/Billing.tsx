@@ -1,9 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import QRCodeGenerator from '../components/QRCodeGenerator';
 import api from '../utils/api';
+import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { de } from 'date-fns/locale';
+import { startOfMonth, endOfMonth, startOfYear, endOfYear } from 'date-fns';
+import { startOfDay, endOfDay, formatDateString } from '../utils/timezone';
 import { 
   fetchInvoices, 
   fetchServices, 
@@ -51,6 +56,7 @@ import {
   Tab,
   CircularProgress,
   Autocomplete,
+  Tooltip,
 } from '@mui/material';
 import {
   Search,
@@ -73,6 +79,7 @@ import {
   Person,
   PersonAdd,
   Email,
+  HelpOutline,
 } from '@mui/icons-material';
 
 // Hilfsfunktion zum Entfernen von HTML-Tags
@@ -104,12 +111,46 @@ const getServicePriceInEuro = (service: Service): number => {
 
 const Billing: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const dispatch = useAppDispatch();
   const { invoices, services, loading, error, statistics } = useAppSelector((state) => state.billing);
   const { patients } = useAppSelector((state) => state.patients);
   
   // Sicherheitsprüfung für invoices
   const safeInvoices = Array.isArray(invoices) ? invoices : [];
+  
+  // Lese Status-Filter aus URL Query-Parametern
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const statusParam = searchParams.get('status');
+    if (statusParam) {
+      // Unterstütze mehrere Status durch Komma-getrennte Liste
+      const statuses = statusParam.split(',').map(s => s.trim()).filter(s => s);
+      setStatusFilter(statuses);
+    } else {
+      setStatusFilter([]);
+    }
+  }, [location.search]);
+  
+  // Datumsfilter - Standard: heute
+  const today = new Date();
+  const [dateFilter, setDateFilter] = useState<{ start: Date | null; end: Date | null }>({
+    start: startOfDay(today),
+    end: endOfDay(today)
+  });
+  
+  // Totals für heute, Monat, Jahr
+  const [totals, setTotals] = useState<{
+    today: { count: number; amount: number };
+    month: { count: number; amount: number };
+    year: { count: number; amount: number };
+  }>({
+    today: { count: 0, amount: 0 },
+    month: { count: 0, amount: 0 },
+    year: { count: 0, amount: 0 }
+  });
   
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(0);
@@ -157,14 +198,82 @@ const Billing: React.FC = () => {
   const [loadingTurnus, setLoadingTurnus] = useState(false);
   const [calculationResult, setCalculationResult] = useState<any>(null);
   const [showCalculation, setShowCalculation] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Load data
   useEffect(() => {
-    dispatch(fetchInvoices({}));
+    const params: any = {
+      limit: 1000, // Erhöhtes Limit, um alle offenen Rechnungen zu laden
+      page: 1
+    };
+    
+    // Wenn Status-Filter vorhanden, füge sie zu den Parametern hinzu
+    if (statusFilter.length > 0) {
+      params.status = statusFilter.join(',');
+    }
+    
+    // Datumsfilter hinzufügen - Format in lokaler Zeit (nicht UTC)
+    if (dateFilter.start) {
+      params.startDate = formatDateString(dateFilter.start) || '';
+    }
+    if (dateFilter.end) {
+      params.endDate = formatDateString(dateFilter.end) || '';
+    }
+    
+    dispatch(fetchInvoices(params));
     dispatch(fetchServices({}));
     dispatch(fetchStatistics({}));
     dispatch(fetchPatients(1));
-  }, [dispatch]);
+  }, [dispatch, statusFilter, dateFilter]);
+  
+  // Lade Totals für heute, Monat, Jahr
+  useEffect(() => {
+    const loadTotals = async () => {
+      try {
+        const todayStart = startOfDay(new Date());
+        const todayEnd = endOfDay(new Date());
+        const monthStart = startOfMonth(new Date());
+        const monthEnd = endOfMonth(new Date());
+        const yearStart = startOfYear(new Date());
+        const yearEnd = endOfYear(new Date());
+        
+        const [todayStats, monthStats, yearStats] = await Promise.all([
+          api.get<any>('/billing/statistics', {
+            startDate: todayStart?.toISOString() || '',
+            endDate: todayEnd?.toISOString() || ''
+          }),
+          api.get<any>('/billing/statistics', {
+            startDate: monthStart.toISOString(),
+            endDate: monthEnd.toISOString()
+          }),
+          api.get<any>('/billing/statistics', {
+            startDate: yearStart.toISOString(),
+            endDate: yearEnd.toISOString()
+          })
+        ]);
+        
+        setTotals({
+          today: {
+            count: todayStats.data?.data?.overview?.totalInvoices || 0,
+            amount: todayStats.data?.data?.overview?.totalAmount || 0
+          },
+          month: {
+            count: monthStats.data?.data?.overview?.totalInvoices || 0,
+            amount: monthStats.data?.data?.overview?.totalAmount || 0
+          },
+          year: {
+            count: yearStats.data?.data?.overview?.totalInvoices || 0,
+            amount: yearStats.data?.data?.overview?.totalAmount || 0
+          }
+        });
+      } catch (error) {
+        console.error('Fehler beim Laden der Totals:', error);
+      }
+    };
+
+    loadTotals();
+  }, []);
 
   // Load quick services (quick_select = true)
   useEffect(() => {
@@ -249,6 +358,12 @@ const Billing: React.FC = () => {
       // Stelle sicher, dass services ein Array ist
       if (!Array.isArray(invoiceData.services)) {
         invoiceData.services = invoiceData.services || [];
+      }
+      
+      // Stelle sicher, dass der Status erhalten bleibt
+      if (!invoiceData.status) {
+        console.warn('⚠️ Rechnung ohne Status geladen, verwende Fallback:', invoiceData);
+        invoiceData.status = invoice.status || 'draft';
       }
       
       setFormData(invoiceData);
@@ -572,7 +687,8 @@ const Billing: React.FC = () => {
           taxAmount: calculatedTaxAmount, // Verwende berechneten Wert
           totalAmount: calculatedTotal, // Verwende berechneten Wert
           invoiceDate: formData.invoiceDate ? new Date(formData.invoiceDate) : formData.invoiceDate,
-          dueDate: formData.dueDate ? new Date(formData.dueDate) : formData.dueDate
+          dueDate: formData.dueDate ? new Date(formData.dueDate) : formData.dueDate,
+          status: formData.status || 'draft' // Stelle sicher, dass Status erhalten bleibt
         };
         
         await dispatch(updateInvoice({ 
@@ -923,6 +1039,15 @@ const Billing: React.FC = () => {
     // Sicherheitsprüfung für invoice Objekt
     if (!invoice) return false;
     
+    // Status-Filter anwenden (wenn Status-Filter gesetzt ist)
+    if (statusFilter.length > 0) {
+      const invoiceStatus = invoice.status || '';
+      if (!statusFilter.includes(invoiceStatus)) {
+        return false;
+      }
+    }
+    
+    // Suchfilter anwenden
     return (
       (invoice.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (invoice.patient?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -955,6 +1080,17 @@ const Billing: React.FC = () => {
     }
   };
 
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'draft': return 'Entwurf';
+      case 'sent': return 'Versendet';
+      case 'paid': return 'Bezahlt';
+      case 'overdue': return 'Überfällig';
+      case 'cancelled': return 'Storniert';
+      default: return status || 'Unbekannt';
+    }
+  };
+
   const getBillingTypeColor = (type: string) => {
     switch (type) {
       case 'kassenarzt': return 'primary';
@@ -964,12 +1100,31 @@ const Billing: React.FC = () => {
     }
   };
 
+  const getBillingTypeLabel = (type: string) => {
+    switch (type) {
+      case 'kassenarzt': return 'Kassenarzt';
+      case 'wahlarzt': return 'Wahlarzt';
+      case 'privat': return 'Privat';
+      default: return type || 'Unbekannt';
+    }
+  };
+
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Abrechnung
-        </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="h4" component="h1">
+            Abrechnung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutline />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box display="flex" gap={2}>
           <Button
             variant="outlined"
@@ -994,43 +1149,42 @@ const Billing: React.FC = () => {
         </Box>
       </Box>
 
-      {/* Statistics Cards */}
-      {statistics && statistics.overview && (
-        <Box sx={{ display: 'flex', gap: 3, mb: 3, flexWrap: 'wrap' }}>
-          <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
-            <Typography variant="h4" color="primary">
-              {statistics.overview.totalInvoices || 0}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Gesamt Rechnungen
-            </Typography>
-          </Card>
-          <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
-            <Typography variant="h4" color="success.main">
-              €{(statistics.overview.totalAmount || 0).toFixed(2)}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Gesamtbetrag
-            </Typography>
-          </Card>
-          <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
-            <Typography variant="h4" color="info.main">
-              €{(statistics.overview.paidAmount || 0).toFixed(2)}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Bezahlt
-            </Typography>
-          </Card>
-          <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
-            <Typography variant="h4" color="warning.main">
-              €{(statistics.overview.pendingAmount || 0).toFixed(2)}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Ausstehend
-            </Typography>
-          </Card>
-        </Box>
-      )}
+      {/* Totals Cards - Heute, Monat, Jahr */}
+      <Box sx={{ display: 'flex', gap: 3, mb: 3, flexWrap: 'wrap' }}>
+        <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
+          <Typography variant="h4" color="primary">
+            {totals.today.count}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Rechnungen heute
+          </Typography>
+          <Typography variant="h6" color="success.main">
+            €{totals.today.amount.toFixed(2)}
+          </Typography>
+        </Card>
+        <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
+          <Typography variant="h4" color="primary">
+            {totals.month.count}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Rechnungen diesen Monat
+          </Typography>
+          <Typography variant="h6" color="success.main">
+            €{totals.month.amount.toFixed(2)}
+          </Typography>
+        </Card>
+        <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
+          <Typography variant="h4" color="primary">
+            {totals.year.count}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Rechnungen dieses Jahr
+          </Typography>
+          <Typography variant="h6" color="success.main">
+            €{totals.year.amount.toFixed(2)}
+          </Typography>
+        </Card>
+      </Box>
 
       {/* Schnell-Leistungen Dashboard */}
       <Card sx={{ mb: 3, p: 3 }}>
@@ -1110,11 +1264,110 @@ const Billing: React.FC = () => {
         )}
       </Card>
 
+      {/* Filter Card */}
       <Card sx={{ mb: 3 }}>
         <Box p={3}>
+          <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+              {/* Datumsfilter */}
+              <DatePicker
+                label="Von"
+                value={dateFilter.start}
+                onChange={(newValue) => setDateFilter(prev => ({ ...prev, start: newValue }))}
+                format="dd.MM.yyyy"
+                slotProps={{ textField: { size: 'small', sx: { minWidth: 180 } } }}
+              />
+              <DatePicker
+                label="Bis"
+                value={dateFilter.end}
+                onChange={(newValue) => setDateFilter(prev => ({ ...prev, end: newValue }))}
+                format="dd.MM.yyyy"
+                slotProps={{ textField: { size: 'small', sx: { minWidth: 180 } } }}
+              />
+              
+              {/* Status-Filter */}
+              <FormControl size="small" sx={{ minWidth: 200 }}>
+                <InputLabel>Status</InputLabel>
+                <Select
+                  multiple
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as string[])}
+                  label="Status"
+                  renderValue={(selected) => {
+                    if (selected.length === 0) return 'Alle';
+                    const labels = selected.map(s => getStatusLabel(s));
+                    return labels.join(', ');
+                  }}
+                >
+                  <SelectMenuItem value="draft">Entwurf</SelectMenuItem>
+                  <SelectMenuItem value="sent">Versendet</SelectMenuItem>
+                  <SelectMenuItem value="paid">Bezahlt</SelectMenuItem>
+                  <SelectMenuItem value="overdue">Überfällig</SelectMenuItem>
+                  <SelectMenuItem value="cancelled">Storniert</SelectMenuItem>
+                </Select>
+              </FormControl>
+              
+              {/* Schnellfilter-Buttons */}
+              <Button
+                size="small"
+                variant={(dateFilter.start?.getTime() === startOfDay(new Date())?.getTime()) ? 'contained' : 'outlined'}
+                onClick={() => {
+                  const today = new Date();
+                  const todayStart = startOfDay(today);
+                  const todayEnd = endOfDay(today);
+                  if (todayStart && todayEnd) {
+                    setDateFilter({
+                      start: todayStart,
+                      end: todayEnd
+                    });
+                  }
+                }}
+              >
+                Heute
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  const today = new Date();
+                  setDateFilter({
+                    start: startOfMonth(today),
+                    end: endOfMonth(today)
+                  });
+                }}
+              >
+                Dieser Monat
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  const today = new Date();
+                  setDateFilter({
+                    start: startOfYear(today),
+                    end: endOfYear(today)
+                  });
+                }}
+              >
+                Dieses Jahr
+              </Button>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  setDateFilter({ start: null, end: null });
+                  setStatusFilter([]);
+                }}
+              >
+                Filter zurücksetzen
+              </Button>
+            </Box>
+          </LocalizationProvider>
+          
+          {/* Patientensuche */}
           <TextField
             fullWidth
-            placeholder="Rechnungen suchen..."
+            placeholder="Rechnungen suchen (Nummer, Patient, Typ)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             InputProps={{
@@ -1172,7 +1425,7 @@ const Billing: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={invoice.billingType || 'Unbekannt'}
+                        label={getBillingTypeLabel(invoice.billingType)}
                         color={getBillingTypeColor(invoice.billingType) as any}
                         size="small"
                       />
@@ -1184,7 +1437,7 @@ const Billing: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={invoice.status || 'Unbekannt'}
+                        label={getStatusLabel(invoice.status)}
                         color={getStatusColor(invoice.status) as any}
                         size="small"
                       />
@@ -2151,6 +2404,503 @@ const Billing: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Rechnungen" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Übersicht" />
+            <Tab label="Rechnung erstellen" />
+            <Tab label="Filter & Suche" />
+            <Tab label="Status & Workflow" />
+            <Tab label="Abrechnungstypen" />
+            <Tab label="Turnusabrechnung" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Rechnungen verwalten
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Rechnungsverwaltung ermöglicht es Ihnen, Rechnungen zu erstellen, zu bearbeiten, 
+                  zu verwalten und an Versicherungen zu übermitteln.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📝 <strong>Rechnung erstellen:</strong> Neue Rechnungen für Patienten anlegen</li>
+                  <li>✏️ <strong>Rechnung bearbeiten:</strong> Bestehende Rechnungen ändern</li>
+                  <li>👁️ <strong>Rechnung anzeigen:</strong> Details und Vorschau</li>
+                  <li>🖨️ <strong>Drucken:</strong> Rechnung als PDF drucken</li>
+                  <li>📧 <strong>Versenden:</strong> Rechnung per E-Mail senden</li>
+                  <li>🔍 <strong>Suche & Filter:</strong> Nach Patient, Status, Datum filtern</li>
+                  <li>📊 <strong>Statistiken:</strong> Übersicht für heute, Monat, Jahr</li>
+                  <li>🔄 <strong>Turnusabrechnung:</strong> ÖGK-Abrechnung exportieren</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Rechnungsstatus
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><Chip label="Entwurf" size="small" sx={{ mr: 1 }} /> Rechnung wird noch bearbeitet</li>
+                  <li><Chip label="Gesendet" color="warning" size="small" sx={{ mr: 1 }} /> Rechnung wurde versendet</li>
+                  <li><Chip label="Bezahlt" color="success" size="small" sx={{ mr: 1 }} /> Rechnung wurde bezahlt</li>
+                  <li><Chip label="Überfällig" color="error" size="small" sx={{ mr: 1 }} /> Rechnung ist überfällig</li>
+                  <li><Chip label="Storniert" size="small" sx={{ mr: 1 }} /> Rechnung wurde storniert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Abrechnungstypen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Privat:</strong> Vollständige Zahlung durch Patient</li>
+                  <li><strong>Kassenarzt:</strong> Abrechnung über Krankenkasse</li>
+                  <li><strong>Wahlarzt:</strong> Teilweise Erstattung durch Krankenkasse</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neue Rechnung erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie eine neue Rechnung:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neue Rechnung"</li>
+                  <li>Wählen Sie einen Patienten aus (Suche oder Auswahl)</li>
+                  <li>Wählen Sie den Abrechnungstyp (Privat, Kassenarzt, Wahlarzt)</li>
+                  <li>Fügen Sie Leistungen hinzu:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li>Klicken Sie auf "Leistung hinzufügen"</li>
+                      <li>Wählen Sie eine Leistung aus dem Katalog</li>
+                      <li>Geben Sie Menge und Datum ein</li>
+                      <li>Preis wird automatisch berechnet</li>
+                    </Box>
+                  </li>
+                  <li>Überprüfen Sie die Berechnung (Brutto, Selbstbehalt, Versicherungsbetrag)</li>
+                  <li>Speichern Sie die Rechnung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Quick Services
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Häufig verwendete Leistungen können als "Quick Services" markiert werden 
+                  und erscheinen in einer Schnellauswahl für schnelleres Arbeiten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Berechnung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Berechnung erfolgt automatisch basierend auf:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Leistungspreisen aus dem Service-Katalog</li>
+                  <li>Abrechnungstyp (Privat, Kassenarzt, Wahlarzt)</li>
+                  <li>Selbstbehalt-Regelungen</li>
+                  <li>Versicherungsbeträgen</li>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Verwenden Sie die Berechnungsvorschau, um die Beträge 
+                  vor dem Speichern zu überprüfen.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Filter & Suche
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Rechnungsseite bietet umfangreiche Filter- und Suchmöglichkeiten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Patientensuche
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Geben Sie den Namen des Patienten in das Suchfeld ein</li>
+                  <li>Die Suche filtert automatisch während der Eingabe</li>
+                  <li>Unterstützt Vor- und Nachname</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Status-Filter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Alle:</strong> Zeigt alle Rechnungen</li>
+                  <li><strong>Entwurf:</strong> Noch nicht versendete Rechnungen</li>
+                  <li><strong>Gesendet:</strong> Versendete, aber noch nicht bezahlte Rechnungen</li>
+                  <li><strong>Bezahlt:</strong> Bereits bezahlte Rechnungen</li>
+                  <li><strong>Überfällig:</strong> Rechnungen, deren Fälligkeitsdatum überschritten ist</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Datumsfilter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Heute:</strong> Rechnungen vom heutigen Tag (Standard)</li>
+                  <li><strong>Datum von/bis:</strong> Benutzerdefiniertes Datumsintervall</li>
+                  <li>Quick-Filter: Heute, Diese Woche, Dieser Monat</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Quick-Filter Buttons
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Schnellfilter für häufige Szenarien:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Heute:</strong> Rechnungen von heute</li>
+                  <li><strong>Diese Woche:</strong> Rechnungen der aktuellen Woche</li>
+                  <li><strong>Dieser Monat:</strong> Rechnungen des aktuellen Monats</li>
+                  <li><strong>Offene Rechnungen:</strong> Gesendet + Überfällig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Rechnungsstatus & Workflow
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Rechnungsstatus bestimmt den aktuellen Stand einer Rechnung im Workflow.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Status-Arten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>
+                    <Chip label="Entwurf" size="small" sx={{ mr: 1 }} />
+                    <strong>Entwurf:</strong> Rechnung wird erstellt/bearbeitet, noch nicht versendet
+                  </li>
+                  <li>
+                    <Chip label="Gesendet" color="warning" size="small" sx={{ mr: 1 }} />
+                    <strong>Gesendet:</strong> Rechnung wurde an Patient/Versicherung versendet
+                  </li>
+                  <li>
+                    <Chip label="Bezahlt" color="success" size="small" sx={{ mr: 1 }} />
+                    <strong>Bezahlt:</strong> Rechnung wurde vollständig bezahlt
+                  </li>
+                  <li>
+                    <Chip label="Überfällig" color="error" size="small" sx={{ mr: 1 }} />
+                    <strong>Überfällig:</strong> Fälligkeitsdatum wurde überschritten (automatisch markiert)
+                  </li>
+                  <li>
+                    <Chip label="Storniert" size="small" sx={{ mr: 1 }} />
+                    <strong>Storniert:</strong> Rechnung wurde storniert
+                  </li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Workflow
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Erstellen:</strong> Rechnung wird als "Entwurf" erstellt</li>
+                  <li><strong>Versenden:</strong> Status ändert sich zu "Gesendet"</li>
+                  <li><strong>Bezahlen:</strong> Status ändert sich zu "Bezahlt"</li>
+                  <li><strong>Überfällig:</strong> Automatisch markiert, wenn Fälligkeitsdatum überschritten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Automatische Überfällig-Markierung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System markiert Rechnungen automatisch als "Überfällig", wenn:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Der Status "Gesendet" ist</li>
+                  <li>Das Fälligkeitsdatum überschritten wurde</li>
+                  <li>Die Rechnung noch nicht bezahlt wurde</li>
+                </Box>
+                <Typography variant="body2" paragraph sx={{ mt: 1 }}>
+                  Dies geschieht durch einen automatischen Cron-Job, der täglich läuft.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Abrechnungstypen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System unterstützt verschiedene Abrechnungstypen für unterschiedliche Versicherungssituationen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  1. Privat-Abrechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Patient zahlt vollständig:</strong> Keine Versicherungsbeteiligung</li>
+                  <li><strong>Verwendung:</strong> Privatpatienten ohne Versicherung</li>
+                  <li><strong>Preise:</strong> Aus Service-Katalog (Privat-Preise)</li>
+                  <li><strong>Selbstbehalt:</strong> Kein Selbstbehalt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  2. Kassenarzt-Abrechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Versicherung zahlt:</strong> Vollständige Abrechnung über Krankenkasse</li>
+                  <li><strong>Verwendung:</strong> Kassenpatienten mit Kassenarztvertrag</li>
+                  <li><strong>Preise:</strong> EBM-Tarife (Einheitlicher Bewertungsmaßstab)</li>
+                  <li><strong>Selbstbehalt:</strong> Je nach Leistung (z.B. Rezeptgebühr)</li>
+                  <li><strong>Übermittlung:</strong> Über ÖGK-Turnusabrechnung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  3. Wahlarzt-Abrechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Teilweise Erstattung:</strong> Patient zahlt, Versicherung erstattet teilweise</li>
+                  <li><strong>Verwendung:</strong> Kassenpatienten bei Wahlärzten</li>
+                  <li><strong>Preise:</strong> Wahlarzt-Tarife (höher als Kassenarzt)</li>
+                  <li><strong>Selbstbehalt:</strong> Differenz zwischen Wahlarzt- und Kassenarzt-Preis</li>
+                  <li><strong>Erstattung:</strong> Versicherung erstattet Kassenarzt-Preis</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Berechnung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Berechnung erfolgt automatisch:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Bruttobetrag:</strong> Summe aller Leistungen</li>
+                  <li><strong>Selbstbehalt:</strong> Vom Patienten zu zahlender Betrag</li>
+                  <li><strong>Versicherungsbetrag:</strong> Von der Versicherung zu zahlender Betrag</li>
+                  <li><strong>Patientenbetrag:</strong> Gesamtbetrag, den der Patient zahlen muss</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Turnusabrechnung (ÖGK)
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Turnusabrechnung ermöglicht die Übermittlung von Kassenarzt-Leistungen 
+                  an die Österreichische Gesundheitskasse (ÖGK).
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Was ist eine Turnusabrechnung?
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Eine Turnusabrechnung ist eine monatliche Zusammenfassung aller Kassenarzt-Leistungen, 
+                  die an die ÖGK übermittelt wird. Sie enthält:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Alle Kassenarzt-Rechnungen des Monats</li>
+                  <li>EBM-Codes und Preise</li>
+                  <li>Patientendaten</li>
+                  <li>Diagnosen (ICD-10)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Turnusabrechnung erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Turnusabrechnung"</li>
+                  <li>Wählen Sie den Zeitraum (Standard: aktueller Monat)</li>
+                  <li>Das System lädt alle Kassenarzt-Rechnungen des Zeitraums</li>
+                  <li>Überprüfen Sie die Liste der Rechnungen</li>
+                  <li>Klicken Sie auf "ÖGK-XML exportieren"</li>
+                  <li>Die XML-Datei wird heruntergeladen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  XML-Format
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die exportierte XML-Datei enthält:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Alle Rechnungen im ÖGK-Standardformat</li>
+                  <li>EBM-Codes und Preise</li>
+                  <li>Patienten- und Versicherungsdaten</li>
+                  <li>Diagnosen (ICD-10)</li>
+                  <li>Alle erforderlichen Metadaten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Übermittlung an ÖGK
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Laden Sie die XML-Datei auf das ÖGK-Portal hoch</li>
+                  <li>Oder senden Sie sie per E-Mail an die ÖGK</li>
+                  <li>Die ÖGK prüft und bearbeitet die Abrechnung</li>
+                  <li>Die Zahlung erfolgt nach Bearbeitung</li>
+                </Box>
+              </Box>
+
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Wichtig:</strong> Nur Rechnungen mit Status "Gesendet" oder "Bezahlt" 
+                  werden in die Turnusabrechnung aufgenommen. Entwürfe werden nicht exportiert.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 6 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices & Tipps
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Rechnung erstellen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Korrekter Abrechnungstyp:</strong> Wählen Sie den richtigen Typ (Privat/Kassenarzt/Wahlarzt)</li>
+                  <li>✅ <strong>Vollständige Daten:</strong> Stellen Sie sicher, dass alle Patientendaten korrekt sind</li>
+                  <li>✅ <strong>Leistungen prüfen:</strong> Überprüfen Sie Menge, Datum und Preise</li>
+                  <li>✅ <strong>Berechnung prüfen:</strong> Nutzen Sie die Berechnungsvorschau</li>
+                  <li>✅ <strong>Diagnosen:</strong> Fügen Sie ICD-10-Diagnosen hinzu (für Kassenarzt erforderlich)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Workflow
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Entwurf speichern:</strong> Speichern Sie Entwürfe, bevor Sie versenden</li>
+                  <li>✅ <strong>Versenden:</strong> Versenden Sie Rechnungen zeitnah nach Erstellung</li>
+                  <li>✅ <strong>Nachverfolgung:</strong> Überwachen Sie den Status der Rechnungen</li>
+                  <li>✅ <strong>Überfällige Rechnungen:</strong> Kontaktieren Sie Patienten bei überfälligen Rechnungen</li>
+                  <li>✅ <strong>Bezahlung markieren:</strong> Markieren Sie Rechnungen als bezahlt, wenn Zahlung eingeht</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Turnusabrechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Monatlich:</strong> Erstellen Sie die Turnusabrechnung monatlich</li>
+                  <li>✅ <strong>Prüfen:</strong> Überprüfen Sie die Liste vor dem Export</li>
+                  <li>✅ <strong>Zeitnah:</strong> Übermitteln Sie die Abrechnung zeitnah an die ÖGK</li>
+                  <li>✅ <strong>Backup:</strong> Speichern Sie eine Kopie der XML-Datei</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Statistiken
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Heute:</strong> Überwachen Sie tägliche Umsätze</li>
+                  <li>📊 <strong>Monat:</strong> Verfolgen Sie monatliche Entwicklungen</li>
+                  <li>📊 <strong>Jahr:</strong> Analysieren Sie jährliche Trends</li>
+                  <li>📊 <strong>Vergleiche:</strong> Nutzen Sie Statistiken für Planung und Analyse</li>
+                </Box>
+              </Box>
+
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Verwenden Sie Quick Services für häufig verwendete Leistungen, 
+                  um Zeit zu sparen und Fehler zu vermeiden.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

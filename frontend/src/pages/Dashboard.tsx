@@ -84,6 +84,8 @@ const Dashboard: React.FC = () => {
   const [newDicomStudies, setNewDicomStudies] = useState<any[]>([]);
   const [importantPatients, setImportantPatients] = useState<any[]>([]);
   const [newOnlineBookings, setNewOnlineBookings] = useState<any[]>([]);
+  const [dashboardStats, setDashboardStats] = useState<any>(null);
+  const [loadingStats, setLoadingStats] = useState(false);
   
   // Refs um Widget-IDs zu speichern und Endlosschleifen zu vermeiden
   const importantPatientsWidgetIdRef = useRef<string | null>(null);
@@ -543,6 +545,28 @@ const Dashboard: React.FC = () => {
           }
         };
 
+  // Load dashboard statistics
+  useEffect(() => {
+    const fetchDashboardStats = async () => {
+      setLoadingStats(true);
+      try {
+        const response = await api.get<{ success: boolean; data: any }>('/dashboard/stats');
+        if (response.data?.success) {
+          setDashboardStats(response.data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching dashboard statistics:', error);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    
+    fetchDashboardStats();
+    // Aktualisiere alle 5 Minuten
+    const interval = setInterval(fetchDashboardStats, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Load widgets on mount
   useEffect(() => {
     dispatch(fetchDashboardWidgets()).then((result) => {
@@ -668,44 +692,61 @@ const Dashboard: React.FC = () => {
     setLayout(newLayout);
   }, [widgets, isMobile, isTablet]);
 
-  // Mock data providers (in real app, these would fetch from API)
+  // Data providers with real API data
   const getWidgetData = useCallback((widget: DashboardWidget) => {
+    const stats = dashboardStats?.statistics || {};
+    
+    // Helper function to format currency
+    const formatCurrency = (amount: number) => {
+      return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(amount / 100);
+    };
+    
     switch (widget.widgetId) {
       case 'patients-today':
-        return { value: '24', icon: <People />, color: 'primary' as const };
+        return { 
+          value: stats.patientsToday?.toString() || '0', 
+          icon: <People />, 
+          color: 'primary' as const 
+        };
       case 'appointments-today':
-        return { value: '18', icon: <CalendarToday />, color: 'secondary' as const };
+        return { 
+          value: stats.appointmentsToday?.toString() || '0', 
+          icon: <CalendarToday />, 
+          color: 'secondary' as const 
+        };
       case 'open-invoices':
-        return { value: '12', icon: <Receipt />, color: 'warning' as const };
+        return {
+          value: stats.openInvoices?.toString() || '0', 
+          icon: <Receipt />,
+          color: 'warning' as const,
+          onClick: () => navigate('/billing?status=sent,overdue')
+        };
       case 'revenue-today':
-        return { value: '€2,450', icon: <TrendingUp />, color: 'success' as const };
+        return { 
+          value: formatCurrency(stats.revenueToday || 0), 
+          icon: <TrendingUp />, 
+          color: 'success' as const 
+        };
       case 'recent-appointments':
-        return [
-          { primary: '09:00 - Max Mustermann', secondary: 'Konsultation', icon: <Schedule />, chip: { label: 'wartend', color: 'warning' as const } },
-          { primary: '09:30 - Maria Musterfrau', secondary: 'Untersuchung', icon: <Schedule />, chip: { label: 'in_behandlung', color: 'error' as const } },
-          { primary: '10:00 - Peter Schmidt', secondary: 'Nachsorge', icon: <Schedule />, chip: { label: 'geplant', color: 'default' as const } }
-        ];
+        if (dashboardStats?.recentAppointments && dashboardStats.recentAppointments.length > 0) {
+          return dashboardStats.recentAppointments.map((apt: any) => ({
+            ...apt,
+            icon: <Schedule />
+          }));
+        }
+        return [];
       case 'notifications':
-        return [
-          { 
-            primary: '3 Termine überfällig', 
+        const notifications = [];
+        if (stats.overdueAppointments > 0) {
+          notifications.push({
+            primary: `${stats.overdueAppointments} Termine überfällig`,
             icon: <Warning />,
             hint: 'Überfällige Termine',
-            details: 'Es gibt 3 Termine, die bereits überfällig sind:\n\n1. Max Mustermann - 10.11.2024\n2. Maria Musterfrau - 12.11.2024\n3. Peter Schmidt - 14.11.2024\n\nBitte kontaktieren Sie die Patienten oder verschieben Sie die Termine.'
-          },
-          { 
-            primary: 'ELGA-Sync erforderlich', 
-            icon: <CheckCircle />,
-            hint: 'ELGA-Synchronisation',
-            details: 'Die letzte Synchronisation mit ELGA war am 10.11.2024. Eine neue Synchronisation wird empfohlen, um die neuesten Daten zu erhalten.'
-          },
-          { 
-            primary: 'Backup erfolgreich', 
-            icon: <CheckCircle />,
-            hint: 'Backup-Status',
-            details: 'Das automatische Backup wurde erfolgreich am 18.11.2024 um 02:00 Uhr durchgeführt. Alle Daten wurden gesichert.'
-          }
-        ];
+            details: `Es gibt ${stats.overdueAppointments} Termine, die bereits überfällig sind. Bitte kontaktieren Sie die Patienten oder verschieben Sie die Termine.`
+          });
+        }
+        // Weitere Benachrichtigungen können hier hinzugefügt werden
+        return notifications;
       case 'new-labor-results':
         // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
         if (newLaborResults.length > 0) {
@@ -862,53 +903,55 @@ const Dashboard: React.FC = () => {
           }
         ];
       case 'revenue-chart':
+        if (dashboardStats?.charts?.revenue) {
+          return {
+            chartType: 'line' as const,
+            data: dashboardStats.charts.revenue.map((item: any) => ({
+              label: item.label,
+              value: item.value / 100 // Convert from cents to euros
+            }))
+          };
+        }
         return {
           chartType: 'line' as const,
-          data: [
-            { label: 'Mo', value: 1200 },
-            { label: 'Di', value: 1500 },
-            { label: 'Mi', value: 1800 },
-            { label: 'Do', value: 2100 },
-            { label: 'Fr', value: 2450 },
-            { label: 'Sa', value: 1900 },
-            { label: 'So', value: 800 }
-          ]
+          data: []
         };
       case 'appointments-chart':
+        if (dashboardStats?.charts?.appointments) {
+          return {
+            chartType: 'bar' as const,
+            data: dashboardStats.charts.appointments
+          };
+        }
         return {
           chartType: 'bar' as const,
-          data: [
-            { label: 'Konsultation', value: 45 },
-            { label: 'Untersuchung', value: 30 },
-            { label: 'Nachsorge', value: 25 }
-          ]
+          data: []
         };
       case 'revenue-distribution':
+        if (dashboardStats?.charts?.revenueDistribution) {
+          return {
+            chartType: 'pie' as const,
+            data: dashboardStats.charts.revenueDistribution.map((item: any) => ({
+              label: item.label,
+              value: item.value / 100 // Convert from cents to euros
+            }))
+          };
+        }
         return {
           chartType: 'pie' as const,
-          data: [
-            { label: 'Konsultationen', value: 40 },
-            { label: 'Untersuchungen', value: 35 },
-            { label: 'Andere', value: 25 }
-          ]
+          data: []
         };
       case 'calendar-week':
-        return [
-          { date: new Date().toISOString(), appointments: 5, status: 'normal' as const },
-          { date: new Date(Date.now() + 86400000).toISOString(), appointments: 8, status: 'busy' as const },
-          { date: new Date(Date.now() + 172800000).toISOString(), appointments: 12, status: 'full' as const },
-          { date: new Date(Date.now() + 259200000).toISOString(), appointments: 6, status: 'normal' as const },
-          { date: new Date(Date.now() + 345600000).toISOString(), appointments: 9, status: 'busy' as const },
-          { date: new Date(Date.now() + 432000000).toISOString(), appointments: 3, status: 'normal' as const },
-          { date: new Date(Date.now() + 518400000).toISOString(), appointments: 0, status: 'normal' as const }
-        ];
+        if (dashboardStats?.calendarWeek) {
+          return dashboardStats.calendarWeek;
+        }
+        return [];
       case 'waiting-room':
       case 'queue':
-        return [
-          { patient: 'Max Mustermann', time: '09:00', type: 'Konsultation', waitingTime: 15, status: 'waiting' as const },
-          { patient: 'Maria Musterfrau', time: '09:15', type: 'Untersuchung', waitingTime: 5, status: 'next' as const },
-          { patient: 'Peter Schmidt', time: '09:30', type: 'Nachsorge', waitingTime: 0, status: 'in_progress' as const }
-        ];
+        if (dashboardStats?.waitingRoom && dashboardStats.waitingRoom.length > 0) {
+          return dashboardStats.waitingRoom;
+        }
+        return [];
       case 'tasks':
       case 'todos':
         // Tasks werden jetzt direkt im TasksWidget geladen
@@ -941,11 +984,23 @@ const Dashboard: React.FC = () => {
           };
         });
       case 'revenue-month':
-        return { value: '€45,200', icon: <AttachMoney />, color: 'success' as const };
+        return { 
+          value: formatCurrency(stats.revenueMonth || 0), 
+          icon: <AttachMoney />, 
+          color: 'success' as const 
+        };
       case 'appointments-week':
-        return { value: '87', icon: <EventNote />, color: 'info' as const };
+        return { 
+          value: stats.appointmentsWeek?.toString() || '0', 
+          icon: <EventNote />, 
+          color: 'info' as const 
+        };
       case 'pending-documents':
-        return { value: '5', icon: <Assessment />, color: 'warning' as const };
+        return { 
+          value: stats.pendingDocuments?.toString() || '0', 
+          icon: <Assessment />, 
+          color: 'warning' as const 
+        };
       case 'medication-reminders':
         return [
           { 
@@ -964,11 +1019,22 @@ const Dashboard: React.FC = () => {
           }
         ];
       case 'upcoming-appointments':
-        return [
-          { primary: '10:30 - Anna Weber', secondary: 'Beratung', icon: <Schedule />, chip: { label: 'geplant', color: 'default' as const } },
-          { primary: '11:00 - Thomas Müller', secondary: 'Konsultation', icon: <Schedule />, chip: { label: 'geplant', color: 'default' as const } },
-          { primary: '11:30 - Lisa Schmidt', secondary: 'Untersuchung', icon: <Schedule />, chip: { label: 'geplant', color: 'default' as const } }
-        ];
+        if (dashboardStats?.upcomingAppointments && dashboardStats.upcomingAppointments.length > 0) {
+          return dashboardStats.upcomingAppointments.map((apt: any) => ({
+            ...apt,
+            icon: <Schedule />,
+            onClick: (e?: React.MouseEvent) => {
+              if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+              }
+              if (apt.appointmentId) {
+                navigate(`/appointments?view=${apt.appointmentId}`);
+              }
+            }
+          }));
+        }
+        return [];
       case 'internal-messages':
         return {
           onMessageClick: (message: any) => {
@@ -988,7 +1054,7 @@ const Dashboard: React.FC = () => {
       default:
         return null;
     }
-  }, [importantPatients, newLaborResults, newDicomStudies]);
+  }, [importantPatients, newLaborResults, newDicomStudies, dashboardStats, navigate]);
 
   const handleGenerateQR = async () => {
     try {

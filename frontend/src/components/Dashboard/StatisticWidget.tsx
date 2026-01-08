@@ -8,6 +8,7 @@ interface StatisticWidgetProps {
     value: string | number;
     icon?: React.ReactNode;
     color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error';
+    onClick?: () => void;
   };
 }
 
@@ -18,14 +19,28 @@ const StatisticWidget: React.FC<StatisticWidgetProps> = ({ widget, data }) => {
   const value = data?.value || widget.config?.value || '0';
   const icon = data?.icon || widget.config?.icon;
 
+  const handleClick = () => {
+    if (data?.onClick) {
+      data.onClick();
+    }
+  };
+
   return (
-    <Box sx={{ 
-      height: '100%', 
-      p: { xs: 2, sm: 3 }, 
-      display: 'flex', 
-      flexDirection: 'column', 
-      justifyContent: 'space-between' 
-    }}>
+    <Box 
+      onClick={data?.onClick ? handleClick : undefined}
+      sx={{ 
+        height: '100%', 
+        p: { xs: 2, sm: 3 }, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        justifyContent: 'space-between',
+        cursor: data?.onClick ? 'pointer' : 'default',
+        '&:hover': data?.onClick ? {
+          bgcolor: 'action.hover',
+          transition: 'background-color 0.2s'
+        } : {}
+      }}
+    >
       <Box 
         display="flex" 
         alignItems="flex-start" 

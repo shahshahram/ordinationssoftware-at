@@ -24,7 +24,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Alert
+  Alert,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   GetApp,
@@ -32,12 +34,14 @@ import {
   Refresh,
   CheckCircle,
   Pending,
-  Description
+  Description,
+  HelpOutline
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface OGKBillingStats {
   period: string;
@@ -55,6 +59,8 @@ const OGKBilling: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [autoSubmitStatus, setAutoSubmitStatus] = useState<any>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     // Setze aktuellen Monat als Standard
@@ -155,7 +161,17 @@ const OGKBilling: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">ÖGK-Abrechnung</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">ÖGK-Abrechnung</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutline />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="outlined"
@@ -298,6 +314,236 @@ const OGKBilling: React.FC = () => {
           </Typography>
         </Box>
       </Paper>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: ÖGK-Abrechnung (Leistungsabrechnung)" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Übersicht" />
+            <Tab label="Turnusabrechnung" />
+            <Tab label="Automatische Übermittlung" />
+            <Tab label="Statistiken" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was ist ÖGK-Abrechnung?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die ÖGK-Abrechnung (Leistungsabrechnung) ermöglicht die Übermittlung von 
+                  Kassenarzt-Leistungen an die Österreichische Gesundheitskasse (ÖGK) im Rahmen 
+                  der monatlichen Turnusabrechnung.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Statistiken:</strong> Übersicht über Rechnungen, Beträge, Selbstbehalt</li>
+                  <li>📥 <strong>Export:</strong> Turnusabrechnung als XML exportieren</li>
+                  <li>🔄 <strong>Automatische Übermittlung:</strong> Täglich um 23:00 Uhr</li>
+                  <li>📅 <strong>Periodenauswahl:</strong> Letzte 12 Monate verfügbar</li>
+                  <li>✅ <strong>Manuelle Übermittlung:</strong> Jederzeit manuell auslösbar</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was wird abgerechnet?
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Alle Kassenarzt-Rechnungen (Abrechnungstyp: "Kassenarzt")</li>
+                  <li>EBM-Codes und Preise</li>
+                  <li>Patientendaten und Versicherungsnummern</li>
+                  <li>Diagnosen (ICD-10)</li>
+                  <li>Leistungsdaten (Datum, Menge, Preis)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Voraussetzungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Kassenarzt-Vertrag mit ÖGK</li>
+                  <li>✅ Rechnungen mit Abrechnungstyp "Kassenarzt"</li>
+                  <li>✅ Rechnungen mit Status "Gesendet" oder "Bezahlt"</li>
+                  <li>✅ Korrekte EBM-Codes in den Leistungen</li>
+                  <li>✅ ICD-10-Diagnosen bei den Rechnungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Turnusabrechnung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Turnusabrechnung ist eine monatliche Zusammenfassung aller Kassenarzt-Leistungen 
+                  für die Übermittlung an die ÖGK.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Turnusabrechnung erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie eine Abrechnungsperiode aus (Standard: aktueller Monat)</li>
+                  <li>Das System lädt automatisch alle Kassenarzt-Rechnungen dieser Periode</li>
+                  <li>Überprüfen Sie die Statistiken (Anzahl, Beträge)</li>
+                  <li>Klicken Sie auf "Turnusabrechnung exportieren"</li>
+                  <li>Die XML-Datei wird heruntergeladen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  XML-Export
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die exportierte XML-Datei enthält:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Alle Kassenarzt-Rechnungen der Periode</li>
+                  <li>EBM-Codes und Preise</li>
+                  <li>Patienten- und Versicherungsdaten</li>
+                  <li>Diagnosen (ICD-10)</li>
+                  <li>Leistungsdaten (Datum, Menge, Beschreibung)</li>
+                  <li>Alle Metadaten im ÖGK-Standardformat</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Übermittlung an ÖGK
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Laden Sie die XML-Datei auf das ÖGK-Portal hoch</li>
+                  <li>Oder senden Sie sie per E-Mail an die ÖGK</li>
+                  <li>Die ÖGK prüft die Abrechnung</li>
+                  <li>Nach erfolgreicher Prüfung erfolgt die Zahlung</li>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Hinweis:</strong> Nur Rechnungen mit Status "Gesendet" oder "Bezahlt" 
+                  werden in die Turnusabrechnung aufgenommen.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Automatische Übermittlung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System kann Turnusabrechnungen automatisch erstellen und exportieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionsweise
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Zeitplan:</strong> Täglich um 23:00 Uhr</li>
+                  <li><strong>Prozess:</strong> Sammelt alle ausstehenden Kassenarzt-Rechnungen</li>
+                  <li><strong>Export:</strong> Erstellt XML-Dateien für jeden Monat</li>
+                  <li><strong>Status:</strong> Status wird aktualisiert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Manuelle Übermittlung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Manuelle Übermittlung"</li>
+                  <li>Das System verarbeitet alle ausstehenden Rechnungen</li>
+                  <li>XML-Dateien werden erstellt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Statistiken
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Statistik-Karten zeigen eine Übersicht über die ausgewählte Periode.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Statistiken
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Rechnungen:</strong> Anzahl der Kassenarzt-Rechnungen</li>
+                  <li><strong>Gesamtbetrag:</strong> Summe aller Rechnungsbeträge</li>
+                  <li><strong>Selbstbehalt:</strong> Summe aller Selbstbehalte</li>
+                  <li><strong>Versicherungsanteil:</strong> Betrag von der ÖGK</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Allgemeine Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erstellen Sie die Turnusabrechnung monatlich</li>
+                  <li>✅ Überprüfen Sie die Statistiken vor dem Export</li>
+                  <li>✅ Übermitteln Sie die Abrechnung zeitnah an die ÖGK</li>
+                  <li>✅ Speichern Sie eine Kopie der XML-Datei</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

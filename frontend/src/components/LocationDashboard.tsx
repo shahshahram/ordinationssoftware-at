@@ -11,7 +11,14 @@ import {
   Alert,
   CircularProgress,
   Paper,
-  Divider
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   LocationOn as LocationIcon,
@@ -21,11 +28,13 @@ import {
   Schedule as ScheduleIcon,
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchLocations } from '../store/slices/locationSlice';
 import api from '../utils/api';
+import GradientDialogTitle from './GradientDialogTitle';
 
 interface LocationStats {
   location: {
@@ -51,6 +60,8 @@ const LocationDashboard: React.FC = () => {
   const { locations, loading, error } = useAppSelector(state => state.locations);
   const [stats, setStats] = useState<LocationStats[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     dispatch(fetchLocations());
@@ -215,9 +226,20 @@ const LocationDashboard: React.FC = () => {
   return (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Standort-Dashboard
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Typography variant="h4" component="h1">
+            Standort-Dashboard
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Tooltip title="Statistiken aktualisieren">
           <span>
             <IconButton onClick={fetchLocationStats} disabled={loadingStats}>
@@ -361,6 +383,139 @@ const LocationDashboard: React.FC = () => {
           </Typography>
         </Box>
       )}
+
+      {/* Hilfe-Dialog */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Standort-Dashboard" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Statistiken" />
+            <Tab label="Auslastung" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Standort-Dashboard
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Das Standort-Dashboard bietet eine Übersicht über alle Standorte mit 
+                  detaillierten Statistiken und Auslastungsinformationen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Statistiken:</strong> Personal, Räume, Geräte, Termine</li>
+                  <li>📈 <strong>Auslastung:</strong> Auslastungsprozent pro Standort</li>
+                  <li>🔄 <strong>Aktualisierung:</strong> Manuelle Aktualisierung der Statistiken</li>
+                  <li>🏥 <strong>Standort-Status:</strong> Aktiv/Inaktiv Anzeige</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Statistiken
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Für jeden Standort werden folgende Statistiken angezeigt:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Statistiken
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👥 <strong>Personal:</strong> Anzahl zugewiesener Mitarbeiter</li>
+                  <li>🏠 <strong>Räume:</strong> Anzahl verfügbarer Räume</li>
+                  <li>💻 <strong>Geräte:</strong> Anzahl verfügbarer Geräte</li>
+                  <li>📅 <strong>Termine:</strong> Gesamt, heute, diese Woche</li>
+                  <li>🕐 <strong>Aktive Stunden:</strong> Anzahl aktiver Öffnungsstunden</li>
+                  <li>🚫 <strong>Schließtage:</strong> Anzahl aktiver Schließtage</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Auslastung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Auslastung wird basierend auf verschiedenen Faktoren berechnet.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Berechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Faktoren:</strong> Personal, Räume, Geräte, Termine</li>
+                  <li>📈 <strong>Anzeige:</strong> Prozentanzeige mit Fortschrittsbalken</li>
+                  <li>🎨 <strong>Farben:</strong> Grün (niedrig), Gelb (mittel), Rot (hoch)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Dashboard-Nutzung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Aktualisieren Sie Statistiken regelmäßig</li>
+                  <li>✅ Überwachen Sie die Auslastung</li>
+                  <li>✅ Prüfen Sie Standort-Status</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

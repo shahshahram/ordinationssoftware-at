@@ -1,3 +1,6 @@
+// Zeitzone zuerst setzen, bevor andere Module geladen werden
+process.env.TZ = process.env.TZ || 'Europe/Vienna';
+
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -9,6 +12,9 @@ const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
 require('dotenv').config();
+
+// Zeitzonen-Utility importieren
+const { DEFAULT_TIMEZONE } = require('./utils/timezone');
 
 // Data Protection Services
 const DataRetentionService = require('./services/dataRetentionService');
@@ -73,6 +79,7 @@ const setupRoutes = require('./routes/setup');
 const settingsRoutes = require('./routes/settings');
 const ambulanzbefundeRoutes = require('./routes/ambulanzbefunde');
 const dashboardWidgetsRoutes = require('./routes/dashboardWidgets');
+const dashboardRoutes = require('./routes/dashboard');
 const dekursRoutes = require('./routes/dekurs');
 const internalMessagesRoutes = require('./routes/internalMessages');
 const messageFoldersRoutes = require('./routes/messageFolders');
@@ -118,6 +125,9 @@ if (USE_MODULE_MANAGER) {
 
 const app = express();
 const PORT = process.env.PORT || 5001;
+
+// Zeitzone-Logging
+logger.info(`🌍 Zeitzone: ${process.env.TZ || DEFAULT_TIMEZONE} (${Intl.DateTimeFormat().resolvedOptions().timeZone})`);
 
 // Security middleware
 app.use(helmet({
@@ -324,6 +334,7 @@ function registerStaticRoutes(app) {
   app.use('/api/settings', settingsRoutes);
   app.use('/api/ambulanzbefunde', ambulanzbefundeRoutes);
   app.use('/api/dashboard-widgets', dashboardWidgetsRoutes);
+  app.use('/api/dashboard', dashboardRoutes);
   app.use('/api/dekurs', dekursRoutes);
   app.use('/api/dekurs-vorlagen', dekursVorlagenRoutes);
   app.use('/api/internal-messages', internalMessagesRoutes);
@@ -420,6 +431,36 @@ cron.schedule('0 3 * * *', async () => {
     logger.info(`✅ Automatische Erstattungsverarbeitung abgeschlossen: ${result.created} Erstattungen erstellt`);
   } catch (error) {
     logger.error('❌ Fehler bei automatischer Erstattungsverarbeitung:', error);
+  }
+});
+
+// Automatische Markierung überfälliger Rechnungen (täglich um 2:30 Uhr)
+cron.schedule('30 2 * * *', async () => {
+  try {
+    logger.info('🔄 Starte automatische Markierung überfälliger Rechnungen...');
+    const Invoice = require('./models/Invoice');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    // Finde alle Rechnungen mit Status "sent", deren Fälligkeitsdatum überschritten ist
+    const result = await Invoice.updateMany(
+      {
+        status: 'sent',
+        dueDate: { $lt: today },
+        paymentDate: { $exists: false } // Noch nicht bezahlt
+      },
+      {
+        $set: { status: 'overdue' }
+      }
+    );
+    
+    if (result.modifiedCount > 0) {
+      logger.info(`✅ ${result.modifiedCount} Rechnungen als überfällig markiert`);
+    } else {
+      logger.info('ℹ️ Keine überfälligen Rechnungen gefunden');
+    }
+  } catch (error) {
+    logger.error('❌ Fehler bei automatischer Markierung überfälliger Rechnungen:', error);
   }
 });
 

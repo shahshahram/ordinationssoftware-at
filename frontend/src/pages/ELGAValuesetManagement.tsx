@@ -42,10 +42,12 @@ import {
   Add,
   Link as LinkIcon,
   Visibility,
-  Category as CategoryIcon
+  Category as CategoryIcon,
+  HelpOutline
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { useNavigate } from 'react-router-dom';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface ValueSet {
   _id: string;
@@ -150,6 +152,8 @@ const ELGAValuesetManagement: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importUrl, setImportUrl] = useState('');
   const [importProgress, setImportProgress] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin';
 
@@ -417,9 +421,19 @@ const ELGAValuesetManagement: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          ELGA Valuesets Verwaltung
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" component="h1">
+            ELGA Valuesets Verwaltung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutline />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Button
           variant="contained"
           color="primary"
@@ -936,6 +950,341 @@ const ELGAValuesetManagement: React.FC = () => {
             }}
           >
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: ELGA Valuesets" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Übersicht" />
+            <Tab label="Import" />
+            <Tab label="Verwaltung" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was sind ELGA Valuesets?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  ELGA Valuesets sind standardisierte Code-Sammlungen, die von ELGA verwendet werden, 
+                  um medizinische Daten zu klassifizieren und zu strukturieren. Sie enthalten Codes 
+                  für Dokumentenklassen, Typen, Formate und andere medizinische Terminologien.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptkomponenten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Titel:</strong> Name des Valuesets</li>
+                  <li><strong>Version:</strong> Versionsnummer des Valuesets</li>
+                  <li><strong>OID (Object Identifier):</strong> Eindeutige Identifikation</li>
+                  <li><strong>URL:</strong> URL zum Valueset-Definition</li>
+                  <li><strong>Kategorie:</strong> Kategorisierung (z.B. "classcode", "typecode", "formatcode")</li>
+                  <li><strong>Status:</strong> Aktiv/Inaktiv</li>
+                  <li><strong>Codes:</strong> Liste aller Codes im Valueset</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Verwendung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Valuesets werden verwendet für:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 Klassifizierung von Dokumenten (Class Codes)</li>
+                  <li>📄 Dokumententypen (Type Codes)</li>
+                  <li>📎 Dokumentformate (Format Codes)</li>
+                  <li>🏥 Medizinische Terminologien (LOINC, SNOMED-CT, ICD-10)</li>
+                  <li>💊 Medikamenten-Codes</li>
+                  <li>🔬 Laborwerte und Befunde</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Vorteile
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Standardisierung:</strong> Einheitliche Codes für medizinische Daten</li>
+                  <li>✅ <strong>ELGA-Kompatibilität:</strong> Korrekte Codes für ELGA-Übermittlung</li>
+                  <li>✅ <strong>Interoperabilität:</strong> Austausch zwischen verschiedenen Systemen</li>
+                  <li>✅ <strong>Vollständigkeit:</strong> Alle benötigten Codes an einem Ort</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Import-Funktion
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Sie können Valuesets auf drei verschiedene Arten importieren:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  1. CSV-Import
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Import"</li>
+                  <li>Wählen Sie "CSV" als Import-Typ</li>
+                  <li>Wählen Sie eine CSV-Datei aus</li>
+                  <li>Die Datei muss folgende Spalten enthalten:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><code>code</code> - Der Code-Wert</li>
+                      <li><code>system</code> - Das Code-System (z.B. "http://loinc.org")</li>
+                      <li><code>display</code> - Die Anzeige-Bezeichnung</li>
+                      <li><code>version</code> - Optional: Versionsnummer</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Importieren"</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  2. XLSX-Import
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Import"</li>
+                  <li>Wählen Sie "XLSX" als Import-Typ</li>
+                  <li>Wählen Sie eine Excel-Datei aus</li>
+                  <li>Die Datei muss die gleichen Spalten wie CSV haben</li>
+                  <li>Klicken Sie auf "Importieren"</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  3. URL-Import
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Import"</li>
+                  <li>Wählen Sie "URL" als Import-Typ</li>
+                  <li>Geben Sie die URL zum Valueset ein (z.B. von termgit.elga.gv.at)</li>
+                  <li>Klicken Sie auf "Importieren"</li>
+                  <li>Das System lädt das Valueset automatisch von der URL</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  CSV/XLSX Format-Beispiel
+                </Typography>
+                <Box 
+                  sx={{ 
+                    bgcolor: 'background.paper',
+                    border: 2,
+                    borderColor: 'primary.main',
+                    p: 3,
+                    borderRadius: 2,
+                    fontFamily: 'monospace',
+                    fontSize: '0.95rem',
+                    overflow: 'auto',
+                    maxHeight: '300px',
+                    boxShadow: 2,
+                    position: 'relative'
+                  }}
+                >
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      position: 'absolute',
+                      top: 8,
+                      right: 12,
+                      bgcolor: 'primary.main',
+                      color: 'white',
+                      px: 1,
+                      py: 0.5,
+                      borderRadius: 1,
+                      fontSize: '0.7rem',
+                      fontWeight: 'bold'
+                    }}
+                  >
+                    CSV/XLSX
+                  </Typography>
+                  <pre style={{ 
+                    margin: 0,
+                    color: '#1976d2',
+                    lineHeight: 1.6,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word'
+                  }}>{`code,system,display,version
+11534-6,http://loinc.org,Progress Note,2.75
+34117-2,http://loinc.org,History and Physical Note,2.75
+51848-0,http://loinc.org,Evaluation and Management Note,2.75`}</pre>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                  💡 Tipp: Die erste Zeile sollte die Spaltenüberschriften enthalten.
+                </Typography>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Hinweis:</strong> Wenn ein Valueset mit derselben URL bereits existiert, 
+                  wird es aktualisiert statt neu erstellt.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Valuesets verwalten
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Suche und Filter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Textsuche:</strong> Durchsuchen Sie Valuesets nach Titel, OID oder Beschreibung</li>
+                  <li><strong>Kategoriefilter:</strong> Filtern Sie nach Kategorie (z.B. "classcode", "typecode")</li>
+                  <li><strong>Aktualisieren:</strong> Laden Sie die Liste neu, um aktuelle Daten zu erhalten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Details anzeigen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Auge-Icon bei einem Valueset</li>
+                  <li>Ein Dialog zeigt alle Codes im Valueset an</li>
+                  <li>Sie sehen Code, System, Display-Name und Version</li>
+                  <li>Bei hierarchischen Valuesets sehen Sie auch Level und Parent-Codes</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Codes bearbeiten
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Stift-Icon bei einem Valueset</li>
+                  <li>Der Bearbeitungsdialog öffnet sich</li>
+                  <li>Sie können Codes hinzufügen, ändern oder löschen</li>
+                  <li>Speichern Sie die Änderungen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Codes löschen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Öffnen Sie den Bearbeitungsdialog</li>
+                  <li>Klicken Sie auf das Löschen-Icon bei einem Code</li>
+                  <li>Bestätigen Sie die Löschung</li>
+                  <li>Der Code wird aus dem Valueset entfernt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Pagination
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Bei vielen Valuesets können Sie durch die Seiten navigieren:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Verwenden Sie die Pagination am unteren Rand der Tabelle</li>
+                  <li>Standard: 20 Valuesets pro Seite</li>
+                  <li>Sie können zwischen den Seiten wechseln</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices & Tipps
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Import
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Verwenden Sie offizielle ELGA-Valuesets</strong> von termgit.elga.gv.at</li>
+                  <li>✅ <strong>Prüfen Sie die Dateistruktur</strong> vor dem Import</li>
+                  <li>✅ <strong>Testen Sie den Import</strong> mit einer kleinen Datei zuerst</li>
+                  <li>✅ <strong>URL-Import</strong> ist am einfachsten für offizielle Valuesets</li>
+                  <li>❌ Vermeiden Sie manuelle Änderungen an offiziellen Valuesets</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Regelmäßig aktualisieren:</strong> Valuesets können sich ändern</li>
+                  <li>✅ <strong>Kategorien verwenden:</strong> Organisieren Sie Valuesets nach Kategorien</li>
+                  <li>✅ <strong>Status prüfen:</strong> Nur aktive Valuesets werden verwendet</li>
+                  <li>✅ <strong>Codes dokumentieren:</strong> Fügen Sie Beschreibungen hinzu, wenn möglich</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Wichtige Valuesets
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Diese Valuesets sind besonders wichtig für ELGA:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Dokumentenklassen (Class Codes):</strong> Für die Klassifizierung von Dokumenten</li>
+                  <li><strong>Dokumententypen (Type Codes):</strong> Für spezifische Dokumententypen (LOINC)</li>
+                  <li><strong>Format Codes:</strong> Für Dokumentformate (CDA, PDF, etc.)</li>
+                  <li><strong>ICD-10:</strong> Für Diagnosen</li>
+                  <li><strong>LOINC:</strong> Für Laborwerte und Befunde</li>
+                </Box>
+              </Box>
+
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Importieren Sie zuerst die wichtigsten Valuesets (Class Codes, Type Codes) 
+                  und erweitern Sie die Sammlung schrittweise.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

@@ -37,6 +37,10 @@ import {
   List,
   ListItem,
   ListItemText,
+  Avatar,
+  Dialog,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Assessment,
@@ -54,6 +58,9 @@ import {
   PieChart,
   Info,
   HelpOutline,
+  Person,
+  Email,
+  Star,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -63,6 +70,7 @@ import { LineChart, BarChart as RechartsBarChart, PieChart as RechartsPieChart, 
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 // Interfaces
 interface PatientAnalysis {
@@ -272,6 +280,20 @@ const BillingReports: React.FC = () => {
   const [biDashboard, setBiDashboard] = useState<BIDashboardData | null>(null);
   const [targetHourlyRate, setTargetHourlyRate] = useState<number>(150); // Wird aus Settings geladen
   const [patients, setPatients] = useState<Array<{ _id: string; firstName: string; lastName: string }>>([]);
+  const [topPatients, setTopPatients] = useState<Array<{
+    patientId: string;
+    patientName: string;
+    totalAmount: number;
+    invoiceCount: number;
+    lastInvoiceDate: string;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+  }>>([]);
+  const [loadingTopPatients, setLoadingTopPatients] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Load targetHourlyRate from settings
   useEffect(() => {
@@ -327,6 +349,8 @@ const BillingReports: React.FC = () => {
         loadNoShow(),
         loadBillingOptimizer()
       ]);
+    } else if (activeTab === 6) {
+      loadTopPatients();
     }
   }, [activeTab, startDate, endDate, selectedPatient, groupBy, targetHourlyRate]);
 
@@ -445,6 +469,26 @@ const BillingReports: React.FC = () => {
     }
   };
 
+  const loadTopPatients = async () => {
+    setLoadingTopPatients(true);
+    try {
+      const params = new URLSearchParams();
+      params.append('limit', '20');
+      if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
+      if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
+      
+      const response = await api.get<{ success: boolean; data: any }>(`/billing/top-patients?${params.toString()}`);
+      if (response.data?.success && response.data?.data) {
+        setTopPatients(response.data.data);
+      }
+    } catch (error: any) {
+      console.error('Error loading top patients:', error);
+      enqueueSnackbar('Fehler beim Laden der Top-Patienten', { variant: 'error' });
+    } finally {
+      setLoadingTopPatients(false);
+    }
+  };
+
   const loadNoShow = async () => {
     try {
       const params = new URLSearchParams();
@@ -529,13 +573,23 @@ const BillingReports: React.FC = () => {
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
       <Box sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Box>
-            <Typography variant="h4" gutterBottom>
-              Abrechnungsberichte
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Professionelle Auswertungen und Analysen für Rechnungen, Leistungen und Patienten
-            </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Box>
+              <Typography variant="h4" gutterBottom>
+                Abrechnungsberichte
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Professionelle Auswertungen und Analysen für Rechnungen, Leistungen und Patienten
+              </Typography>
+            </Box>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+              >
+                <HelpOutline />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
 
@@ -547,6 +601,7 @@ const BillingReports: React.FC = () => {
               <Tab label="Trend-Analyse" icon={<TrendingUp />} />
               <Tab label="Profitabilität" icon={<BarChart />} />
               <Tab label="Effizienz-Analyse" icon={<ShowChart />} />
+              <Tab label="Top-Patienten" icon={<Star />} />
             </Tabs>
           </Paper>
 
@@ -605,6 +660,8 @@ const BillingReports: React.FC = () => {
                   loadEfficiency();
                   loadNoShow();
                   loadBillingOptimizer();
+                } else if (activeTab === 6) {
+                  loadTopPatients();
                 }
               }}
             >
@@ -2632,7 +2689,391 @@ const BillingReports: React.FC = () => {
             )}
           </Box>
         )}
+
+        {/* Tab 6: Top-Patienten */}
+        {activeTab === 6 && (
+          <Box>
+            <Card>
+              <CardContent>
+                <Box display="flex" alignItems="center" gap={2} mb={3}>
+                  <Star sx={{ color: 'primary.main', fontSize: 32 }} />
+                  <Box>
+                    <Typography variant="h5" fontWeight="bold">
+                      Top 20 Patienten nach Ausgaben
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Patienten mit den höchsten Gesamtausgaben im ausgewählten Zeitraum
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {loadingTopPatients ? (
+                  <Box display="flex" justifyContent="center" py={4}>
+                    <CircularProgress />
+                  </Box>
+                ) : topPatients.length === 0 ? (
+                  <Box textAlign="center" py={4}>
+                    <Person sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                    <Typography variant="h6" color="text.secondary" gutterBottom>
+                      Keine Daten verfügbar
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Es wurden noch keine Rechnungen im ausgewählten Zeitraum erstellt
+                    </Typography>
+                  </Box>
+                ) : (
+                  <TableContainer>
+                    <Table>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Rang</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Patient</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }} align="right">Anzahl Rechnungen</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }} align="right">Gesamtbetrag</TableCell>
+                          <TableCell sx={{ fontWeight: 'bold' }}>Letzte Rechnung</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {topPatients.map((patient, index) => (
+                          <TableRow 
+                            key={patient.patientId || index}
+                            sx={{ 
+                              '&:hover': { 
+                                backgroundColor: 'action.hover',
+                                cursor: 'pointer'
+                              } 
+                            }}
+                          >
+                            <TableCell>
+                              <Chip 
+                                label={`#${index + 1}`}
+                                size="small"
+                                color={index < 3 ? 'primary' : 'default'}
+                                sx={{ fontWeight: 'bold' }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Box display="flex" alignItems="center" gap={1}>
+                                <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                                  {patient.firstName?.[0] || patient.lastName?.[0] || patient.patientName?.[0] || '?'}
+                                </Avatar>
+                                <Box>
+                                  <Typography variant="body2" fontWeight="medium">
+                                    {patient.patientName || `${patient.firstName || ''} ${patient.lastName || ''}`.trim() || 'Unbekannt'}
+                                  </Typography>
+                                  {patient.email && (
+                                    <Typography variant="caption" color="text.secondary" display="flex" alignItems="center" gap={0.5}>
+                                      <Email sx={{ fontSize: 12 }} />
+                                      {patient.email}
+                                    </Typography>
+                                  )}
+                                </Box>
+                              </Box>
+                            </TableCell>
+                            <TableCell align="right">
+                              <Chip 
+                                label={patient.invoiceCount}
+                                size="small"
+                                variant="outlined"
+                              />
+                            </TableCell>
+                            <TableCell align="right">
+                              <Typography variant="body2" fontWeight="bold" color="success.main">
+                                €{(patient.totalAmount / 100).toFixed(2)}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              {patient.lastInvoiceDate ? (
+                                <Typography variant="body2" color="text.secondary">
+                                  {format(new Date(patient.lastInvoiceDate), 'dd.MM.yyyy')}
+                                </Typography>
+                              ) : (
+                                <Typography variant="body2" color="text.secondary">
+                                  -
+                                </Typography>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </CardContent>
+            </Card>
+          </Box>
+        )}
       </Box>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Abrechnungsberichte" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ 
+              mb: 3, 
+              borderBottom: 1, 
+              borderColor: 'divider',
+              '& .MuiTabs-flexContainer': {
+                flexWrap: 'wrap',
+                gap: 1
+              }
+            }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Patienten-Analyse" />
+            <Tab label="Leistungs-Analyse" />
+            <Tab label="Trends" />
+            <Tab label="Rentabilität" />
+            <Tab label="Effizienz" />
+            <Tab label="Top-Patienten" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Abrechnungsberichte
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Abrechnungsberichte bieten umfassende Analysen und Auswertungen für 
+                  Rechnungen, Leistungen und Patienten. Sie helfen bei der Planung, Optimierung 
+                  und Entscheidungsfindung.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Verfügbare Berichte
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👥 <strong>Patienten-Analyse:</strong> Detaillierte Analyse pro Patient</li>
+                  <li>🏥 <strong>Leistungs-Analyse:</strong> Auswertung nach Leistungen</li>
+                  <li>📈 <strong>Trends & Entwicklungen:</strong> Zeitliche Entwicklungen</li>
+                  <li>💰 <strong>Rentabilität:</strong> Gewinn- und Verlustanalyse</li>
+                  <li>⚡ <strong>Effizienz-Analyse:</strong> Optimierungsvorschläge</li>
+                  <li>⭐ <strong>Top-Patienten:</strong> Patienten mit höchsten Ausgaben</li>
+                  <li>📊 <strong>BI-Dashboard:</strong> Umfassende Business Intelligence</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Filter & Zeiträume
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Datum von/bis:</strong> Benutzerdefiniertes Zeitintervall</li>
+                  <li><strong>Patient:</strong> Filter nach spezifischem Patient</li>
+                  <li><strong>Gruppierung:</strong> Nach Tag, Woche, Monat oder Jahr</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Patienten-Analyse
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Detaillierte Analyse der Rechnungen und Leistungen pro Patient.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Gesamtzahl Rechnungen:</strong> Anzahl aller Rechnungen</li>
+                  <li><strong>Gesamtbetrag:</strong> Summe aller Rechnungsbeträge</li>
+                  <li><strong>Nach Abrechnungstyp:</strong> Aufschlüsselung nach Privat/Kassenarzt/Wahlarzt</li>
+                  <li><strong>Nach Monat:</strong> Zeitliche Verteilung</li>
+                  <li><strong>Leistungen:</strong> Liste aller verwendeten Leistungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Leistungs-Analyse
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Auswertung der am häufigsten verwendeten Leistungen und deren Umsatz.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Leistungscode:</strong> EBM-Code oder Service-Code</li>
+                  <li><strong>Beschreibung:</strong> Leistungsbeschreibung</li>
+                  <li><strong>Kategorie:</strong> Leistungskategorie</li>
+                  <li><strong>Anzahl:</strong> Wie oft wurde die Leistung verwendet</li>
+                  <li><strong>Gesamtbetrag:</strong> Umsatz durch diese Leistung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Trends & Entwicklungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Zeitliche Analyse der Umsatzentwicklung und Trends.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Trends
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Umsatzentwicklung:</strong> Zeitliche Entwicklung des Umsatzes</li>
+                  <li><strong>Rechnungsanzahl:</strong> Entwicklung der Rechnungsanzahl</li>
+                  <li><strong>Durchschnittsbeträge:</strong> Entwicklung der Durchschnittsbeträge</li>
+                  <li><strong>Nach Abrechnungstyp:</strong> Trends nach Privat/Kassenarzt/Wahlarzt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Rentabilität
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Analyse der Gewinn- und Verluststruktur nach Leistungen und Patienten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Berechnungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Umsatz:</strong> Summe aller Rechnungsbeträge</li>
+                  <li><strong>Kosten:</strong> Material-, Geräte-, variable und fixe Kosten</li>
+                  <li><strong>Gewinn:</strong> Umsatz - Kosten</li>
+                  <li><strong>Gewinnmarge:</strong> (Gewinn / Umsatz) × 100</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Effizienz-Analyse
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Optimierungsvorschläge zur Steigerung der Effizienz und Rentabilität.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Analysierte Bereiche
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Stundenlohn:</strong> Vergleich mit Ziel-Stundenlohn</li>
+                  <li><strong>Auslastung:</strong> Analyse der Terminauslastung</li>
+                  <li><strong>No-Shows:</strong> Analyse von Terminausfällen</li>
+                  <li><strong>Optimierungsvorschläge:</strong> Konkrete Verbesserungsvorschläge</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 6 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Top-Patienten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Liste der Patienten mit den höchsten Gesamtausgaben im ausgewählten Zeitraum.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Rang:</strong> Platzierung (Top 20)</li>
+                  <li><strong>Patient:</strong> Name und Kontaktdaten</li>
+                  <li><strong>Anzahl Rechnungen:</strong> Wie viele Rechnungen</li>
+                  <li><strong>Gesamtbetrag:</strong> Summe aller Ausgaben</li>
+                  <li><strong>Letzte Rechnung:</strong> Datum der letzten Rechnung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 7 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Regelmäßige Analyse
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Analysieren Sie Berichte monatlich</li>
+                  <li>✅ Vergleichen Sie Perioden (Monat zu Monat, Jahr zu Jahr)</li>
+                  <li>✅ Identifizieren Sie Trends frühzeitig</li>
+                  <li>✅ Nutzen Sie Filter für spezifische Analysen</li>
+                </Box>
+              </Box>
+
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Exportieren Sie regelmäßig Berichte für Dokumentation 
+                  und langfristige Analyse.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </LocalizationProvider>
   );
 };

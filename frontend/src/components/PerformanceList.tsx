@@ -32,7 +32,9 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
-  Divider
+  Divider,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -43,11 +45,13 @@ import {
   CalendarToday as CalendarIcon,
   Euro as EuroIcon,
   FilterList as FilterIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import OneClickBillingButton from './OneClickBillingButton';
 import PerformanceForm from './PerformanceForm';
+import GradientDialogTitle from './GradientDialogTitle';
 
 interface Performance {
   _id: string;
@@ -104,6 +108,8 @@ const PerformanceList: React.FC = () => {
   const [editingPerformance, setEditingPerformance] = useState<Performance | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [performanceToDelete, setPerformanceToDelete] = useState<Performance | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   
   // Filter State
   const [filters, setFilters] = useState({
@@ -336,9 +342,19 @@ const PerformanceList: React.FC = () => {
     <Box sx={{ p: 3 }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
-          Leistungsabrechnung
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" component="h1">
+            Leistungsabrechnung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         
         <Button
           variant="contained"
@@ -616,6 +632,225 @@ const PerformanceList: React.FC = () => {
           </Button>
           <Button onClick={handleDeletePerformance} color="error" variant="contained">
             Löschen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Leistungsabrechnung" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Übersicht" />
+            <Tab label="Leistung erfassen" />
+            <Tab label="Filter & Suche" />
+            <Tab label="Status & Workflow" />
+            <Tab label="Tariftypen" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Leistungsabrechnung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Leistungsabrechnung ermöglicht es Ihnen, einzelne medizinische Leistungen 
+                  zu erfassen, zu verwalten und abzurechnen. Jede Leistung kann einem Patienten 
+                  zugeordnet und mit verschiedenen Tariftypen abgerechnet werden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📝 <strong>Leistung erfassen:</strong> Neue Leistungen für Patienten anlegen</li>
+                  <li>✏️ <strong>Leistung bearbeiten:</strong> Bestehende Leistungen ändern</li>
+                  <li>🗑️ <strong>Leistung löschen:</strong> Leistungen entfernen</li>
+                  <li>🔍 <strong>Suche & Filter:</strong> Nach Patient, Status, Tariftyp, Datum filtern</li>
+                  <li>📊 <strong>Übersicht:</strong> Tabellarische Darstellung aller Leistungen</li>
+                  <li>💶 <strong>Abrechnung:</strong> Direkte Abrechnung von Leistungen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Leistungsstatus
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><Chip label="Erfasst" size="small" sx={{ mr: 1 }} /> Leistung wurde erfasst, noch nicht abgerechnet</li>
+                  <li><Chip label="Abgerechnet" color="info" size="small" sx={{ mr: 1 }} /> Leistung wurde abgerechnet</li>
+                  <li><Chip label="Gesendet" color="warning" size="small" sx={{ mr: 1 }} /> Leistung wurde an Versicherung gesendet</li>
+                  <li><Chip label="Akzeptiert" color="success" size="small" sx={{ mr: 1 }} /> Von Versicherung akzeptiert</li>
+                  <li><Chip label="Abgelehnt" color="error" size="small" sx={{ mr: 1 }} /> Von Versicherung abgelehnt</li>
+                  <li><Chip label="Erstattet" color="success" size="small" sx={{ mr: 1 }} /> Erstattung wurde ausgezahlt</li>
+                  <li><Chip label="Fehlgeschlagen" color="error" size="small" sx={{ mr: 1 }} /> Abrechnung fehlgeschlagen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Tariftypen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><Chip label="Kassenarzt" color="primary" size="small" sx={{ mr: 1 }} /> Abrechnung über Krankenkasse</li>
+                  <li><Chip label="Wahlarzt" color="secondary" size="small" sx={{ mr: 1 }} /> Teilweise Erstattung durch Versicherung</li>
+                  <li><Chip label="Privat" color="success" size="small" sx={{ mr: 1 }} /> Vollständige Zahlung durch Patient</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neue Leistung erfassen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erfassen Sie eine neue Leistung:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neue Leistung"</li>
+                  <li>Wählen Sie einen Patienten aus</li>
+                  <li>Wählen Sie eine Leistung aus dem Service-Katalog</li>
+                  <li>Geben Sie das Leistungsdatum ein</li>
+                  <li>Geben Sie Menge ein (Standard: 1)</li>
+                  <li>Wählen Sie den Tariftyp (Kassenarzt, Wahlarzt, Privat)</li>
+                  <li>Fügen Sie Diagnosen hinzu (optional, für Kassenarzt empfohlen)</li>
+                  <li>Speichern Sie die Leistung</li>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Verwenden Sie "One-Click-Billing" für schnelles Erfassen 
+                  von Standard-Leistungen direkt aus dem Terminkalender.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Filter & Suche
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Leistungsabrechnung bietet umfangreiche Filter- und Suchmöglichkeiten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Filter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Status:</strong> Filter nach Leistungsstatus</li>
+                  <li><strong>Tariftyp:</strong> Filter nach Kassenarzt, Wahlarzt oder Privat</li>
+                  <li><strong>Von Datum / Bis Datum:</strong> Datumsbereich</li>
+                  <li><strong>Suche:</strong> Textsuche in Patientennamen, Leistungsbeschreibungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Status & Workflow
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Leistungsstatus zeigt den aktuellen Stand im Abrechnungsprozess.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Status-Arten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><Chip label="Erfasst" size="small" sx={{ mr: 1 }} /> Leistung wurde erfasst</li>
+                  <li><Chip label="Abgerechnet" color="info" size="small" sx={{ mr: 1 }} /> Leistung wurde abgerechnet</li>
+                  <li><Chip label="Gesendet" color="warning" size="small" sx={{ mr: 1 }} /> An Versicherung gesendet</li>
+                  <li><Chip label="Akzeptiert" color="success" size="small" sx={{ mr: 1 }} /> Von Versicherung akzeptiert</li>
+                  <li><Chip label="Abgelehnt" color="error" size="small" sx={{ mr: 1 }} /> Von Versicherung abgelehnt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Tariftypen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System unterstützt verschiedene Tariftypen für unterschiedliche Abrechnungssituationen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Kassenarzt, Wahlarzt, Privat
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Kassenarzt:</strong> Abrechnung über Krankenkasse</li>
+                  <li><strong>Wahlarzt:</strong> Teilweise Erstattung durch Versicherung</li>
+                  <li><strong>Privat:</strong> Vollständige Zahlung durch Patient</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Allgemeine Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erfassen Sie Leistungen zeitnah nach Erbringung</li>
+                  <li>✅ Überwachen Sie den Status der Leistungen</li>
+                  <li>✅ Fügen Sie Diagnosen hinzu (für Kassenarzt erforderlich)</li>
+                  <li>✅ Verwenden Sie Filter für schnelle Suche</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

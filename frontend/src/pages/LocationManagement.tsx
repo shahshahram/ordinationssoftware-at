@@ -44,6 +44,7 @@ import {
   Storage as StorageIcon,
   Description as DescriptionIcon,
   BookOnline,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -127,6 +128,14 @@ const LocationManagement: React.FC = () => {
   const [editingAssignment, setEditingAssignment] = useState<StaffLocationAssignment | null>(null);
   const [editingWeeklySchedule, setEditingWeeklySchedule] = useState<LocationWeeklySchedule | null>(null);
   const [selectedLocationForSchedule, setSelectedLocationForSchedule] = useState<Location | null>(null);
+  
+  // Hilfe-Dialog States
+  const [helpDialogLocationsOpen, setHelpDialogLocationsOpen] = useState(false);
+  const [helpDialogHoursOpen, setHelpDialogHoursOpen] = useState(false);
+  const [helpDialogWeeklyScheduleOpen, setHelpDialogWeeklyScheduleOpen] = useState(false);
+  const [helpDialogClosuresOpen, setHelpDialogClosuresOpen] = useState(false);
+  const [helpDialogAssignmentsOpen, setHelpDialogAssignmentsOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Form states
   const [locationForm, setLocationForm] = useState({
@@ -2717,6 +2726,827 @@ const LocationManagement: React.FC = () => {
           } : undefined}
         />
       )}
+
+      {/* Hilfe-Dialog für Standorte */}
+      <Dialog 
+        open={helpDialogLocationsOpen} 
+        onClose={() => setHelpDialogLocationsOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Standorte" 
+          onClose={() => setHelpDialogLocationsOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Standort erstellen" />
+            <Tab label="Standort bearbeiten" />
+            <Tab label="Logo verwalten" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Standorte
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Standorte sind physische oder virtuelle Orte, an denen medizinische Leistungen 
+                  erbracht werden. Jeder Standort kann eigene Öffnungszeiten, Schließtage und 
+                  Personal-Zuweisungen haben.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🏥 <strong>Standortverwaltung:</strong> Erstellen, bearbeiten, löschen</li>
+                  <li>📋 <strong>Standortdaten:</strong> Name, Code, Adresse, Kontaktdaten</li>
+                  <li>🖼️ <strong>Logo:</strong> Logo für Briefköpfe hochladen</li>
+                  <li>⚙️ <strong>Einstellungen:</strong> Praxistyp, Status, Zeitzone</li>
+                  <li>👥 <strong>Personal:</strong> Personal-Zuweisungen verwalten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Name:</strong> Name des Standorts</li>
+                  <li><strong>Code:</strong> Eindeutiger Code (z.B. "HAUPT", "NEBEN")</li>
+                  <li><strong>Adresse:</strong> Vollständige Adresse</li>
+                  <li><strong>Praxistyp:</strong> Art der Praxis (z.B. "Allgemeinmedizin")</li>
+                  <li><strong>Status:</strong> Aktiv oder inaktiv</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neuen Standort erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie einen neuen Standort:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neuer Standort"</li>
+                  <li>Geben Sie die Standortdaten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Name:</strong> Name des Standorts (z.B. "Hauptpraxis")</li>
+                      <li><strong>Code:</strong> Eindeutiger Code (z.B. "HAUPT")</li>
+                      <li><strong>Adresse:</strong> Straße, PLZ, Stadt, Land</li>
+                      <li><strong>Kontaktdaten:</strong> Telefon, E-Mail, Website</li>
+                      <li><strong>Praxistyp:</strong> Wählen Sie den Praxistyp</li>
+                      <li><strong>Zeitzone:</strong> Standard: "Europe/Vienna"</li>
+                      <li><strong>Status:</strong> Aktiv oder inaktiv</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                  <li>Der Standort wird erstellt und in der Liste angezeigt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Erforderliche Felder
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Name:</strong> Muss angegeben werden</li>
+                  <li><strong>Code:</strong> Muss eindeutig sein</li>
+                  <li><strong>Adresse:</strong> Straße, PLZ, Stadt, Land</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Standort bearbeiten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So bearbeiten Sie einen bestehenden Standort:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Bearbeiten-Icon bei einem Standort</li>
+                  <li>Der Bearbeitungsdialog öffnet sich</li>
+                  <li>Ändern Sie die gewünschten Daten</li>
+                  <li>Klicken Sie auf "Aktualisieren"</li>
+                  <li>Die Änderungen werden gespeichert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Bearbeitbare Felder
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Name, Code, Adresse</li>
+                  <li>✅ Kontaktdaten (Telefon, E-Mail, Website)</li>
+                  <li>✅ Praxistyp, Zeitzone</li>
+                  <li>✅ Status (Aktiv/Inaktiv)</li>
+                  <li>✅ Beschreibung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Logo verwalten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Jeder Standort kann ein eigenes Logo haben, das für Briefköpfe verwendet wird.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Logo hochladen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Logo hochladen"</li>
+                  <li>Wählen Sie eine Bilddatei (PNG, JPG, SVG)</li>
+                  <li>Das Logo wird hochgeladen und gespeichert</li>
+                  <li>Das Logo wird in Briefköpfen verwendet</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Logo löschen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Logo löschen"</li>
+                  <li>Das Logo wird entfernt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Empfohlene Formate
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📷 <strong>PNG:</strong> Mit transparentem Hintergrund</li>
+                  <li>📷 <strong>SVG:</strong> Vektorgrafik (skalierbar)</li>
+                  <li>📷 <strong>JPG:</strong> Für Fotos</li>
+                  <li>📏 <strong>Größe:</strong> Empfohlen: 200x200px bis 500x500px</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Standortverwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Eindeutige Codes:</strong> Verwenden Sie eindeutige Codes</li>
+                  <li>✅ <strong>Vollständige Adressen:</strong> Geben Sie vollständige Adressen ein</li>
+                  <li>✅ <strong>Kontaktdaten:</strong> Aktuelle Kontaktdaten pflegen</li>
+                  <li>✅ <strong>Status:</strong> Inaktive Standorte deaktivieren</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Logo
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🖼️ <strong>Qualität:</strong> Verwenden Sie hochwertige Logos</li>
+                  <li>🖼️ <strong>Format:</strong> PNG mit transparentem Hintergrund</li>
+                  <li>🖼️ <strong>Größe:</strong> Nicht zu groß (max. 500x500px)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogLocationsOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für Öffnungszeiten */}
+      <Dialog 
+        open={helpDialogHoursOpen} 
+        onClose={() => setHelpDialogHoursOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Öffnungszeiten" 
+          onClose={() => setHelpDialogHoursOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Öffnungszeiten erstellen" />
+            <Tab label="RRULE Format" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Öffnungszeiten
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Öffnungszeiten definieren, wann ein Standort geöffnet ist. Sie werden im 
+                  RRULE-Format (iCalendar) gespeichert und können komplexe Zeitpläne abbilden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🕐 <strong>Zeitpläne:</strong> Definieren Sie Öffnungszeiten</li>
+                  <li>📅 <strong>Wiederholungen:</strong> Wöchentliche, monatliche Wiederholungen</li>
+                  <li>🏷️ <strong>Labels:</strong> Beschriftungen für verschiedene Zeitpläne</li>
+                  <li>🌍 <strong>Zeitzone:</strong> Zeitzone für den Standort</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Öffnungszeiten erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie neue Öffnungszeiten:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Neue Öffnungszeiten"</li>
+                  <li>Geben Sie die Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Standort:</strong> Wählen Sie den Standort</li>
+                      <li><strong>Label:</strong> Beschriftung (z.B. "Reguläre Öffnungszeiten")</li>
+                      <li><strong>RRULE:</strong> Wiederholungsregel (siehe RRULE Format)</li>
+                      <li><strong>Zeitzone:</strong> Standard: "Europe/Vienna"</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  RRULE Format
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  RRULE (Recurrence Rule) ist ein iCalendar-Standard für wiederkehrende Ereignisse.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Beispiele
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Wochentage:</strong> FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR</li>
+                  <li><strong>Stunden:</strong> BYHOUR=8,9,10,11,13,14,15,16</li>
+                  <li><strong>Kombiniert:</strong> FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=8,9,10,11,13,14,15,16</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  RRULE Komponenten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>FREQ:</strong> Häufigkeit (WEEKLY, DAILY, MONTHLY)</li>
+                  <li><strong>BYDAY:</strong> Wochentage (MO, TU, WE, TH, FR, SA, SU)</li>
+                  <li><strong>BYHOUR:</strong> Stunden (0-23)</li>
+                  <li><strong>BYMINUTE:</strong> Minuten (0-59)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Detaillierte Konfigurationsanleitung für Öffnungszeiten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Standard-Konfiguration
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Label:</strong> "Reguläre Öffnungszeiten"</li>
+                  <li><strong>RRULE:</strong> FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR;BYHOUR=8,9,10,11,13,14,15,16</li>
+                  <li><strong>Zeitzone:</strong> Europe/Vienna</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Öffnungszeiten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie aussagekräftige Labels</li>
+                  <li>✅ Testen Sie RRULE-Regeln vor dem Speichern</li>
+                  <li>✅ Überprüfen Sie die Zeitzone</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogHoursOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für Wöchentliche Öffnungszeiten */}
+      <Dialog 
+        open={helpDialogWeeklyScheduleOpen} 
+        onClose={() => setHelpDialogWeeklyScheduleOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Wöchentliche Öffnungszeiten" 
+          onClose={() => setHelpDialogWeeklyScheduleOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Wöchentliche Öffnungszeiten erstellen" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Wöchentliche Öffnungszeiten
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Wöchentliche Öffnungszeiten ermöglichen eine detaillierte Planung der 
+                  Öffnungszeiten für jeden Wochentag.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 <strong>Wochentage:</strong> Individuelle Zeiten pro Wochentag</li>
+                  <li>🕐 <strong>Zeiten:</strong> Start- und Endzeiten pro Tag</li>
+                  <li>📆 <strong>Gültigkeitszeitraum:</strong> Von-Datum bis Datum</li>
+                  <li>🔄 <strong>Wiederholung:</strong> Automatische Wiederholung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Wöchentliche Öffnungszeiten erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie wöchentliche Öffnungszeiten:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Neue wöchentliche Öffnungszeiten"</li>
+                  <li>Geben Sie die Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Standort:</strong> Wählen Sie den Standort</li>
+                      <li><strong>Gültig von:</strong> Startdatum</li>
+                      <li><strong>Gültig bis:</strong> Enddatum (optional)</li>
+                      <li><strong>Zeiten pro Wochentag:</strong> Start- und Endzeiten</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Detaillierte Konfigurationsanleitung.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Wochentage konfigurieren
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Montag:</strong> Start- und Endzeit eingeben</li>
+                  <li><strong>Dienstag:</strong> Start- und Endzeit eingeben</li>
+                  <li><strong>Mittwoch:</strong> Start- und Endzeit eingeben</li>
+                  <li><strong>Donnerstag:</strong> Start- und Endzeit eingeben</li>
+                  <li><strong>Freitag:</strong> Start- und Endzeit eingeben</li>
+                  <li><strong>Samstag/Sonntag:</strong> Optional konfigurieren</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Allgemeine Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie realistische Zeiten</li>
+                  <li>✅ Berücksichtigen Sie Pausen</li>
+                  <li>✅ Überprüfen Sie Gültigkeitszeiträume</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogWeeklyScheduleOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für Schließtage */}
+      <Dialog 
+        open={helpDialogClosuresOpen} 
+        onClose={() => setHelpDialogClosuresOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Schließtage" 
+          onClose={() => setHelpDialogClosuresOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Schließtag erstellen" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Schließtage
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Schließtage definieren Zeiträume, in denen ein Standort geschlossen ist 
+                  (z.B. Feiertage, Urlaub, Renovierung).
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 <strong>Zeiträume:</strong> Start- und Enddatum</li>
+                  <li>📝 <strong>Grund:</strong> Grund für die Schließung</li>
+                  <li>🏥 <strong>Standort:</strong> Zuordnung zu einem Standort</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Schließtag erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie einen Schließtag:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Neuer Schließtag"</li>
+                  <li>Geben Sie die Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Standort:</strong> Wählen Sie den Standort</li>
+                      <li><strong>Startdatum:</strong> Beginn der Schließung</li>
+                      <li><strong>Enddatum:</strong> Ende der Schließung</li>
+                      <li><strong>Grund:</strong> Grund für die Schließung (optional)</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Detaillierte Konfigurationsanleitung.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Zeiträume
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Einzelner Tag:</strong> Start- und Enddatum gleich</li>
+                  <li><strong>Mehrere Tage:</strong> Start- und Enddatum unterschiedlich</li>
+                  <li><strong>Beispiel:</strong> 24.12.2024 - 26.12.2024 (Weihnachten)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schließtage
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erstellen Sie Schließtage frühzeitig</li>
+                  <li>✅ Verwenden Sie aussagekräftige Gründe</li>
+                  <li>✅ Überprüfen Sie Zeiträume</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogClosuresOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für Personal-Zuweisungen */}
+      <Dialog 
+        open={helpDialogAssignmentsOpen} 
+        onClose={() => setHelpDialogAssignmentsOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Personal-Zuweisungen" 
+          onClose={() => setHelpDialogAssignmentsOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Zuweisung erstellen" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Personal-Zuweisungen
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Personal-Zuweisungen definieren, welches Personal an welchem Standort arbeitet.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👥 <strong>Personal:</strong> Zuweisung von Personal zu Standorten</li>
+                  <li>📅 <strong>Zeiträume:</strong> Gültigkeitszeiträume</li>
+                  <li>🏥 <strong>Standort:</strong> Zuordnung zu einem Standort</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Zuweisung erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie eine Personal-Zuweisung:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Neue Zuweisung"</li>
+                  <li>Geben Sie die Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Standort:</strong> Wählen Sie den Standort</li>
+                      <li><strong>Personal:</strong> Wählen Sie das Personal</li>
+                      <li><strong>Startdatum:</strong> Beginn der Zuweisung</li>
+                      <li><strong>Enddatum:</strong> Ende der Zuweisung (optional)</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Detaillierte Konfigurationsanleitung.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Zuweisungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Überprüfen Sie Zeiträume</li>
+                  <li>✅ Aktualisieren Sie Zuweisungen regelmäßig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogAssignmentsOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

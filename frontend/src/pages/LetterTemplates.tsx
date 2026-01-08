@@ -33,6 +33,7 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -50,6 +51,7 @@ import {
   Send,
   Visibility,
   Timeline,
+  HelpOutline,
 } from '@mui/icons-material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import RichTextEditor, { RichTextEditorRef } from '../components/RichTextEditor';
@@ -135,6 +137,8 @@ const LetterTemplates: React.FC = () => {
   const [filterSpecialty, setFilterSpecialty] = useState<string>('');
   const [filterApprovalStatus, setFilterApprovalStatus] = useState<string>('');
   const [filterStandalone, setFilterStandalone] = useState<boolean | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [templateForm, setTemplateForm] = useState({
     name: '',
     type: 'custom' as 'greeting' | 'closing' | 'custom' | 'anrede',
@@ -232,12 +236,24 @@ const LetterTemplates: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Briefvorlagen
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Verwalten Sie Briefkopfvorlagen und Briefvorlagen für Ihre Standorte.
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Briefvorlagen
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Verwalten Sie Briefkopfvorlagen und Briefvorlagen für Ihre Standorte.
+          </Typography>
+        </Box>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+          >
+            <HelpOutline />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Card>
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
@@ -1540,6 +1556,301 @@ const LetterTemplates: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setVersionHistoryDialogOpen(false)}>Schließen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Briefvorlagen" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Übersicht" />
+            <Tab label="Briefkopfvorlagen" />
+            <Tab label="Briefvorlagen" />
+            <Tab label="Dokumentvorlagen" />
+            <Tab label="Placeholders" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was sind Briefvorlagen?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Briefvorlagen ermöglichen es Ihnen, wiederkehrende Textbausteine und Dokumentstrukturen 
+                  zu erstellen und zu verwalten. Das System bietet drei Arten von Vorlagen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Drei Arten von Vorlagen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>
+                    <strong>📋 Briefkopfvorlagen:</strong> Logo und Layout für verschiedene Dokumenttypen 
+                    (Arztbrief, Patientenbrief, Rezept, etc.)
+                  </li>
+                  <li>
+                    <strong>✉️ Briefvorlagen:</strong> Text-Vorlagen für Anreden, Begrüßungen, Abschlüsse 
+                    und benutzerdefinierte Textbausteine
+                  </li>
+                  <li>
+                    <strong>📄 Dokumentvorlagen:</strong> Vollständige Dokumentvorlagen mit Versionierung, 
+                    Freigabeprozess und Fachrichtungskategorisierung
+                  </li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Logo-Verwaltung:</strong> Logo pro Standort hochladen und verwalten</li>
+                  <li>✅ <strong>Briefkopf-Layouts:</strong> Verschiedene Layout-Vorlagen pro Dokumenttyp</li>
+                  <li>✅ <strong>Text-Vorlagen:</strong> Wiederverwendbare Textbausteine</li>
+                  <li>✅ <strong>Placeholders:</strong> Dynamische Variablen für Patientendaten</li>
+                  <li>✅ <strong>Versionierung:</strong> Versionshistorie für Dokumentvorlagen</li>
+                  <li>✅ <strong>Freigabeprozess:</strong> Workflow für Vorlagen-Freigabe</li>
+                  <li>✅ <strong>Import/Export:</strong> Vorlagen zwischen Standorten teilen</li>
+                  <li>✅ <strong>Filter:</strong> Nach Kategorie, Fachrichtung, Status filtern</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Vorteile
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>⚡ <strong>Zeitersparnis:</strong> Schnellere Dokumentenerstellung</li>
+                  <li>📝 <strong>Konsistenz:</strong> Einheitliche Dokumente</li>
+                  <li>🔄 <strong>Wiederverwendbarkeit:</strong> Einmal erstellen, mehrfach verwenden</li>
+                  <li>👥 <strong>Kollaboration:</strong> Vorlagen zwischen Standorten teilen</li>
+                  <li>✅ <strong>Qualitätssicherung:</strong> Freigabeprozess für wichtige Vorlagen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Briefkopfvorlagen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Briefkopfvorlagen definieren das Layout und das Logo für verschiedene Dokumenttypen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Logo hochladen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Logo hochladen"</li>
+                  <li>Wählen Sie eine Bilddatei aus (JPEG, PNG, GIF, WebP, SVG)</li>
+                  <li>Empfohlene Auflösung: mindestens 300x150px</li>
+                  <li>Maximale Dateigröße: 5MB</li>
+                  <li>Das Logo wird automatisch im Briefkopf verwendet</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Briefkopf-Vorlagen pro Dokumenttyp
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Sie können für jeden Dokumenttyp eine eigene Briefkopf-Vorlage wählen:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Vorlage 1:</strong> Logo links, Arzt rechts</li>
+                  <li><strong>Vorlage 2:</strong> Kontaktdaten links, Logo rechts</li>
+                  <li><strong>Vorlage 3:</strong> Drei-Spalten-Layout</li>
+                  <li><strong>Individuelle Gestaltung:</strong> Standard-Layout ohne vordefinierte Vorlage</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Dokumenttypen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Arztbrief</li>
+                  <li>Patientenbrief</li>
+                  <li>Rezept</li>
+                  <li>Überweisung</li>
+                  <li>Attest</li>
+                  <li>Befund</li>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Hinweis:</strong> Das Logo wird in allen Dokumenten verwendet, die für diesen 
+                  Standort erstellt werden. Die Briefkopf-Vorlage bestimmt nur das Layout.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Briefvorlagen (Text-Vorlagen)
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Briefvorlagen sind wiederverwendbare Textbausteine, die in Briefen verwendet werden können.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Vorlagentypen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Anrede:</strong> Für Arztbriefe (z.B. "Sehr geehrte/r Dr. ...")</li>
+                  <li><strong>Begrüßung:</strong> Begrüßungstexte</li>
+                  <li><strong>Abschluss:</strong> Abschlussformeln (z.B. "Mit freundlichen Grüßen")</li>
+                  <li><strong>Benutzerdefiniert:</strong> Eigene Textbausteine</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Neue Vorlage erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Standort aus</li>
+                  <li>Klicken Sie auf "Neue Vorlage"</li>
+                  <li>Geben Sie einen Namen ein</li>
+                  <li>Wählen Sie den Typ (Anrede, Begrüßung, Abschluss, Benutzerdefiniert)</li>
+                  <li>Wählen Sie den Dokumenttyp (für welche Dokumente die Vorlage verwendet wird)</li>
+                  <li>Erstellen Sie den Inhalt mit dem Rich-Text-Editor</li>
+                  <li>Verwenden Sie Placeholders für dynamische Daten</li>
+                  <li>Speichern Sie die Vorlage</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Import von anderen Standorten
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Von anderem Standort importieren"</li>
+                  <li>Geben Sie die Standort-ID des Quell-Standorts ein</li>
+                  <li>Die Vorlagen werden kopiert (nicht verschoben)</li>
+                  <li>Sie können die importierten Vorlagen anschließend anpassen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Dokumentvorlagen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Dokumentvorlagen sind vollständige Dokumentstrukturen mit erweiterten Funktionen 
+                  wie Versionierung und Freigabeprozess.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Freigabeprozess
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><Chip label="Entwurf" size="small" sx={{ mr: 1 }} /> Vorlage wird noch bearbeitet</li>
+                  <li><Chip label="Zur Freigabe" color="warning" size="small" sx={{ mr: 1 }} /> Vorlage wurde zur Freigabe eingereicht</li>
+                  <li><Chip label="Freigegeben" color="success" size="small" sx={{ mr: 1 }} /> Vorlage ist freigegeben</li>
+                  <li><Chip label="Abgelehnt" color="error" size="small" sx={{ mr: 1 }} /> Vorlage wurde abgelehnt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Versionierung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Jede Änderung erstellt eine neue Version</li>
+                  <li>Versionshistorie zeigt alle Änderungen</li>
+                  <li>Sie können frühere Versionen einsehen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Placeholders (Variablen)
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Placeholders sind dynamische Variablen, die beim Erstellen eines Dokuments automatisch 
+                  durch echte Daten ersetzt werden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Placeholders
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Patientendaten:</strong> {`{{patient.name}}`}, {`{{patient.birthDate}}`}, etc.</li>
+                  <li><strong>Arztdaten:</strong> {`{{doctor.name}}`}, {`{{doctor.title}}`}, etc.</li>
+                  <li><strong>Standortdaten:</strong> {`{{location.name}}`}, {`{{location.address}}`}, etc.</li>
+                  <li><strong>Datum/Zeit:</strong> {`{{date}}`}, {`{{time}}`}, {`{{dateTime}}`}, etc.</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Allgemeine Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie klare, beschreibende Namen</li>
+                  <li>✅ Nutzen Sie Placeholders für dynamische Daten</li>
+                  <li>✅ Organisieren Sie Vorlagen nach Kategorien</li>
+                  <li>✅ Testen Sie Vorlagen vor der Freigabe</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

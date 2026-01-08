@@ -8,6 +8,7 @@ const Device = require('../models/Device');
 const Room = require('../models/Room');
 const AppointmentValidator = require('../utils/appointmentValidation');
 const { body, validationResult } = require('express-validator');
+const { parseDateString, now } = require('../utils/timezone');
 const router = express.Router();
 
 // Initialize validator with default settings
@@ -26,8 +27,8 @@ router.get('/', auth, async (req, res) => {
     if (locationId) filter.locationId = locationId;
     if (from || to) {
       filter.startTime = {};
-      if (from) filter.startTime.$gte = new Date(from);
-      if (to) filter.startTime.$lte = new Date(to);
+      if (from) filter.startTime.$gte = parseDateString(from) || new Date(from);
+      if (to) filter.startTime.$lte = parseDateString(to) || new Date(to);
     }
 
     const parsedPage = Math.max(parseInt(page) || 1, 1);
@@ -671,7 +672,7 @@ router.delete('/:id', auth, async (req, res) => {
     // Wenn Termin gelöscht wird, markiere als storniert und benachrichtige Warteliste
     // (DELETE wird als Stornierung behandelt, wenn der Termin noch nicht stattgefunden hat)
     const appointmentDate = new Date(appointment.startTime);
-    const isFutureAppointment = appointmentDate > new Date();
+    const isFutureAppointment = appointmentDate > now();
     
     if (isFutureAppointment) {
       // Markiere als storniert statt zu löschen, damit Warteliste benachrichtigt werden kann
@@ -790,8 +791,8 @@ router.get('/available-slots', auth, async (req, res) => {
     }
 
     // Parse dates
-    const start = startDate ? new Date(startDate) : new Date();
-    const end = endDate ? new Date(endDate) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // Default: 30 Tage
+    const start = startDate ? (parseDateString(startDate) || new Date(startDate)) : now();
+    const end = endDate ? (parseDateString(endDate) || new Date(endDate)) : new Date(now().getTime() + 30 * 24 * 60 * 60 * 1000); // Default: 30 Tage
 
     // Service-Informationen abrufen
     const ServiceCatalog = require('../models/ServiceCatalog');

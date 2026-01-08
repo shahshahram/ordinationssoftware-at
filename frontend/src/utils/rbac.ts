@@ -275,6 +275,12 @@ export const useRBAC = (user: User | null) => {
     // Prüfe spezifische Action
     const hasRolePermission = resourcePermissions.includes(action);
     
+    // Spezielle Behandlung für 'write' - Alias für 'create' und 'update'
+    if (action === 'write') {
+      const hasWritePermission = resourcePermissions.includes('create') || resourcePermissions.includes('update');
+      if (hasWritePermission) return true;
+    }
+    
     // Prüfe Custom Permissions für spezifische Resource
     if (user.rbac?.customPermissions) {
       const hasCustomPermission = user.rbac.customPermissions.some(cp => 

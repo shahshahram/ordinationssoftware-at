@@ -40,9 +40,11 @@ import {
   Search,
   Download,
   Upload,
+  HelpOutline,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useAppSelector } from '../store/hooks';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface ELGAStatus {
   configured: boolean;
@@ -103,6 +105,8 @@ const ELGA: React.FC = () => {
   const [patientStatus, setPatientStatus] = useState<any>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     fetchELGAStatus();
@@ -222,13 +226,23 @@ const ELGA: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h4" gutterBottom>
-            ELGA Integration
-          </Typography>
-          <Typography variant="subtitle1" color="text.secondary">
-            Elektronische Gesundheitsakte und e-Medikation
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box>
+            <Typography variant="h4" gutterBottom>
+              ELGA Integration
+            </Typography>
+            <Typography variant="subtitle1" color="text.secondary">
+              Elektronische Gesundheitsakte und e-Medikation
+            </Typography>
+          </Box>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutline />
+            </IconButton>
+          </Tooltip>
         </Box>
         <Button
           variant="outlined"
@@ -534,6 +548,304 @@ const ELGA: React.FC = () => {
           <Button onClick={() => setSyncDialogOpen(false)}>Abbrechen</Button>
           <Button onClick={handleSync} variant="contained" disabled={loading}>
             {loading ? <CircularProgress size={20} /> : 'Synchronisieren'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: ELGA Integration" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+            <Tab label="Übersicht" />
+            <Tab label="e-Medikation" />
+            <Tab label="e-Rezepte" />
+            <Tab label="e-Befunde" />
+            <Tab label="Synchronisation" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was ist ELGA?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  ELGA (Elektronische Gesundheitsakte) ist das österreichische System für die elektronische 
+                  Gesundheitsakte. Es ermöglicht den sicheren Austausch von Gesundheitsdaten zwischen 
+                  verschiedenen Gesundheitseinrichtungen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  ELGA-Systemstatus
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Systemstatus zeigt Ihnen die aktuelle Konfiguration und den Verbindungsstatus:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Konfiguriert:</strong> Zeigt an, ob ELGA korrekt konfiguriert ist</li>
+                  <li><strong>Umgebung:</strong> Test- oder Produktionsumgebung</li>
+                  <li><strong>Zertifikate:</strong> Status der ELGA-Zertifikate</li>
+                  <li><strong>Fehler:</strong> Zeigt Konfigurationsfehler an, falls vorhanden</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 <strong>e-Medikation:</strong> Anzeige aller Medikamente aus ELGA</li>
+                  <li>💊 <strong>e-Rezepte:</strong> Anzeige aller elektronischen Rezepte</li>
+                  <li>📄 <strong>e-Befunde/Dokumente:</strong> Anzeige aller medizinischen Dokumente</li>
+                  <li>🔄 <strong>Synchronisation:</strong> Manuelle Synchronisation mit ELGA</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Voraussetzungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Patient muss in ELGA registriert sein (ELGA-ID vorhanden)</li>
+                  <li>✅ ELGA-System muss korrekt konfiguriert sein</li>
+                  <li>✅ Gültige ELGA-Zertifikate müssen vorhanden sein</li>
+                  <li>✅ Internetverbindung für ELGA-API-Zugriff</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  e-Medikation
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die e-Medikation zeigt alle Medikamente an, die für den ausgewählten Patienten in ELGA gespeichert sind.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Medikamentenname:</strong> Name des Medikaments</li>
+                  <li><strong>Dosierung:</strong> Menge und Einheit (z.B. "10mg")</li>
+                  <li><strong>Häufigkeit:</strong> Einnahmehäufigkeit (z.B. "2x täglich")</li>
+                  <li><strong>Startdatum:</strong> Beginn der Medikation</li>
+                  <li><strong>Enddatum:</strong> Ende der Medikation (falls vorhanden)</li>
+                  <li><strong>Verschreiber:</strong> Name des verschreibenden Arztes</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  So verwenden Sie e-Medikation
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Patienten aus (Patient muss ELGA-ID haben)</li>
+                  <li>Klicken Sie auf den Tab "e-Medikation"</li>
+                  <li>Die Medikamente werden automatisch geladen</li>
+                  <li>Bei Bedarf: Klicken Sie auf "Mit ELGA synchronisieren" für aktuelle Daten</li>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Hinweis:</strong> Nur Patienten mit ELGA-ID können e-Medikation-Daten anzeigen. 
+                  Wenn ein Patient nicht in ELGA registriert ist, wird eine entsprechende Meldung angezeigt.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  e-Rezepte
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die e-Rezepte zeigen alle elektronischen Rezepte an, die für den ausgewählten Patienten in ELGA gespeichert sind.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Medikament:</strong> Name des verschriebenen Medikaments</li>
+                  <li><strong>Dosierung:</strong> Verschriebene Dosierung</li>
+                  <li><strong>Menge:</strong> Verschriebene Menge</li>
+                  <li><strong>Datum:</strong> Ausstellungsdatum des Rezepts</li>
+                  <li><strong>Verschreiber:</strong> Name des verschreibenden Arztes</li>
+                  <li><strong>Status:</strong> Status des Rezepts (z.B. "aktiv", "eingelöst")</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  So verwenden Sie e-Rezepte
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Patienten aus (Patient muss ELGA-ID haben)</li>
+                  <li>Klicken Sie auf den Tab "e-Rezepte"</li>
+                  <li>Die Rezepte werden automatisch geladen</li>
+                  <li>Bei Bedarf: Klicken Sie auf "Mit ELGA synchronisieren" für aktuelle Daten</li>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Hinweis:</strong> e-Rezepte werden automatisch in ELGA gespeichert, wenn Sie Rezepte 
+                  in der Ordinationssoftware erstellen (sofern ELGA-Integration aktiviert ist).
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  e-Befunde/Dokumente
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die e-Befunde/Dokumente zeigen alle medizinischen Dokumente an, die für den ausgewählten Patienten in ELGA gespeichert sind.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Titel:</strong> Titel des Dokuments</li>
+                  <li><strong>Class Code:</strong> Dokumentenklasse (z.B. "CDA", "Befund")</li>
+                  <li><strong>Type Code:</strong> Dokumententyp (z.B. "11534-6" für Progress Note)</li>
+                  <li><strong>Datum:</strong> Erstellungsdatum des Dokuments</li>
+                  <li><strong>Autor:</strong> Name des erstellenden Arztes</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  So verwenden Sie e-Befunde/Dokumente
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Patienten aus (Patient muss ELGA-ID haben)</li>
+                  <li>Klicken Sie auf den Tab "e-Befunde"</li>
+                  <li>Die Dokumente werden automatisch geladen</li>
+                  <li>Klicken Sie auf ein Dokument, um Details anzuzeigen</li>
+                  <li>Bei Bedarf: Klicken Sie auf "Mit ELGA synchronisieren" für aktuelle Daten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Dokumente zu ELGA hochladen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Sie können Dokumente (z.B. Dekurs-Einträge) direkt zu ELGA hochladen:
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Erstellen Sie ein Dokument in der Ordinationssoftware</li>
+                  <li>Klicken Sie auf "Zu ELGA senden" (falls verfügbar)</li>
+                  <li>Das Dokument wird automatisch in ELGA gespeichert</li>
+                  <li>Der Patient kann das Dokument dann in seiner ELGA-Akte sehen</li>
+                </Box>
+              </Box>
+
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Dekurs-Einträge können automatisch als CDA-Dokumente zu ELGA gesendet werden, 
+                  wenn Sie die entsprechende Funktion verwenden.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Synchronisation mit ELGA
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Synchronisation aktualisiert die Patientendaten aus ELGA und stellt sicher, 
+                  dass Sie die aktuellsten Informationen haben.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  So synchronisieren Sie
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Patienten aus</li>
+                  <li>Klicken Sie auf "Mit ELGA synchronisieren"</li>
+                  <li>Bestätigen Sie die Synchronisation im Dialog</li>
+                  <li>Das System lädt die aktuellen Daten von ELGA</li>
+                  <li>Die Tabs (e-Medikation, e-Rezepte, e-Befunde) werden automatisch aktualisiert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Was wird synchronisiert?
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Aktuelle Medikamente (e-Medikation)</li>
+                  <li>✅ Aktuelle Rezepte (e-Rezepte)</li>
+                  <li>✅ Neue Dokumente (e-Befunde)</li>
+                  <li>✅ ELGA-Status des Patienten</li>
+                  <li>✅ Versicherungsdaten (falls aktualisiert)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Automatische Synchronisation
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das System synchronisiert automatisch:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Bei der ersten Auswahl eines Patienten</li>
+                  <li>Nach dem Wechsel zwischen Tabs (e-Medikation, e-Rezepte, e-Befunde)</li>
+                  <li>Nach dem Hochladen eines Dokuments zu ELGA</li>
+                </Box>
+              </Box>
+
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Wichtig:</strong> Die Synchronisation kann einige Sekunden dauern, 
+                  abhängig von der Anzahl der Daten und der Verbindungsgeschwindigkeit.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

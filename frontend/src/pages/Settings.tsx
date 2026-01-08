@@ -20,7 +20,14 @@ import {
   Stack,
   IconButton,
   InputAdornment,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Tabs,
+  Tab,
+  Tooltip
 } from '@mui/material';
 import {
   Visibility,
@@ -28,13 +35,15 @@ import {
   Email,
   Send,
   CheckCircle,
-  Error as ErrorIcon
+  Error as ErrorIcon,
+  HelpOutline
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { useAppDispatch } from '../store/hooks';
 import { loadUser } from '../store/slices/authSlice';
 import api from '../utils/api';
 import UpdateMonitoring from '../components/UpdateMonitoring';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -88,6 +97,14 @@ const Settings: React.FC = () => {
   const [testSmsNumber, setTestSmsNumber] = useState<string>('');
   const [testSmsLoading, setTestSmsLoading] = useState<boolean>(false);
   const [testSmsResult, setTestSmsResult] = useState<{ success: boolean; message: string } | null>(null);
+  
+  // Hilfe-Dialog States
+  const [helpDialogBillingOpen, setHelpDialogBillingOpen] = useState(false);
+  const [helpDialogELDAOpen, setHelpDialogELDAOpen] = useState(false);
+  const [helpDialogWAHonlineOpen, setHelpDialogWAHonlineOpen] = useState(false);
+  const [helpDialogEmailOpen, setHelpDialogEmailOpen] = useState(false);
+  const [helpDialogSmsOpen, setHelpDialogSmsOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Lade aktuelle Einstellungen
   useEffect(() => {
@@ -456,9 +473,20 @@ const Settings: React.FC = () => {
         <Grid size={{ xs: 12, md: 8 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                Abrechnungseinstellungen
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="h6" gutterBottom>
+                  Abrechnungseinstellungen
+                </Typography>
+                <Tooltip title="Hilfe & Leitfaden">
+                  <IconButton
+                    onClick={() => setHelpDialogBillingOpen(true)}
+                    color="primary"
+                    size="small"
+                  >
+                    <HelpOutline />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Divider sx={{ my: 2 }} />
               
               <Box sx={{ mb: 3 }}>
@@ -563,9 +591,20 @@ const Settings: React.FC = () => {
         <Grid size={{ xs: 12, md: 8 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                ELDA-Konfiguration
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  ELDA-Konfiguration
+                </Typography>
+                <Tooltip title="Hilfe & Leitfaden">
+                  <IconButton
+                    onClick={() => setHelpDialogELDAOpen(true)}
+                    color="primary"
+                    size="small"
+                  >
+                    <HelpOutline />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Elektronischer Datenaustausch mit österreichischen Sozialversicherungsträgern
               </Typography>
@@ -680,9 +719,20 @@ const Settings: React.FC = () => {
         <Grid size={{ xs: 12, md: 8 }} sx={{ mt: 3 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                WAHonline-Integration
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  WAHonline-Integration
+                </Typography>
+                <Tooltip title="Hilfe & Leitfaden">
+                  <IconButton
+                    onClick={() => setHelpDialogWAHonlineOpen(true)}
+                    color="primary"
+                    size="small"
+                  >
+                    <HelpOutline />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Elektronische Meldung von Wahlarzt-Leistungen an die Österreichische Ärztekammer
               </Typography>
@@ -753,10 +803,21 @@ const Settings: React.FC = () => {
         <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                <Email sx={{ mr: 1, verticalAlign: 'middle' }} />
-                E-Mail-Konfiguration
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  <Email sx={{ mr: 1, verticalAlign: 'middle' }} />
+                  E-Mail-Konfiguration
+                </Typography>
+                <Tooltip title="Hilfe & Leitfaden">
+                  <IconButton
+                    onClick={() => setHelpDialogEmailOpen(true)}
+                    color="primary"
+                    size="small"
+                  >
+                    <HelpOutline />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
                 Konfigurieren Sie die E-Mail-Einstellungen für Benachrichtigungen über gebuchte Termine
               </Typography>
@@ -964,9 +1025,20 @@ const Settings: React.FC = () => {
         <Grid size={{ xs: 12 }}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                SMS Konfiguration
-              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  SMS Konfiguration
+                </Typography>
+                <Tooltip title="Hilfe & Leitfaden">
+                  <IconButton
+                    onClick={() => setHelpDialogSmsOpen(true)}
+                    color="primary"
+                    size="small"
+                  >
+                    <HelpOutline />
+                  </IconButton>
+                </Tooltip>
+              </Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
                 Konfigurieren Sie SMS-Benachrichtigungen für Online-Buchungen
               </Typography>
@@ -1203,6 +1275,1307 @@ const Settings: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Hilfe-Dialog für Abrechnungseinstellungen */}
+      <Dialog 
+        open={helpDialogBillingOpen} 
+        onClose={() => setHelpDialogBillingOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Abrechnungseinstellungen" 
+          onClose={() => setHelpDialogBillingOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Automatische Abrechnung" />
+            <Tab label="BI-Dashboard" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Abrechnungseinstellungen
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Abrechnungseinstellungen steuern, wie Leistungen automatisch abgerechnet werden 
+                  und welche Werte für Business Intelligence Berechnungen verwendet werden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>⚙️ <strong>Automatische Abrechnung:</strong> Aktivierung der automatischen Abrechnung</li>
+                  <li>📊 <strong>BI-Dashboard:</strong> Konfiguration von Kennzahlen für Business Intelligence</li>
+                  <li>💰 <strong>Personalkosten:</strong> Einstellung der Personalkostenquote</li>
+                  <li>⏰ <strong>Stundensatz:</strong> Ziel-Stundensatz für Geld-Uhr</li>
+                  <li>📈 <strong>Akquisekosten:</strong> Customer Acquisition Cost (CAC)</li>
+                  <li>🕐 <strong>Arbeitszeit:</strong> Arbeitsstunden pro Tag</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Automatische Abrechnung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die automatische Abrechnung ermöglicht es, dass alle erfassten Leistungen 
+                  automatisch abgerechnet werden, ohne manuelle Bestätigung.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Aktivierung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren Sie den Schalter "Automatische Abrechnung aktivieren"</li>
+                  <li>Klicken Sie auf "Einstellungen speichern"</li>
+                  <li>Die Checkbox "Automatisch abrechnen" im Leistungsdialog wird ausgeblendet</li>
+                  <li>Alle neuen Leistungen werden automatisch abgerechnet</li>
+                </Box>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Hinweis:</strong> Wenn diese Systemeinstellung aktiviert ist, wird die 
+                  Checkbox "Automatisch abrechnen" im Leistungsdialog ausgeblendet und alle 
+                  Leistungen werden automatisch abgerechnet.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  BI-Dashboard Einstellungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Diese Werte werden für die Berechnungen im Business Intelligence Dashboard verwendet.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  1. Personalkostenquote (%)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Standard:</strong> 25%</li>
+                  <li><strong>Bereich:</strong> 0-100%</li>
+                  <li><strong>Verwendung:</strong> Berechnung der Personalkosten im BI-Dashboard</li>
+                  <li><strong>Beispiel:</strong> Bei 25% und 10.000€ Umsatz = 2.500€ Personalkosten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  2. Ziel-Stundensatz (€)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Standard:</strong> 150€</li>
+                  <li><strong>Bereich:</strong> 0-∞ (in 10€ Schritten)</li>
+                  <li><strong>Verwendung:</strong> Vergleich mit tatsächlichem Stundensatz</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  3. Customer Acquisition Cost (CAC) (€)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Standard:</strong> 50€</li>
+                  <li><strong>Verwendung:</strong> Berechnung der Akquisekosten pro Patient</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  4. Arbeitsstunden pro Tag
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Standard:</strong> 8 Stunden</li>
+                  <li><strong>Bereich:</strong> 1-24 Stunden (in 0,5 Stunden Schritten)</li>
+                  <li><strong>Verwendung:</strong> Berechnung der täglichen Kapazität</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie die Abrechnungseinstellungen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren/Deaktivieren Sie "Automatische Abrechnung"</li>
+                  <li>Geben Sie die BI-Dashboard Werte ein</li>
+                  <li>Klicken Sie auf "Einstellungen speichern"</li>
+                  <li>Erfolgsmeldung wird angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Allgemeine Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Aktivieren Sie automatische Abrechnung für Effizienz</li>
+                  <li>✅ Überprüfen Sie die BI-Dashboard Werte regelmäßig</li>
+                  <li>✅ Passen Sie Werte an tatsächliche Gegebenheiten an</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogBillingOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für ELDA-Konfiguration */}
+      <Dialog 
+        open={helpDialogELDAOpen} 
+        onClose={() => setHelpDialogELDAOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: ELDA-Konfiguration" 
+          onClose={() => setHelpDialogELDAOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Was ist ELDA?" />
+            <Tab label="Konfiguration" />
+            <Tab label="Übertragungsmethoden" />
+            <Tab label="Umgebungen" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  ELDA-Konfiguration
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  ELDA (Elektronischer Datenaustausch) ermöglicht die automatische Übermittlung 
+                  von Abrechnungen an österreichische Sozialversicherungsträger.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📤 <strong>Automatische Übermittlung:</strong> Abrechnungen werden automatisch übermittelt</li>
+                  <li>🔐 <strong>Sichere Übertragung:</strong> FTPS oder Webservice</li>
+                  <li>🧪 <strong>Test-Umgebung:</strong> Testen vor Produktion</li>
+                  <li>✅ <strong>Status-Überwachung:</strong> Konfigurationsstatus wird angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was ist ELDA?
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  ELDA (Elektronischer Datenaustausch) ist ein System für den elektronischen 
+                  Datenaustausch zwischen Ärzten und österreichischen Sozialversicherungsträgern.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Vorteile
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Schnellere Abrechnung</li>
+                  <li>✅ Weniger Fehler</li>
+                  <li>✅ Automatische Verarbeitung</li>
+                  <li>✅ Bessere Nachverfolgbarkeit</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  ELDA konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie ELDA:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren Sie "ELDA-Übermittlung aktivieren"</li>
+                  <li>Wählen Sie die Übertragungsmethode (FTPS, Webservice, Auto)</li>
+                  <li>Wählen Sie die Umgebung (Test, SIT, Produktion)</li>
+                  <li>Klicken Sie auf "Einstellungen speichern"</li>
+                  <li>Überprüfen Sie den Konfigurationsstatus</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Übertragungsmethoden
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  ELDA unterstützt verschiedene Übertragungsmethoden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  1. FTPS (aktuell verfügbar)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Verfügbarkeit:</strong> Sofort verfügbar</li>
+                  <li><strong>Verwendung:</strong> Sichere Dateiübertragung über FTPS</li>
+                  <li><strong>Vorteil:</strong> Bewährt und stabil</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  2. Webservice (ab 02.02.2026)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Verfügbarkeit:</strong> Ab 02.02.2026 in Produktion</li>
+                  <li><strong>Verwendung:</strong> Automatische API-Übertragung</li>
+                  <li><strong>Vorteil:</strong> Vollautomatisch, Echtzeit</li>
+                  <li><strong>Hinweis:</strong> In Test- und SIT-Umgebungen bereits verfügbar</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  3. Automatisch
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Verfügbarkeit:</strong> Immer verfügbar</li>
+                  <li><strong>Verwendung:</strong> System wählt automatisch die beste Methode</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Umgebungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  ELDA unterstützt verschiedene Umgebungen für Tests und Produktion.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  1. Test
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Zweck:</strong> Entwicklung und Tests</li>
+                  <li><strong>Empfehlung:</strong> Für erste Tests verwenden</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  2. Systemintegrationstest (SIT)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Zweck:</strong> Integrationstests vor Produktion</li>
+                  <li><strong>Empfehlung:</strong> Vor Produktion verwenden</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  3. Produktion
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Zweck:</strong> Live-Betrieb</li>
+                  <li><strong>Empfehlung:</strong> Nur nach erfolgreichen Tests verwenden</li>
+                </Box>
+              </Box>
+
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Wichtig:</strong> Testen Sie ELDA immer zuerst in der Test-Umgebung, 
+                  bevor Sie zur Produktion wechseln.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konfiguration
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Testen Sie zuerst in Test-Umgebung</li>
+                  <li>✅ Überprüfen Sie den Konfigurationsstatus</li>
+                  <li>✅ Beheben Sie Konfigurationsfehler sofort</li>
+                  <li>✅ Wechseln Sie erst zur Produktion nach erfolgreichen Tests</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogELDAOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für WAHonline-Integration */}
+      <Dialog 
+        open={helpDialogWAHonlineOpen} 
+        onClose={() => setHelpDialogWAHonlineOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: WAHonline-Integration" 
+          onClose={() => setHelpDialogWAHonlineOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Was ist WAHonline?" />
+            <Tab label="Konfiguration" />
+            <Tab label="Funktionsweise" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  WAHonline-Integration
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  WAHonline ermöglicht die elektronische Meldung von Wahlarzt-Leistungen 
+                  an die Österreichische Ärztekammer.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📤 <strong>Automatische Meldung:</strong> Wahlarzt-Leistungen werden automatisch gemeldet</li>
+                  <li>🏥 <strong>Ärztekammer:</strong> Meldung an Österreichische Ärztekammer</li>
+                  <li>✅ <strong>Status-Überwachung:</strong> Konfigurationsstatus wird angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was ist WAHonline?
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  WAHonline ist ein System der Österreichischen Ärztekammer für die elektronische 
+                  Meldung von Wahlarzt-Leistungen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Zweck
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 <strong>Meldepflicht:</strong> Wahlarzt-Leistungen müssen gemeldet werden</li>
+                  <li>🏥 <strong>Ärztekammer:</strong> Meldung an Österreichische Ärztekammer</li>
+                  <li>✅ <strong>Compliance:</strong> Erfüllt gesetzliche Anforderungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  WAHonline konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie WAHonline:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren Sie "WAHonline-Übermittlung aktivieren"</li>
+                  <li>Klicken Sie auf "Einstellungen speichern"</li>
+                  <li>Die Konfiguration wird gespeichert</li>
+                  <li>Status wird aktualisiert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Funktionsweise
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So funktioniert die WAHonline-Integration:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Automatische Meldung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wahlarzt-Abrechnung wird erstellt</li>
+                  <li>Abrechnung wird erfolgreich abgeschlossen</li>
+                  <li>WAHonline-Integration wird automatisch ausgelöst</li>
+                  <li>Leistung wird an WAHonline übermittelt</li>
+                  <li>Bestätigung wird gespeichert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konfiguration
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Aktivieren Sie WAHonline für Wahlarzt-Leistungen</li>
+                  <li>✅ Überprüfen Sie den Konfigurationsstatus</li>
+                  <li>✅ Beheben Sie Konfigurationsfehler sofort</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogWAHonlineOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für E-Mail-Konfiguration */}
+      <Dialog 
+        open={helpDialogEmailOpen} 
+        onClose={() => setHelpDialogEmailOpen(false)} 
+        maxWidth="lg" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '700px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Detaillierte Konfigurationsanleitung: E-Mail" 
+          onClose={() => setHelpDialogEmailOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Gmail" />
+            <Tab label="Apple iCloud" />
+            <Tab label="Outlook" />
+            <Tab label="Yahoo" />
+            <Tab label="Eigener SMTP" />
+            <Tab label="Test-E-Mail" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  E-Mail-Konfiguration
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die E-Mail-Konfiguration ermöglicht es, Benachrichtigungen über gebuchte Termine 
+                  per E-Mail zu versenden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Unterstützte Anbieter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📧 <strong>Gmail:</strong> Google Mail</li>
+                  <li>🍎 <strong>Apple iCloud:</strong> iCloud Mail</li>
+                  <li>📮 <strong>Outlook / Hotmail:</strong> Microsoft Mail</li>
+                  <li>📬 <strong>Yahoo:</strong> Yahoo Mail</li>
+                  <li>⚙️ <strong>Eigener SMTP-Server:</strong> Benutzerdefinierter Server</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Erforderliche Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔐 <strong>SMTP Host:</strong> Server-Adresse (z.B. smtp.gmail.com)</li>
+                  <li>🔌 <strong>SMTP Port:</strong> Port-Nummer (z.B. 587 oder 465)</li>
+                  <li>🔒 <strong>SSL/TLS:</strong> Verschlüsselung aktivieren</li>
+                  <li>📧 <strong>E-Mail-Adresse:</strong> Ihre E-Mail-Adresse</li>
+                  <li>🔑 <strong>Passwort:</strong> Passwort oder App-Passwort</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Gmail konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Gmail für E-Mail-Benachrichtigungen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: App-Passwort erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>https://myaccount.google.com</strong></li>
+                  <li>Klicken Sie auf "Sicherheit"</li>
+                  <li>Aktivieren Sie "2-Schritt-Verifizierung" (falls noch nicht aktiviert)</li>
+                  <li>Klicken Sie auf "App-Passwörter"</li>
+                  <li>Wählen Sie "Mail" und "Andere (benutzerdefiniert)"</li>
+                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Klicken Sie auf "Generieren"</li>
+                  <li><strong>Wichtig:</strong> Kopieren Sie das App-Passwort (wird nur einmal angezeigt!)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>E-Mail-Anbieter:</strong> Wählen Sie "Gmail"</li>
+                  <li><strong>SMTP Host:</strong> Wird automatisch auf "smtp.gmail.com" gesetzt</li>
+                  <li><strong>SMTP Port:</strong> Wird automatisch auf "587" gesetzt</li>
+                  <li><strong>SSL/TLS:</strong> Wird automatisch aktiviert</li>
+                  <li><strong>Absender-E-Mail:</strong> Ihre Gmail-Adresse (z.B. name@gmail.com)</li>
+                  <li><strong>Benutzername:</strong> Ihre Gmail-Adresse (z.B. name@gmail.com)</li>
+                  <li><strong>Passwort:</strong> Das erstellte App-Passwort (nicht Ihr normales Passwort!)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Gmail SMTP-Einstellungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>SMTP Host:</strong> smtp.gmail.com</li>
+                  <li><strong>SMTP Port:</strong> 587 (TLS) oder 465 (SSL)</li>
+                  <li><strong>SSL/TLS:</strong> Aktiviert</li>
+                  <li><strong>Authentifizierung:</strong> Erforderlich</li>
+                  <li><strong>Passwort:</strong> App-Passwort (nicht normales Passwort!)</li>
+                </Box>
+              </Box>
+
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Wichtig:</strong> Verwenden Sie für Gmail immer ein App-Passwort, 
+                  nicht Ihr normales Gmail-Passwort. Normale Passwörter funktionieren nicht!
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Apple iCloud konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Apple iCloud Mail:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: App-spezifisches Passwort erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>https://appleid.apple.com</strong></li>
+                  <li>Melden Sie sich mit Ihrer Apple-ID an</li>
+                  <li>Klicken Sie auf "App-spezifische Passwörter"</li>
+                  <li>Klicken Sie auf "Passwort generieren"</li>
+                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                  <li><strong>Wichtig:</strong> Kopieren Sie das Passwort (wird nur einmal angezeigt!)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>E-Mail-Anbieter:</strong> Wählen Sie "Apple iCloud"</li>
+                  <li><strong>SMTP Host:</strong> Wird automatisch auf "smtp.mail.me.com" gesetzt</li>
+                  <li><strong>SMTP Port:</strong> Wird automatisch auf "587" gesetzt</li>
+                  <li><strong>SSL/TLS:</strong> Wird automatisch aktiviert</li>
+                  <li><strong>Absender-E-Mail:</strong> Ihre iCloud-Adresse (z.B. name@icloud.com)</li>
+                  <li><strong>Benutzername:</strong> Ihre iCloud-Adresse (z.B. name@icloud.com)</li>
+                  <li><strong>Passwort:</strong> Das erstellte app-spezifische Passwort</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  iCloud SMTP-Einstellungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>SMTP Host:</strong> smtp.mail.me.com</li>
+                  <li><strong>SMTP Port:</strong> 587 (TLS)</li>
+                  <li><strong>SSL/TLS:</strong> Aktiviert</li>
+                  <li><strong>Authentifizierung:</strong> Erforderlich</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Outlook / Hotmail konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Outlook oder Hotmail:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: App-Passwort erstellen (falls 2FA aktiviert)
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>https://account.microsoft.com</strong></li>
+                  <li>Klicken Sie auf "Sicherheit"</li>
+                  <li>Aktivieren Sie "Zweistufige Überprüfung" (falls noch nicht aktiviert)</li>
+                  <li>Klicken Sie auf "App-Passwörter"</li>
+                  <li>Wählen Sie "Mail" und "Andere"</li>
+                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Klicken Sie auf "Generieren"</li>
+                  <li><strong>Wichtig:</strong> Kopieren Sie das App-Passwort</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>E-Mail-Anbieter:</strong> Wählen Sie "Outlook / Hotmail"</li>
+                  <li><strong>SMTP Host:</strong> Wird automatisch auf "smtp-mail.outlook.com" gesetzt</li>
+                  <li><strong>SMTP Port:</strong> Wird automatisch auf "587" gesetzt</li>
+                  <li><strong>SSL/TLS:</strong> Wird automatisch aktiviert</li>
+                  <li><strong>Absender-E-Mail:</strong> Ihre Outlook/Hotmail-Adresse</li>
+                  <li><strong>Benutzername:</strong> Ihre Outlook/Hotmail-Adresse</li>
+                  <li><strong>Passwort:</strong> App-Passwort (falls 2FA aktiviert) oder normales Passwort</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Outlook SMTP-Einstellungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>SMTP Host:</strong> smtp-mail.outlook.com</li>
+                  <li><strong>SMTP Port:</strong> 587 (TLS)</li>
+                  <li><strong>SSL/TLS:</strong> Aktiviert</li>
+                  <li><strong>Authentifizierung:</strong> Erforderlich</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Yahoo konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Yahoo Mail:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: App-Passwort erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>https://login.yahoo.com</strong></li>
+                  <li>Klicken Sie auf "Account-Sicherheit"</li>
+                  <li>Aktivieren Sie "Zweistufige Überprüfung" (falls noch nicht aktiviert)</li>
+                  <li>Klicken Sie auf "App-Passwörter generieren"</li>
+                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Klicken Sie auf "Generieren"</li>
+                  <li><strong>Wichtig:</strong> Kopieren Sie das App-Passwort</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>E-Mail-Anbieter:</strong> Wählen Sie "Yahoo"</li>
+                  <li><strong>SMTP Host:</strong> Wird automatisch auf "smtp.mail.yahoo.com" gesetzt</li>
+                  <li><strong>SMTP Port:</strong> Wird automatisch auf "587" gesetzt</li>
+                  <li><strong>SSL/TLS:</strong> Wird automatisch aktiviert</li>
+                  <li><strong>Absender-E-Mail:</strong> Ihre Yahoo-Adresse</li>
+                  <li><strong>Benutzername:</strong> Ihre Yahoo-Adresse</li>
+                  <li><strong>Passwort:</strong> Das erstellte App-Passwort</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Yahoo SMTP-Einstellungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>SMTP Host:</strong> smtp.mail.yahoo.com</li>
+                  <li><strong>SMTP Port:</strong> 587 (TLS) oder 465 (SSL)</li>
+                  <li><strong>SSL/TLS:</strong> Aktiviert</li>
+                  <li><strong>Authentifizierung:</strong> Erforderlich</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Eigener SMTP-Server konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie einen eigenen SMTP-Server:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: SMTP-Daten erhalten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Kontaktieren Sie Ihren E-Mail-Provider oder IT-Administrator</li>
+                  <li>Erfragen Sie die SMTP-Einstellungen:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li>SMTP Host (z.B. mail.example.com)</li>
+                      <li>SMTP Port (z.B. 587, 465, 25)</li>
+                      <li>SSL/TLS Anforderung</li>
+                      <li>Benutzername und Passwort</li>
+                    </Box>
+                  </li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>E-Mail-Anbieter:</strong> Wählen Sie "Eigener SMTP-Server"</li>
+                  <li><strong>SMTP Host:</strong> Geben Sie die Server-Adresse ein (z.B. mail.example.com)</li>
+                  <li><strong>SMTP Port:</strong> Geben Sie den Port ein (z.B. 587, 465, 25)</li>
+                  <li><strong>SSL/TLS:</strong> Aktivieren Sie, wenn erforderlich (normalerweise für Port 465)</li>
+                  <li><strong>Absender-E-Mail:</strong> Ihre E-Mail-Adresse</li>
+                  <li><strong>Benutzername:</strong> Ihr SMTP-Benutzername</li>
+                  <li><strong>Passwort:</strong> Ihr SMTP-Passwort</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Häufige SMTP-Ports
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>587:</strong> TLS (empfohlen, SSL/TLS aktivieren)</li>
+                  <li><strong>465:</strong> SSL (SSL/TLS aktivieren)</li>
+                  <li><strong>25:</strong> Unverschlüsselt (nicht empfohlen)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 6 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Test-E-Mail senden
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Nach der Konfiguration können Sie eine Test-E-Mail senden, um die Einstellungen zu überprüfen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Test-E-Mail senden
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Geben Sie eine Test-E-Mail-Adresse ein (z.B. test@example.com)</li>
+                  <li>Klicken Sie auf "Test senden"</li>
+                  <li>Warten Sie auf die Bestätigung</li>
+                  <li>Überprüfen Sie Ihr E-Mail-Postfach</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Fehlerbehebung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>❌ <strong>Fehler beim Senden:</strong> Überprüfen Sie SMTP-Host und Port</li>
+                  <li>❌ <strong>Authentifizierungsfehler:</strong> Überprüfen Sie Benutzername und Passwort</li>
+                  <li>❌ <strong>SSL/TLS-Fehler:</strong> Aktivieren/Deaktivieren Sie SSL/TLS</li>
+                  <li>❌ <strong>Port-Fehler:</strong> Versuchen Sie einen anderen Port (587, 465)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 7 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Sicherheit
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔐 <strong>App-Passwörter:</strong> Verwenden Sie immer App-Passwörter für Gmail, iCloud, Yahoo</li>
+                  <li>🔐 <strong>Verschlüsselung:</strong> Aktivieren Sie SSL/TLS immer</li>
+                  <li>🔐 <strong>Passwort:</strong> Speichern Sie Passwörter sicher</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konfiguration
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Testen:</strong> Senden Sie immer eine Test-E-Mail</li>
+                  <li>✅ <strong>Überprüfen:</strong> Überprüfen Sie die Einstellungen regelmäßig</li>
+                  <li>✅ <strong>Backup:</strong> Dokumentieren Sie die Einstellungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogEmailOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für SMS Konfiguration */}
+      <Dialog 
+        open={helpDialogSmsOpen} 
+        onClose={() => setHelpDialogSmsOpen(false)} 
+        maxWidth="lg" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '700px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Detaillierte Konfigurationsanleitung: SMS" 
+          onClose={() => setHelpDialogSmsOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Seven.io" />
+            <Tab label="Twilio" />
+            <Tab label="websms.at" />
+            <Tab label="Test-SMS" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  SMS Konfiguration
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die SMS-Konfiguration ermöglicht es, SMS-Benachrichtigungen für Online-Buchungen 
+                  zu versenden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Unterstützte Provider
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📱 <strong>Seven.io:</strong> Internationaler SMS-Provider</li>
+                  <li>📞 <strong>Twilio:</strong> Cloud-Kommunikationsplattform</li>
+                  <li>🇦🇹 <strong>websms.at:</strong> Österreichischer SMS-Provider</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Seven.io konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Seven.io:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: Seven.io Account erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>https://www.seven.io</strong></li>
+                  <li>Erstellen Sie ein Konto</li>
+                  <li>Melden Sie sich an</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: API Key erhalten
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Im Dashboard: "API" → "API Keys"</li>
+                  <li>Klicken Sie auf "Neuen API Key erstellen"</li>
+                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Kopieren Sie den API Key</li>
+                  <li><strong>Wichtig:</strong> API Key sicher speichern!</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 3: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>SMS-Provider:</strong> Wählen Sie "Seven.io"</li>
+                  <li><strong>Seven.io API Key:</strong> Einfügen des kopierten API Keys</li>
+                  <li><strong>Absender-Name:</strong> Name, der in der SMS angezeigt wird (optional)</li>
+                  <li>Klicken Sie auf "SMS-Konfiguration speichern"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Twilio konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Twilio:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: Twilio Account erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>https://www.twilio.com</strong></li>
+                  <li>Erstellen Sie ein Konto</li>
+                  <li>Melden Sie sich an</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Credentials erhalten
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Im Dashboard: "Account" → "Credentials"</li>
+                  <li>Kopieren Sie "Account SID"</li>
+                  <li>Kopieren Sie "Auth Token"</li>
+                  <li>Kaufen Sie eine Telefonnummer (falls noch nicht vorhanden)</li>
+                  <li>Kopieren Sie die Telefonnummer</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 3: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>SMS-Provider:</strong> Wählen Sie "Twilio"</li>
+                  <li><strong>Account SID:</strong> Einfügen der Account SID</li>
+                  <li><strong>Auth Token:</strong> Einfügen des Auth Tokens</li>
+                  <li><strong>Absender-Nummer:</strong> Ihre Twilio Telefonnummer (z.B. +1234567890)</li>
+                  <li>Klicken Sie auf "SMS-Konfiguration speichern"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  websms.at konfigurieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie websms.at:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: websms.at Account erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>https://www.websms.at</strong></li>
+                  <li>Erstellen Sie ein Konto</li>
+                  <li>Melden Sie sich an</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Credentials erhalten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Benutzername: Ihre websms.at Benutzername</li>
+                  <li>Passwort: Ihr websms.at Passwort</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 3: Konfiguration im System
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>SMS-Provider:</strong> Wählen Sie "websms.at"</li>
+                  <li><strong>Benutzername:</strong> Ihr websms.at Benutzername</li>
+                  <li><strong>Passwort:</strong> Ihr websms.at Passwort</li>
+                  <li>Klicken Sie auf "SMS-Konfiguration speichern"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Test-SMS senden
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Nach der Konfiguration können Sie eine Test-SMS senden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Test-SMS senden
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Geben Sie eine Test-Telefonnummer ein (z.B. +436641234567)</li>
+                  <li><strong>Wichtig:</strong> Internationales Format erforderlich (+43...)</li>
+                  <li>Klicken Sie auf "Test senden"</li>
+                  <li>Warten Sie auf die Bestätigung</li>
+                  <li>Überprüfen Sie Ihr Telefon</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Telefonnummer-Format
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Korrekt:</strong> +436641234567 (mit Ländercode)</li>
+                  <li>❌ <strong>Falsch:</strong> 06641234567 (ohne Ländercode)</li>
+                  <li>❌ <strong>Falsch:</strong> 00436641234567 (mit 00 statt +)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Sicherheit
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔐 <strong>API Keys:</strong> Geheim halten, nicht weitergeben</li>
+                  <li>🔐 <strong>Passwörter:</strong> Sicher speichern</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konfiguration
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Testen:</strong> Senden Sie immer eine Test-SMS</li>
+                  <li>✅ <strong>Format:</strong> Verwenden Sie internationales Format (+43...)</li>
+                  <li>✅ <strong>Überprüfen:</strong> Überprüfen Sie die Einstellungen regelmäßig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogSmsOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

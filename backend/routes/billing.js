@@ -8,6 +8,7 @@ const ServiceCatalog = require('../models/ServiceCatalog');
 const Patient = require('../models/Patient');
 const PatientExtended = require('../models/PatientExtended');
 const User = require('../models/User');
+const { parseDateString, startOfDay, endOfDay, formatDateString } = require('../utils/timezone');
 const auth = require('../middleware/auth');
 const checkPermission = require('../middleware/checkPermission');
 const billingCalculator = require('../utils/billing-calculator');
@@ -28,12 +29,41 @@ router.get('/invoices', auth, async (req, res) => {
     const { page = 1, limit = 10, status, billingType, startDate, endDate } = req.query;
     
     const filter = {};
-    if (status) filter.status = status;
+    // Unterstütze mehrere Status durch Komma-getrennte Liste
+    if (status) {
+      const statusArray = status.split(',').map(s => s.trim()).filter(s => s);
+      if (statusArray.length === 1) {
+        filter.status = statusArray[0];
+      } else if (statusArray.length > 1) {
+        filter.status = { $in: statusArray };
+      }
+    }
     if (billingType) filter.billingType = billingType;
     if (startDate || endDate) {
       filter.invoiceDate = {};
-      if (startDate) filter.invoiceDate.$gte = new Date(startDate);
-      if (endDate) filter.invoiceDate.$lte = new Date(endDate);
+      if (startDate) {
+        const start = startOfDay(parseDateString(startDate));
+        filter.invoiceDate.$gte = start;
+        console.log('📅 Date Filter - startDate:', {
+          input: startDate,
+          parsed: start,
+          iso: start.toISOString(),
+          local: start.toLocaleString('de-DE', { timeZone: 'Europe/Vienna' })
+        });
+      }
+      if (endDate) {
+        const end = endOfDay(parseDateString(endDate));
+        filter.invoiceDate.$lte = end;
+        console.log('📅 Date Filter - endDate:', {
+          input: endDate,
+          parsed: end,
+          iso: end.toISOString(),
+          local: end.toLocaleString('de-DE', { timeZone: 'Europe/Vienna' })
+        });
+      }
+      if (startDate || endDate) {
+        console.log('📅 Final invoiceDate filter:', JSON.stringify(filter.invoiceDate, null, 2));
+      }
     }
 
     const invoices = await Invoice.find(filter)
@@ -544,6 +574,188 @@ router.post('/services', auth, [
     res.status(500).json({
       success: false,
       message: 'Fehler beim Erstellen der Leistung'
+    });
+  }
+});
+
+// @route   GET /api/billing/top-patients
+// @desc    Get top 20 patients by total spending
+// @access  Private
+router.get('/top-patients', auth, async (req, res) => {
+  try {
+    const { limit = 20, startDate, endDate } = req.query;
+    
+    // Datumsfilter
+    const dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.invoiceDate = {};
+      if (startDate) {
+        const start = startOfDay(parseDateString(startDate));
+        dateFilter.invoiceDate.$gte = start;
+      }
+      if (endDate) {
+        const end = endOfDay(parseDateString(endDate));
+        dateFilter.invoiceDate.$lte = end;
+      }
+    }
+    
+    // Aggregation: Gruppiere nach Patient und summiere Beträge
+    const topPatients = await Invoice.aggregate([
+      {
+        $match: {
+          ...dateFilter,
+          status: { $ne: 'cancelled' } // Stornierte Rechnungen ausschließen
+        }
+      },
+      {
+        $group: {
+          _id: '$patient.id',
+          patientName: { $first: '$patient.name' },
+          totalAmount: { $sum: '$totalAmount' },
+          invoiceCount: { $sum: 1 },
+          lastInvoiceDate: { $max: '$invoiceDate' }
+        }
+      },
+      {
+        $sort: { totalAmount: -1 } // Sortiere nach Gesamtbetrag (höchste zuerst)
+      },
+      {
+        $limit: parseInt(limit)
+      },
+      {
+        $lookup: {
+          from: 'patients',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'patientDetails'
+        }
+      },
+      {
+        $unwind: {
+          path: '$patientDetails',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          patientId: '$_id',
+          patientName: {
+            $ifNull: [
+              { $concat: ['$patientDetails.firstName', ' ', '$patientDetails.lastName'] },
+              '$patientName'
+            ]
+          },
+          totalAmount: 1,
+          invoiceCount: 1,
+          lastInvoiceDate: 1,
+          firstName: '$patientDetails.firstName',
+          lastName: '$patientDetails.lastName',
+          email: '$patientDetails.email',
+          phone: '$patientDetails.phone'
+        }
+      }
+    ]);
+    
+    res.json({
+      success: true,
+      data: topPatients
+    });
+  } catch (error) {
+    console.error('Error fetching top patients:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Top-Patienten'
+    });
+  }
+});
+
+// @route   GET /api/billing/top-patients
+// @desc    Get top 20 patients by total spending
+// @access  Private
+router.get('/top-patients', auth, async (req, res) => {
+  try {
+    const { limit = 20, startDate, endDate } = req.query;
+    
+    // Datumsfilter
+    const dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.invoiceDate = {};
+      if (startDate) {
+        const start = startOfDay(parseDateString(startDate));
+        dateFilter.invoiceDate.$gte = start;
+      }
+      if (endDate) {
+        const end = endOfDay(parseDateString(endDate));
+        dateFilter.invoiceDate.$lte = end;
+      }
+    }
+    
+    // Aggregation: Gruppiere nach Patient und summiere Beträge
+    const topPatients = await Invoice.aggregate([
+      {
+        $match: {
+          ...dateFilter,
+          status: { $ne: 'cancelled' } // Stornierte Rechnungen ausschließen
+        }
+      },
+      {
+        $group: {
+          _id: '$patient.id',
+          patientName: { $first: '$patient.name' },
+          totalAmount: { $sum: '$totalAmount' },
+          invoiceCount: { $sum: 1 },
+          lastInvoiceDate: { $max: '$invoiceDate' }
+        }
+      },
+      {
+        $sort: { totalAmount: -1 } // Sortiere nach Gesamtbetrag (höchste zuerst)
+      },
+      {
+        $limit: parseInt(limit)
+      },
+      {
+        $lookup: {
+          from: 'patients',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'patientDetails'
+        }
+      },
+      {
+        $unwind: {
+          path: '$patientDetails',
+          preserveNullAndEmptyArrays: true
+        }
+      },
+      {
+        $project: {
+          patientId: '$_id',
+          patientName: {
+            $ifNull: [
+              { $concat: ['$patientDetails.firstName', ' ', '$patientDetails.lastName'] },
+              '$patientName'
+            ]
+          },
+          totalAmount: 1,
+          invoiceCount: 1,
+          lastInvoiceDate: 1,
+          firstName: '$patientDetails.firstName',
+          lastName: '$patientDetails.lastName',
+          email: '$patientDetails.email',
+          phone: '$patientDetails.phone'
+        }
+      }
+    ]);
+    
+    res.json({
+      success: true,
+      data: topPatients
+    });
+  } catch (error) {
+    console.error('Error fetching top patients:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Top-Patienten'
     });
   }
 });

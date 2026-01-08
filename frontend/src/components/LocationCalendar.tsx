@@ -15,10 +15,15 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  CircularProgress
+  CircularProgress,
+  Tooltip,
+  Tabs,
+  Tab,
+  IconButton
 } from '@mui/material';
 import {
-  Add as AddIcon
+  Add as AddIcon,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -36,6 +41,7 @@ import {
   deleteLocationHours,
   deleteLocationClosure
 } from '../store/slices/locationSlice';
+import GradientDialogTitle from './GradientDialogTitle';
 
 interface CalendarEvent {
   id: string;
@@ -60,6 +66,8 @@ const LocationCalendar: React.FC = () => {
   const [editingClosure, setEditingClosure] = useState<any>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [eventToDelete, setEventToDelete] = useState<CalendarEvent | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   const [hoursForm, setHoursForm] = useState({
     location_id: '',
@@ -406,9 +414,20 @@ const LocationCalendar: React.FC = () => {
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
       <Box>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-          <Typography variant="h4" component="h1">
-            Standort-Kalender
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="h4" component="h1">
+              Standort-Kalender
+            </Typography>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Box display="flex" gap={1}>
             <Button
               variant="outlined"
@@ -673,6 +692,162 @@ const LocationCalendar: React.FC = () => {
           </DialogActions>
         </Dialog>
       </Box>
+
+      {/* Hilfe-Dialog */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Standort-Kalender" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Kalenderansicht" />
+            <Tab label="Öffnungszeiten" />
+            <Tab label="Schließtage" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Standort-Kalender
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Der Standort-Kalender zeigt alle Öffnungszeiten und Schließtage 
+                  für einen ausgewählten Standort in einer übersichtlichen Kalenderansicht.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 <strong>Kalenderansicht:</strong> Monatsansicht mit Events</li>
+                  <li>🕐 <strong>Öffnungszeiten:</strong> Anzeige und Verwaltung</li>
+                  <li>🚫 <strong>Schließtage:</strong> Anzeige und Verwaltung</li>
+                  <li>🏥 <strong>Standortauswahl:</strong> Filter nach Standort</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Kalenderansicht
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Kalenderansicht zeigt alle Events für den ausgewählten Standort.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 <strong>Monatsansicht:</strong> Übersicht über den gesamten Monat</li>
+                  <li>🎨 <strong>Farbcodierung:</strong> Öffnungszeiten (blau), Schließtage (rot)</li>
+                  <li>🖱️ <strong>Interaktion:</strong> Klicken Sie auf Events für Details</li>
+                  <li>🔍 <strong>Navigation:</strong> Vor/Zurück durch Monate</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Öffnungszeiten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Öffnungszeiten können direkt im Kalender erstellt und bearbeitet werden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>➕ <strong>Erstellen:</strong> "Neue Öffnungszeiten" Button</li>
+                  <li>✏️ <strong>Bearbeiten:</strong> Klicken Sie auf ein Event</li>
+                  <li>🗑️ <strong>Löschen:</strong> Über das Bearbeitungsdialog</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Schließtage
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Schließtage werden im Kalender rot angezeigt.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>➕ <strong>Erstellen:</strong> "Neuer Schließtag" Button</li>
+                  <li>✏️ <strong>Bearbeiten:</strong> Klicken Sie auf ein Event</li>
+                  <li>🗑️ <strong>Löschen:</strong> Über das Bearbeitungsdialog</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Kalender-Nutzung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erstellen Sie Schließtage frühzeitig</li>
+                  <li>✅ Überprüfen Sie Öffnungszeiten regelmäßig</li>
+                  <li>✅ Verwenden Sie aussagekräftige Labels</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </LocalizationProvider>
   );
 };

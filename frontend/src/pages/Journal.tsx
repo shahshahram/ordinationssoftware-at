@@ -41,10 +41,12 @@ import {
   Close as CloseIcon,
   Visibility as VisibilityIcon,
   AttachMoney as AttachMoneyIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { format as formatDate } from 'date-fns';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface InvoiceJournalEntry {
   _id: string;
@@ -163,6 +165,8 @@ const Journal: React.FC = () => {
   const [selectedReceiptEntry, setSelectedReceiptEntry] = useState<ReceiptJournalEntry | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [fullInvoiceDetails, setFullInvoiceDetails] = useState<any>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Lade Standorte
   useEffect(() => {
@@ -468,12 +472,24 @@ const Journal: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Journal
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Unveränderbare Protokollierung aller Rechnungen und Registrierkassa-Belege für interne Überprüfung und Compliance
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Journal
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Unveränderbare Protokollierung aller Rechnungen und Registrierkassa-Belege für interne Überprüfung und Compliance
+          </Typography>
+        </Box>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+          >
+            <HelpOutlineIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Tabs 
         value={activeTab} 
@@ -1374,6 +1390,275 @@ const Journal: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailDialogOpen(false)}>Schließen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog mit Leitfaden */}
+      <Dialog 
+        open={helpDialogOpen} 
+        onClose={() => setHelpDialogOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Leitfaden: Journal" 
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Rechnungsjournal" />
+            <Tab label="Registrierkassa-Journal" />
+            <Tab label="Filter & Suche" />
+            <Tab label="Export" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Was ist das Journal?
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Das Journal ist eine vollständige, unveränderbare Aufzeichnung aller 
+                  Rechnungen und Registrierkassa-Belege. Es dient der Dokumentation, 
+                  Nachverfolgbarkeit und gesetzlichen Compliance.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 <strong>Rechnungsjournal:</strong> Vollständige Aufzeichnung aller Rechnungen</li>
+                  <li>🧾 <strong>Registrierkassa-Journal:</strong> Aufzeichnung aller Belege</li>
+                  <li>🔍 <strong>Suche & Filter:</strong> Nach Datum, Standort, Status filtern</li>
+                  <li>👁️ <strong>Details anzeigen:</strong> Vollständige Informationen zu jedem Eintrag</li>
+                  <li>📥 <strong>Export:</strong> Journal-Einträge exportieren</li>
+                  <li>🔐 <strong>Unveränderbarkeit:</strong> Journal-Hash für Integrität</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Gesetzliche Anforderungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>RKSVO (Registrierkassensicherheitsverordnung)</li>
+                  <li>UGB (Unternehmensgesetzbuch) - Buchführungspflicht</li>
+                  <li>BAO (Bundesabgabenordnung) - Aufbewahrungspflicht</li>
+                  <li>DSGVO - Datenschutz</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Rechnungsjournal
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das Rechnungsjournal enthält alle erstellten, geänderten oder gelöschten Rechnungen 
+                  mit vollständigen Informationen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Rechnungsnummer:</strong> Eindeutige Rechnungsnummer</li>
+                  <li><strong>Rechnungsdatum:</strong> Datum der Rechnung</li>
+                  <li><strong>Patient:</strong> Name und Adresse</li>
+                  <li><strong>Leistungen:</strong> Liste aller Leistungen mit Preisen</li>
+                  <li><strong>Beträge:</strong> Zwischensumme, Steuer, Gesamtbetrag</li>
+                  <li><strong>Status:</strong> Aktueller Rechnungsstatus</li>
+                  <li><strong>Journal-Hash:</strong> Eindeutiger Hash für Integrität</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Details anzeigen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Augen-Icon bei einem Eintrag</li>
+                  <li>Der Detail-Dialog zeigt alle Informationen</li>
+                  <li>Vollständige Rechnungsdetails werden geladen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Registrierkassa-Journal
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das Registrierkassa-Journal enthält alle Belege der Registrierkassen, 
+                  einschließlich Startbelege, Normalbelege, Monats- und Jahresbelege.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Belegarten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Startbeleg:</strong> Erster Beleg bei Kassenstart</li>
+                  <li><strong>Normal:</strong> Reguläre Verkaufsbelege</li>
+                  <li><strong>Monatsbeleg:</strong> Monatliche Zusammenfassung</li>
+                  <li><strong>Jahresbeleg:</strong> Jährliche Zusammenfassung</li>
+                  <li><strong>Storno:</strong> Stornierte Belege</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  TSE (Technische Sicherheitseinrichtung)
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Alle Belege werden durch eine TSE signiert, die gesetzlich vorgeschrieben ist. 
+                  Die TSE-Signatur stellt sicher, dass Belege nicht manipuliert werden können.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Filter & Suche
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das Journal bietet umfangreiche Filter- und Suchmöglichkeiten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Datumsfilter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Tag:</strong> Einen spezifischen Tag auswählen</li>
+                  <li><strong>Monat:</strong> Einen Monat auswählen</li>
+                  <li><strong>Jahr:</strong> Ein Jahr auswählen</li>
+                  <li><strong>Zeitraum:</strong> Benutzerdefiniertes Datumsintervall (von/bis)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Weitere Filter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Standort:</strong> Filter nach Standort</li>
+                  <li><strong>Abrechnungstyp:</strong> Privat, Kassenarzt, Wahlarzt</li>
+                  <li><strong>Status:</strong> Rechnungsstatus (nur Rechnungsjournal)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Export
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Journal-Einträge können für Dokumentation und Archivierung exportiert werden.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Export-Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>PDF-Export:</strong> Journal-Einträge als PDF</li>
+                  <li><strong>Excel-Export:</strong> Journal-Einträge als Excel-Datei</li>
+                  <li><strong>CSV-Export:</strong> Journal-Einträge als CSV-Datei</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Aufbewahrungspflicht
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Journal-Einträge müssen gesetzlich aufbewahrt werden:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>UGB:</strong> 7 Jahre Aufbewahrungspflicht</li>
+                  <li><strong>BAO:</strong> 7 Jahre Aufbewahrungspflicht</li>
+                  <li><strong>RKSVO:</strong> Unbegrenzte Aufbewahrung für TSE-Belege</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Regelmäßige Überprüfung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Überprüfen Sie das Journal monatlich</li>
+                  <li>✅ Stellen Sie sicher, dass alle Rechnungen erfasst sind</li>
+                  <li>✅ Prüfen Sie die Konsistenz der Daten</li>
+                  <li>✅ Überprüfen Sie die Journal-Hashes</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Export & Backup
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📥 Exportieren Sie das Journal regelmäßig</li>
+                  <li>📥 Speichern Sie Exports an sicheren Orten</li>
+                  <li>📥 Archivieren Sie alte Journal-Einträge</li>
+                </Box>
+              </Box>
+
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Verwenden Sie Filter, um schnell bestimmte Zeiträume 
+                  oder Einträge zu finden. Exportieren Sie regelmäßig für Backup.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>
