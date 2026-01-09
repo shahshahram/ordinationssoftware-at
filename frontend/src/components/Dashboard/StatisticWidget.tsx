@@ -29,11 +29,12 @@ const StatisticWidget: React.FC<StatisticWidgetProps> = ({ widget, data }) => {
     <Box 
       onClick={data?.onClick ? handleClick : undefined}
       sx={{ 
-        height: '100%', 
-        p: { xs: 2, sm: 3 }, 
+        minHeight: '100%',
+        height: 'auto',
+        p: { xs: 1.5, sm: 3 }, 
         display: 'flex', 
         flexDirection: 'column', 
-        justifyContent: 'space-between',
+        justifyContent: 'center',
         cursor: data?.onClick ? 'pointer' : 'default',
         '&:hover': data?.onClick ? {
           bgcolor: 'action.hover',
@@ -43,9 +44,8 @@ const StatisticWidget: React.FC<StatisticWidgetProps> = ({ widget, data }) => {
     >
       <Box 
         display="flex" 
-        alignItems="flex-start" 
+        alignItems="center"
         justifyContent="space-between" 
-        sx={{ flex: 1 }}
         flexDirection={{ xs: 'column', sm: 'row' }}
         gap={{ xs: 1, sm: 0 }}
       >

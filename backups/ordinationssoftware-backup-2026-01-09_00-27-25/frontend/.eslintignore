@@ -1,0 +1,21 @@
+# Ignore compiled JavaScript files
+src/**/*.js
+!src/**/*.test.js
+!src/**/*.spec.js
+
+# Ignore node_modules
+node_modules/
+
+# Ignore build output
+build/
+dist/
+
+
+
+
+
+
+
+
+
+

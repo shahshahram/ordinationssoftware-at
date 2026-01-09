@@ -1,0 +1,491 @@
+{
+  "generatedAt": "2025-11-01T14:25:39.038Z",
+  "statistics": {
+    "valuesets": {
+      "total": 40,
+      "byCategory": {
+        "dgc": 3,
+        "elga": 18,
+        "elga-problem": 4,
+        "elga-sections": 2,
+        "ems-b": 1,
+        "ems-h": 1,
+        "ems-i": 1,
+        "ems-k": 1,
+        "ems-l": 1,
+        "ems-t": 1,
+        "rare-diseases": 1,
+        "eimpf": 6
+      },
+      "byStatus": {
+        "active": 40
+      },
+      "totalCodes": 56743
+    },
+    "codesystems": {
+      "total": 1,
+      "byCategory": {
+        "snomed-ct": 1
+      },
+      "byStatus": {
+        "active": 1
+      },
+      "totalConcepts": 31914
+    }
+  },
+  "valuesets": [
+    {
+      "title": "DGC_DiseaseOrAgent1.0.0+20230131",
+      "version": "1.0.0+20230131",
+      "url": "https://termgit.elga.gv.at/ValueSet/dgc-diseaseoragent1.2.40.0.34.6.0.10.55",
+      "oid": "1.2.40.0.34.6.0.10.55",
+      "category": "dgc",
+      "codeCount": 14,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:34.049Z",
+      "importedAt": "2025-11-01T14:19:34.049Z"
+    },
+    {
+      "title": "DGC_ResultOfTheTest1.0.0+20230131",
+      "version": "1.0.0+20230131",
+      "url": "https://termgit.elga.gv.at/ValueSet/dgc-resultofthetest1.2.40.0.34.6.0.10.60",
+      "oid": "1.2.40.0.34.6.0.10.60",
+      "category": "dgc",
+      "codeCount": 16,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:34.739Z",
+      "importedAt": "2025-11-01T14:19:34.739Z"
+    },
+    {
+      "title": "DGC_Vaccine1.2.0+20230417",
+      "version": "1.2.0+20230417",
+      "url": "https://termgit.elga.gv.at/ValueSet/dgc-vaccine1.2.40.0.34.6.0.10.56",
+      "oid": "1.2.40.0.34.6.0.10.56",
+      "category": "dgc",
+      "codeCount": 16,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:35.430Z",
+      "importedAt": "2025-11-01T14:19:35.430Z"
+    },
+    {
+      "title": "ELGA_AlcoholConsumption1.3.0+20240325",
+      "version": "1.3.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-alcoholconsumption1.2.40.0.34.6.0.10.30",
+      "oid": "1.2.40.0.34.6.0.10.30",
+      "category": "elga",
+      "codeCount": 28,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:10.104Z",
+      "importedAt": "2025-11-01T14:19:10.104Z"
+    },
+    {
+      "title": "ELGA_AllergyOrIntoleranceAgent1.3.0+20240325",
+      "version": "1.3.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-allergyorintoleranceagent1.2.40.0.34.10.180",
+      "oid": "1.2.40.0.34.10.180",
+      "category": "elga",
+      "codeCount": 3120,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:11.469Z",
+      "importedAt": "2025-11-01T14:19:11.469Z"
+    },
+    {
+      "title": "ELGA_AllergyOrIntoleranceType1.2.0+20240325",
+      "version": "1.2.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-allergyorintolerancetype1.2.40.0.34.10.177",
+      "oid": "1.2.40.0.34.10.177",
+      "category": "elga",
+      "codeCount": 24,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:12.233Z",
+      "importedAt": "2025-11-01T14:19:12.233Z"
+    },
+    {
+      "title": "ELGA_AllergyReaction1.3.0+20240325",
+      "version": "1.3.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-allergyreaction1.2.40.0.34.10.181",
+      "oid": "1.2.40.0.34.10.181",
+      "category": "elga",
+      "codeCount": 96,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:12.933Z",
+      "importedAt": "2025-11-01T14:19:12.933Z"
+    },
+    {
+      "title": "ELGA_AllergyStatusCode2.1.0+20240325",
+      "version": "2.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-allergystatuscode1.2.40.0.34.10.183",
+      "oid": "1.2.40.0.34.10.183",
+      "category": "elga",
+      "codeCount": 20,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:13.632Z",
+      "importedAt": "2025-11-01T14:19:13.632Z"
+    },
+    {
+      "title": "ELGA_AnamneseLaborMikrobiologie1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-anamneselabormikrobiologie1.2.40.0.34.6.0.10.66",
+      "oid": "1.2.40.0.34.6.0.10.66",
+      "category": "elga",
+      "codeCount": 38,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:14.321Z",
+      "importedAt": "2025-11-01T14:19:14.321Z"
+    },
+    {
+      "title": "ELGA_ArtderDiagnose1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-artderdiagnose1.2.40.0.34.6.0.10.23",
+      "oid": "1.2.40.0.34.6.0.10.23",
+      "category": "elga",
+      "codeCount": 24,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:15.008Z",
+      "importedAt": "2025-11-01T14:19:15.008Z"
+    },
+    {
+      "title": "ELGA_CriticalityObservationValue2.1.0+20240325",
+      "version": "2.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-criticalityobservationvalue1.2.40.0.34.10.182",
+      "oid": "1.2.40.0.34.10.182",
+      "category": "elga",
+      "codeCount": 20,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:15.702Z",
+      "importedAt": "2025-11-01T14:19:15.702Z"
+    },
+    {
+      "title": "ELGA_CurrentSmokingStatus1.2.0+20240325",
+      "version": "1.2.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-currentsmokingstatus1.2.40.0.34.10.204",
+      "oid": "1.2.40.0.34.10.204",
+      "category": "elga",
+      "codeCount": 28,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:16.405Z",
+      "importedAt": "2025-11-01T14:19:16.405Z"
+    },
+    {
+      "title": "ELGA_NachweisErgebnis2.1.0+20240325",
+      "version": "2.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-nachweisergebnis1.2.40.0.34.10.186",
+      "oid": "1.2.40.0.34.10.186",
+      "category": "elga",
+      "codeCount": 42,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:20.490Z",
+      "importedAt": "2025-11-01T14:15:29.771Z"
+    },
+    {
+      "title": "ELGA_NoInformation1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-noinformation1.2.40.0.34.10.33",
+      "oid": "1.2.40.0.34.10.33",
+      "category": "elga",
+      "codeCount": 18,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:21.185Z",
+      "importedAt": "2025-11-01T14:19:21.185Z"
+    },
+    {
+      "title": "ELGA_Probenmaterial1.4.0+20250114",
+      "version": "1.4.0+20250114",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-probenmaterial1.2.40.0.34.10.187",
+      "oid": "1.2.40.0.34.10.187",
+      "category": "elga",
+      "codeCount": 459,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:21.898Z",
+      "importedAt": "2025-11-01T14:19:21.898Z"
+    },
+    {
+      "title": "ELGA_ProblemSeverity2.1.0+20240325",
+      "version": "2.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-problemseverity1.2.40.0.34.10.189",
+      "oid": "1.2.40.0.34.10.189",
+      "category": "elga-problem",
+      "codeCount": 20,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:23.384Z",
+      "importedAt": "2025-11-01T14:19:23.384Z"
+    },
+    {
+      "title": "ELGA_Problemarten1.2.0+20240820",
+      "version": "1.2.0+20240820",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-problemarten1.2.40.0.34.10.35",
+      "oid": "1.2.40.0.34.10.35",
+      "category": "elga-problem",
+      "codeCount": 31,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:22.696Z",
+      "importedAt": "2025-11-01T14:19:22.696Z"
+    },
+    {
+      "title": "ELGA_Problemkataloge1.0.0+20230131",
+      "version": "1.0.0+20230131",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-problemkataloge1.2.40.0.34.10.169",
+      "oid": "1.2.40.0.34.10.169",
+      "category": "elga-problem",
+      "codeCount": 44259,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:37.085Z",
+      "importedAt": "2025-11-01T14:19:37.085Z"
+    },
+    {
+      "title": "ELGA_SectionsAmbulanzbefund1.0.0+20250116",
+      "version": "1.0.0+20250116",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-sectionsambulanzbefund1.2.40.0.34.6.0.10.97",
+      "oid": "1.2.40.0.34.6.0.10.97",
+      "category": "elga-sections",
+      "codeCount": 87,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:24.073Z",
+      "importedAt": "2025-11-01T14:19:24.073Z"
+    },
+    {
+      "title": "ELGA_SectionsServiceEvents1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-sectionsserviceevents1.2.40.0.34.10.360",
+      "oid": "1.2.40.0.34.10.360",
+      "category": "elga-sections",
+      "codeCount": 46,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:25.151Z",
+      "importedAt": "2025-11-01T14:19:25.151Z"
+    },
+    {
+      "title": "ELGA_ServiceEventsLabor1.3.0+20240820",
+      "version": "1.3.0+20240820",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-serviceeventslabor1.2.40.0.34.10.22",
+      "oid": "1.2.40.0.34.10.22",
+      "category": "elga",
+      "codeCount": 76,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:26.189Z",
+      "importedAt": "2025-11-01T14:19:26.189Z"
+    },
+    {
+      "title": "ELGA_ServiceEventsTelemonEpi1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-serviceeventstelemonepi1.2.40.0.34.6.0.10.26",
+      "oid": "1.2.40.0.34.6.0.10.26",
+      "category": "elga",
+      "codeCount": 36,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:27.044Z",
+      "importedAt": "2025-11-01T14:19:27.044Z"
+    },
+    {
+      "title": "ELGA_SpecimenType1.4.0+20250114",
+      "version": "1.4.0+20250114",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-specimentype1.2.40.0.34.10.46",
+      "oid": "1.2.40.0.34.10.46",
+      "category": "elga",
+      "codeCount": 551,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:27.774Z",
+      "importedAt": "2025-11-01T14:19:27.774Z"
+    },
+    {
+      "title": "ELGA_TypeOfProblem1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-typeofproblem1.2.40.0.34.10.205",
+      "oid": "1.2.40.0.34.10.205",
+      "category": "elga-problem",
+      "codeCount": 18,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:28.487Z",
+      "importedAt": "2025-11-01T14:19:28.487Z"
+    },
+    {
+      "title": "ELGA_Vitalparameterarten1.3.0+20250206",
+      "version": "1.3.0+20250206",
+      "url": "https://termgit.elga.gv.at/ValueSet/elga-vitalparameterarten1.2.40.0.34.10.34",
+      "oid": "1.2.40.0.34.10.34",
+      "category": "elga",
+      "codeCount": 44,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:29.178Z",
+      "importedAt": "2025-11-01T14:19:29.178Z"
+    },
+    {
+      "title": "EMS_Betreuung1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/ems-betreuung1.2.40.0.34.6.0.10.31",
+      "oid": "1.2.40.0.34.6.0.10.31",
+      "category": "ems-b",
+      "codeCount": 30,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:29.869Z",
+      "importedAt": "2025-11-01T14:19:29.869Z"
+    },
+    {
+      "title": "EMS_Hospitalisierung1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/ems-hospitalisierung1.2.40.0.34.6.0.10.49",
+      "oid": "1.2.40.0.34.6.0.10.49",
+      "category": "ems-h",
+      "codeCount": 18,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:30.553Z",
+      "importedAt": "2025-11-01T14:19:30.553Z"
+    },
+    {
+      "title": "EMS_Impfstatus1.2.0+20240325",
+      "version": "1.2.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/ems-impfstatus1.2.40.0.34.6.0.10.24",
+      "oid": "1.2.40.0.34.6.0.10.24",
+      "category": "ems-i",
+      "codeCount": 19,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:31.237Z",
+      "importedAt": "2025-11-01T14:19:31.237Z"
+    },
+    {
+      "title": "EMS_KlinischeManifestation1.3.0+20251024",
+      "version": "1.3.0+20251024",
+      "url": "https://termgit.elga.gv.at/ValueSet/ems-klinischemanifestation1.2.40.0.34.6.0.10.25",
+      "oid": "1.2.40.0.34.6.0.10.25",
+      "category": "ems-k",
+      "codeCount": 120,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:31.971Z",
+      "importedAt": "2025-11-01T14:19:31.971Z"
+    },
+    {
+      "title": "EMS_LebensmittelbedingteIntoxikationen1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/ems-lebensmittelbedingteintoxikationen1.2.40.0.34.6.0.10.29",
+      "oid": "1.2.40.0.34.6.0.10.29",
+      "category": "ems-l",
+      "codeCount": 20,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:32.665Z",
+      "importedAt": "2025-11-01T14:19:32.665Z"
+    },
+    {
+      "title": "EMS_Taetigkeitsbereich1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/ems-taetigkeitsbereich1.2.40.0.34.6.0.10.21",
+      "oid": "1.2.40.0.34.6.0.10.21",
+      "category": "ems-t",
+      "codeCount": 23,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:33.352Z",
+      "importedAt": "2025-11-01T14:19:33.352Z"
+    },
+    {
+      "title": "SNOMED_Rare Diseases1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/snomed-rare-diseases1.2.40.0.34.6.0.10.85",
+      "oid": "1.2.40.0.34.6.0.10.85",
+      "category": "rare-diseases",
+      "codeCount": 6812,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:39.015Z",
+      "importedAt": "2025-11-01T14:18:44.562Z"
+    },
+    {
+      "title": "atcdabbr-LateralityQualifiercode2.2.0+20250324",
+      "version": "2.2.0+20250324",
+      "url": "https://termgit.elga.gv.at/ValueSet/atcdabbr-lateralityqualifiercode1.2.40.0.34.10.211",
+      "oid": "1.2.40.0.34.10.211",
+      "category": "elga",
+      "codeCount": 21,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:04.076Z",
+      "importedAt": "2025-11-01T14:19:04.076Z"
+    },
+    {
+      "title": "atcdabbr_NoInformationQualifier1.2.0+20240325",
+      "version": "1.2.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/atcdabbr-noinformationqualifier1.2.40.0.34.10.210",
+      "oid": "1.2.40.0.34.10.210",
+      "category": "elga",
+      "codeCount": 20,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:04.865Z",
+      "importedAt": "2025-11-01T14:19:04.865Z"
+    },
+    {
+      "title": "eImpf_Antikoerperbestimmung1.6.0+20241115",
+      "version": "1.6.0+20241115",
+      "url": "https://termgit.elga.gv.at/ValueSet/eimpf-antikoerperbestimmung1.2.40.0.34.6.0.10.13",
+      "oid": "1.2.40.0.34.6.0.10.13",
+      "category": "eimpf",
+      "codeCount": 129,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:05.638Z",
+      "importedAt": "2025-11-01T14:19:05.638Z"
+    },
+    {
+      "title": "eImpf_ImmunizationTarget1.14.0+20251016",
+      "version": "1.14.0+20251016",
+      "url": "https://termgit.elga.gv.at/ValueSet/eimpf-immunizationtarget1.2.40.0.34.6.0.10.4",
+      "oid": "1.2.40.0.34.6.0.10.4",
+      "category": "eimpf",
+      "codeCount": 139,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:06.445Z",
+      "importedAt": "2025-11-01T14:19:06.445Z"
+    },
+    {
+      "title": "eImpf_ImpfrelevanteErkrankung1.6.0+20241115",
+      "version": "1.6.0+20241115",
+      "url": "https://termgit.elga.gv.at/ValueSet/eimpf-impfrelevanteerkrankung1.2.40.0.34.6.0.10.2",
+      "oid": "1.2.40.0.34.6.0.10.2",
+      "category": "eimpf",
+      "codeCount": 74,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:07.165Z",
+      "importedAt": "2025-11-01T14:19:07.165Z"
+    },
+    {
+      "title": "eImpf_SpecialCaseVaccination1.1.0+20240325",
+      "version": "1.1.0+20240325",
+      "url": "https://termgit.elga.gv.at/ValueSet/eimpf-specialcasevaccination1.2.40.0.34.6.0.10.3",
+      "oid": "1.2.40.0.34.6.0.10.3",
+      "category": "eimpf",
+      "codeCount": 51,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:07.890Z",
+      "importedAt": "2025-11-01T14:19:07.890Z"
+    },
+    {
+      "title": "eImpf_SpecialSituationIndication2.7.0+20241115",
+      "version": "2.7.0+20241115",
+      "url": "https://termgit.elga.gv.at/ValueSet/eimpf-specialsituationindication1.2.40.0.34.6.0.10.15",
+      "oid": "1.2.40.0.34.6.0.10.15",
+      "category": "eimpf",
+      "codeCount": 97,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:08.616Z",
+      "importedAt": "2025-11-01T14:19:08.616Z"
+    },
+    {
+      "title": "eImpf_Zusatzklassifikation3.5.0+20251030",
+      "version": "3.5.0+20251030",
+      "url": "https://termgit.elga.gv.at/ValueSet/eimpf-zusatzklassifikation1.2.40.0.34.6.0.10.62",
+      "oid": "1.2.40.0.34.6.0.10.62",
+      "category": "eimpf",
+      "codeCount": 39,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:19:09.323Z",
+      "importedAt": "2025-11-01T14:19:09.323Z"
+    }
+  ],
+  "codesystems": [
+    {
+      "title": "SNOMED CT (Auszug)1.11.0+20250325",
+      "version": "1.11.0+20250325",
+      "url": "https://termgit.elga.gv.at/CodeSystem/snomed-ct-auszug2.16.840.1.113883.6.96",
+      "oid": "2.16.840.1.113883.6.96",
+      "category": "snomed-ct",
+      "conceptCount": 31914,
+      "status": "active",
+      "lastUpdated": "2025-11-01T14:25:28.347Z",
+      "importedAt": "2025-11-01T14:18:48.075Z"
+    }
+  ]
+}

@@ -595,16 +595,30 @@ const Dashboard: React.FC = () => {
     const calculateWidth = () => {
       if (typeof window === 'undefined') return 1200;
       
-      // Check if sidebar is open (check DOM or use a more reliable method)
-      const sidebarElement = document.querySelector('[class*="MuiDrawer-paper"]');
-      const sidebarOpen = sidebarElement && window.getComputedStyle(sidebarElement).display !== 'none';
+      // Auf Mobile: volle Viewport-Breite
+      if (isMobile) {
+        // Keine Sidebar auf Mobile, volle Breite
+        return window.innerWidth;
+      }
       
-      const sidebarWidth = (isMobile || !sidebarOpen) ? 0 : 240;
-      const padding = isMobile ? 16 : (isTablet ? 24 : 40);
-      const width = window.innerWidth - sidebarWidth - padding;
+      // Für Desktop und Tablet: Berechne die verfügbare Breite
+      // Suche nach dem Hauptcontainer (Box mit Dashboard-Inhalt)
+      const mainContainer = document.querySelector('[class*="MuiBox-root"]');
+      let availableWidth = window.innerWidth;
       
-      // Für sehr kleine Fenster: volle Breite nutzen
-      return Math.max(width, isMobile ? window.innerWidth - 32 : 320);
+      // Prüfe ob Sidebar vorhanden ist
+      const sidebarElement = document.querySelector('[class*="MuiDrawer-paper"][class*="persistent"]');
+      if (sidebarElement) {
+        const sidebarRect = sidebarElement.getBoundingClientRect();
+        const sidebarWidth = sidebarRect.width || 240;
+        availableWidth = window.innerWidth - sidebarWidth;
+      }
+      
+      // Berücksichtige Padding vom Hauptcontainer
+      const padding = isTablet ? 48 : 96; // 24px links + 24px rechts für Tablet, 48px für Desktop
+      const width = availableWidth - padding;
+      
+      return Math.max(width, 600); // Mindestbreite für Desktop
     };
 
     setContainerWidth(calculateWidth());
@@ -621,6 +635,11 @@ const Dashboard: React.FC = () => {
     if (typeof window !== 'undefined') {
       window.addEventListener('resize', handleResize);
       resizeObserver.observe(document.body);
+      
+      // Warte kurz, damit DOM vollständig geladen ist
+      setTimeout(() => {
+        setContainerWidth(calculateWidth());
+      }, 100);
     }
 
     return () => {
@@ -630,67 +649,6 @@ const Dashboard: React.FC = () => {
       }
     };
   }, [isMobile, isTablet]);
-
-  // Update layout when widgets change
-  useEffect(() => {
-    const newLayout = widgets
-      .filter(w => w.isVisible)
-      .sort((a, b) => a.order - b.order)
-      .map((widget, index) => {
-        // Adjust widget sizes for mobile
-        let w = widget.position.w;
-        let h = widget.position.h;
-        let x = widget.position.x;
-        let y = widget.position.y;
-        
-        if (isMobile) {
-          // On mobile, make widgets full width and stack vertically
-          w = 12;
-          x = 0;
-          // Calculate Y position based on previous widgets
-          let currentY = 0;
-          for (let i = 0; i < index; i++) {
-            const prevWidget = widgets.filter(w => w.isVisible).sort((a, b) => a.order - b.order)[i];
-            if (prevWidget) {
-              let prevH = prevWidget.position.h;
-              if (prevWidget.widgetType === 'statistic') {
-                prevH = 3;
-              } else if (prevWidget.widgetType === 'list') {
-                prevH = 6;
-              } else {
-                prevH = Math.max(prevH, 4);
-              }
-              currentY += prevH + 1; // Add margin
-            }
-          }
-          y = currentY;
-          
-          // Adjust height for better mobile display
-          if (widget.widgetType === 'statistic') {
-            h = 3;
-          } else if (widget.widgetType === 'list') {
-            h = 6;
-          } else {
-            h = Math.max(h, 4);
-          }
-        } else if (isTablet) {
-          // On tablet, adjust widths
-          if (w > 6) w = 12;
-          if (x > 6) x = 0;
-        }
-        
-        return {
-          i: widget._id || widget.widgetId,
-          x,
-          y,
-          w,
-          h,
-          minW: isMobile ? 12 : 2,
-          minH: 2
-        };
-      });
-    setLayout(newLayout);
-  }, [widgets, isMobile, isTablet]);
 
   // Data providers with real API data
   const getWidgetData = useCallback((widget: DashboardWidget) => {
@@ -745,24 +703,16 @@ const Dashboard: React.FC = () => {
             details: `Es gibt ${stats.overdueAppointments} Termine, die bereits überfällig sind. Bitte kontaktieren Sie die Patienten oder verschieben Sie die Termine.`
           });
         }
-        // Weitere Benachrichtigungen können hier hinzugefügt werden
         return notifications;
       case 'new-labor-results':
-        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
         if (newLaborResults.length > 0) {
-          console.log('🔍 Dashboard: getWidgetData - Using newLaborResults', { count: newLaborResults.length, firstItem: newLaborResults[0] });
           return newLaborResults;
         }
-        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
         const savedItems = widget.config?.items || [];
-        console.log('🔍 Dashboard: getWidgetData - Using saved items', { count: savedItems.length, firstItem: savedItems[0] });
         return savedItems.map((item: any) => {
           const patientId = item.patientId;
-          // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
-          // Versuche Datum aus secondary Text zu extrahieren oder verwende aktuelles Datum als Fallback
           let isNew = false;
           if (item.secondary) {
-            // Versuche Datum aus secondary zu extrahieren (Format: "Tests • DD.MM.YYYY HH:MM")
             const dateMatch = item.secondary.match(/(\d{2})\.(\d{2})\.(\d{4})/);
             if (dateMatch) {
               const [, day, month, year] = dateMatch;
@@ -774,41 +724,31 @@ const Dashboard: React.FC = () => {
           }
           return {
             ...item,
-            icon: 'Science', // Stelle sicher, dass das Icon immer Science ist
-            patientId: patientId ? String(patientId) : null, // Stelle sicher, dass patientId ein String ist
-            isNew: isNew, // Flag für farbliche Hervorhebung
+            icon: 'Science',
+            patientId: patientId ? String(patientId) : null,
+            isNew: isNew,
             onClick: (e?: React.MouseEvent) => {
               if (e) {
                 e.preventDefault();
                 e.stopPropagation();
               }
-              // Navigiere zum Patienten
               const currentPatientId = patientId || item.patientId;
               if (currentPatientId) {
                 const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
-                console.log('🔍 Dashboard: onClick from saved item - Navigating to patient labor values', { patientId: patientIdStr, originalPatientId: currentPatientId, fullItem: item });
                 window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
-              } else {
-                console.error('❌ Dashboard: No patientId in saved labor result item - cannot navigate', item);
               }
             }
           };
         });
       case 'new-dicom-studies':
-        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
         if (newDicomStudies.length > 0) {
-          console.log('🔍 Dashboard: getWidgetData - Using newDicomStudies', { count: newDicomStudies.length, firstItem: newDicomStudies[0] });
           return newDicomStudies;
         }
-        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
         const savedDicomItems = widget.config?.items || [];
         return savedDicomItems.map((item: any) => {
           const patientId = item.patientId;
-          // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
-          // Versuche Datum aus secondary Text zu extrahieren oder verwende aktuelles Datum als Fallback
           let isNew = false;
           if (item.secondary) {
-            // Versuche Datum aus secondary zu extrahieren (Format: "Studie • DD.MM.YYYY HH:MM")
             const dateMatch = item.secondary.match(/(\d{2})\.(\d{2})\.(\d{4})/);
             if (dateMatch) {
               const [, day, month, year] = dateMatch;
@@ -822,7 +762,7 @@ const Dashboard: React.FC = () => {
             ...item,
             icon: 'LocalHospital',
             patientId: patientId ? String(patientId) : null,
-            isNew: isNew, // Flag für farbliche Hervorhebung
+            isNew: isNew,
             onClick: (e?: React.MouseEvent) => {
               if (e) {
                 e.preventDefault();
@@ -837,19 +777,14 @@ const Dashboard: React.FC = () => {
           };
         });
       case 'new-online-bookings':
-        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
         if (newOnlineBookings.length > 0) {
-          console.log('🔍 Dashboard: getWidgetData - Using newOnlineBookings', { count: newOnlineBookings.length, firstItem: newOnlineBookings[0] });
           return newOnlineBookings;
         }
-        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
         const savedOnlineBookingItems = widget.config?.items || [];
         return savedOnlineBookingItems.map((item: any) => {
           const appointmentId = item.appointmentId;
-          // Prüfe ob das Item neu ist (innerhalb der letzten 24 Stunden)
           let isNew = false;
           if (item.secondary) {
-            // Versuche Datum aus secondary zu extrahieren (Format: "Service • DD.MM.YYYY HH:MM • DD.MM.YYYY HH:MM")
             const dateMatch = item.secondary.match(/(\d{2})\.(\d{2})\.(\d{4})/);
             if (dateMatch) {
               const [, day, month, year] = dateMatch;
@@ -869,7 +804,6 @@ const Dashboard: React.FC = () => {
                 e.preventDefault();
                 e.stopPropagation();
               }
-              // Navigiere zur Online-Buchungen-Seite oder zum Termin
               if (appointmentId) {
                 const appointmentIdStr = typeof appointmentId === 'string' ? appointmentId : String(appointmentId);
                 navigate(`/appointments?view=${appointmentIdStr}&returnUrl=${encodeURIComponent('/online-bookings')}`);
@@ -890,14 +824,14 @@ const Dashboard: React.FC = () => {
           {
             label: 'QR-Code generieren',
             icon: <QrCode />,
-            onClick: handleGenerateQR,
+            onClick: () => {},
             variant: 'contained' as const,
             color: 'primary' as const
           },
           {
             label: 'Tablet-Modus',
             icon: <Tablet />,
-            onClick: () => setTabletModeOpen(true),
+            onClick: () => {},
             variant: 'outlined' as const,
             color: 'primary' as const
           }
@@ -908,7 +842,7 @@ const Dashboard: React.FC = () => {
             chartType: 'line' as const,
             data: dashboardStats.charts.revenue.map((item: any) => ({
               label: item.label,
-              value: item.value / 100 // Convert from cents to euros
+              value: item.value / 100
             }))
           };
         }
@@ -933,7 +867,7 @@ const Dashboard: React.FC = () => {
             chartType: 'pie' as const,
             data: dashboardStats.charts.revenueDistribution.map((item: any) => ({
               label: item.label,
-              value: item.value / 100 // Convert from cents to euros
+              value: item.value / 100
             }))
           };
         }
@@ -954,15 +888,11 @@ const Dashboard: React.FC = () => {
         return [];
       case 'tasks':
       case 'todos':
-        // Tasks werden jetzt direkt im TasksWidget geladen
-        // Keine Mock-Daten mehr, da das Widget die Daten selbst lädt
         return [];
       case 'important-patients':
-        // Verwende die geladenen Daten (mit onClick-Handlern) oder füge onClick-Handler zu gespeicherten Items hinzu
         if (importantPatients.length > 0) {
           return importantPatients;
         }
-        // Falls keine neuen Daten, füge onClick-Handler zu gespeicherten Items hinzu
         const savedImportantPatients = widget.config?.items || [];
         return savedImportantPatients.map((item: any) => {
           const patientId = item.patientId || item._id;
@@ -978,17 +908,11 @@ const Dashboard: React.FC = () => {
               const currentPatientId = patientId || item.patientId || item._id;
               if (currentPatientId) {
                 const patientIdStr = typeof currentPatientId === 'string' ? currentPatientId : String(currentPatientId);
-                window.location.href = `/patient-organizer/${patientIdStr}`;
+                navigate(`/patient-organizer/${patientIdStr}`);
               }
             }
           };
         });
-      case 'revenue-month':
-        return { 
-          value: formatCurrency(stats.revenueMonth || 0), 
-          icon: <AttachMoney />, 
-          color: 'success' as const 
-        };
       case 'appointments-week':
         return { 
           value: stats.appointmentsWeek?.toString() || '0', 
@@ -1018,36 +942,16 @@ const Dashboard: React.FC = () => {
             details: 'Patient: Maria Musterfrau\nMedikament: Medikament B\nDosierung: 2 Tabletten\nZeit: 14:00 Uhr\nHinweis: Vor dem Essen einnehmen'
           }
         ];
-      case 'upcoming-appointments':
-        if (dashboardStats?.upcomingAppointments && dashboardStats.upcomingAppointments.length > 0) {
-          return dashboardStats.upcomingAppointments.map((apt: any) => ({
-            ...apt,
-            icon: <Schedule />,
-            onClick: (e?: React.MouseEvent) => {
-              if (e) {
-                e.preventDefault();
-                e.stopPropagation();
-              }
-              if (apt.appointmentId) {
-                navigate(`/appointments?view=${apt.appointmentId}`);
-              }
-            }
-          }));
-        }
-        return [];
       case 'internal-messages':
         return {
           onMessageClick: (message: any) => {
             // Wenn die Nachricht eine patientId hat, navigiere zum Patienten
             if (message.patientId) {
-              // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
               const patientIdStr = typeof message.patientId === 'string' ? message.patientId : String(message.patientId);
-              console.log('Dashboard: Navigating to patient labor values from getWidgetData', { patientId: patientIdStr, originalPatientId: message.patientId, fullMessage: message });
-              // Verwende window.location für zuverlässige Navigation
-              window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+              navigate(`/patient-organizer/${patientIdStr}?tab=laborwerte`);
             } else {
-              // Sonst öffne den Nachrichten-Dialog
-              setMessagesDialogOpen(true);
+              // Sonst navigiere zur Interne-Nachrichten-Seite
+              navigate('/internal-messages');
             }
           }
         };
@@ -1055,6 +959,390 @@ const Dashboard: React.FC = () => {
         return null;
     }
   }, [importantPatients, newLaborResults, newDicomStudies, dashboardStats, navigate]);
+
+  // Update layout when widgets change
+  useEffect(() => {
+    // Helper function to check if widget has content (defined inline to avoid dependency issues)
+    const checkWidgetHasContent = (widget: DashboardWidget): boolean => {
+      const data = getWidgetData(widget);
+      if (!data) return false;
+      
+      switch (widget.widgetType) {
+        case 'statistic':
+          const statValue = (data as any)?.value;
+          return !(statValue === '0' || statValue === 0 || !statValue || statValue === '');
+        case 'list':
+          return Array.isArray(data) && data.length > 0;
+        case 'chart':
+          const chartData = (data as any)?.data || (data as any)?.series || data;
+          if (Array.isArray(chartData)) {
+            return chartData.length > 0;
+          }
+          return !!chartData;
+        case 'quick-action':
+          return Array.isArray(data) && data.length > 0;
+        case 'status':
+          const statusItems = (data as any)?.items || data;
+          return Array.isArray(statusItems) && statusItems.length > 0;
+        case 'custom':
+          const customData = (data as any)?.tasks || (data as any)?.items || data;
+          if (Array.isArray(customData)) {
+            return customData.length > 0;
+          }
+          return !!customData;
+        case 'messages':
+          // Messages-Widget immer anzeigen, auch wenn keine Nachrichten vorhanden sind
+          // Das Widget zeigt dann eine leere Liste oder eine entsprechende Meldung
+          return true;
+        default:
+          return !!data;
+      }
+    };
+    
+    const newLayout = widgets
+      .filter(w => w.isVisible && checkWidgetHasContent(w))
+      .sort((a, b) => a.order - b.order)
+      .map((widget, index) => {
+        // Adjust widget sizes for mobile
+        let w = widget.position.w;
+        let h = widget.position.h;
+        let x = widget.position.x;
+        let y = widget.position.y;
+        
+        if (isMobile) {
+          // On mobile, make widgets full width (4 cols = full width) and stack vertically
+          w = 4; // 4 cols auf Mobile = volle Breite
+          x = 0;
+          
+          // Calculate height based on widget type and content - optimiert für Mobile
+          let calculatedH = h;
+          if (widget.widgetType === 'statistic') {
+            // Statistic widgets: sehr kompakt auf Mobile
+            calculatedH = 3;
+          } else if (widget.widgetType === 'list') {
+            // List widgets: Höhe basierend auf Anzahl Items (min 4, max 10)
+            const items = getWidgetData(widget);
+            const itemCount = Array.isArray(items) ? items.length : 0;
+            if (itemCount === 0) {
+              calculatedH = 4; // Leere Liste: minimale Höhe
+            } else if (itemCount === 1) {
+              calculatedH = 5; // 1 Item: kompakt
+            } else if (itemCount <= 2) {
+              calculatedH = 6; // 2 Items: kompakt
+            } else if (itemCount <= 4) {
+              calculatedH = 7; // 3-4 Items: mittel
+            } else if (itemCount <= 6) {
+              calculatedH = 8; // 5-6 Items: größer
+            } else {
+              calculatedH = Math.min(10, 8 + Math.ceil((itemCount - 6) * 0.3)); // Max 10 für Mobile
+            }
+          } else if (widget.widgetType === 'chart') {
+            // Chart widgets: kompakt aber lesbar
+            calculatedH = 7;
+          } else if (widget.widgetType === 'quick-action') {
+            // Quick-Action widgets: dynamisch basierend auf Anzahl Actions
+            const actions = getWidgetData(widget);
+            const actionCount = Array.isArray(actions) ? actions.length : 0;
+            if (actionCount === 0) {
+              calculatedH = 4;
+            } else if (actionCount === 1) {
+              calculatedH = 4;
+            } else if (actionCount === 2) {
+              calculatedH = 5;
+            } else if (actionCount <= 4) {
+              calculatedH = 6;
+            } else {
+              calculatedH = Math.min(7, 5 + actionCount * 0.5);
+            }
+          } else if (widget.widgetType === 'status') {
+            // Status widgets: kompakt auf Mobile
+            const statusData = getWidgetData(widget);
+            const statusItems = (statusData as any)?.items || (statusData as any) || [];
+            const itemCount = Array.isArray(statusItems) ? statusItems.length : 0;
+            if (itemCount === 0) {
+              calculatedH = 4;
+            } else if (itemCount <= 2) {
+              calculatedH = 5;
+            } else if (itemCount <= 4) {
+              calculatedH = 6;
+            } else {
+              calculatedH = Math.min(8, 6 + Math.ceil((itemCount - 4) * 0.4));
+            }
+          } else if (widget.widgetType === 'messages') {
+            // Messages widgets: dynamisch basierend auf Nachrichten
+            const messagesData = getWidgetData(widget);
+            const messages = (messagesData as any)?.messages || (messagesData as any)?.inbox || messagesData || [];
+            const messageCount = Array.isArray(messages) ? messages.length : 0;
+            if (messageCount === 0) {
+              calculatedH = 5; // Mindesthöhe auch ohne Nachrichten
+            } else if (messageCount === 1) {
+              calculatedH = 6;
+            } else if (messageCount <= 3) {
+              calculatedH = 7;
+            } else if (messageCount <= 5) {
+              calculatedH = 8;
+            } else {
+              calculatedH = Math.min(10, 8 + Math.ceil((messageCount - 5) * 0.3));
+            }
+          } else if (widget.widgetType === 'custom') {
+            // Custom widgets (z.B. Tasks): dynamisch basierend auf Items
+            const customData = getWidgetData(widget);
+            const customItems = (customData as any)?.tasks || (customData as any)?.items || customData || [];
+            const itemCount = Array.isArray(customItems) ? customItems.length : 0;
+            if (itemCount === 0) {
+              calculatedH = 4;
+            } else if (itemCount <= 2) {
+              calculatedH = 5;
+            } else if (itemCount <= 4) {
+              calculatedH = 6;
+            } else if (itemCount <= 6) {
+              calculatedH = 7;
+            } else {
+              calculatedH = Math.min(9, 7 + Math.ceil((itemCount - 6) * 0.3));
+            }
+          } else {
+            // Für andere Widget-Typen: Mindesthöhe
+            calculatedH = Math.max(4, h);
+          }
+          h = calculatedH;
+          
+          // Calculate Y position based on previous widgets
+          let currentY = 0;
+          const visibleWidgetsWithContent = widgets.filter(w => w.isVisible && checkWidgetHasContent(w)).sort((a, b) => a.order - b.order);
+          for (let i = 0; i < index; i++) {
+            const prevWidget = visibleWidgetsWithContent[i];
+            if (prevWidget) {
+              let prevH = prevWidget.position.h;
+              // Berechne Höhe für vorheriges Widget genauso
+              if (prevWidget.widgetType === 'statistic') {
+                prevH = 3;
+              } else if (prevWidget.widgetType === 'list') {
+                const prevItems = getWidgetData(prevWidget);
+                const prevItemCount = Array.isArray(prevItems) ? prevItems.length : 0;
+                if (prevItemCount === 0) {
+                  prevH = 4;
+                } else if (prevItemCount === 1) {
+                  prevH = 5;
+                } else if (prevItemCount <= 2) {
+                  prevH = 6;
+                } else if (prevItemCount <= 4) {
+                  prevH = 7;
+                } else if (prevItemCount <= 6) {
+                  prevH = 8;
+                } else {
+                  prevH = Math.min(10, 8 + Math.ceil((prevItemCount - 6) * 0.3));
+                }
+              } else if (prevWidget.widgetType === 'chart') {
+                prevH = 7;
+              } else if (prevWidget.widgetType === 'quick-action') {
+                const prevActions = getWidgetData(prevWidget);
+                const prevActionCount = Array.isArray(prevActions) ? prevActions.length : 0;
+                if (prevActionCount === 0) {
+                  prevH = 4;
+                } else if (prevActionCount === 1) {
+                  prevH = 4;
+                } else if (prevActionCount === 2) {
+                  prevH = 5;
+                } else if (prevActionCount <= 4) {
+                  prevH = 6;
+                } else {
+                  prevH = Math.min(7, 5 + prevActionCount * 0.5);
+                }
+              } else if (prevWidget.widgetType === 'status') {
+                const prevStatusData = getWidgetData(prevWidget);
+                const prevStatusItems = (prevStatusData as any)?.items || (prevStatusData as any) || [];
+                const prevStatusCount = Array.isArray(prevStatusItems) ? prevStatusItems.length : 0;
+                if (prevStatusCount === 0) {
+                  prevH = 4;
+                } else if (prevStatusCount <= 2) {
+                  prevH = 5;
+                } else if (prevStatusCount <= 4) {
+                  prevH = 6;
+                } else {
+                  prevH = Math.min(8, 6 + Math.ceil((prevStatusCount - 4) * 0.4));
+                }
+              } else if (prevWidget.widgetType === 'messages') {
+                const prevMessagesData = getWidgetData(prevWidget);
+                const prevMessages = (prevMessagesData as any)?.messages || (prevMessagesData as any)?.inbox || prevMessagesData || [];
+                const prevMessageCount = Array.isArray(prevMessages) ? prevMessages.length : 0;
+                if (prevMessageCount === 0) {
+                  prevH = 5;
+                } else if (prevMessageCount === 1) {
+                  prevH = 6;
+                } else if (prevMessageCount <= 3) {
+                  prevH = 7;
+                } else if (prevMessageCount <= 5) {
+                  prevH = 8;
+                } else {
+                  prevH = Math.min(10, 8 + Math.ceil((prevMessageCount - 5) * 0.3));
+                }
+              } else if (prevWidget.widgetType === 'custom') {
+                const prevCustomData = getWidgetData(prevWidget);
+                const prevCustomItems = (prevCustomData as any)?.tasks || (prevCustomData as any)?.items || prevCustomData || [];
+                const prevCustomCount = Array.isArray(prevCustomItems) ? prevCustomItems.length : 0;
+                if (prevCustomCount === 0) {
+                  prevH = 4;
+                } else if (prevCustomCount <= 2) {
+                  prevH = 5;
+                } else if (prevCustomCount <= 4) {
+                  prevH = 6;
+                } else if (prevCustomCount <= 6) {
+                  prevH = 7;
+                } else {
+                  prevH = Math.min(9, 7 + Math.ceil((prevCustomCount - 6) * 0.3));
+                }
+              } else {
+                prevH = Math.max(4, prevH);
+              }
+              currentY += prevH + 1; // Add margin
+            }
+          }
+          y = currentY;
+        } else if (isTablet) {
+          // On tablet, adjust widths
+          if (w > 6) w = 12;
+          if (x > 6) x = 0;
+        } else {
+          // Desktop: Dynamische Höhenanpassung basierend auf Inhalt - kompakter
+          if (widget.widgetType === 'statistic') {
+            // Statistic Widgets: Sehr kompakt
+            h = 3;
+          } else if (widget.widgetType === 'list') {
+            const items = getWidgetData(widget);
+            const itemCount = Array.isArray(items) ? items.length : 0;
+            // Dynamische Höhe basierend auf Anzahl Items - kompakter
+            if (itemCount === 0) {
+              h = 3;
+            } else if (itemCount === 1) {
+              h = 4;
+            } else if (itemCount === 2) {
+              h = 5;
+            } else if (itemCount <= 4) {
+              h = 6;
+            } else if (itemCount <= 6) {
+              h = 7;
+            } else if (itemCount <= 8) {
+              h = 8;
+            } else if (itemCount <= 10) {
+              h = 9;
+            } else {
+              h = Math.min(12, 8 + Math.ceil((itemCount - 8) * 0.3));
+            }
+          } else if (widget.widgetType === 'chart') {
+            // Chart Widgets: Kompakter
+            h = Math.max(5, Math.min(h, 7));
+          } else if (widget.widgetType === 'quick-action') {
+            const actions = getWidgetData(widget);
+            const actionCount = Array.isArray(actions) ? actions.length : 0;
+            // Quick-Action Widgets: Sehr kompakt
+            if (actionCount === 0) {
+              h = 3;
+            } else if (actionCount === 1) {
+              h = 3;
+            } else if (actionCount === 2) {
+              h = 4;
+            } else {
+              h = Math.min(5, 3 + actionCount);
+            }
+          } else if (widget.widgetType === 'status') {
+            const statusData = getWidgetData(widget);
+            const statusItems = (statusData as any)?.items || (statusData as any) || [];
+            const itemCount = Array.isArray(statusItems) ? statusItems.length : 0;
+            // Status Widgets: Kompakt
+            if (itemCount === 0) {
+              h = 3;
+            } else if (itemCount <= 3) {
+              h = 4;
+            } else {
+              h = Math.min(5, 3 + itemCount);
+            }
+          } else if (widget.widgetType === 'messages') {
+            const messagesData = getWidgetData(widget);
+            const messages = (messagesData as any)?.messages || (messagesData as any)?.inbox || messagesData || [];
+            const messageCount = Array.isArray(messages) ? messages.length : 0;
+            // Messages Widgets: Dynamisch basierend auf Nachrichten
+            if (messageCount === 0) {
+              h = 4; // Mindesthöhe auch ohne Nachrichten
+            } else if (messageCount === 1) {
+              h = 5;
+            } else if (messageCount <= 3) {
+              h = 6;
+            } else if (messageCount <= 5) {
+              h = 7;
+            } else {
+              h = Math.min(9, 6 + Math.ceil((messageCount - 3) * 0.4));
+            }
+          } else if (widget.widgetType === 'custom') {
+            const customData = getWidgetData(widget);
+            const customItems = (customData as any)?.tasks || (customData as any)?.items || customData || [];
+            const itemCount = Array.isArray(customItems) ? customItems.length : 0;
+            // Custom Widgets: Kompakt
+            if (itemCount === 0) {
+              h = 3;
+            } else if (itemCount <= 2) {
+              h = 4;
+            } else if (itemCount <= 4) {
+              h = 5;
+            } else if (itemCount <= 6) {
+              h = 6;
+            } else {
+              h = Math.min(8, 5 + Math.ceil(itemCount * 0.3));
+            }
+          } else {
+            // Für andere Widget-Typen: Mindesthöhe
+            h = Math.max(3, h);
+          }
+        }
+        
+        return {
+          i: widget._id || widget.widgetId,
+          x,
+          y,
+          w,
+          h,
+          minW: isMobile ? 12 : 2,
+          minH: 2
+        };
+      });
+    
+    // Zweiter Durchlauf für Desktop: Kompakte Y-Positionen berechnen
+    if (!isMobile && !isTablet) {
+      const compactedLayout: typeof newLayout = [];
+      
+      // Iteriere durch alle Layout-Items und kompaktiere sie
+      for (let index = 0; index < newLayout.length; index++) {
+        const layoutItem = newLayout[index];
+        let minY = 0;
+        
+        // Prüfe alle vorherigen Widgets auf Überlappungen
+        for (let i = 0; i < compactedLayout.length; i++) {
+          const prevLayoutItem = compactedLayout[i];
+          if (prevLayoutItem) {
+            const prevX = prevLayoutItem.x;
+            const prevW = prevLayoutItem.w;
+            const prevY = prevLayoutItem.y;
+            const prevH = prevLayoutItem.h;
+            
+            // Prüfe ob Widgets sich horizontal überlappen
+            const overlaps = (layoutItem.x < prevX + prevW && layoutItem.x + layoutItem.w > prevX);
+            
+            if (overlaps) {
+              // Wenn sich Widgets überlappen, platziere das neue Widget unter dem vorherigen
+              minY = Math.max(minY, prevY + prevH);
+            }
+          }
+        }
+        
+        // Wenn eine bessere Position gefunden wurde, verwende sie
+        const finalY = minY > 0 && minY < layoutItem.y ? minY : layoutItem.y;
+        compactedLayout.push({ ...layoutItem, y: finalY });
+      }
+      
+      setLayout(compactedLayout);
+    } else {
+      setLayout(newLayout);
+    }
+  }, [widgets, isMobile, isTablet, dashboardStats, newLaborResults, newDicomStudies, newOnlineBookings, importantPatients, getWidgetData]);
 
   const handleGenerateQR = async () => {
     try {
@@ -1143,7 +1431,14 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <Box sx={{ px: { xs: 1, sm: 2, md: 3 }, pb: { xs: 1, sm: 2 } }}>
+    <Box sx={{ 
+      px: { xs: 0, sm: 2, md: 3 }, 
+      pb: { xs: 2, sm: 2 },
+      width: '100%',
+      maxWidth: '100%',
+      overflowX: 'hidden',
+      boxSizing: 'border-box'
+    }}>
       <Box 
         display="flex" 
         justifyContent="space-between" 
@@ -1155,7 +1450,12 @@ const Dashboard: React.FC = () => {
         <Typography variant="h4" sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
           Dashboard
         </Typography>
-        <Box display="flex" gap={{ xs: 0.5, sm: 1 }} flexWrap="wrap">
+        <Box 
+          display="flex" 
+          gap={{ xs: 0.5, sm: 1 }} 
+          flexWrap="wrap"
+          width={{ xs: '100%', sm: 'auto' }}
+        >
           {!editMode ? (
             <>
               <Button
@@ -1163,18 +1463,26 @@ const Dashboard: React.FC = () => {
                 startIcon={<Add />}
                 onClick={() => setWidgetSelectorOpen(true)}
                 size={isMobile ? 'small' : 'medium'}
+                sx={{
+                  fontSize: { xs: '0.875rem', sm: '1rem' },
+                  minHeight: { xs: '44px', sm: 'auto' },
+                  flex: { xs: 1, sm: 'none' },
+                  minWidth: { xs: 'auto', sm: 'auto' }
+                }}
+                fullWidth={isMobile}
               >
                 {isMobile ? 'Hinzufügen' : 'Widget hinzufügen'}
               </Button>
-              <Button
-                variant="outlined"
-                startIcon={<Edit />}
-                onClick={() => setEditMode(true)}
-                size={isMobile ? 'small' : 'medium'}
-                disabled={isMobile}
-              >
-                Bearbeiten
-              </Button>
+              {!isMobile && (
+                <Button
+                  variant="outlined"
+                  startIcon={<Edit />}
+                  onClick={() => setEditMode(true)}
+                  size="medium"
+                >
+                  Bearbeiten
+                </Button>
+              )}
             </>
           ) : (
             <>
@@ -1184,6 +1492,12 @@ const Dashboard: React.FC = () => {
                 onClick={handleSaveLayout}
                 color="primary"
                 size={isMobile ? 'small' : 'medium'}
+                sx={{
+                  fontSize: { xs: '0.875rem', sm: '1rem' },
+                  minHeight: { xs: '44px', sm: 'auto' },
+                  flex: { xs: 1, sm: 'none' }
+                }}
+                fullWidth={isMobile}
               >
                 Speichern
               </Button>
@@ -1192,6 +1506,12 @@ const Dashboard: React.FC = () => {
                 startIcon={<Cancel />}
                 onClick={handleCancelEdit}
                 size={isMobile ? 'small' : 'medium'}
+                sx={{
+                  fontSize: { xs: '0.875rem', sm: '1rem' },
+                  minHeight: { xs: '44px', sm: 'auto' },
+                  flex: { xs: 1, sm: 'none' }
+                }}
+                fullWidth={isMobile}
               >
                 Abbrechen
               </Button>
@@ -1236,39 +1556,81 @@ const Dashboard: React.FC = () => {
             width: '100%',
             minHeight: 'calc(100vh - 200px)',
             position: 'relative',
-            px: { xs: 0.5, sm: 1, md: 0 },
-            overflowX: 'hidden'
+            px: { xs: 0, sm: 1, md: 0 },
+            overflowX: 'hidden',
+            overflowY: 'auto',
+            boxSizing: 'border-box'
           }}
         >
           <GridLayout
             className="layout"
             layout={layout}
             cols={isMobile ? 4 : (isTablet ? 8 : 12)}
-            rowHeight={isMobile ? 50 : (isTablet ? 70 : 80)}
+            rowHeight={isMobile ? 60 : (isTablet ? 70 : 55)}
             width={containerWidth}
             isDraggable={editMode && !isMobile}
             isResizable={editMode && !isMobile}
             onLayoutChange={handleLayoutChange}
-            margin={isMobile ? [4, 4] : (isTablet ? [8, 8] : [16, 16])}
-            containerPadding={isMobile ? [4, 4] : (isTablet ? [8, 8] : [16, 16])}
-            compactType={null}
-            preventCollision={true}
+            margin={isMobile ? [6, 6] : (isTablet ? [12, 12] : [12, 12])}
+            containerPadding={isMobile ? [8, 0] : (isTablet ? [12, 12] : [0, 0])}
+            compactType="vertical"
+            preventCollision={false}
             useCSSTransforms={true}
             style={{
               minHeight: '100%',
-              width: '100%'
+              width: '100%',
+              maxWidth: '100%',
+              boxSizing: 'border-box'
             }}
           >
             {widgets
-              .filter(w => w.isVisible)
+              .filter(w => {
+                if (!w.isVisible) return false;
+                const data = getWidgetData(w);
+                if (!data) return false;
+                switch (w.widgetType) {
+                  case 'statistic':
+                    const statValue = (data as any)?.value;
+                    return !(statValue === '0' || statValue === 0 || !statValue || statValue === '');
+                  case 'list':
+                    return Array.isArray(data) && data.length > 0;
+                  case 'chart':
+                    const chartData = (data as any)?.data || (data as any)?.series || data;
+                    if (Array.isArray(chartData)) {
+                      return chartData.length > 0;
+                    }
+                    return !!chartData;
+                  case 'quick-action':
+                    return Array.isArray(data) && data.length > 0;
+                  case 'status':
+                    const statusItems = (data as any)?.items || data;
+                    return Array.isArray(statusItems) && statusItems.length > 0;
+                  case 'custom':
+                    const customData = (data as any)?.tasks || (data as any)?.items || data;
+                    if (Array.isArray(customData)) {
+                      return customData.length > 0;
+                    }
+                    return !!customData;
+                  case 'messages':
+                    // Messages-Widget immer anzeigen, auch wenn keine Nachrichten vorhanden sind
+                    return true;
+                  default:
+                    return !!data;
+                }
+              })
               .map(widget => (
                 <Box
                   key={widget._id || widget.widgetId}
                   sx={{
                     height: '100%',
                     width: '100%',
+                    maxWidth: '100%',
+                    boxSizing: 'border-box',
+                    overflow: 'hidden',
                     '& > *': {
-                      height: '100%'
+                      height: '100%',
+                      width: '100%',
+                      maxWidth: '100%'
                     }
                   }}
                 >
@@ -1286,8 +1648,8 @@ const Dashboard: React.FC = () => {
                         // Verwende window.location für zuverlässige Navigation
                         window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
                       } else {
-                        // Sonst öffne den Nachrichten-Dialog
-                        setMessagesDialogOpen(true);
+                        // Sonst navigiere zur Interne-Nachrichten-Seite
+                        navigate('/internal-messages');
                       }
                     }}
                   />
@@ -1311,39 +1673,55 @@ const Dashboard: React.FC = () => {
         onClose={handleCloseQRDialog}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
           QR-Code für Selbst-Check-in
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ textAlign: 'center', py: 2 }}>
+          <Box sx={{ textAlign: 'center', py: { xs: 1, sm: 2 } }}>
             {qrError && (
               <Alert severity="error" sx={{ mb: 2 }}>
                 {qrError}
               </Alert>
             )}
             {qrLoading ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
-                <CircularProgress size={60} />
-                <Typography variant="body1" sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: { xs: 2, sm: 4 } }}>
+                <CircularProgress size={isMobile ? 48 : 60} />
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    mt: 2,
+                    fontSize: { xs: '0.875rem', sm: '1rem' }
+                  }}
+                >
                   QR-Code wird generiert...
                 </Typography>
               </Box>
             ) : qrCode ? (
               <QRCodeGenerator
                 data={qrCode}
-                size={250}
+                size={isMobile ? 200 : 250}
                 onRefresh={handleRefreshQR}
               />
             ) : (
-              <Box sx={{ py: 4 }}>
-                <Typography variant="body1" color="text.secondary">
+              <Box sx={{ py: { xs: 2, sm: 4 } }}>
+                <Typography 
+                  variant="body1" 
+                  color="text.secondary"
+                  sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+                >
                   Kein QR-Code verfügbar. Bitte generieren Sie einen neuen Code.
                 </Typography>
                 <Button
                   variant="contained"
                   onClick={handleGenerateQR}
-                  sx={{ mt: 2 }}
+                  sx={{ 
+                    mt: 2,
+                    minHeight: { xs: '44px', sm: 'auto' },
+                    fontSize: { xs: '0.875rem', sm: '1rem' }
+                  }}
+                  fullWidth={isMobile}
                 >
                   QR-Code generieren
                 </Button>
@@ -1351,8 +1729,15 @@ const Dashboard: React.FC = () => {
             )}
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseQRDialog}>
+        <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 2 } }}>
+          <Button 
+            onClick={handleCloseQRDialog}
+            sx={{
+              minHeight: { xs: '44px', sm: 'auto' },
+              fontSize: { xs: '0.875rem', sm: '1rem' }
+            }}
+            fullWidth={isMobile}
+          >
             Schließen
           </Button>
         </DialogActions>

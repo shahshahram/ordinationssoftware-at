@@ -29,32 +29,12 @@ const initialState: CheckInState = {
 // Generate QR code for self check-in
 export const generateCheckInCode = createAsyncThunk(
   'checkin/generateCode',
-  async (_, { rejectWithValue, getState }) => {
+  async (_, { rejectWithValue }) => {
     try {
-      // Get token from Redux state
-      const state = getState() as any;
-      const token = state.auth.token;
-      
-      if (!token) {
-        throw new Error('Kein Authentifizierungstoken gefunden');
-      }
-      
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/checkin/generate`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data;
+      const response = await api.post('/checkin/generate');
+      return response.data;
     } catch (error: any) {
-      return rejectWithValue(error.message || 'Fehler beim Generieren des QR-Codes');
+      return rejectWithValue(error.response?.data?.message || error.message || 'Fehler beim Generieren des QR-Codes');
     }
   }
 );
@@ -64,21 +44,10 @@ export const validateCheckInSession = createAsyncThunk(
   'checkin/validateSession',
   async (checkInId: string, { rejectWithValue }) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/checkin/validate/${checkInId}`, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data as { success: boolean; data: { status: string; message?: string }; message?: string };
+      const response = await api.get(`/checkin/validate/${checkInId}`);
+      return response.data as { success: boolean; data: { status: string; message?: string }; message?: string };
     } catch (error: any) {
-      return rejectWithValue(error.message || 'Fehler beim Validieren der Session');
+      return rejectWithValue(error.response?.data?.message || error.message || 'Fehler beim Validieren der Session');
     }
   }
 );
@@ -88,22 +57,10 @@ export const submitCheckInData = createAsyncThunk(
   'checkin/submitData',
   async ({ checkInId, patientData }: { checkInId: string; patientData: any }, { rejectWithValue }) => {
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/checkin/submit/${checkInId}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(patientData),
-      });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      return data as { success: boolean; message?: string; data?: any };
+      const response = await api.post(`/checkin/submit/${checkInId}`, patientData);
+      return response.data as { success: boolean; message?: string; data?: any };
     } catch (error: any) {
-      return rejectWithValue(error.message || 'Fehler beim Speichern der Daten');
+      return rejectWithValue(error.response?.data?.message || error.message || 'Fehler beim Speichern der Daten');
     }
   }
 );

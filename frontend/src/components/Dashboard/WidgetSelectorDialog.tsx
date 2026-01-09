@@ -10,7 +10,9 @@ import {
   CardContent,
   Typography,
   IconButton,
-  Box
+  Box,
+  useTheme,
+  useMediaQuery
 } from '@mui/material';
 import { Close } from '@mui/icons-material';
 import {
@@ -324,32 +326,53 @@ const WidgetSelectorDialog: React.FC<WidgetSelectorDialogProps> = ({
   onSelect,
   existingWidgetIds
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const availableWidgets = AVAILABLE_WIDGETS.filter(
     widget => !existingWidgetIds.includes(widget.widgetId)
   );
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="md" 
+      fullWidth
+      fullScreen={isMobile}
+    >
+      <DialogTitle sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">Widget hinzufügen</Typography>
-          <IconButton onClick={onClose} size="small">
+          <Typography 
+            variant="h6"
+            sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}
+          >
+            Widget hinzufügen
+          </Typography>
+          <IconButton 
+            onClick={onClose} 
+            size="small"
+            sx={{ minWidth: '44px', minHeight: '44px' }}
+          >
             <Close />
           </IconButton>
         </Box>
       </DialogTitle>
-      <DialogContent>
-        <Grid container spacing={2} sx={{ mt: 1 }}>
+      <DialogContent sx={{ px: { xs: 1, sm: 3 }, py: { xs: 1, sm: 2 } }}>
+        <Grid container spacing={{ xs: 1.5, sm: 2 }} sx={{ mt: { xs: 0, sm: 1 } }}>
           {availableWidgets.map((widget) => (
             <Grid size={{ xs: 12, sm: 6, md: 4 }} key={widget.widgetId}>
               <Card
                 sx={{
                   height: '100%',
                   cursor: 'pointer',
+                  minHeight: { xs: '120px', sm: 'auto' },
                   '&:hover': {
                     boxShadow: 3,
                     transform: 'translateY(-2px)',
                     transition: 'all 0.2s'
+                  },
+                  '&:active': {
+                    transform: 'translateY(0)'
                   }
                 }}
                 onClick={() => {
@@ -357,12 +380,37 @@ const WidgetSelectorDialog: React.FC<WidgetSelectorDialogProps> = ({
                   onClose();
                 }}
               >
-                <CardContent>
-                  <Box display="flex" alignItems="center" gap={2} mb={1}>
-                    <Box sx={{ color: 'primary.main' }}>{widget.icon}</Box>
-                    <Typography variant="h6">{widget.title}</Typography>
+                <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+                  <Box 
+                    display="flex" 
+                    alignItems="center" 
+                    gap={{ xs: 1.5, sm: 2 }} 
+                    mb={{ xs: 1, sm: 1 }}
+                    flexDirection={{ xs: 'row', sm: 'row' }}
+                  >
+                    <Box 
+                      sx={{ 
+                        color: 'primary.main',
+                        fontSize: { xs: '1.5rem', sm: '2rem' }
+                      }}
+                    >
+                      {widget.icon}
+                    </Box>
+                    <Typography 
+                      variant="h6"
+                      sx={{ 
+                        fontSize: { xs: '1rem', sm: '1.25rem' },
+                        fontWeight: 600
+                      }}
+                    >
+                      {widget.title}
+                    </Typography>
                   </Box>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontSize: { xs: '0.875rem', sm: '0.875rem' } }}
+                  >
                     {widget.description}
                   </Typography>
                 </CardContent>
@@ -371,15 +419,32 @@ const WidgetSelectorDialog: React.FC<WidgetSelectorDialogProps> = ({
           ))}
           {availableWidgets.length === 0 && (
             <Grid size={{ xs: 12 }}>
-              <Typography variant="body2" color="text.secondary" align="center" sx={{ py: 4 }}>
+              <Typography 
+                variant="body2" 
+                color="text.secondary" 
+                align="center" 
+                sx={{ 
+                  py: { xs: 3, sm: 4 },
+                  fontSize: { xs: '0.875rem', sm: '0.875rem' }
+                }}
+              >
                 Alle verfügbaren Widgets sind bereits hinzugefügt.
               </Typography>
             </Grid>
           )}
         </Grid>
       </DialogContent>
-      <DialogActions>
-        <Button onClick={onClose}>Schließen</Button>
+      <DialogActions sx={{ px: { xs: 2, sm: 3 }, pb: { xs: 2, sm: 2 } }}>
+        <Button 
+          onClick={onClose}
+          sx={{
+            minHeight: { xs: '44px', sm: 'auto' },
+            fontSize: { xs: '0.875rem', sm: '1rem' }
+          }}
+          fullWidth={isMobile}
+        >
+          Schließen
+        </Button>
       </DialogActions>
     </Dialog>
   );

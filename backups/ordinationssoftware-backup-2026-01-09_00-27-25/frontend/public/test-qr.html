@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QR-Code Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .qr-container {
+            margin: 20px;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            display: inline-block;
+            background: #f9f9f9;
+        }
+        .url-display {
+            margin: 10px 0;
+            padding: 15px;
+            background: #f0f0f0;
+            border-radius: 8px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+            border: 1px solid #ccc;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        h3 {
+            color: #555;
+            margin-bottom: 15px;
+        }
+        .test-info {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #2196f3;
+        }
+        .test-info h4 {
+            margin: 0 0 10px 0;
+            color: #1976d2;
+        }
+        .test-info ul {
+            margin: 0;
+            padding-left: 20px;
+        }
+        .test-info li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 QR-Code Test für Stammdaten-Validierung</h1>
+        
+        <div class="test-info">
+            <h4>📋 Test-Anleitung:</h4>
+            <ul>
+                <li>Öffnen Sie diese Seite auf dem Tablet</li>
+                <li>Scannen Sie den QR-Code mit einer QR-Scanner-App</li>
+                <li>Die Validierungsseite sollte sich öffnen</li>
+                <li>Testen Sie die Bearbeitung der Felder</li>
+            </ul>
+        </div>
+        
+        <div class="qr-container">
+            <h3>📱 Test QR-Code</h3>
+            <div class="url-display" id="urlDisplay"></div>
+            <div id="qrCode"></div>
+        </div>
+
+        <div class="test-info">
+            <h4>🔧 Debug-Informationen:</h4>
+            <p><strong>Hostname:</strong> <span id="hostname"></span></p>
+            <p><strong>Port:</strong> <span id="port"></span></p>
+            <p><strong>URL:</strong> <span id="debugUrl"></span></p>
+            <p><strong>Status:</strong> <span id="status">Lade...</span></p>
+            <p><strong>User Agent:</strong> <span id="userAgent"></span></p>
+        </div>
+    </div>
+
+    <script>
+        // Test-Daten für Validierung
+        const testData = {
+            patientId: "test123",
+            firstName: "Max",
+            lastName: "Mustermann",
+            dateOfBirth: "1990-01-01",
+            gender: "m",
+            email: "max@example.com",
+            phone: "123456789",
+            address: {
+                street: "Musterstraße 1",
+                city: "Wien",
+                zipCode: "1010"
+            },
+            insuranceProvider: "ÖGK",
+            socialSecurityNumber: "1234567890",
+            bloodType: "A+",
+            height: 180,
+            weight: 75,
+            bmi: 23.1,
+            allergies: ["Pollen", "Nüsse"],
+            currentMedications: ["Aspirin"],
+            medicalHistory: ["Bluthochdruck"],
+            vaccinations: ["Tetanus"],
+            medicalNotes: "Keine besonderen Notizen",
+            isPregnant: false,
+            pregnancyWeek: null
+        };
+
+        // Aktuelle IP-Adresse ermitteln
+        const currentHost = window.location.hostname;
+        const currentPort = window.location.port || '3000';
+        const baseUrl = `http://${currentHost}:${currentPort}`;
+        
+        // URL generieren
+        const url = `${baseUrl}/validate.html?data=${encodeURIComponent(JSON.stringify(testData))}`;
+        
+        // Debug-Informationen anzeigen
+        document.getElementById('hostname').textContent = currentHost;
+        document.getElementById('port').textContent = currentPort;
+        document.getElementById('urlDisplay').textContent = url;
+        document.getElementById('debugUrl').textContent = url;
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+        
+        // Status prüfen
+        fetch(`${baseUrl}/validate.html`)
+            .then(response => {
+                if (response.ok) {
+                    document.getElementById('status').textContent = '✅ Validierungsseite erreichbar';
+                    document.getElementById('status').style.color = 'green';
+                } else {
+                    document.getElementById('status').textContent = '❌ Validierungsseite nicht erreichbar';
+                    document.getElementById('status').style.color = 'red';
+                }
+            })
+            .catch(error => {
+                document.getElementById('status').textContent = '❌ Fehler: ' + error.message;
+                document.getElementById('status').style.color = 'red';
+            });
+        
+        // QR-Code generieren
+        const qrCodeImg = document.createElement('img');
+        qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(url)}`;
+        qrCodeImg.alt = "QR-Code für Validierung";
+        qrCodeImg.style.maxWidth = '300px';
+        qrCodeImg.style.height = 'auto';
+        qrCodeImg.style.border = '1px solid #ddd';
+        qrCodeImg.style.borderRadius = '8px';
+        
+        document.getElementById('qrCode').appendChild(qrCodeImg);
+        
+        console.log('Test URL:', url);
+        console.log('Test Data:', testData);
+        
+        // QR-Code Click-Handler für direkten Test
+        qrCodeImg.onclick = function() {
+            window.open(url, '_blank');
+        };
+        
+        // Hinweis hinzufügen
+        const hint = document.createElement('p');
+        hint.innerHTML = '<em>💡 Tipp: Klicken Sie auf den QR-Code, um die Validierungsseite direkt zu öffnen</em>';
+        hint.style.marginTop = '15px';
+        hint.style.color = '#666';
+        hint.style.fontSize = '14px';
+        document.getElementById('qrCode').appendChild(hint);
+    </script>
+</body>
+</html>

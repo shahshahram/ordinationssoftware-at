@@ -90,7 +90,13 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
 
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1.5, sm: 2 } }}>
+    <Box sx={{ 
+      minHeight: '100%',
+      height: 'auto',
+      display: 'flex', 
+      flexDirection: 'column', 
+      p: { xs: 1.5, sm: 2 } 
+    }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: { xs: 1, sm: 1.5 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Badge badgeContent={unreadCount} color="error">
@@ -112,7 +118,11 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
           />
         )}
       </Box>
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+      <Box sx={{ 
+        flex: inbox.length === 0 ? 'none' : 1,
+        overflow: inbox.length > 4 ? 'auto' : 'visible',
+        minHeight: inbox.length === 0 ? 'auto' : 'none'
+      }}>
         {loading ? (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
             Lade Nachrichten...
@@ -164,21 +174,25 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
                       fullMessage: message 
                     });
                     
-                    // Wenn patientId vorhanden ist, navigiere zum Patienten
-                    if (patientId) {
-                      // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
-                      const patientIdStr = typeof patientId === 'string' ? patientId : String(patientId);
-                      console.log('🔍 MessagesWidget: Navigating to patient labor values', { 
-                        patientId: patientIdStr, 
-                        originalPatientId: patientId, 
-                        fullMessage: message 
-                      });
-                      // Verwende window.location für zuverlässige Navigation
-                      window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
-                    } else {
-                      console.log('🔍 MessagesWidget: No patientId, using normal message handling', { messageId: message._id });
-                      // Sonst normale Nachrichten-Behandlung
+                    // Wenn ein onMessageClick-Handler vorhanden ist, verwende ihn
+                    if (onMessageClick) {
                       handleMessageClick(message);
+                      onMessageClick(message);
+                    } else {
+                      // Fallback: Wenn patientId vorhanden ist, navigiere zum Patienten
+                      if (patientId) {
+                        const patientIdStr = typeof patientId === 'string' ? patientId : String(patientId);
+                        console.log('🔍 MessagesWidget: Navigating to patient labor values', { 
+                          patientId: patientIdStr, 
+                          originalPatientId: patientId, 
+                          fullMessage: message 
+                        });
+                        window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+                      } else {
+                        // Sonst zur Interne-Nachrichten-Seite navigieren
+                        console.log('🔍 MessagesWidget: No patientId, navigating to internal messages page', { messageId: message._id });
+                        window.location.href = '/internal-messages';
+                      }
                     }
                   }}
                   sx={{ 

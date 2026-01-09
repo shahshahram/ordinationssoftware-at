@@ -1,0 +1,827 @@
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { CssBaseline, Box } from '@mui/material';
+import { SnackbarProvider } from 'notistack';
+import { useAppSelector } from './store/hooks';
+// import { Global } from '@emotion/react'; // Disabled to prevent accessibility issues
+
+// Layout Components
+import Layout from './components/Layout/Layout';
+import Sidebar from './components/Layout/Sidebar';
+import Header from './components/Layout/Header';
+import ProtectedRoute from './components/ProtectedRoute';
+import LocationProvider from './components/Location/LocationProvider';
+
+// Pages
+import Dashboard from './pages/Dashboard';
+import Patients from './pages/Patients';
+import TemporaryPatients from './pages/TemporaryPatients';
+import PatientsHints from './pages/PatientsHints';
+import Appointments from './pages/Appointments';
+import Resources from './pages/Resources';
+import Billing from './pages/Billing';
+import CashRegisterManagement from './pages/CashRegisterManagement';
+import Documents from './pages/Documents';
+import LetterTemplates from './pages/LetterTemplates';
+import OnlineBooking from './pages/OnlineBooking';
+import OnlineBookings from './pages/OnlineBookings';
+import PatientBooking from './pages/PatientBooking';
+import WaitingListReservation from './pages/WaitingListReservation';
+import ELGA from './pages/ELGA';
+import Users from './pages/Users';
+import Reports from './pages/Reports';
+import BillingReports from './pages/BillingReports';
+import Journal from './pages/Journal';
+import Security from './pages/Security';
+import StaffManagement from './pages/StaffManagement';
+import Calendar from './pages/Calendar';
+import DemoCalendar from './pages/DemoCalendar';
+import EnhancedCalendar from './pages/EnhancedCalendar';
+import ServiceDemoCalendar from './pages/ServiceDemoCalendar';
+import LocationManagement from './pages/LocationManagement';
+import LocationDashboard from './components/LocationDashboard';
+import LocationCalendar from './components/LocationCalendar';
+import MedicalSpecialties from './pages/MedicalSpecialties';
+import DekursVorlagenAdmin from './pages/DekursVorlagenAdmin';
+import ServiceCatalog from './pages/ServiceCatalog';
+import ServiceBookings from './pages/ServiceBookings';
+import Settings from './pages/Settings';
+import UpdateMonitoringPage from './pages/UpdateMonitoringPage';
+import ICD10Demo from './pages/ICD10Demo';
+import ICD10CatalogManagement from './pages/ICD10CatalogManagement';
+import ELGAValuesetManagement from './pages/ELGAValuesetManagement';
+import XdsDocumentManagement from './pages/XdsDocumentManagement';
+import AppointmentDetail from './pages/AppointmentDetail';
+import DocumentDetail from './pages/DocumentDetail';
+import DiagnosisDetail from './pages/DiagnosisDetail';
+import Login from './pages/Login';
+import Unauthorized from './pages/Unauthorized';
+import ErrorBoundary from './components/ErrorBoundary';
+import PatientOrganizer from './pages/PatientOrganizer';
+import TemplateManagement from './pages/TemplateManagement';
+import DocumentTemplateAdmin from './pages/DocumentTemplateAdmin';
+import AmbulanzbefundEditor from './pages/AmbulanzbefundEditor';
+import SuperAdminSetup from './pages/SuperAdminSetup';
+import PerformanceList from './components/PerformanceList';
+import MedicationImport from './pages/MedicationImport';
+
+// Patient Admission Forms
+import PatientAdmissionPage from './pages/PatientAdmissionPage';
+import SelfCheckInPage from './pages/SelfCheckInPage';
+import PatientAdmissionDemo from './pages/PatientAdmissionDemo';
+import PatientAdmissionTest from './pages/PatientAdmissionTest';
+import RBACManagement from './pages/RBACManagement';
+import RBACDiscovery from './pages/RBACDiscovery';
+import Checkin from './pages/Checkin';
+import InternalMessages from './pages/InternalMessages';
+import Reimbursements from './pages/Reimbursements';
+import Absences from './pages/Absences';
+import AddressBook from './pages/AddressBook';
+import WorkShifts from './pages/WorkShifts';
+import ClinicHours from './pages/ClinicHours';
+import Availability from './pages/Availability';
+import ServiceCategories from './pages/ServiceCategories';
+import ECardValidation from './pages/ECardValidation';
+import IntegrationStatus from './pages/IntegrationStatus';
+import WaitingList from './pages/WaitingList';
+import DicomProviderManagement from './pages/DicomProviderManagement';
+import DicomTestPage from './pages/DicomTestPage';
+import LaborProviderManagement from './pages/LaborProviderManagement';
+import InsuranceProviderManagement from './pages/InsuranceProviderManagement';
+import LaborTestPage from './pages/LaborTestPage';
+import KassaTestPage from './pages/KassaTestPage';
+import ELDATestPage from './pages/ELDATestPage';
+import WAHonlineTestPage from './pages/WAHonlineTestPage';
+
+// Theme-Funktion, die basierend auf dem Modus ein Theme erstellt
+const getTheme = (mode: 'light' | 'dark') => createTheme({
+  palette: {
+    mode,
+    primary: {
+      main: '#1976d2',
+      light: '#42a5f5',
+      dark: '#1565c0',
+    },
+    secondary: {
+      main: '#dc004e',
+    },
+    background: {
+      default: mode === 'dark' ? '#121212' : '#f5f5f5',
+      paper: mode === 'dark' ? '#1e1e1e' : '#ffffff',
+    },
+    text: {
+      primary: mode === 'dark' ? '#ffffff' : 'rgba(0, 0, 0, 0.87)',
+      secondary: mode === 'dark' ? 'rgba(255, 255, 255, 0.7)' : 'rgba(0, 0, 0, 0.6)',
+    },
+  },
+  typography: {
+    fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+    h1: {
+      fontSize: '2.5rem',
+      fontWeight: 600,
+    },
+    h2: {
+      fontSize: '2rem',
+      fontWeight: 600,
+    },
+    h3: {
+      fontSize: '1.75rem',
+      fontWeight: 500,
+    },
+    h4: {
+      fontSize: '1.5rem',
+      fontWeight: 500,
+    },
+    h5: {
+      fontSize: '1.25rem',
+      fontWeight: 500,
+    },
+    h6: {
+      fontSize: '1rem',
+      fontWeight: 500,
+    },
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          borderRadius: 8,
+        },
+      },
+    },
+    MuiCard: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+          boxShadow: mode === 'dark' 
+            ? '0 2px 8px rgba(0,0,0,0.3)' 
+            : '0 2px 8px rgba(0,0,0,0.1)',
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          borderRadius: 12,
+        },
+      },
+    },
+    MuiDrawer: {
+      defaultProps: {
+        ModalProps: {
+          disableEnforceFocus: true,
+          disableAutoFocus: true,
+          disableRestoreFocus: true,
+        },
+      },
+    },
+    MuiDialog: {
+      defaultProps: {
+        disableEnforceFocus: false,
+        disableAutoFocus: false,
+        disableRestoreFocus: false,
+        hideBackdrop: false,
+      },
+      styleOverrides: {
+        root: {
+          // Verhindere aria-hidden auf root-Element, wenn Dialog geöffnet ist
+          '&[aria-hidden="true"]': {
+            '&:focus-within': {
+              '& *': {
+                pointerEvents: 'auto',
+              },
+            },
+          },
+        },
+      },
+    },
+    MuiModal: {
+      defaultProps: {
+        disableEnforceFocus: false,
+        disableAutoFocus: false,
+        disableRestoreFocus: false,
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        root: {
+          backgroundColor: mode === 'dark' ? '#1e1e1e' : '#ffffff',
+          color: mode === 'dark' ? '#ffffff' : 'rgba(0, 0, 0, 0.87)',
+        },
+      },
+    },
+  },
+});
+
+// Global CSS for aria-hidden fix - disabled to prevent accessibility issues
+// const globalStyles = (
+//   <Global
+//     styles={{
+//       '#root[aria-hidden="true"] *': {
+//         pointerEvents: 'none',
+//       },
+//     }}
+//   />
+// );
+
+// App Content Component
+const AppContent: React.FC = () => {
+  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+
+  const handleSidebarToggle = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
+  return (
+    <Router>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<Login />} />
+        <Route path="/unauthorized" element={<Unauthorized />} />
+        <Route path="/online-booking" element={<OnlineBooking />} />
+        <Route path="/patient-booking/:token" element={<PatientBooking />} />
+        <Route path="/waiting-list-reservation/:token" element={<WaitingListReservation />} />
+        <Route path="/checkin" element={<Checkin />} />
+        
+        {/* Protected Routes */}
+        <Route
+          path="/*"
+          element={
+            <ProtectedRoute>
+              <LocationProvider>
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                  <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+                  <Box
+                    component="main"
+                    sx={{
+                      flexGrow: 1,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      ml: { sm: sidebarOpen ? '240px' : '0px' },
+                      transition: 'margin 0.3s ease',
+                      overflow: 'hidden',
+                      height: '100vh',
+                    }}
+                  >
+                    <Header onMenuClick={handleSidebarToggle} />
+                    <Layout>
+                    <Routes>
+                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="/dashboard" element={<Dashboard />} />
+                      <Route path="/internal-messages" element={<InternalMessages />} />
+                      <Route 
+                        path="/patients" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <Patients />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/temporary-patients" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <TemporaryPatients />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/patients-hints" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <PatientsHints />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/address-book" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <AddressBook />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route 
+                        path="/waiting-list" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <WaitingList />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route 
+                        path="/appointments" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <Appointments />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/online-bookings" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <OnlineBookings />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/calendar" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <Calendar />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/demo-calendar" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <DemoCalendar />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      {/* <Route 
+                        path="/enhanced-calendar" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <EnhancedCalendar />
+                          </ProtectedRoute>
+                        } 
+                      /> */}
+                      <Route 
+                        path="/service-demo-calendar" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <ServiceDemoCalendar />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route path="/resources" element={<Resources />} />
+                      <Route path="/icd10-demo" element={<ICD10Demo />} />
+                      <Route 
+                        path="/icd10-catalog-management" 
+                        element={
+                          <ProtectedRoute requiredRole="admin">
+                            <ICD10CatalogManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+            <Route
+              path="/locations"
+              element={
+                <ProtectedRoute requiredPermissions={['locations.read']}>
+                  <LocationManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/location-dashboard"
+              element={
+                <ProtectedRoute requiredPermissions={['locations.read']}>
+                  <LocationDashboard />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/location-calendar"
+              element={
+                <ProtectedRoute requiredPermissions={['locations.read']}>
+                  <LocationCalendar />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/medical-specialties"
+              element={
+                <ProtectedRoute requiredRole={['admin', 'super_admin']}>
+                  <MedicalSpecialties />
+                </ProtectedRoute>
+              }
+            />
+                      <Route 
+                        path="/service-catalog" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['services.read']}>
+                            <ServiceCatalog />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/service-bookings" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['bookings.read']}>
+                            <ServiceBookings />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/billing" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <Billing />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/cash-register" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <CashRegisterManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/performance-billing" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <PerformanceList />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/reimbursements" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <Reimbursements />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/documents" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                            <Documents />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/letter-templates" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                            <LetterTemplates />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/template-management" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.write']}>
+                            <TemplateManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/document-templates" 
+                        element={
+                          <ProtectedRoute requiredRole={['admin', 'super_admin']}>
+                            <DocumentTemplateAdmin />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/dekurs-vorlagen" 
+                        element={
+                          <ProtectedRoute requiredRole={['admin', 'super_admin', 'arzt', 'doctor']}>
+                            <DekursVorlagenAdmin />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/ambulanzbefund/new/:patientId" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.write']}>
+                            <AmbulanzbefundEditor />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/ambulanzbefund/:ambefundId" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                            <AmbulanzbefundEditor />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/appointments/:id" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <AppointmentDetail />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route 
+                        path="/documents/:id" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                            <DocumentDetail />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route 
+                        path="/diagnoses/:id" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <DiagnosisDetail />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route path="/elga" element={<ELGA />} />
+                      <Route 
+                        path="/elga-valuesets" 
+                        element={
+                          <ProtectedRoute requiredRole={['admin', 'super_admin']}>
+                            <ELGAValuesetManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/xds-documents" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                            <XdsDocumentManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/users" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['users.read']}>
+                            <Users />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/reports" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['reports.read']}>
+                            <Reports />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/billing-reports" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <BillingReports />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/journal" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['billing.read']}>
+                            <Journal />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/security" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['security.read']}>
+                            <Security />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/patient-organizer/:id" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <PatientOrganizer />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/patient-admission" 
+                        element={
+                          <ProtectedRoute>
+                            <PatientAdmissionPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/self-checkin" 
+                        element={<SelfCheckInPage />} 
+                      />
+                      <Route 
+                        path="/patient-admission-demo" 
+                        element={
+                          <ProtectedRoute>
+                            <PatientAdmissionDemo />
+                          </ProtectedRoute>
+                        }
+                      />
+                      <Route 
+                        path="/patient-admission-test" 
+                        element={<PatientAdmissionTest />}
+                      />
+                      <Route 
+                        path="/super-admin-setup" 
+                        element={<SuperAdminSetup />}
+                      />
+                      <Route 
+                        path="/staff" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['staff.read']}>
+                            <StaffManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/absences" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['staff.read']}>
+                            <Absences />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/work-shifts" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['staff.read']}>
+                            <WorkShifts />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/clinic-hours" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <ClinicHours />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/availability" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                            <Availability />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/service-categories" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['services.read']}>
+                            <ServiceCategories />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/ecard-validation" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                            <ECardValidation />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/settings" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <Settings />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/update-monitoring" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <UpdateMonitoringPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/integration-status" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <IntegrationStatus />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/dicom-providers" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <DicomProviderManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/dicom-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <DicomTestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/labor-providers" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <LaborProviderManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/insurance-providers" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <InsuranceProviderManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/labor-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <LaborTestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/kassa-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <KassaTestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/elda-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <ELDATestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/wahonline-test" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                            <WAHonlineTestPage />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/medication-import" 
+                        element={
+                          <ProtectedRoute requiredRole={['admin', 'super_admin']}>
+                            <MedicationImport />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/rbac-management" 
+                        element={
+                          <ProtectedRoute requiredRole={['admin', 'super_admin']}>
+                            <RBACManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/rbac-discovery" 
+                        element={
+                          <ProtectedRoute requiredRole={['admin', 'super_admin']}>
+                            <RBACDiscovery />
+                          </ProtectedRoute>
+                        } 
+                      />
+                    </Routes>
+                  </Layout>
+                </Box>
+              </Box>
+              </LocationProvider>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </Router>
+  );
+};
+
+function App() {
+  const themeMode = useAppSelector((state) => state.ui.theme);
+  const theme = React.useMemo(() => getTheme(themeMode), [themeMode]);
+
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <SnackbarProvider 
+        maxSnack={3}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+        autoHideDuration={3000}
+      >
+        {/* globalStyles disabled to prevent accessibility issues */}
+        <ErrorBoundary>
+          <AppContent />
+        </ErrorBoundary>
+      </SnackbarProvider>
+    </ThemeProvider>
+  );
+}
+
+export default App;

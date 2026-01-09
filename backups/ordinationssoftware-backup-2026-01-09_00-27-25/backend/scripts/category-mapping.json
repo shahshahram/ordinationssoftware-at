@@ -1,0 +1,156 @@
+{
+  "_comment": "Kategorisierungs-Mapping für ELGA Valuesets und CodeSystems",
+  "_version": "1.0.0",
+  "_description": "Dieses Mapping definiert bekannte Kategorien und deren Erkennungsregeln. Wird als Referenz verwendet.",
+  
+  "categories": {
+    "classcode": {
+      "description": "CDA Class Codes",
+      "keywords": ["classcode"],
+      "oid_patterns": []
+    },
+    "typecode": {
+      "description": "CDA Type Codes",
+      "keywords": ["typecode"],
+      "oid_patterns": []
+    },
+    "formatcode": {
+      "description": "CDA Format Codes",
+      "keywords": ["formatcode"],
+      "oid_patterns": []
+    },
+    "hl7-v3": {
+      "description": "HL7 v3 Standards",
+      "keywords": ["v3-", "entitycode", "participationtype", "routeofadministration", "targetawareness"],
+      "oid_patterns": ["2.16.840.1.113883.5."]
+    },
+    "dgc": {
+      "description": "Digital Green Certificate (COVID-Zertifikate)",
+      "keywords": ["dgc_", "digital green certificate", "covid"],
+      "oid_patterns": ["1.2.40.0.34.6.0.10.54", "1.2.40.0.34.6.0.10.56", "1.2.40.0.34.6.0.10.58", "1.2.40.0.34.6.0.10.60"]
+    },
+    "eimpf": {
+      "description": "e-Impfpass",
+      "keywords": ["eimpf_", "e-impfpass", "impfpass"],
+      "oid_patterns": ["1.2.40.0.34.6.0.10.80"]
+    },
+    "elga": {
+      "description": "ELGA generisch",
+      "keywords": ["elga_"],
+      "oid_patterns": ["1.2.40.0.34.10.", "1.2.40.0.34.5."]
+    },
+    "elga-medikation": {
+      "description": "ELGA Medikation",
+      "keywords": ["medikation", "medication"],
+      "oid_patterns": [],
+      "parent_category": "elga"
+    },
+    "elga-audit": {
+      "description": "ELGA Audit/Role IDs",
+      "keywords": ["audit", "roleid"],
+      "oid_patterns": [],
+      "parent_category": "elga"
+    },
+    "elga-problem": {
+      "description": "ELGA Problemkatalog",
+      "keywords": ["problem", "katalog"],
+      "oid_patterns": [],
+      "parent_category": "elga"
+    },
+    "elga-sections": {
+      "description": "ELGA Sections",
+      "keywords": ["section"],
+      "oid_patterns": ["1.2.40.0.34.5.40"],
+      "parent_category": "elga"
+    },
+    "elga-fachaerzte": {
+      "description": "ELGA Fachärzte",
+      "keywords": ["fachaerzte", "facharzt"],
+      "oid_patterns": ["1.2.40.0.34.5.160"],
+      "parent_category": "elga"
+    },
+    "appc": {
+      "description": "APPC (Anatomie/Prozeduren)",
+      "keywords": ["appc_", "anatomie"],
+      "oid_patterns": ["1.2.40.0.34.10.65"]
+    },
+    "diaetologie": {
+      "description": "Diätologie/Ernährung",
+      "keywords": ["diaetologie", "ernaehrungsproblem", "nutrition"],
+      "oid_patterns": ["1.2.40.0.34.6.0.10.101"]
+    },
+    "rare-diseases": {
+      "description": "Seltene Krankheiten",
+      "keywords": ["orphanet", "rare disease", "seltene krankheit", "snomed_rare"],
+      "oid_patterns": []
+    },
+    "units-time": {
+      "description": "Zeit-Einheiten (UCUM)",
+      "keywords": ["zeiteinheit", "time unit", "ucum", "zeiteinheiten"],
+      "oid_patterns": []
+    },
+    "loinc": {
+      "description": "LOINC Terminologie",
+      "keywords": ["loinc"],
+      "oid_patterns": ["2.16.840.1.113883.6.1"]
+    },
+    "snomed-ct": {
+      "description": "SNOMED CT Terminologie",
+      "keywords": ["snomed"],
+      "oid_patterns": ["2.16.840.1.113883.6.96"]
+    },
+    "icd-10": {
+      "description": "ICD-10 Klassifikation",
+      "keywords": ["icd-10", "icd10"],
+      "oid_patterns": ["1.2.40.0.34.5.171"]
+    },
+    "labor": {
+      "description": "Labor/Befunde",
+      "keywords": ["labor", "laboratory", "lab"],
+      "oid_patterns": []
+    },
+    "medication": {
+      "description": "Medikation/Arzneimittel (allgemein)",
+      "keywords": ["medikation", "medication", "arznei", "drug"],
+      "oid_patterns": []
+    },
+    "befund": {
+      "description": "Befunde/Ergebnisse",
+      "keywords": ["befund", "finding", "result", "diagnostic"],
+      "oid_patterns": []
+    },
+    "prozedur": {
+      "description": "Prozeduren/Interventionen",
+      "keywords": ["prozedur", "procedure", "intervention"],
+      "oid_patterns": []
+    },
+    "diagnose": {
+      "description": "Diagnosen/Krankheiten",
+      "keywords": ["diagnose", "diagnosis", "disease", "condition"],
+      "oid_patterns": []
+    },
+    "organisation": {
+      "description": "Organisationen/Institutionen",
+      "keywords": ["organisation", "organization", "institution", "facility"],
+      "oid_patterns": []
+    },
+    "rolle": {
+      "description": "Rollen/Personen",
+      "keywords": ["role", "rolle", "person", "participant"],
+      "oid_patterns": []
+    },
+    "1450-service": {
+      "description": "1450 Telefondienst (BPOS)",
+      "keywords": ["1450", "bpos"],
+      "oid_patterns": ["1.2.40.0.34.6.0.10.101"]
+    },
+    "other": {
+      "description": "Sonstige/Unbekannt",
+      "keywords": [],
+      "oid_patterns": []
+    }
+  }
+}
+
+
+

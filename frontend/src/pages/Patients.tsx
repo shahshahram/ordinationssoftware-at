@@ -46,6 +46,12 @@ import {
   CircularProgress,
   Switch,
   FormControlLabel,
+  useTheme,
+  useMediaQuery,
+  Collapse,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
   Search,
@@ -67,6 +73,7 @@ import {
   CalendarToday,
   Schedule,
   Block,
+  ExpandMore,
 } from '@mui/icons-material';
 import AdditionalInsuranceForm from '../components/Billing/AdditionalInsuranceForm';
 import ECardValidation from '../components/ECardValidation';
@@ -75,6 +82,9 @@ import ECardValidation from '../components/ECardValidation';
 const Patients: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { patients, loading, error, pagination } = useAppSelector((state) => state.patients);
   const { appointments } = useAppSelector((state) => state.appointments);
   
@@ -87,6 +97,7 @@ const Patients: React.FC = () => {
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState<'name' | 'lastVisit' | 'birthday' | 'status'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [filtersExpanded, setFiltersExpanded] = useState(!isMobile); // Auf Mobile standardmäßig eingeklappt
   
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -888,25 +899,39 @@ const Patients: React.FC = () => {
           }
         }}
       >
-        <CardContent sx={{ flexGrow: 1, p: 3 }}>
+        <CardContent sx={{ flexGrow: 1, p: { xs: 2, sm: 3 } }}>
           {/* Header with Avatar and Name */}
-          <Box display="flex" alignItems="center" gap={2} mb={2}>
+          <Box display="flex" alignItems="center" gap={{ xs: 1, sm: 2 }} mb={{ xs: 1, sm: 2 }}>
             <Avatar 
               sx={{ 
-                width: 48, 
-                height: 48, 
+                width: { xs: 36, sm: 48 }, 
+                height: { xs: 36, sm: 48 }, 
                 bgcolor: getAvatarColor(patient.gender),
-                fontSize: '1.1rem',
+                fontSize: { xs: '0.8rem', sm: '1.1rem' },
                 fontWeight: 'bold',
                 border: '2px solid',
-                borderColor: patient.gender?.toLowerCase().includes('w') ? 'pink.300' : 'blue.300'
+                borderColor: patient.gender?.toLowerCase().includes('w') ? 'pink.300' : 'blue.300',
+                flexShrink: 0
               }}
             >
               {getInitials(patient.firstName, patient.lastName)}
             </Avatar>
-            <Box flexGrow={1}>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Typography variant="h6" component="div" fontWeight={600} noWrap>
+            <Box flexGrow={1} minWidth={0}>
+              <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                <Typography 
+                  variant="h6" 
+                  component="div" 
+                  fontWeight={600} 
+                  sx={{ 
+                    fontSize: { xs: '0.9rem', sm: '1.25rem' },
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    display: '-webkit-box',
+                    WebkitLineClamp: 2,
+                    WebkitBoxOrient: 'vertical',
+                    lineHeight: 1.2
+                  }}
+                >
                   {patient.firstName} {patient.lastName}
                 </Typography>
                 {patient.hasHint && (
@@ -1205,15 +1230,23 @@ const Patients: React.FC = () => {
           </Badge>
         </ListItemAvatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 500, fontSize: '1rem' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 }, mb: { xs: 0.5, sm: 0.5 }, flexWrap: 'wrap' }}>
+            <Typography 
+              variant="subtitle1" 
+              sx={{ 
+                fontWeight: 500, 
+                fontSize: { xs: '0.9rem', sm: '1rem' },
+                flex: { xs: '1 1 100%', sm: 'none' }
+              }}
+            >
               {patient.firstName} {patient.lastName}
             </Typography>
-            <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', gap: { xs: 0.25, sm: 0.5 }, alignItems: 'center', flexWrap: 'wrap' }}>
               <Chip
                 label={patient.status}
                 color={patient.status === 'aktiv' ? 'success' : patient.status === 'wartend' ? 'warning' : 'default'}
                 size="small"
+                sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' }, height: { xs: '24px', sm: 'auto' } }}
               />
               {patient.hasHint && (
                 <Tooltip title="Patient hat einen Hinweis">
@@ -1266,17 +1299,50 @@ const Patients: React.FC = () => {
               )}
             </Box>
           </Box>
-          <Box sx={{ mb: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
-              {age} Jahre • {patient.gender} • {patient.phone} • {patient.email}
+          <Box sx={{ mb: { xs: 0.5, sm: 0.5 } }}>
+            <Typography 
+              variant="body2" 
+              color="text.secondary"
+              sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+            >
+              {age} Jahre • {patient.gender}
+              {!isMobile && ` • ${patient.phone}`}
+              {!isMobile && ` • ${patient.email}`}
             </Typography>
+            {isMobile && (
+              <>
+                {patient.phone && (
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontSize: '0.75rem', mt: 0.25 }}
+                  >
+                    📞 {patient.phone}
+                  </Typography>
+                )}
+                {patient.email && (
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontSize: '0.75rem', mt: 0.25 }}
+                  >
+                    ✉️ {patient.email}
+                  </Typography>
+                )}
+              </>
+            )}
           </Box>
-          <Box sx={{ mb: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
-              SV-Nr.: {patient.socialSecurityNumber || 'Nicht angegeben'} • 
-              Versicherung: {patient.insuranceProvider || 'Nicht angegeben'}
-              {(patient as any).insuranceNumber && ` • VN: ${(patient as any).insuranceNumber}`}
-            </Typography>
+          {!isMobile && (
+            <Box sx={{ mb: 0.5 }}>
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
+              >
+                SV-Nr.: {patient.socialSecurityNumber || 'Nicht angegeben'} • 
+                Versicherung: {patient.insuranceProvider || 'Nicht angegeben'}
+                {(patient as any).insuranceNumber && ` • VN: ${(patient as any).insuranceNumber}`}
+              </Typography>
             {/* Zusatzversicherungen in Listenansicht */}
             {(patient as any).additionalInsurances && (
               <Box sx={{ mt: 0.5, display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -1295,23 +1361,43 @@ const Patients: React.FC = () => {
               </Box>
             )}
           </Box>
-          <Typography variant="caption" color="text.secondary">
-            Letzter Besuch: {lastVisit.toLocaleDateString('de-DE')} • {patient.address.city}
+            )}
+          <Typography 
+            variant="caption" 
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
+          >
+            Letzter Besuch: {lastVisit.toLocaleDateString('de-DE')} {!isMobile && `• ${patient.address.city}`}
           </Typography>
+          {isMobile && patient.address.city && (
+            <Typography 
+              variant="caption" 
+              color="text.secondary"
+              sx={{ fontSize: '0.7rem', mt: 0.25, display: 'block' }}
+            >
+              📍 {patient.address.city}
+            </Typography>
+          )}
         </Box>
         {/* Action Buttons for List View */}
-        <Box display="flex" gap={1}>
+        <Box 
+          display="flex" 
+          gap={{ xs: 0.5, sm: 1 }}
+          flexDirection={{ xs: 'column', sm: 'row' }}
+        >
           <IconButton 
             size="small" 
             onClick={handleCall}
             sx={{ 
               bgcolor: 'primary.50', 
               color: 'primary.main',
+              minWidth: { xs: '44px', sm: 'auto' },
+              minHeight: { xs: '44px', sm: 'auto' },
               '&:hover': { bgcolor: 'primary.100' }
             }}
             title="Anrufen"
           >
-            <Phone fontSize="small" />
+            <Phone fontSize={isMobile ? 'medium' : 'small'} />
           </IconButton>
           <IconButton 
             size="small" 
@@ -1319,11 +1405,13 @@ const Patients: React.FC = () => {
             sx={{ 
               bgcolor: 'success.50', 
               color: 'success.main',
+              minWidth: { xs: '44px', sm: 'auto' },
+              minHeight: { xs: '44px', sm: 'auto' },
               '&:hover': { bgcolor: 'success.100' }
             }}
             title="E-Mail senden"
           >
-            <Email fontSize="small" />
+            <Email fontSize={isMobile ? 'medium' : 'small'} />
           </IconButton>
           <IconButton 
             size="small" 
@@ -1331,11 +1419,13 @@ const Patients: React.FC = () => {
             sx={{ 
               bgcolor: 'info.50', 
               color: 'info.main',
+              minWidth: { xs: '44px', sm: 'auto' },
+              minHeight: { xs: '44px', sm: 'auto' },
               '&:hover': { bgcolor: 'info.100' }
             }}
             title="Termin buchen"
           >
-            <AccessTime fontSize="small" />
+            <AccessTime fontSize={isMobile ? 'medium' : 'small'} />
           </IconButton>
         </Box>
       </ListItem>
@@ -1345,20 +1435,49 @@ const Patients: React.FC = () => {
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
       {/* Modern Header */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
+      <Box 
+        display="flex" 
+        justifyContent="space-between" 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        flexDirection={{ xs: 'column', sm: 'row' }}
+        gap={{ xs: 2, sm: 0 }}
+        mb={{ xs: 2, sm: 4 }}
+      >
         <Box>
-          <Typography variant="h3" component="h1" fontWeight={600} gutterBottom>
+          <Typography 
+            variant="h3" 
+            component="h1" 
+            fontWeight={600} 
+            gutterBottom
+            sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' } }}
+          >
             Patientenverwaltung
           </Typography>
-          <Typography variant="body1" color="text.secondary">
+          <Typography 
+            variant="body1" 
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+          >
             {filteredAndSortedPatients.length} von {patients?.length || 0} Patienten
           </Typography>
         </Box>
-        <Box display="flex" alignItems="center" gap={2}>
+        <Box 
+          display="flex" 
+          alignItems="center" 
+          gap={{ xs: 1, sm: 2 }}
+          flexWrap="wrap"
+          width={{ xs: '100%', sm: 'auto' }}
+        >
           <Button
             variant="outlined"
             startIcon={<Search />}
-            sx={{ borderRadius: 2 }}
+            sx={{ 
+              borderRadius: 2,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              flex: { xs: 1, sm: 'none' }
+            }}
+            fullWidth={isMobile}
           >
             Suche
           </Button>
@@ -1368,20 +1487,24 @@ const Patients: React.FC = () => {
             onClick={handleAddNew}
             sx={{ 
               borderRadius: 2,
-              px: 3,
-              py: 1.5,
-              fontWeight: 600
+              px: { xs: 2, sm: 3 },
+              py: { xs: 1.25, sm: 1.5 },
+              fontWeight: 600,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              flex: { xs: 1, sm: 'none' }
             }}
+            fullWidth={isMobile}
           >
-            Neuer Patient
+            {isMobile ? 'Neu' : 'Neuer Patient'}
           </Button>
         </Box>
       </Box>
 
       {/* Search and Filters */}
-      <Card sx={{ mb: 3 }}>
-        <Box p={3}>
-          <Stack spacing={3}>
+      <Card sx={{ mb: { xs: 2, sm: 3 } }}>
+        <Box p={{ xs: 2, sm: 3 }}>
+          <Stack spacing={{ xs: 2, sm: 3 }}>
             {/* Modern Search Bar */}
             <TextField
               fullWidth
@@ -1396,7 +1519,11 @@ const Patients: React.FC = () => {
                 ),
                 endAdornment: searchTerm && (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearchTerm('')}>
+                    <IconButton 
+                      size="small" 
+                      onClick={() => setSearchTerm('')}
+                      sx={{ minWidth: '44px', minHeight: '44px' }}
+                    >
                       <Clear />
                     </IconButton>
                   </InputAdornment>
@@ -1405,60 +1532,135 @@ const Patients: React.FC = () => {
               sx={{
                 '& .MuiOutlinedInput-root': {
                   borderRadius: 2,
+                  fontSize: { xs: '1rem', sm: '1rem' },
+                  minHeight: { xs: '48px', sm: 'auto' },
                   '&:hover .MuiOutlinedInput-notchedOutline': {
                     borderColor: 'primary.main',
                   },
+                },
+                '& .MuiFormHelperText-root': {
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' }
                 }
               }}
-              helperText="Tipp: Suche nach 'Eva', 'Eva ', '1234567890' (Vers.-Nr.) oder 'Eva Mustermann' - alle funktionieren!"
+              helperText={!isMobile ? "Tipp: Suche nach 'Eva', 'Eva ', '1234567890' (Vers.-Nr.) oder 'Eva Mustermann' - alle funktionieren!" : "Suche nach Name, Vers.-Nr. oder 'Eva Mustermann'"}
             />
 
-            {/* Modern Quick Filters */}
-            <Box>
-              <Box display="flex" alignItems="center" gap={1} mb={2}>
-                <FilterList fontSize="small" color="action" />
-                <Typography variant="subtitle2" color="text.secondary" fontWeight={500}>
-                  Quick-Filter:
-                </Typography>
-                {activeFilters.length > 0 && (
-                  <Button
-                    size="small"
-                    startIcon={<Clear />}
-                    onClick={handleClearFilters}
-                    sx={{ ml: 'auto', textTransform: 'none' }}
-                  >
-                    Alle löschen
-                  </Button>
-                )}
+            {/* Modern Quick Filters - Collapsible on Mobile */}
+            {isMobile ? (
+              <Accordion 
+                expanded={filtersExpanded} 
+                onChange={() => setFiltersExpanded(!filtersExpanded)}
+                sx={{ boxShadow: 'none', '&:before': { display: 'none' } }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMore />}
+                  sx={{
+                    minHeight: '48px',
+                    '& .MuiAccordionSummary-content': {
+                      my: 1
+                    }
+                  }}
+                >
+                  <Box display="flex" alignItems="center" gap={1} width="100%">
+                    <FilterList fontSize="small" color="action" />
+                    <Typography variant="subtitle2" color="text.secondary" fontWeight={500} sx={{ fontSize: { xs: '0.875rem', sm: '0.875rem' } }}>
+                      Quick-Filter {activeFilters.length > 0 && `(${activeFilters.length})`}
+                    </Typography>
+                    {activeFilters.length > 0 && (
+                      <Button
+                        size="small"
+                        startIcon={<Clear />}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleClearFilters();
+                        }}
+                        sx={{ ml: 'auto', textTransform: 'none', fontSize: '0.75rem' }}
+                      >
+                        Alle löschen
+                      </Button>
+                    )}
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ pt: 0 }}>
+                  <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                    {quickFilters.map((filter) => {
+                      const isActive = activeFilters.includes(filter.id);
+                      return (
+                        <Chip
+                          key={filter.id}
+                          icon={filter.icon}
+                          label={filter.label}
+                          color={isActive ? filter.color as any : 'default'}
+                          variant={isActive ? 'filled' : 'outlined'}
+                          onClick={() => handleFilterToggle(filter.id)}
+                          clickable
+                          sx={{
+                            fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                            height: { xs: '36px', sm: 'auto' },
+                            minHeight: { xs: '36px', sm: 'auto' },
+                            transition: 'all 0.2s ease-in-out',
+                            '&:hover': {
+                              transform: 'translateY(-1px)',
+                              boxShadow: 2,
+                            },
+                            ...(isActive && {
+                              fontWeight: 600,
+                              boxShadow: 2,
+                            })
+                          }}
+                        />
+                      );
+                    })}
+                  </Stack>
+                </AccordionDetails>
+              </Accordion>
+            ) : (
+              <Box>
+                <Box display="flex" alignItems="center" gap={1} mb={2}>
+                  <FilterList fontSize="small" color="action" />
+                  <Typography variant="subtitle2" color="text.secondary" fontWeight={500}>
+                    Quick-Filter:
+                  </Typography>
+                  {activeFilters.length > 0 && (
+                    <Button
+                      size="small"
+                      startIcon={<Clear />}
+                      onClick={handleClearFilters}
+                      sx={{ ml: 'auto', textTransform: 'none' }}
+                    >
+                      Alle löschen
+                    </Button>
+                  )}
+                </Box>
+                <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+                  {quickFilters.map((filter) => {
+                    const isActive = activeFilters.includes(filter.id);
+                    return (
+                      <Chip
+                        key={filter.id}
+                        icon={filter.icon}
+                        label={filter.label}
+                        color={isActive ? filter.color as any : 'default'}
+                        variant={isActive ? 'filled' : 'outlined'}
+                        onClick={() => handleFilterToggle(filter.id)}
+                        clickable
+                        sx={{
+                          transition: 'all 0.2s ease-in-out',
+                          '&:hover': {
+                            transform: 'translateY(-1px)',
+                            boxShadow: 2,
+                          },
+                          ...(isActive && {
+                            fontWeight: 600,
+                            boxShadow: 2,
+                          })
+                        }}
+                      />
+                    );
+                  })}
+                </Stack>
               </Box>
-              <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
-                {quickFilters.map((filter) => {
-                  const isActive = activeFilters.includes(filter.id);
-                  return (
-                    <Chip
-                      key={filter.id}
-                      icon={filter.icon}
-                      label={filter.label}
-                      color={isActive ? filter.color as any : 'default'}
-                      variant={isActive ? 'filled' : 'outlined'}
-                      onClick={() => handleFilterToggle(filter.id)}
-                      clickable
-                      sx={{
-                        transition: 'all 0.2s ease-in-out',
-                        '&:hover': {
-                          transform: 'translateY(-1px)',
-                          boxShadow: 2,
-                        },
-                        ...(isActive && {
-                          fontWeight: 600,
-                          boxShadow: 2,
-                        })
-                      }}
-                    />
-                  );
-                })}
-              </Stack>
-            </Box>
+            )}
 
             {/* Filter Results Info */}
             {activeFilters.length > 0 && (
@@ -1471,25 +1673,49 @@ const Patients: React.FC = () => {
             )}
 
             {/* View Controls */}
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-              <Box display="flex" alignItems="center" gap={2}>
-                <Typography variant="body2" color="text.secondary">
-                  Sortieren nach:
+            <Box 
+              display="flex" 
+              justifyContent="space-between" 
+              alignItems="center"
+              flexDirection={{ xs: 'column', sm: 'row' }}
+              gap={{ xs: 2, sm: 0 }}
+            >
+              <Box 
+                display="flex" 
+                alignItems="center" 
+                gap={{ xs: 1, sm: 2 }}
+                flexWrap="wrap"
+                width={{ xs: '100%', sm: 'auto' }}
+              >
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary"
+                  sx={{ fontSize: { xs: '0.875rem', sm: '0.875rem' } }}
+                >
+                  Sortieren:
                 </Typography>
-                <FormControl size="small" sx={{ minWidth: 120 }}>
+                <FormControl 
+                  size="small" 
+                  sx={{ 
+                    minWidth: { xs: 100, sm: 120 },
+                    flex: { xs: 1, sm: 'none' }
+                  }}
+                >
                   <Select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as any)}
+                    sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
                   >
-                    <MenuItem value="name">Name</MenuItem>
-                    <MenuItem value="lastVisit">Letzter Besuch</MenuItem>
-                    <MenuItem value="birthday">Geburtstag</MenuItem>
-                    <MenuItem value="status">Status</MenuItem>
+                    <MenuItem value="name" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Name</MenuItem>
+                    <MenuItem value="lastVisit" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Letzter Besuch</MenuItem>
+                    <MenuItem value="birthday" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Geburtstag</MenuItem>
+                    <MenuItem value="status" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Status</MenuItem>
                   </Select>
                 </FormControl>
                 <IconButton
                   size="small"
                   onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                  sx={{ minWidth: '44px', minHeight: '44px' }}
                 >
                   {sortOrder === 'asc' ? '↑' : '↓'}
                 </IconButton>
@@ -1500,6 +1726,12 @@ const Patients: React.FC = () => {
                 exclusive
                 onChange={(e, newMode) => newMode && setViewMode(newMode)}
                 size="small"
+                sx={{ 
+                  '& .MuiToggleButton-root': {
+                    minWidth: { xs: '44px', sm: 'auto' },
+                    minHeight: { xs: '44px', sm: 'auto' }
+                  }
+                }}
               >
                 <ToggleButton value="cards">
                   <ViewModule />
@@ -1518,13 +1750,16 @@ const Patients: React.FC = () => {
         ref={scrollContainerRef}
         sx={{ 
           flex: 1, 
-          px: 2, 
-          pb: 2, 
+          px: { xs: 1, sm: 2 }, 
+          pb: { xs: 1, sm: 2 }, 
           overflow: 'auto',
-          maxHeight: 'calc(100vh - 350px)', // Optimierte Höhenbegrenzung
-          minHeight: '400px', // Mindesthöhe
+          maxHeight: { xs: 'calc(100vh - 400px)', sm: 'calc(100vh - 350px)' },
+          minHeight: { xs: '300px', sm: '400px' },
+          '-webkit-overflow-scrolling': 'touch',
+          willChange: 'scroll-position',
+          touchAction: 'pan-y',
           '&::-webkit-scrollbar': {
-            width: '8px',
+            width: { xs: '4px', sm: '8px' },
           },
           '&::-webkit-scrollbar-track': {
             background: 'rgba(0,0,0,0.1)',
@@ -1597,8 +1832,8 @@ const Patients: React.FC = () => {
               md: 'repeat(3, 1fr)',
               lg: 'repeat(4, 1fr)',
             },
-            gap: 3,
-            p: 1, // Padding für bessere Optik
+            gap: { xs: 2, sm: 3 },
+            p: { xs: 0.5, sm: 1 },
           }}
         >
           {filteredAndSortedPatients.map((patient) => (
@@ -1606,8 +1841,17 @@ const Patients: React.FC = () => {
           ))}
         </Box>
       ) : (
-        <Paper sx={{ p: 2 }}>
-          <List>
+        <Paper sx={{ 
+          p: { xs: 1, sm: 2 },
+          borderRadius: { xs: 2, sm: 3 }
+        }}>
+          <List sx={{ 
+            py: 0,
+            '& .MuiListItem-root': {
+              px: { xs: 1, sm: 2 },
+              py: { xs: 1, sm: 1.5 }
+            }
+          }}>
             {filteredAndSortedPatients.map((patient) => (
               <PatientListItem key={patient._id || patient.id} patient={patient} />
             ))}
@@ -1656,10 +1900,14 @@ const Patients: React.FC = () => {
         onClose={() => setOpenDialog(false)}
         maxWidth="md"
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
           sx: {
-            borderRadius: 3,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
           }
         }}
       >
@@ -1673,7 +1921,13 @@ const Patients: React.FC = () => {
           icon={<PersonIcon />}
           gradientColors={{ from: '#6366f1', to: '#8b5cf6' }}
         />
-        <DialogContent sx={{ pt: 3, px: 3 }}>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 }, 
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
             <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
               <Tab label="Grunddaten" />

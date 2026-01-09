@@ -2299,11 +2299,12 @@ const PatientOrganizer: React.FC = () => {
                       return photoUrl;
                     })()}
                     sx={{
-                      width: { xs: 60, sm: 80 },
-                      height: { xs: 60, sm: 80 },
+                      width: { xs: 50, sm: 80 },
+                      height: { xs: 50, sm: 80 },
                       border: '3px solid',
                       borderColor: 'rgba(255, 255, 255, 0.3)',
-                      bgcolor: 'rgba(255, 255, 255, 0.2)'
+                      bgcolor: 'rgba(255, 255, 255, 0.2)',
+                      flexShrink: 0
                     }}
                     onError={(e) => {
                       console.error('Fehler beim Laden des Patientenfotos:', e);
@@ -2361,8 +2362,17 @@ const PatientOrganizer: React.FC = () => {
                   )}
                 </Box>
               )}
-              <Box sx={{ flex: 1, minWidth: { xs: 0, sm: 200 } }}>
-                <Typography variant={isMobile ? 'h6' : 'h5'} fontWeight="bold">
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography 
+                  variant={isMobile ? 'h6' : 'h5'} 
+                  fontWeight="bold"
+                  sx={{
+                    fontSize: { xs: '1rem', sm: '1.5rem' },
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}
+                >
                   {patient ? `${patient.firstName} ${patient.lastName}` : 'Patienten-Organizer'}
                 </Typography>
                 {patient && (
@@ -2785,8 +2795,15 @@ const PatientOrganizer: React.FC = () => {
         )}
 
         {/* Quick Actions */}
-        <Paper sx={{ p: 1.5, mb: 2 }}>
-          <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
+        <Paper sx={{ p: { xs: 1, sm: 1.5 }, mb: { xs: 1, sm: 2 } }}>
+          <Stack 
+            direction="row" 
+            spacing={{ xs: 0.5, sm: 1 }} 
+            sx={{ 
+              flexWrap: 'wrap',
+              gap: { xs: 0.5, sm: 1 }
+            }}
+          >
             <Button
               variant="contained"
               size="small"
@@ -2799,6 +2816,10 @@ const PatientOrganizer: React.FC = () => {
               sx={{
                 bgcolor: theme.palette.mode === 'dark' ? 'warning.dark' : 'warning.light',
                 color: theme.palette.mode === 'dark' ? 'warning.contrastText' : 'text.primary',
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } },
                 '&:hover': {
                   bgcolor: theme.palette.mode === 'dark' ? 'warning.main' : 'warning.main',
                   color: theme.palette.mode === 'dark' ? 'warning.contrastText' : 'text.primary'
@@ -2819,12 +2840,16 @@ const PatientOrganizer: React.FC = () => {
               sx={{
                 bgcolor: theme.palette.mode === 'dark' ? 'primary.dark' : '#E3F2FD',
                 color: theme.palette.mode === 'dark' ? 'primary.contrastText' : 'text.primary',
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } },
                 '&:hover': {
                   bgcolor: theme.palette.mode === 'dark' ? 'primary.main' : '#90CAF9'
                 }
               }}
             >
-              Patienten-/Arztbrief
+              {isMobile ? 'Brief' : 'Patienten-/Arztbrief'}
             </Button>
             <Button
               variant="contained"
@@ -2838,12 +2863,16 @@ const PatientOrganizer: React.FC = () => {
               sx={{
                 bgcolor: theme.palette.mode === 'dark' ? 'success.dark' : '#E8F5E9',
                 color: theme.palette.mode === 'dark' ? 'success.contrastText' : 'text.primary',
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } },
                 '&:hover': {
                   bgcolor: theme.palette.mode === 'dark' ? 'success.main' : '#A5D6A7'
                 }
               }}
             >
-              Medikamente
+              {isMobile ? 'Med.' : 'Medikamente'}
             </Button>
             <Button
               variant="outlined"
@@ -2858,13 +2887,17 @@ const PatientOrganizer: React.FC = () => {
               sx={{
                 borderColor: 'success.main',
                 color: 'success.main',
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } },
                 '&:hover': {
                   borderColor: 'success.dark',
                   bgcolor: 'success.light'
                 }
               }}
             >
-              Aus Vorlage
+              {isMobile ? 'Vorlage' : 'Aus Vorlage'}
             </Button>
             <Button
               variant="outlined"
@@ -2872,6 +2905,12 @@ const PatientOrganizer: React.FC = () => {
               startIcon={<Schedule />}
               onClick={() => navigate('/appointments')}
               disabled={!patient}
+              sx={{
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+              }}
             >
               Termin
             </Button>
@@ -2884,8 +2923,14 @@ const PatientOrganizer: React.FC = () => {
                 handleTabNavigation(10, true);
               }}
               disabled={!patient}
+              sx={{
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+              }}
             >
-              Stammdaten
+              {isMobile ? 'Daten' : 'Stammdaten'}
             </Button>
             <Button
               variant="outlined"
@@ -2893,8 +2938,14 @@ const PatientOrganizer: React.FC = () => {
               startIcon={<QrCode />}
               onClick={handleValidateStammdaten}
               disabled={!patient}
+              sx={{
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+              }}
             >
-              Validieren
+              {isMobile ? 'Valid.' : 'Validieren'}
             </Button>
             <Button
               variant="contained"
@@ -2908,12 +2959,16 @@ const PatientOrganizer: React.FC = () => {
               sx={{
                 bgcolor: 'success.main',
                 color: 'success.contrastText',
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } },
                 '&:hover': {
                   bgcolor: 'success.dark'
                 }
               }}
             >
-              Leistungsabrechnung
+              {isMobile ? 'Leistung' : 'Leistungsabrechnung'}
             </Button>
             <Button
               variant="outlined"
@@ -2936,6 +2991,10 @@ const PatientOrganizer: React.FC = () => {
               sx={{
                 borderColor: 'warning.main',
                 color: 'warning.main',
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } },
                 '&:hover': {
                   borderColor: 'warning.dark',
                   bgcolor: 'warning.light',
@@ -2943,7 +3002,7 @@ const PatientOrganizer: React.FC = () => {
                 }
               }}
             >
-              {patient?.hasHint ? 'Hinweis bearbeiten' : 'Hinweis hinzufügen'}
+              {isMobile ? 'Hinweis' : (patient?.hasHint ? 'Hinweis bearbeiten' : 'Hinweis hinzufügen')}
             </Button>
             <Button
               variant="outlined"
@@ -2956,6 +3015,12 @@ const PatientOrganizer: React.FC = () => {
                 setNotesDialogOpen(true);
               }}
               disabled={!patient}
+              sx={{
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+              }}
             >
               Notizen
             </Button>
@@ -2976,9 +3041,15 @@ const PatientOrganizer: React.FC = () => {
               borderBottom: 1, 
               borderColor: 'divider',
               '& .MuiTab-root': {
-                minWidth: { xs: 72, sm: 120 },
-                fontSize: { xs: '0.75rem', sm: '0.875rem' },
-                padding: { xs: '6px 8px', sm: '12px 16px' }
+                minWidth: { xs: 60, sm: 120 },
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                padding: { xs: '6px 8px', sm: '12px 16px' },
+                minHeight: { xs: '48px', sm: 'auto' },
+                textTransform: 'none'
+              },
+              '& .MuiTabs-scrollButtons': {
+                minWidth: { xs: '36px', sm: 'auto' },
+                minHeight: { xs: '36px', sm: 'auto' }
               }
             }}
           >

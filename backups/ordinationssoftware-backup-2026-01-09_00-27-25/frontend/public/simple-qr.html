@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Einfacher QR-Code Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+            background: #f0f0f0;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .qr-code {
+            max-width: 300px;
+            height: auto;
+            border: 2px solid #333;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .url-display {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            margin: 20px 0;
+            border: 1px solid #dee2e6;
+            word-break: break-all;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            width: 100%;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📱 Einfacher QR-Code Test</h1>
+        
+        <div class="info">
+            <strong>ℹ️ Anleitung:</strong><br>
+            1. Scannen Sie den QR-Code mit einer QR-Scanner-App<br>
+            2. Die Validierungsseite sollte sich öffnen<br>
+            3. Falls es nicht funktioniert, versuchen Sie eine andere QR-Scanner-App
+        </div>
+        
+        <div class="url-display" id="urlDisplay">
+            URL wird generiert...
+        </div>
+        
+        <div id="qrCodeContainer">
+            <img id="qrCode" class="qr-code" alt="QR-Code wird generiert...">
+        </div>
+        
+        <button class="button" onclick="generateQR()">
+            🔄 QR-Code neu generieren
+        </button>
+        
+        <button class="button" onclick="testDirect()">
+            🧪 Direkt testen
+        </button>
+        
+        <div class="info">
+            <strong>🔧 Debug-Info:</strong><br>
+            Hostname: <span id="hostname"></span><br>
+            Port: <span id="port"></span><br>
+            User Agent: <span id="userAgent"></span>
+        </div>
+    </div>
+
+    <script>
+        // Geräte-Informationen
+        const currentHost = window.location.hostname;
+        const currentPort = window.location.port || '3000';
+        const baseUrl = `http://${currentHost}:${currentPort}`;
+        
+        document.getElementById('hostname').textContent = currentHost;
+        document.getElementById('port').textContent = currentPort;
+        document.getElementById('userAgent').textContent = navigator.userAgent.substring(0, 50) + '...';
+        
+        // QR-Code generieren
+        function generateQR() {
+            const testUrl = `${baseUrl}/validate.html`;
+            document.getElementById('urlDisplay').textContent = testUrl;
+            
+            const qrCodeImg = document.getElementById('qrCode');
+            qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(testUrl)}&ecc=M&margin=10&format=png`;
+            qrCodeImg.alt = "QR-Code für Validierung";
+            
+            // QR-Code klickbar machen
+            qrCodeImg.onclick = function() {
+                window.open(testUrl, '_blank');
+            };
+            
+            console.log('QR-Code URL:', testUrl);
+        }
+        
+        // Direkt testen
+        function testDirect() {
+            const testUrl = `${baseUrl}/validate.html`;
+            window.open(testUrl, '_blank');
+        }
+        
+        // Automatisch QR-Code generieren beim Laden
+        window.onload = function() {
+            generateQR();
+        };
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

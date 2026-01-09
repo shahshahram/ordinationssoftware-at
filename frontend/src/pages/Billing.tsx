@@ -57,6 +57,8 @@ import {
   CircularProgress,
   Autocomplete,
   Tooltip,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Search,
@@ -113,6 +115,9 @@ const Billing: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const dispatch = useAppDispatch();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { invoices, services, loading, error, statistics } = useAppSelector((state) => state.billing);
   const { patients } = useAppSelector((state) => state.patients);
   
@@ -1111,21 +1116,33 @@ const Billing: React.FC = () => {
 
   return (
     <Box>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Box display="flex" alignItems="center" gap={2}>
-          <Typography variant="h4" component="h1">
+      <Box 
+        display="flex" 
+        justifyContent="space-between" 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        mb={{ xs: 2, sm: 3 }}
+        flexDirection={{ xs: 'column', sm: 'row' }}
+        gap={{ xs: 2, sm: 0 }}
+      >
+        <Box display="flex" alignItems="center" gap={{ xs: 1, sm: 2 }}>
+          <Typography 
+            variant="h4" 
+            component="h1"
+            sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}
+          >
             Abrechnung
           </Typography>
           <Tooltip title="Hilfe & Leitfaden">
             <IconButton
               onClick={() => setHelpDialogOpen(true)}
               color="primary"
+              sx={{ minWidth: { xs: '44px', sm: 'auto' }, minHeight: { xs: '44px', sm: 'auto' } }}
             >
               <HelpOutline />
             </IconButton>
           </Tooltip>
         </Box>
-        <Box display="flex" gap={2}>
+        <Box display="flex" gap={{ xs: 1, sm: 2 }} flexWrap="wrap" width={{ xs: '100%', sm: 'auto' }}>
           <Button
             variant="outlined"
             startIcon={<Receipt />}
@@ -1134,53 +1151,85 @@ const Billing: React.FC = () => {
               const endDate = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().split('T')[0];
               handleLoadTurnusabrechnung(startDate, endDate);
             }}
-            sx={{ borderRadius: 2 }}
+            sx={{ 
+              borderRadius: 2,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              flex: { xs: 1, sm: 'none' }
+            }}
+            fullWidth={isMobile}
           >
-            Turnusabrechnung
+            {isMobile ? 'Turnus' : 'Turnusabrechnung'}
           </Button>
           <Button
             variant="contained"
             startIcon={<Add />}
             onClick={handleAddNew}
-            sx={{ borderRadius: 2 }}
+            sx={{ 
+              borderRadius: 2,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              flex: { xs: 1, sm: 'none' }
+            }}
+            fullWidth={isMobile}
           >
-            Neue Rechnung
+            {isMobile ? 'Neu' : 'Neue Rechnung'}
           </Button>
         </Box>
       </Box>
 
       {/* Totals Cards - Heute, Monat, Jahr */}
-      <Box sx={{ display: 'flex', gap: 3, mb: 3, flexWrap: 'wrap' }}>
-        <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
-          <Typography variant="h4" color="primary">
+      <Box sx={{ 
+        display: 'flex', 
+        gap: { xs: 1.5, sm: 3 }, 
+        mb: { xs: 2, sm: 3 }, 
+        flexWrap: 'wrap' 
+      }}>
+        <Card sx={{ 
+          p: { xs: 1.5, sm: 2 }, 
+          textAlign: 'center', 
+          flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 200px' }, 
+          minWidth: { xs: 'calc(50% - 8px)', sm: '200px' } 
+        }}>
+          <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
             {totals.today.count}
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" gutterBottom sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             Rechnungen heute
           </Typography>
-          <Typography variant="h6" color="success.main">
+          <Typography variant="h6" color="success.main" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
             €{totals.today.amount.toFixed(2)}
           </Typography>
         </Card>
-        <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
-          <Typography variant="h4" color="primary">
+        <Card sx={{ 
+          p: { xs: 1.5, sm: 2 }, 
+          textAlign: 'center', 
+          flex: { xs: '1 1 calc(50% - 8px)', sm: '1 1 200px' }, 
+          minWidth: { xs: 'calc(50% - 8px)', sm: '200px' } 
+        }}>
+          <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
             {totals.month.count}
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" gutterBottom sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             Rechnungen diesen Monat
           </Typography>
-          <Typography variant="h6" color="success.main">
+          <Typography variant="h6" color="success.main" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
             €{totals.month.amount.toFixed(2)}
           </Typography>
         </Card>
-        <Card sx={{ p: 2, textAlign: 'center', flex: '1 1 200px', minWidth: '200px' }}>
-          <Typography variant="h4" color="primary">
+        <Card sx={{ 
+          p: { xs: 1.5, sm: 2 }, 
+          textAlign: 'center', 
+          flex: { xs: '1 1 100%', sm: '1 1 200px' }, 
+          minWidth: { xs: '100%', sm: '200px' } 
+        }}>
+          <Typography variant="h4" color="primary" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
             {totals.year.count}
           </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
+          <Typography variant="body2" color="text.secondary" gutterBottom sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
             Rechnungen dieses Jahr
           </Typography>
-          <Typography variant="h6" color="success.main">
+          <Typography variant="h6" color="success.main" sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}>
             €{totals.year.amount.toFixed(2)}
           </Typography>
         </Card>
@@ -1265,28 +1314,50 @@ const Billing: React.FC = () => {
       </Card>
 
       {/* Filter Card */}
-      <Card sx={{ mb: 3 }}>
-        <Box p={3}>
+      <Card sx={{ mb: { xs: 2, sm: 3 } }}>
+        <Box p={{ xs: 2, sm: 3 }}>
           <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+            <Box sx={{ 
+              display: 'flex', 
+              gap: { xs: 1, sm: 2 }, 
+              flexWrap: 'wrap', 
+              alignItems: 'center', 
+              mb: { xs: 1.5, sm: 2 } 
+            }}>
               {/* Datumsfilter */}
               <DatePicker
                 label="Von"
                 value={dateFilter.start}
                 onChange={(newValue) => setDateFilter(prev => ({ ...prev, start: newValue }))}
                 format="dd.MM.yyyy"
-                slotProps={{ textField: { size: 'small', sx: { minWidth: 180 } } }}
+                slotProps={{ 
+                  textField: { 
+                    size: 'small', 
+                    sx: { 
+                      minWidth: { xs: '100%', sm: 180 },
+                      width: { xs: '100%', sm: 'auto' }
+                    } 
+                  } 
+                }}
               />
               <DatePicker
                 label="Bis"
                 value={dateFilter.end}
                 onChange={(newValue) => setDateFilter(prev => ({ ...prev, end: newValue }))}
                 format="dd.MM.yyyy"
-                slotProps={{ textField: { size: 'small', sx: { minWidth: 180 } } }}
+                slotProps={{ 
+                  textField: { 
+                    size: 'small', 
+                    sx: { 
+                      minWidth: { xs: '100%', sm: 180 },
+                      width: { xs: '100%', sm: 'auto' }
+                    } 
+                  } 
+                }}
               />
               
               {/* Status-Filter */}
-              <FormControl size="small" sx={{ minWidth: 200 }}>
+              <FormControl size="small" sx={{ minWidth: { xs: '100%', sm: 200 }, width: { xs: '100%', sm: 'auto' } }}>
                 <InputLabel>Status</InputLabel>
                 <Select
                   multiple
@@ -1322,6 +1393,11 @@ const Billing: React.FC = () => {
                     });
                   }
                 }}
+                sx={{ 
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '36px', sm: 'auto' },
+                  flex: { xs: '1 1 calc(50% - 4px)', sm: 'none' }
+                }}
               >
                 Heute
               </Button>
@@ -1335,8 +1411,13 @@ const Billing: React.FC = () => {
                     end: endOfMonth(today)
                   });
                 }}
+                sx={{ 
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '36px', sm: 'auto' },
+                  flex: { xs: '1 1 calc(50% - 4px)', sm: 'none' }
+                }}
               >
-                Dieser Monat
+                {isMobile ? 'Monat' : 'Dieser Monat'}
               </Button>
               <Button
                 size="small"
@@ -1348,8 +1429,13 @@ const Billing: React.FC = () => {
                     end: endOfYear(today)
                   });
                 }}
+                sx={{ 
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '36px', sm: 'auto' },
+                  flex: { xs: '1 1 calc(50% - 4px)', sm: 'none' }
+                }}
               >
-                Dieses Jahr
+                {isMobile ? 'Jahr' : 'Dieses Jahr'}
               </Button>
               <Button
                 size="small"
@@ -1358,6 +1444,12 @@ const Billing: React.FC = () => {
                   setDateFilter({ start: null, end: null });
                   setStatusFilter([]);
                 }}
+                sx={{ 
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '36px', sm: 'auto' },
+                  flex: { xs: '1 1 100%', sm: 'none' }
+                }}
+                fullWidth={isMobile}
               >
                 Filter zurücksetzen
               </Button>
@@ -1376,6 +1468,12 @@ const Billing: React.FC = () => {
                   <Search />
                 </InputAdornment>
               ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                minHeight: { xs: '48px', sm: 'auto' }
+              }
             }}
           />
         </Box>
@@ -1553,10 +1651,14 @@ const Billing: React.FC = () => {
         onClose={() => setOpenDialog(false)}
         maxWidth="lg"
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
           sx: {
-            borderRadius: 3,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
           }
         }}
       >
@@ -1570,7 +1672,13 @@ const Billing: React.FC = () => {
           icon={<Receipt />}
           gradientColors={{ from: '#f59e0b', to: '#d97706' }}
         />
-        <DialogContent sx={{ pt: 3, px: 3 }}>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 }, 
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Box>
             <Tabs 
               value={activeTab} 

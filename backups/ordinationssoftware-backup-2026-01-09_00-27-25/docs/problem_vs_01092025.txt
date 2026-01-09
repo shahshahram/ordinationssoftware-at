@@ -1,0 +1,1342 @@
+========================================
+NICHT ERFOLGREICH IMPORTIERTE VALUESETS
+========================================
+
+Erstellt am: 1.11.2025, 16:01:42
+Total Valuesets auf ELGA-Seite: 206
+Erfolgreich importiert: -125
+Fehlgeschlagen: 166
+
+========================================
+
+FEHLGESCHLAGENE VALUESETS:
+
+1. ​EntityCode2.0.0
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 1
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+2. ​ParticipationType2.0.0
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 2
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+3. ​RouteOfAdministration2.0.0
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 3
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+4. ​TargetAwareness2.0.0
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 4
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+5. ​Diaetologie-at_Ernaehrungsprobleme0.2.0+20251027
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 5
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+6. ​1450_BPOS0.1.0+20250924
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 6
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+7. ​APPC_Anatomie1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 7
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+8. ​APPC_Lateralitaet1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 8
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+9. ​APPC_Modalitaet1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 9
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+10. ​APPC_Prozeduren1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 10
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+11. ​Austrian Designation Use2.2.1+20251030
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 13
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+12. ​eHCS-Fachrichtungen1.0.0+20250926
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 14
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+13. ​DICOM_SOPClasses2.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 15
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+14. ​eHCS_DiagnosisQualifier1.0.0+20250429
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 16
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+15. ​eHCS-Fachrichtungen1.1.0+20251002
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 17
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+16. ​eHDSI_ActiveIngredient1.2.0+20241023
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 18
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+17. ​eHDSI_ActSubstanceAdministrationCode1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 19
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+18. ​eHDSI-Administrative-Gender1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 20
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+19. ​EHDSI_Confidentiality1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 21
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+20. ​eHDSI-Country1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 22
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+21. ​eHDSI-DoseForm1.3.0+20241023
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 23
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+22. ​eHDSI_hcpo-type1.0.0+20250710
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 24
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+23. ​eHDSI-HealthcareProfessionalRole2.2.0+20250729
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 25
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+24. ​EHDSI_Language1.0.0+20230505
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 26
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+25. ​eHDSI-Package1.2.0+20241023
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 27
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+26. ​eHDSI-Quantity-Unit1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 28
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+27. ​eHDSI-Route-of-Administration1.2.0+20241023
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 29
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+28. ​eHDSI-Substance1.2.0+20241023
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 30
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+29. ​eHDSI-Telecom-Address1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 31
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+30. ​eHDSI-Timing-Event1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 32
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+31. ​eHDSI-Unit2.0.0+20240903
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 33
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+32. ​eImpf_HistorischeImpfstoffe2.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 35
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+33. ​eImpf_Impfdosis1.4.0+20240910
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 37
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+34. ​eImpf_Impfgrund1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 38
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+35. ​eImpf_Impfrollen1.2.0+20250723
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 40
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+36. ​eImpf_Impfschema2.27.0+20251016
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 41
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+37. ​eImpf_Impfstoffe2.27.0+20251022
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 42
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+38. ​eImpf_MedikationArtAnwendung1.3.0+20250612
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 43
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+39. ​eImpf_Mengenart2.0.0+20240903
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 44
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+40. ​eImpf_Zusatzklassifikation_Impfprogramm1.4.0+20251030
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 48
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+41. ​eImpf_Zusatzklassifikation_Impfsetting1.2.0+20250107
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 49
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+42. ​ELGA_AbsentOrUnknownAllergies3.0.0+20231122
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 50
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+43. ​ELGA_AbsentOrUnknownDevices2.0.0+20231117
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 51
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+44. ​ELGA_AbsentOrUnknownMedication2.0.0+20231117
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 52
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+45. ​ELGA_AbsentOrUnknownProblems2.0.0+20231117
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 53
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+46. ​ELGA_AbsentOrUnknownProcedures1.1.0+20231117
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 54
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+47. ​ELGA_ActCode_AbgInfo1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 55
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+48. ​ELGA_ActCode_PatInfo1.2.0+20250312
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 56
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+49. ​ELGA_ActEncounterCode1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 57
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+50. ​ELGA_AddressUse1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 58
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+51. ​ELGA_AdministrativeGender2.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 59
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+52. ​ELGA_AllergieTyp2.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 61
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+53. ​ELGA_Antibiogramm1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 67
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+54. ​ELGA_AuditEventID1.3.0+20251001
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 69
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+55. ​ELGA_AuditEventType1.8.0+20251001
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 70
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+56. ​ELGA_AuditEventType_A-ARR1.8.0+20250709
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 71
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+57. ​ELGA_AuditParticipantObjectIdType1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 72
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+58. ​ELGA_AuditParticipantObjectType1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 73
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+59. ​ELGA_AuditParticipantObjectTypeRole1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 74
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+60. ​ELGA_AuditSourceType1.4.0+20251001
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 75
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+61. ​ELGA_AuthorSpeciality1.6.0+20250723
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 76
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+62. ​eHCS_DiagnosisQualifier1.0.0+20250429
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 77
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+63. ​ELGA_ConditionStatusCode2.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 78
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+64. ​ELGA_ConditionVerificationStatus2.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 79
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+65. ​ELGA_Confidentiality1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 80
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+66. ​ELGA_Diagnosesicherheit1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 83
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+67. ​ELGA_Dokumentenklassen3.6.0+20250603
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 84
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+68. ​ELGA_Dosisparameter1.2.0+20240411
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 85
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+69. ​ELGA_Einnahmezeitpunkte1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 86
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+70. ​ELGA_EntityNamePartQualifier2.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 87
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+71. ​ELGA_EntityNameUse1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 88
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+72. ​ELGA_EntlassungsmanagementA1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 89
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+73. ​ELGA_ExpectedDeliveryDateMethod1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 90
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+74. ​ELGA_FormatCode2.6.0+20250616
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 91
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+75. ​ELGA_FormatCodeZusatz1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 92
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+76. ​ELGA_HealthcareFacilityTypeCode1.3.0+20250408
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 93
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+77. ​ELGA_HumanActSite1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 94
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+78. ​ELGA_HumanLanguage1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 95
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+79. ​ELGA_InformationRecipientType1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 96
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+80. ​ELGA_InsuredAssocEntity1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 97
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+81. ​ELGA_KulturErregernachweis1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 98
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+82. ​ELGA_Laborparameter1.9.0+20250828
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 99
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+83. ​ELGA_Laborstruktur1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 100
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+84. ​ELGA_Laendercodes1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 101
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+85. ​ELGA_LanguageAbilityMode1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 102
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+86. ​ELGA_LanguageCode2.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 103
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+87. ​ELGA Lebensmittelallergene2.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 104
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+88. ​ELGA_MammogramAssessment1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 105
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+89. ​ELGA_MaritalStatus1.4.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 106
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+90. ​ELGA_MedicalDevices1.0.0+20200728
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 107
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+91. ​ELGA_Medientyp1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 108
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+92. ​ELGA_MedikationAbgabeArt1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 109
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+93. ​ELGA_MedikationArtAnwendung1.3.0+20250324
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 110
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+94. ​ELGA_MedikationDarreichungsform2.19.0+20250924
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 111
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+95. ​ELGA_MedikationFrequenz2.1.0+20250313
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 112
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+96. ​ELGA_MedikationMengenart2.2.1+20250401
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 113
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+97. ​ELGA_MedikationPharmazeutischeEmpfehlungStatus1.2.0+20250317
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 114
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+98. ​ELGA_MedikationPharmazeutischeEmpfehlungStatusDetails0.1.0+20250526
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 115
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+99. ​ELGA_MedikationRezeptart1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 116
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+100. ​ELGA_MedikationRezeptpflichtstatus1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 117
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+101. ​ELGA_MedikationTherapieArt1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 118
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+102. ELGA_Mikroorganismen1.4.0+20240325
+   Version: 1.4.0+20240325
+   OID: 1.2.40.0.34.10.188
+   URL: https://termgit.elga.gv.at/ValueSet/elga-mikroorganismen1.2.40.0.34.10.188
+   Detail-URL: https://termgit.elga.gv.at/ValueSet-elga-mikroorganismen.html
+   Zeile: 119
+   Grund: Nicht in Datenbank gefunden (Import fehlgeschlagen)
+   Beschreibung: Description: Microorganisms. Contains information protected by copyright of SNOMED International. An...
+
+103. ​ELGA_NullFlavor1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 122
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+104. ​ELGA_ObservationInterpretation1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 123
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+105. ​ELGA_ParticipationFunctionCode1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 124
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+106. ​ELGA_PersonalRelationship1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 125
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+107. ​ELGA_PracticeSetting1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 126
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+108. ​ELGA_PregnanciesSummary1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 127
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+109. ​ELGA_PregnancyStatus1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 128
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+110. ​ELGA_ProblemStatusCode1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 132
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+111. ​ELGA_ProcedureApproachSite1.0.0+20170906
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 133
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+112. ​ELGA_ProficiencyLevelCode1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 134
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+113. ​ELGA_Radiopharmaceuticals1.0.1+20250327
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 135
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+114. ​ELGA_RealmCode1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 136
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+115. ​ELGA_ReligiousAffiliation1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 137
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+116. ​ELGA_RoleClass1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 138
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+117. ​ELGA_Rollen2.5.0+20250729
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 139
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+118. ​ELGA_SectionsEntlassungAerztl1.3.0+20251002
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 141
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+119. ​ELGA_SectionsEntlassungPflege1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 142
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+120. ​ELGA_SectionsPflegeSitber1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 143
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+121. ​ELGA_SectionsRadiologie1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 144
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+122. ​ELGA_Seitenlokalisation1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 146
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+123. ​ELGA_ServiceEventPerformer1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 147
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+124. ​ELGA_ServiceEventsEntlassbr1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 148
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+125. ​ELGA_SignificantPathogens1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 151
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+126. ​ELGA_TargetSite1.0.0+20200708
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 153
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+127. ​ELGA_TelecomAddressUse1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 154
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+128. ​ELGA_TopographicalModifierQualifier1.0.0+20200512
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 155
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+129. ​ELGA_URLScheme1.3.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 157
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+130. ​ELGA_Wirkstoffe_AGES2.39.0+20251022
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 159
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+131. ​EMS_Anti-HCV-Immunoassay1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 160
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+132. ​EMS_Anti-HCV-Immunoblot_Assay1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 161
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+133. ​EMS_HBV_Status1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 163
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+134. ​EMS_HCV_core_Ag_Assay1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 164
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+135. ​EMS_Krankheitsmerkmale1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 168
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+136. ​EMS_MaterialMethode1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 170
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+137. ​EMS_Meldepflichtige_Krankheiten1.3.0+20250218
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 171
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+138. ​EMS_Reiseland1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 172
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+139. ​HL7-at_ActConsentType1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 174
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+140. ​HL7-at_AdministrativeGender-FHIR-Extension1.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 175
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+141. ​HL7-at_AdministrativeGender-v21.2.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 176
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+142. ​HL7-at_OrganizationType1.0.0+20231120
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 177
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+143. ​HL7-at_PatientIdentifier1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 178
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+144. ​HL7-at_PractitionerRole1.0.0+20231120
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 179
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+145. ​HL7-at_XDS-Dokumentenklassen3.4.0+20250603
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 180
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+146. ​langid-at1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 181
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+147. ​LKF_Diagnose-Art1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 182
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+148. ​LKF_Diagnose-statAuf1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 183
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+149. ​LKF_Diagnose-Typ1.1.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 184
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+150. ​RADS_BreastImaging1.1.0+20240820
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 185
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+151. ​RADS_CoronaryArteryDisease1.0.0+20250324
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 186
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+152. ​RADS_DiagnosticImagingScales1.0.0+20250317
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 187
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+153. ​RADS_LiverImaging1.0.0+20250324
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 188
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+154. ​RADS_ProstateImaging1.0.0+20250324
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 189
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+155. ​RADS_ThyroidImaging1.0.0+20250324
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 190
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+156. ​DGC_Country1.0.0+20230131
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 191
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+157. ​DGC_Doses1.0.0+20230131
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 193
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+158. ​DGC_MedicinalProduct2.1.0+20230731
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 194
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+159. ​DGC_RATNameManufacturer2.4.0+20230523
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 195
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+160. ​DGC_TypeofTest1.0.0+20230131
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 197
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+161. ​DGC_VaccineMarketingAuthorizationHolder2.1.0+20230731
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 199
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+162. ​eImpf_KostenfreiesImpfprogramm1.0.1+20240422
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 200
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+163. ​ELGA_AuditRoleID2.3.0+20241212
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 201
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+164. ​ELGA_MedikationMengenartAlternativ1.2.0+20240325
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 202
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+165. ​Orphanet_Rare Diseases1.2.0+20240430
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 204
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+
+166. ​Zeiteinheiten2.0.0+20240903
+   Version: unknown
+   OID: unknown
+   URL: Nicht verfügbar
+   Detail-URL: Nicht verfügbar
+   Zeile: 206
+   Grund: Parsing fehlgeschlagen - Datenstruktur konnte nicht extrahiert werden
+

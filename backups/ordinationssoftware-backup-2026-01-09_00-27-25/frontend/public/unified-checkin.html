@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selbst-Check-in - Einheitliches Formular</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #0056b3, #007bff);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.2em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+        
+        .stepper {
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .step {
+            display: flex;
+            align-items: center;
+            margin: 0 10px;
+        }
+        
+        .step-number {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background-color: #e9ecef;
+            color: #6c757d;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        
+        .step.active .step-number {
+            background-color: #0056b3;
+            color: white;
+        }
+        
+        .step.completed .step-number {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        .step-label {
+            font-weight: 500;
+            color: #6c757d;
+        }
+        
+        .step.active .step-label {
+            color: #0056b3;
+        }
+        
+        .step.completed .step-label {
+            color: #28a745;
+        }
+        
+        .form-container {
+            padding: 30px;
+        }
+        
+        .form-section {
+            display: none;
+        }
+        
+        .form-section.active {
+            display: block;
+        }
+        
+        .section-title {
+            font-size: 1.5em;
+            color: #0056b3;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .section-title .icon {
+            margin-right: 10px;
+            font-size: 1.2em;
+        }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group.full-width {
+            grid-column: 1 / -1;
+        }
+        
+        label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .required {
+            color: #dc3545;
+        }
+        
+        input, select, textarea {
+            padding: 12px;
+            border: 2px solid #e9ecef;
+            border-radius: 6px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #0056b3;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 10px;
+            width: 18px;
+            height: 18px;
+        }
+        
+        .array-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .array-item input {
+            flex: 1;
+        }
+        
+        .btn-remove {
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn-add {
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 20px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        .btn-add:hover, .btn-remove:hover {
+            opacity: 0.8;
+        }
+        
+        .divider {
+            height: 1px;
+            background-color: #e9ecef;
+            margin: 20px 0;
+        }
+        
+        .alert {
+            padding: 15px;
+            border-radius: 6px;
+            margin: 20px 0;
+        }
+        
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #e9ecef;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .btn-primary {
+            background-color: #0056b3;
+            color: white;
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .btn:hover:not(:disabled) {
+            opacity: 0.8;
+        }
+        
+        .success-message {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .success-message h2 {
+            color: #28a745;
+            margin-bottom: 20px;
+        }
+        
+        .countdown {
+            font-size: 1.2em;
+            color: #6c757d;
+            margin-top: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stepper {
+                flex-wrap: wrap;
+            }
+            
+            .step {
+                margin: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 Selbst-Check-in</h1>
+            <p>Bitte füllen Sie das Formular vollständig aus</p>
+        </div>
+        
+        <div class="stepper">
+            <div class="step active" data-step="0">
+                <div class="step-number">1</div>
+                <div class="step-label">Stammdaten</div>
+            </div>
+            <div class="step" data-step="1">
+                <div class="step-number">2</div>
+                <div class="step-label">Medizinische Daten</div>
+            </div>
+            <div class="step" data-step="2">
+                <div class="step-number">3</div>
+                <div class="step-label">Administrative Daten</div>
+            </div>
+            <div class="step" data-step="3">
+                <div class="step-number">4</div>
+                <div class="step-label">Einverständniserklärungen</div>
+            </div>
+        </div>
+        
+        <div class="form-container">
+            <form id="patientForm">
+                <!-- Stammdaten -->
+                <div class="form-section active" data-section="0">
+                    <h2 class="section-title">
+                        <span class="icon">👤</span>
+                        Stammdaten
+                    </h2>
+                    
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="firstName">Vorname <span class="required">*</span></label>
+                            <input type="text" id="firstName" name="firstName" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="lastName">Nachname <span class="required">*</span></label>
+                            <input type="text" id="lastName" name="lastName" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="dateOfBirth">Geburtsdatum <span class="required">*</span></label>
+                            <input type="date" id="dateOfBirth" name="dateOfBirth" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="gender">Geschlecht <span class="required">*</span></label>
+                            <select id="gender" name="gender" required>
+                                <option value="">Bitte wählen</option>
+                                <option value="m">Männlich</option>
+                                <option value="w">Weiblich</option>
+                                <option value="d">Divers</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="socialSecurityNumber">Sozialversicherungsnummer <span class="required">*</span></label>
+                            <input type="text" id="socialSecurityNumber" name="socialSecurityNumber" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="insuranceProvider">Versicherungsanstalt <span class="required">*</span></label>
+                            <select id="insuranceProvider" name="insuranceProvider" required>
+                                <option value="">Bitte wählen</option>
+                                <option value="ÖGK (Österreichische Gesundheitskasse)">ÖGK (Österreichische Gesundheitskasse)</option>
+                                <option value="BVAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)">BVAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)</option>
+                                <option value="SVS (Sozialversicherung der Selbständigen)">SVS (Sozialversicherung der Selbständigen)</option>
+                                <option value="KFA (Krankenfürsorgeanstalt der Bediensteten der Stadt Wien)">KFA (Krankenfürsorgeanstalt der Bediensteten der Stadt Wien)</option>
+                                <option value="PVA (Pensionsversicherungsanstalt)">PVA (Pensionsversicherungsanstalt)</option>
+                                <option value="Privatversicherung">Privatversicherung</option>
+                                <option value="Selbstzahler">Selbstzahler</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Adresse</h3>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="addressStreet">Straße und Hausnummer</label>
+                            <input type="text" id="addressStreet" name="addressStreet">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="addressZipCode">PLZ</label>
+                            <input type="text" id="addressZipCode" name="addressZipCode">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="addressCity">Stadt</label>
+                            <input type="text" id="addressCity" name="addressCity">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="addressCountry">Land</label>
+                            <input type="text" id="addressCountry" name="addressCountry" value="Österreich">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="phone">Telefon <span class="required">*</span></label>
+                            <input type="tel" id="phone" name="phone" required>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="email">E-Mail</label>
+                            <input type="email" id="email" name="email">
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Medizinische Daten -->
+                <div class="form-section" data-section="1">
+                    <h2 class="section-title">
+                        <span class="icon">🏥</span>
+                        Medizinische Daten
+                    </h2>
+                    
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="bloodType">Blutgruppe</label>
+                            <select id="bloodType" name="bloodType">
+                                <option value="Unbekannt">Unbekannt</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="height">Größe (cm)</label>
+                            <input type="number" id="height" name="height" min="50" max="250">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="weight">Gewicht (kg)</label>
+                            <input type="number" id="weight" name="weight" min="1" max="300" step="0.1">
+                        </div>
+                        
+                        <!-- Schwangerschaft (nur für Frauen) -->
+                        <div id="pregnancySection" class="form-group full-width" style="display: none;">
+                            <div class="divider"></div>
+                            <h3>Schwangerschaft</h3>
+                        </div>
+                        
+                        <div id="pregnancyCheckbox" class="form-group" style="display: none;">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="isPregnant" name="isPregnant">
+                                <label for="isPregnant">Schwanger</label>
+                            </div>
+                        </div>
+                        
+                        <div id="pregnancyWeek" class="form-group" style="display: none;">
+                            <label for="pregnancyWeekInput">Schwangerschaftswoche</label>
+                            <input type="number" id="pregnancyWeekInput" name="pregnancyWeek" min="1" max="42">
+                        </div>
+                        
+                        <div id="breastfeedingCheckbox" class="form-group" style="display: none;">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="isBreastfeeding" name="isBreastfeeding">
+                                <label for="isBreastfeeding">Stillen</label>
+                            </div>
+                        </div>
+                        
+                        <!-- Medizinische Implantate -->
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Medizinische Implantate</h3>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="hasPacemaker" name="hasPacemaker">
+                                <label for="hasPacemaker">Schrittmacher</label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="hasDefibrillator" name="hasDefibrillator">
+                                <label for="hasDefibrillator">Defibrillator</label>
+                            </div>
+                        </div>
+                        
+                        <!-- Raucherstatus -->
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Raucherstatus</h3>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="smokingStatus">Raucherstatus</label>
+                            <select id="smokingStatus" name="smokingStatus">
+                                <option value="non-smoker">Nichtraucher</option>
+                                <option value="former-smoker">Ehemaliger Raucher</option>
+                                <option value="current-smoker">Aktiver Raucher</option>
+                            </select>
+                        </div>
+                        
+                        <div id="cigarettesPerDay" class="form-group" style="display: none;">
+                            <label for="cigarettesPerDayInput">Zigaretten pro Tag</label>
+                            <input type="number" id="cigarettesPerDayInput" name="cigarettesPerDay" min="0" max="100">
+                        </div>
+                        
+                        <div id="yearsOfSmoking" class="form-group" style="display: none;">
+                            <label for="yearsOfSmokingInput">Rauchejahre</label>
+                            <input type="number" id="yearsOfSmokingInput" name="yearsOfSmoking" min="0" max="100">
+                        </div>
+                        
+                        <div id="quitSmokingDate" class="form-group" style="display: none;">
+                            <label for="quitSmokingDateInput">Aufhördatum</label>
+                            <input type="date" id="quitSmokingDateInput" name="quitSmokingDate">
+                        </div>
+                        
+                        <!-- Allergien -->
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Allergien</h3>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div id="allergiesList"></div>
+                            <button type="button" class="btn-add" onclick="addAllergy()">+ Allergie hinzufügen</button>
+                        </div>
+                        
+                        <!-- Aktuelle Medikamente -->
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Aktuelle Medikamente</h3>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div id="medicationsList"></div>
+                            <button type="button" class="btn-add" onclick="addMedication()">+ Medikament hinzufügen</button>
+                        </div>
+                        
+                        <!-- Medizinische Vorgeschichte -->
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Medizinische Vorgeschichte</h3>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div id="conditionsList"></div>
+                            <button type="button" class="btn-add" onclick="addCondition()">+ Erkrankung hinzufügen</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Administrative Daten -->
+                <div class="form-section" data-section="2">
+                    <h2 class="section-title">
+                        <span class="icon">⚙️</span>
+                        Administrative Daten
+                    </h2>
+                    
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <h3>Hausarzt</h3>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="primaryCarePhysicianName">Name des Hausarztes</label>
+                            <input type="text" id="primaryCarePhysicianName" name="primaryCarePhysicianName">
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="primaryCarePhysicianLocation">Praxisstandort</label>
+                            <input type="text" id="primaryCarePhysicianLocation" name="primaryCarePhysicianLocation">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Zuweisung</h3>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="referralSource">Zuweisung durch</label>
+                            <select id="referralSource" name="referralSource">
+                                <option value="self">Selbst</option>
+                                <option value="family_doctor">Hausarzt</option>
+                                <option value="specialist">Facharzt</option>
+                                <option value="hospital">Krankenhaus</option>
+                                <option value="emergency">Notaufnahme</option>
+                                <option value="other">Sonstiges</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="referralDoctor">Zuweisender Arzt</label>
+                            <input type="text" id="referralDoctor" name="referralDoctor">
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div class="divider"></div>
+                            <h3>Besuch</h3>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <label for="visitReason">Grund des Besuchs</label>
+                            <textarea id="visitReason" name="visitReason" rows="3"></textarea>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Einverständniserklärungen -->
+                <div class="form-section" data-section="3">
+                    <h2 class="section-title">
+                        <span class="icon">🔒</span>
+                        Einverständniserklärungen
+                    </h2>
+                    
+                    <div class="form-grid">
+                        <div class="form-group full-width">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="dataProtectionConsent" name="dataProtectionConsent" required>
+                                <label for="dataProtectionConsent">Ich stimme der Verarbeitung meiner personenbezogenen Daten gemäß DSGVO zu. <span class="required">*</span></label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div class="checkbox-group">
+                                <input type="checkbox" id="electronicCommunicationConsent" name="electronicCommunicationConsent">
+                                <label for="electronicCommunicationConsent">Ich stimme der elektronischen Kommunikation (E-Mail, SMS) zu.</label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group full-width">
+                            <div class="alert alert-info">
+                                Die mit * markierten Felder sind Pflichtfelder und müssen ausgefüllt werden.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" id="prevBtn" class="btn btn-secondary" onclick="changeStep(-1)" disabled>Zurück</button>
+                    <button type="button" id="nextBtn" class="btn btn-primary" onclick="changeStep(1)">Weiter</button>
+                    <button type="submit" id="submitBtn" class="btn btn-primary" style="display: none;">Patient erstellen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+    <div id="successMessage" class="success-message" style="display: none;">
+        <h2>✅ Check-in erfolgreich abgeschlossen!</h2>
+        <p>Vielen Dank für Ihre Angaben. Bitte geben Sie das Tablet an das Praxispersonal zurück.</p>
+        <div class="countdown" id="countdown">Diese Seite wird in 30 Sekunden automatisch geschlossen.</div>
+    </div>
+
+    <script>
+        let currentStep = 0;
+        const totalSteps = 4;
+        
+        // Stepper-Update
+        function updateStepper() {
+            document.querySelectorAll('.step').forEach((step, index) => {
+                step.classList.remove('active', 'completed');
+                if (index === currentStep) {
+                    step.classList.add('active');
+                } else if (index < currentStep) {
+                    step.classList.add('completed');
+                }
+            });
+        }
+        
+        // Schritt wechseln
+        function changeStep(direction) {
+            const sections = document.querySelectorAll('.form-section');
+            const prevBtn = document.getElementById('prevBtn');
+            const nextBtn = document.getElementById('nextBtn');
+            const submitBtn = document.getElementById('submitBtn');
+            
+            if (direction > 0 && currentStep < totalSteps - 1) {
+                currentStep++;
+            } else if (direction < 0 && currentStep > 0) {
+                currentStep--;
+            }
+            
+            // Sektionen anzeigen/verstecken
+            sections.forEach((section, index) => {
+                section.classList.toggle('active', index === currentStep);
+            });
+            
+            // Buttons aktualisieren
+            prevBtn.disabled = currentStep === 0;
+            nextBtn.style.display = currentStep === totalSteps - 1 ? 'none' : 'inline-block';
+            submitBtn.style.display = currentStep === totalSteps - 1 ? 'inline-block' : 'none';
+            
+            updateStepper();
+        }
+        
+        // Geschlecht-Änderung für Schwangerschaft
+        document.getElementById('gender').addEventListener('change', function() {
+            const isFemale = this.value === 'w';
+            const pregnancySection = document.getElementById('pregnancySection');
+            const pregnancyCheckbox = document.getElementById('pregnancyCheckbox');
+            const breastfeedingCheckbox = document.getElementById('breastfeedingCheckbox');
+            
+            if (isFemale) {
+                pregnancySection.style.display = 'block';
+                pregnancyCheckbox.style.display = 'block';
+                breastfeedingCheckbox.style.display = 'block';
+            } else {
+                pregnancySection.style.display = 'none';
+                pregnancyCheckbox.style.display = 'none';
+                breastfeedingCheckbox.style.display = 'none';
+                document.getElementById('isPregnant').checked = false;
+                document.getElementById('isBreastfeeding').checked = false;
+            }
+        });
+        
+        // Schwangerschaft-Checkbox
+        document.getElementById('isPregnant').addEventListener('change', function() {
+            const pregnancyWeek = document.getElementById('pregnancyWeek');
+            pregnancyWeek.style.display = this.checked ? 'block' : 'none';
+        });
+        
+        // Raucherstatus-Änderung
+        document.getElementById('smokingStatus').addEventListener('change', function() {
+            const cigarettesPerDay = document.getElementById('cigarettesPerDay');
+            const yearsOfSmoking = document.getElementById('yearsOfSmoking');
+                const quitSmokingDate = document.getElementById('quitSmokingDate');
+            
+            cigarettesPerDay.style.display = this.value === 'current-smoker' ? 'block' : 'none';
+            yearsOfSmoking.style.display = this.value !== 'non-smoker' ? 'block' : 'none';
+            quitSmokingDate.style.display = this.value === 'former-smoker' ? 'block' : 'none';
+        });
+        
+        // Array-Management
+        function addAllergy() {
+            const container = document.getElementById('allergiesList');
+            const div = document.createElement('div');
+            div.className = 'array-item';
+            div.innerHTML = `
+                <input type="text" name="allergies[]" placeholder="Allergie">
+                <button type="button" class="btn-remove" onclick="removeArrayItem(this)">Entfernen</button>
+            `;
+            container.appendChild(div);
+        }
+        
+        function addMedication() {
+            const container = document.getElementById('medicationsList');
+            const div = document.createElement('div');
+            div.className = 'array-item';
+            div.innerHTML = `
+                <input type="text" name="medications[]" placeholder="Medikament">
+                <button type="button" class="btn-remove" onclick="removeArrayItem(this)">Entfernen</button>
+            `;
+            container.appendChild(div);
+        }
+        
+        function addCondition() {
+            const container = document.getElementById('conditionsList');
+            const div = document.createElement('div');
+            div.className = 'array-item';
+            div.innerHTML = `
+                <input type="text" name="conditions[]" placeholder="Erkrankung">
+                <button type="button" class="btn-remove" onclick="removeArrayItem(this)">Entfernen</button>
+            `;
+            container.appendChild(div);
+        }
+        
+        function removeArrayItem(button) {
+            button.parentElement.remove();
+        }
+        
+        // Formular-Submit
+        document.getElementById('patientForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const data = Object.fromEntries(formData.entries());
+            
+            // Arrays sammeln
+            data.allergies = Array.from(document.querySelectorAll('input[name="allergies[]"]')).map(input => input.value).filter(val => val.trim());
+            data.medications = Array.from(document.querySelectorAll('input[name="medications[]"]')).map(input => input.value).filter(val => val.trim());
+            data.conditions = Array.from(document.querySelectorAll('input[name="conditions[]"]')).map(input => input.value).filter(val => val.trim());
+            
+            // Adresse-Objekt erstellen
+            data.address = {
+                street: data.addressStreet || '',
+                zipCode: data.addressZipCode || '',
+                city: data.addressCity || '',
+                country: data.addressCountry || 'Österreich'
+            };
+            
+            // Notfallkontakt-Objekt erstellen
+            data.emergencyContact = {
+                name: data.emergencyContactName || '',
+                phone: data.emergencyContactPhone || ''
+            };
+            
+            // Hausarzt-Objekt erstellen
+            data.primaryCarePhysician = {
+                name: data.primaryCarePhysicianName || '',
+                location: data.primaryCarePhysicianLocation || ''
+            };
+            
+            try {
+                // Token aus URL extrahieren
+                const urlParams = new URLSearchParams(window.location.search);
+                const token = urlParams.get('token');
+                
+                if (!token) {
+                    throw new Error('Kein gültiger Token gefunden');
+                }
+                
+                const response = await fetch(`http://192.168.178.163:5001/api/checkin/submit/${token}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    // Erfolgsmeldung anzeigen
+                    document.querySelector('.container').style.display = 'none';
+                    document.getElementById('successMessage').style.display = 'block';
+                    
+                    // Countdown starten
+                    let countdown = 30;
+                    const countdownElement = document.getElementById('countdown');
+                    const interval = setInterval(() => {
+                        countdown--;
+                        countdownElement.textContent = `Diese Seite wird in ${countdown} Sekunden automatisch geschlossen.`;
+                        
+                        if (countdown <= 0) {
+                            clearInterval(interval);
+                            // Seite schließen oder zur Startseite weiterleiten
+                            window.close();
+                        }
+                    }, 1000);
+                } else {
+                    throw new Error(result.message || 'Unbekannter Fehler');
+                }
+            } catch (error) {
+                console.error('Fehler beim Senden der Daten:', error);
+                alert('Fehler beim Senden der Daten: ' + error.message);
+            }
+        });
+        
+        // Initialisierung
+        updateStepper();
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

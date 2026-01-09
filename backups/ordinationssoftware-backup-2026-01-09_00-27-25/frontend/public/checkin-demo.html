@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selbst-Check-in Demo</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        .header {
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        .content {
+            padding: 40px;
+        }
+        .workflow {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-bottom: 40px;
+        }
+        .step {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 25px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .step:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .step.active {
+            border-color: #4CAF50;
+            background: #e8f5e8;
+        }
+        .step.completed {
+            border-color: #2196F3;
+            background: #e3f2fd;
+        }
+        .step-number {
+            position: absolute;
+            top: -15px;
+            left: 20px;
+            background: #4CAF50;
+            color: white;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+        .step h3 {
+            margin: 20px 0 15px 0;
+            color: #333;
+            font-size: 1.3em;
+        }
+        .step p {
+            color: #666;
+            line-height: 1.6;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        .qr-display {
+            background: white;
+            border: 2px dashed #ddd;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        .qr-code {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            word-break: break-all;
+        }
+        .status {
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+            font-weight: 500;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .demo-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+        .demo-section h3 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 2px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .test-buttons button {
+            background: #2196F3;
+        }
+        .test-buttons button:hover {
+            background: #1976D2;
+        }
+        .reset-button {
+            background: #ff9800;
+            margin-top: 20px;
+        }
+        .reset-button:hover {
+            background: #f57c00;
+        }
+        .footer {
+            background: #333;
+            color: white;
+            text-align: center;
+            padding: 20px;
+            font-size: 0.9em;
+        }
+        @media (max-width: 768px) {
+            .workflow {
+                grid-template-columns: 1fr;
+            }
+            .header h1 {
+                font-size: 2em;
+            }
+            .content {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏥 Selbst-Check-in System</h1>
+            <p>Digitaler Workflow für Patientenanmeldung</p>
+        </div>
+
+        <div class="content">
+            <!-- Workflow Übersicht -->
+            <div class="workflow">
+                <div class="step" id="step1">
+                    <div class="step-number">1</div>
+                    <h3>QR-Code generieren</h3>
+                    <p>Die Assistentin generiert einen einmaligen QR-Code für den Patienten</p>
+                    <button onclick="generateQRCode()">QR-Code generieren</button>
+                    <div id="qrResult" style="display: none;">
+                        <div class="qr-display">
+                            <h4>📱 QR-Code für Selbst-Check-in</h4>
+                            <div class="qr-code" id="qrCodeValue">Wird generiert...</div>
+                            <p><strong>Gültig für 15 Minuten</strong></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step" id="step2">
+                    <div class="step-number">2</div>
+                    <h3>QR-Code scannen</h3>
+                    <p>Patient oder Assistentin scannt den QR-Code mit dem Tablet</p>
+                    <button onclick="simulateScan()" id="scanBtn" disabled>QR-Code scannen</button>
+                    <div id="scanResult" style="display: none;">
+                        <div class="status success">
+                            ✅ QR-Code erfolgreich gescannt!<br>
+                            Formular wird automatisch geladen...
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step" id="step3">
+                    <div class="step-number">3</div>
+                    <h3>Formular ausfüllen</h3>
+                    <p>Patient füllt das Check-in-Formular auf dem Tablet aus</p>
+                    <button onclick="simulateFormFill()" id="formBtn" disabled>Formular ausfüllen</button>
+                    <div id="formResult" style="display: none;">
+                        <div class="status info">
+                            📝 Patient füllt das Formular aus...<br>
+                            Alle Daten werden erfasst
+                        </div>
+                    </div>
+                </div>
+
+                <div class="step" id="step4">
+                    <div class="step-number">4</div>
+                    <h3>Check-in abschließen</h3>
+                    <p>Daten werden gespeichert und Patient wird automatisch angelegt</p>
+                    <button onclick="simulateSubmit()" id="submitBtn" disabled>Daten speichern</button>
+                    <div id="submitResult" style="display: none;">
+                        <div class="status success">
+                            ✅ Check-in erfolgreich abgeschlossen!<br>
+                            Patient wurde im System angelegt/aktualisiert<br>
+                            Tablet kann zurückgegeben werden
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Demo und Tests -->
+            <div class="demo-section">
+                <h3>🧪 System-Tests</h3>
+                <p>Testen Sie die Backend-Integration und den kompletten Workflow:</p>
+                
+                <div class="test-buttons">
+                    <button onclick="testBackendConnection()">Backend-Verbindung testen</button>
+                    <button onclick="testQRGeneration()">QR-Code Generation testen</button>
+                    <button onclick="testQRValidation()">QR-Code Validierung testen</button>
+                    <button onclick="testCompleteWorkflow()">Kompletter Workflow testen</button>
+                </div>
+
+                <div id="testResults"></div>
+            </div>
+
+            <!-- Integration Links -->
+            <div class="demo-section">
+                <h3>🔗 System-Integration</h3>
+                <p>Zugriff auf die verschiedenen Systemkomponenten:</p>
+                
+                <div class="test-buttons">
+                    <button onclick="window.open('http://localhost:3000', '_blank')">Hauptanwendung öffnen</button>
+                    <button onclick="window.open('http://localhost:3000/test-workflow.html', '_blank')">Workflow-Test öffnen</button>
+                    <button onclick="window.open('http://localhost:5001/api/health', '_blank')">Backend-Status prüfen</button>
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 40px;">
+                <button class="reset-button" onclick="resetDemo()">🔄 Demo zurücksetzen</button>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>© 2025 Ordinationssoftware - Selbst-Check-in System</p>
+            <p>Backend: Port 5001 | Frontend: Port 3000</p>
+        </div>
+    </div>
+
+    <script>
+        let currentQRCode = null;
+        let testResults = [];
+
+        // Backend Tests
+        async function testBackendConnection() {
+            try {
+                const response = await fetch('http://localhost:5001/api/health');
+                const data = await response.json();
+                addTestResult('Backend-Verbindung', 'success', 'Backend ist erreichbar: ' + data.status);
+            } catch (error) {
+                addTestResult('Backend-Verbindung', 'error', 'Backend nicht erreichbar: ' + error.message);
+            }
+        }
+
+        async function testQRGeneration() {
+            try {
+                const response = await fetch('http://localhost:5001/api/checkin/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    addTestResult('QR-Code Generation', 'success', 'QR-Code generiert: ' + data.data.qrCode);
+                } else {
+                    addTestResult('QR-Code Generation', 'error', 'Fehler: ' + data.message);
+                }
+            } catch (error) {
+                addTestResult('QR-Code Generation', 'error', 'Fehler: ' + error.message);
+            }
+        }
+
+        async function testQRValidation() {
+            // Use a test QR code if none is available
+            const testQRCode = currentQRCode || 'checkin_1761297359951_nw1udkikx';
+            
+            try {
+                const response = await fetch(`http://localhost:5001/api/checkin/validate/${testQRCode}`);
+                const data = await response.json();
+                if (data.success) {
+                    addTestResult('QR-Code Validierung', 'success', 'QR-Code ist gültig: ' + data.message);
+                } else {
+                    addTestResult('QR-Code Validierung', 'error', 'Fehler: ' + data.message);
+                }
+            } catch (error) {
+                addTestResult('QR-Code Validierung', 'error', 'Fehler: ' + error.message);
+            }
+        }
+
+        async function testCompleteWorkflow() {
+            addTestResult('Kompletter Workflow', 'info', 'Starte Workflow-Test...');
+            
+            // 1. QR-Code generieren
+            try {
+                const response = await fetch('http://localhost:5001/api/checkin/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                const data = await response.json();
+                if (data.success) {
+                    currentQRCode = data.data.qrCode;
+                    addTestResult('Workflow Schritt 1', 'success', 'QR-Code generiert: ' + currentQRCode);
+                } else {
+                    addTestResult('Workflow Schritt 1', 'error', 'QR-Code Generation fehlgeschlagen');
+                    return;
+                }
+            } catch (error) {
+                addTestResult('Workflow Schritt 1', 'error', 'Fehler: ' + error.message);
+                return;
+            }
+
+            // 2. QR-Code validieren
+            try {
+                const response = await fetch(`http://localhost:5001/api/checkin/validate/${currentQRCode}`);
+                const data = await response.json();
+                if (data.success) {
+                    addTestResult('Workflow Schritt 2', 'success', 'QR-Code validiert: ' + data.message);
+                } else {
+                    addTestResult('Workflow Schritt 2', 'error', 'QR-Code Validierung fehlgeschlagen');
+                    return;
+                }
+            } catch (error) {
+                addTestResult('Workflow Schritt 2', 'error', 'Fehler: ' + error.message);
+                return;
+            }
+
+            addTestResult('Kompletter Workflow', 'success', 'Workflow-Test erfolgreich abgeschlossen!');
+        }
+
+        function addTestResult(testName, type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            testResults.push({ testName, type, message, timestamp });
+            updateTestResults();
+        }
+
+        function updateTestResults() {
+            const container = document.getElementById('testResults');
+            container.innerHTML = testResults.map(result => 
+                `<div class="status ${result.type}">
+                    <strong>${result.testName}</strong> (${result.timestamp})<br>
+                    ${result.message}
+                </div>`
+            ).join('');
+        }
+
+        // Demo Functions
+        function generateQRCode() {
+            currentQRCode = 'checkin_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+            
+            document.getElementById('qrCodeValue').textContent = currentQRCode;
+            document.getElementById('qrResult').style.display = 'block';
+            document.getElementById('step1').classList.add('completed');
+            document.getElementById('step2').classList.add('active');
+            document.getElementById('scanBtn').disabled = false;
+            
+            showStatus('QR-Code erfolgreich generiert!', 'success');
+        }
+
+        function simulateScan() {
+            if (!currentQRCode) {
+                showStatus('Bitte zuerst einen QR-Code generieren!', 'error');
+                return;
+            }
+
+            document.getElementById('scanResult').style.display = 'block';
+            document.getElementById('step2').classList.remove('active');
+            document.getElementById('step2').classList.add('completed');
+            document.getElementById('step3').classList.add('active');
+            document.getElementById('formBtn').disabled = false;
+            
+            showStatus('QR-Code erfolgreich gescannt! Formular wird geladen...', 'success');
+        }
+
+        function simulateFormFill() {
+            document.getElementById('formResult').style.display = 'block';
+            document.getElementById('step3').classList.remove('active');
+            document.getElementById('step3').classList.add('completed');
+            document.getElementById('step4').classList.add('active');
+            document.getElementById('submitBtn').disabled = false;
+            
+            showStatus('Formular wird ausgefüllt...', 'info');
+        }
+
+        function simulateSubmit() {
+            document.getElementById('submitResult').style.display = 'block';
+            document.getElementById('step4').classList.remove('active');
+            document.getElementById('step4').classList.add('completed');
+            
+            showStatus('Check-in erfolgreich abgeschlossen!', 'success');
+        }
+
+        function resetDemo() {
+            document.querySelectorAll('.step').forEach(step => {
+                step.classList.remove('active', 'completed');
+            });
+            
+            document.getElementById('qrResult').style.display = 'none';
+            document.getElementById('scanResult').style.display = 'none';
+            document.getElementById('formResult').style.display = 'none';
+            document.getElementById('submitResult').style.display = 'none';
+            
+            document.getElementById('scanBtn').disabled = true;
+            document.getElementById('formBtn').disabled = true;
+            document.getElementById('submitBtn').disabled = true;
+            
+            currentQRCode = null;
+            testResults = [];
+            document.getElementById('testResults').innerHTML = '';
+            
+            showStatus('Demo wurde zurückgesetzt. Klicken Sie auf "QR-Code generieren" um zu beginnen.', 'info');
+        }
+
+        function showStatus(message, type) {
+            const status = document.createElement('div');
+            status.className = 'status ' + type;
+            status.textContent = message;
+            
+            const container = document.querySelector('.content');
+            container.insertBefore(status, container.firstChild);
+            
+            setTimeout(() => {
+                if (status.parentNode) {
+                    status.parentNode.removeChild(status);
+                }
+            }, 3000);
+        }
+
+        // Initialize
+        showStatus('Willkommen! Das Selbst-Check-in System ist bereit.', 'info');
+    </script>
+</body>
+</html>

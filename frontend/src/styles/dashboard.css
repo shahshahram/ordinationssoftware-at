@@ -3,11 +3,16 @@
   position: relative;
   transition: height 200ms ease;
   width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
 }
 
 .react-grid-item {
   transition: all 200ms ease;
   transition-property: left, top, width, height;
+  box-sizing: border-box;
+  max-width: 100% !important;
+  overflow: hidden;
 }
 
 .react-grid-item.cssTransforms {
@@ -76,15 +81,44 @@
 @media (max-width: 600px) {
   .react-grid-layout {
     margin: 0 !important;
-    padding: 8px !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+    /* Optimiertes Scrollen für Mobile */
+    -webkit-overflow-scrolling: touch;
+    will-change: scroll-position;
   }
   
   .react-grid-item {
-    margin-bottom: 8px;
+    margin-bottom: 6px !important; /* Reduzierter Abstand zwischen Widgets */
+    width: 100% !important;
+    max-width: 100% !important;
+    left: 0 !important;
+    box-sizing: border-box;
+    /* Bessere Touch-Performance */
+    touch-action: pan-y;
+    -webkit-tap-highlight-color: transparent;
   }
   
   .react-grid-item > .react-resizable-handle {
     display: none;
+  }
+  
+  .layout {
+    padding: 0 !important;
+    margin: 0 !important;
+    /* Smooth scrolling für Mobile */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Größere Touch-Targets für interaktive Elemente */
+  .react-grid-item button,
+  .react-grid-item a,
+  .react-grid-item [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
   }
 }
 

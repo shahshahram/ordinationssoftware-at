@@ -120,7 +120,13 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data }) => {
 
   return (
     <>
-      <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1.5, sm: 2 } }}>
+      <Box sx={{ 
+        minHeight: '100%',
+        height: 'auto',
+        display: 'flex', 
+        flexDirection: 'column', 
+        p: { xs: 1.5, sm: 2 } 
+      }}>
         <Typography 
           variant={isMobile ? 'subtitle1' : 'h6'} 
           gutterBottom 
@@ -128,7 +134,11 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data }) => {
         >
           {widget.title}
         </Typography>
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Box sx={{ 
+          flex: items.length === 0 ? 'none' : 1,
+          overflow: items.length > 4 ? 'auto' : 'visible',
+          minHeight: items.length === 0 ? 'auto' : 'none'
+        }}>
           <List sx={{ py: 0 }}>
             {items.map((item: any, index: number) => {
               const handleItemClick = (e: React.MouseEvent) => {

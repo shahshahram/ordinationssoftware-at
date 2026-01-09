@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient QR-Code Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .qr-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            background: #f9f9f9;
+        }
+        .qr-code {
+            max-width: 300px;
+            height: auto;
+            border: 2px solid #333;
+            border-radius: 8px;
+            margin: 10px;
+        }
+        .button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px;
+            width: 100%;
+        }
+        .button:hover {
+            background: #0056b3;
+        }
+        .url-display {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 12px;
+            margin: 10px 0;
+            border: 1px solid #ccc;
+            word-break: break-all;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .patient-info {
+            background: #e8f5e8;
+            color: #2d5a2d;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👤 Patient QR-Code Test</h1>
+        
+        <div class="info status">
+            <strong>ℹ️ Geräte-Informationen:</strong><br>
+            Hostname: <span id="hostname"></span><br>
+            Port: <span id="port"></span><br>
+            User Agent: <span id="userAgent"></span>
+        </div>
+
+        <div class="qr-section">
+            <h3>👤 Test-Patienten</h3>
+            <p>Wählen Sie einen Test-Patienten aus:</p>
+            
+            <button class="button" onclick="generatePatientQR('max')">
+                👨 Max Mustermann
+            </button>
+            
+            <button class="button" onclick="generatePatientQR('sophie')">
+                👩 Sophie Waki
+            </button>
+            
+            <button class="button" onclick="generatePatientQR('custom')">
+                ✏️ Eigener Patient
+            </button>
+        </div>
+
+        <div class="qr-section" id="patientInfo" style="display: none;">
+            <h3>📋 Patient-Informationen</h3>
+            <div class="patient-info" id="patientDetails">
+                Patient wird geladen...
+            </div>
+        </div>
+
+        <div class="qr-section" id="qrCodeSection" style="display: none;">
+            <h3>📱 QR-Code für Validierung</h3>
+            <div class="url-display" id="urlDisplay">
+                URL wird generiert...
+            </div>
+            
+            <div id="qrCodeContainer">
+                <img id="qrCode" class="qr-code" alt="QR-Code wird generiert...">
+            </div>
+            
+            <button class="button" onclick="testDirect()">
+                🧪 Direkt testen
+            </button>
+        </div>
+
+        <div class="qr-section" id="customPatientSection" style="display: none;">
+            <h3>✏️ Eigener Patient</h3>
+            <div style="text-align: left;">
+                <label>Vorname:</label><br>
+                <input type="text" id="customFirstName" value="Test" style="width: 100%; padding: 8px; margin: 5px 0;"><br>
+                
+                <label>Nachname:</label><br>
+                <input type="text" id="customLastName" value="Patient" style="width: 100%; padding: 8px; margin: 5px 0;"><br>
+                
+                <label>Geburtsdatum:</label><br>
+                <input type="date" id="customDateOfBirth" value="1990-01-01" style="width: 100%; padding: 8px; margin: 5px 0;"><br>
+                
+                <label>Geschlecht:</label><br>
+                <select id="customGender" style="width: 100%; padding: 8px; margin: 5px 0;">
+                    <option value="m">Männlich</option>
+                    <option value="f">Weiblich</option>
+                    <option value="d">Divers</option>
+                </select><br>
+                
+                <button class="button" onclick="generateCustomPatientQR()">
+                    🔗 QR-Code generieren
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Geräte-Informationen
+        const currentHost = window.location.hostname;
+        const currentPort = window.location.port || '3000';
+        const baseUrl = `http://${currentHost}:${currentPort}`;
+        
+        document.getElementById('hostname').textContent = currentHost;
+        document.getElementById('port').textContent = currentPort;
+        document.getElementById('userAgent').textContent = navigator.userAgent.substring(0, 50) + '...';
+        
+        // Test-Patienten
+        const testPatients = {
+            max: {
+                patientId: "test_max_123",
+                firstName: "Max",
+                lastName: "Mustermann",
+                dateOfBirth: "1985-05-15",
+                gender: "m"
+            },
+            sophie: {
+                patientId: "test_sophie_456",
+                firstName: "Sophie",
+                lastName: "Waki",
+                dateOfBirth: "1992-08-22",
+                gender: "f"
+            }
+        };
+        
+        // QR-Code für Test-Patient generieren
+        function generatePatientQR(patientKey) {
+            if (patientKey === 'custom') {
+                document.getElementById('customPatientSection').style.display = 'block';
+                document.getElementById('patientInfo').style.display = 'none';
+                document.getElementById('qrCodeSection').style.display = 'none';
+                return;
+            }
+            
+            const patient = testPatients[patientKey];
+            if (!patient) return;
+            
+            // Patient-Info anzeigen
+            document.getElementById('patientDetails').innerHTML = `
+                <strong>Patient:</strong> ${patient.firstName} ${patient.lastName}<br>
+                <strong>Geburtsdatum:</strong> ${patient.dateOfBirth}<br>
+                <strong>Geschlecht:</strong> ${patient.gender === 'm' ? 'Männlich' : patient.gender === 'f' ? 'Weiblich' : 'Divers'}<br>
+                <strong>Patienten-ID:</strong> ${patient.patientId}
+            `;
+            
+            document.getElementById('patientInfo').style.display = 'block';
+            document.getElementById('customPatientSection').style.display = 'none';
+            
+            // QR-Code generieren
+            generateQR(patient);
+        }
+        
+        // QR-Code für eigenen Patient generieren
+        function generateCustomPatientQR() {
+            const patient = {
+                patientId: "custom_" + Date.now(),
+                firstName: document.getElementById('customFirstName').value,
+                lastName: document.getElementById('customLastName').value,
+                dateOfBirth: document.getElementById('customDateOfBirth').value,
+                gender: document.getElementById('customGender').value
+            };
+            
+            // Patient-Info anzeigen
+            document.getElementById('patientDetails').innerHTML = `
+                <strong>Patient:</strong> ${patient.firstName} ${patient.lastName}<br>
+                <strong>Geburtsdatum:</strong> ${patient.dateOfBirth}<br>
+                <strong>Geschlecht:</strong> ${patient.gender === 'm' ? 'Männlich' : patient.gender === 'f' ? 'Weiblich' : 'Divers'}<br>
+                <strong>Patienten-ID:</strong> ${patient.patientId}
+            `;
+            
+            document.getElementById('patientInfo').style.display = 'block';
+            
+            // QR-Code generieren
+            generateQR(patient);
+        }
+        
+        // QR-Code generieren
+        function generateQR(patient) {
+            const validationUrl = `${baseUrl}/validate.html?data=${encodeURIComponent(JSON.stringify(patient))}`;
+            document.getElementById('urlDisplay').textContent = validationUrl;
+            
+            const qrCodeImg = document.getElementById('qrCode');
+            qrCodeImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(validationUrl)}&ecc=M&margin=10&format=png`;
+            qrCodeImg.alt = "QR-Code für Patient-Validierung";
+            
+            // QR-Code klickbar machen
+            qrCodeImg.onclick = function() {
+                window.open(validationUrl, '_blank');
+            };
+            
+            document.getElementById('qrCodeSection').style.display = 'block';
+            
+            console.log('Patient QR-Code URL:', validationUrl);
+        }
+        
+        // Direkt testen
+        function testDirect() {
+            const urlDisplay = document.getElementById('urlDisplay');
+            if (urlDisplay.textContent && urlDisplay.textContent !== 'URL wird generiert...') {
+                window.open(urlDisplay.textContent, '_blank');
+            }
+        }
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

@@ -1,0 +1,670 @@
+import React, { useState, useEffect } from 'react';
+import {
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Typography,
+  Box,
+  Chip,
+  CircularProgress,
+  Alert,
+  Snackbar,
+  IconButton,
+  Tooltip,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText
+} from '@mui/material';
+import {
+  Receipt as ReceiptIcon,
+  Send as SendIcon,
+  CheckCircle as CheckCircleIcon,
+  Error as ErrorIcon,
+  Refresh as RefreshIcon,
+  MoreVert as MoreVertIcon,
+  History as HistoryIcon,
+  Euro as EuroIcon
+} from '@mui/icons-material';
+import { useDispatch, useSelector } from 'react-redux';
+import { fetchInvoices } from '../store/slices/billingSlice';
+
+interface Performance {
+  _id: string;
+  serviceCode: string;
+  serviceDescription: string;
+  serviceDatetime: string;
+  unitPrice: number;
+  quantity: number;
+  totalPrice: number;
+  tariffType: 'kassa' | 'wahl' | 'privat';
+  status: 'recorded' | 'billed' | 'sent' | 'accepted' | 'rejected' | 'refunded' | 'failed';
+  appointmentId?: {
+    _id: string;
+    locationId?: string;
+  };
+  patientId: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email?: string;
+    socialSecurityNumber?: string;
+    insuranceProvider?: string;
+  } | null;
+  doctorId: {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    contractType?: string;
+  };
+  billingData?: {
+    kassaRef?: string;
+    insuranceRef?: string;
+    invoiceNumber?: string;
+    paymentStatus?: string;
+  };
+}
+
+interface OneClickBillingButtonProps {
+  performance: Performance;
+  onStatusChange?: (newStatus: string) => void;
+  compact?: boolean;
+}
+
+const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
+  performance,
+  onStatusChange,
+  compact = false
+}) => {
+  const dispatch = useDispatch();
+  const { user } = useSelector((state: any) => state.auth);
+  
+  // State
+  const [loading, setLoading] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'info'
+  });
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+
+  // Berechnung der Route und Anzeige
+  // Berücksichtigt Mischformen: tariffType > contractType > patient insurance
+  const getBillingRoute = () => {
+    // 1. PRIORITÄT: Performance.tariffType (explizite Angabe in der Leistung)
+    // Dies hat höchste Priorität, da es die explizite Entscheidung des Arztes ist
+    if (performance.tariffType) {
+      switch (performance.tariffType) {
+        case 'kassa':
+          // Kassenleistung - prüfe ob Arzt Kassenarzt ist
+          if (performance.doctorId.contractType === 'kassenarzt') {
+            return 'KASSE';
+          }
+          // Wenn Arzt kein Kassenarzt, aber Leistung als Kasse markiert,
+          // könnte es eine Fehlkonfiguration sein, aber wir zeigen es trotzdem
+          // Das Backend wird die Validierung durchführen
+          return 'KASSE';
+          
+        case 'wahl':
+          // Wahlarzt-Leistung - immer erlaubt
+          return 'PATIENT+KASSE_REFUND';
+          
+        case 'privat':
+          // Privatleistung - prüfe ob Patient Versicherung hat
+          return performance.patientId?.insuranceProvider && 
+                 performance.patientId.insuranceProvider !== 'Privatversicherung' && 
+                 performance.patientId.insuranceProvider !== 'Selbstzahler'
+            ? 'PATIENT+INSURANCE' 
+            : 'PATIENT';
+      }
+    }
+    
+    // 2. FALLBACK: Doctor contractType
+    const contractType = performance.doctorId.contractType || 'privat';
+    
+    switch (contractType) {
+      case 'kassenarzt':
+        return 'KASSE';
+      case 'wahlarzt':
+        return 'PATIENT+KASSE_REFUND';
+      case 'privat':
+        return performance.patientId?.insuranceProvider && 
+               performance.patientId.insuranceProvider !== 'Privatversicherung' && 
+               performance.patientId.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
+      default:
+        return performance.patientId?.insuranceProvider && 
+               performance.patientId.insuranceProvider !== 'Privatversicherung' && 
+               performance.patientId.insuranceProvider !== 'Selbstzahler'
+          ? 'PATIENT+INSURANCE' 
+          : 'PATIENT';
+    }
+  };
+
+  const getButtonLabel = () => {
+    const route = getBillingRoute();
+    
+    switch (route) {
+      case 'KASSE':
+        return 'Als Kassenleistung abrechnen';
+      case 'PATIENT+KASSE_REFUND':
+        return 'Wahlarztleistung abrechnen';
+      case 'PATIENT+INSURANCE':
+        return 'An Versicherung einreichen';
+      case 'PATIENT':
+        return 'Honorarnote erstellen';
+      default:
+        return 'Leistung abrechnen';
+    }
+  };
+
+  const getButtonColor = () => {
+    const route = getBillingRoute();
+    
+    switch (route) {
+      case 'KASSE':
+        return 'primary';
+      case 'PATIENT+KASSE_REFUND':
+        return 'secondary';
+      case 'PATIENT+INSURANCE':
+        return 'info';
+      case 'PATIENT':
+        return 'success';
+      default:
+        return 'primary';
+    }
+  };
+
+  const getStatusChip = () => {
+    const statusConfig = {
+      recorded: { label: 'Erfasst', color: 'default' as const },
+      billed: { label: 'Abgerechnet', color: 'info' as const },
+      sent: { label: 'Gesendet', color: 'warning' as const },
+      accepted: { label: 'Akzeptiert', color: 'success' as const },
+      rejected: { label: 'Abgelehnt', color: 'error' as const },
+      refunded: { label: 'Erstattet', color: 'success' as const },
+      failed: { label: 'Fehlgeschlagen', color: 'error' as const }
+    };
+    
+    const config = statusConfig[performance.status] || statusConfig.recorded;
+    return <Chip label={config.label} color={config.color} size="small" />;
+  };
+
+  // One-Click-Billing ausführen
+  const handleOneClickBilling = async () => {
+    setLoading(true);
+    
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Kein Authentifizierungstoken gefunden');
+      }
+
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/one-click/${performance._id}`,
+        {
+          method: 'POST',
+          headers: {
+            'x-auth-token': token || '',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            options: {
+              insuranceClaim: !!performance.patientId?.insuranceProvider,
+              locationId: performance.appointmentId?.locationId || null
+            }
+          })
+        }
+      );
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.message || 'One-Click-Abrechnung fehlgeschlagen');
+      }
+
+      setSnackbar({
+        open: true,
+        message: `✅ ${result.message}`,
+        severity: 'success'
+      });
+
+      // Job-ID speichern für Status-Polling
+      if (result.data?.jobId) {
+        setJobId(result.data.jobId);
+        startPolling(result.data.jobId);
+      }
+
+      // Status-Update an Parent-Komponente
+      if (onStatusChange) {
+        onStatusChange('sent');
+      }
+
+      // Rechnungsliste aktualisieren
+      // dispatch(fetchInvoices({}));
+
+    } catch (error: any) {
+      console.error('One-Click-Billing Fehler:', error);
+      setSnackbar({
+        open: true,
+        message: `❌ ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+      setConfirmDialogOpen(false);
+    }
+  };
+
+  // Polling starten für Job-Status
+  const startPolling = (jobIdToPoll: string) => {
+    // Stoppe vorheriges Polling falls vorhanden
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+
+    // Prüfe Status sofort
+    checkJobStatus(jobIdToPoll);
+
+    // Dann alle 3 Sekunden prüfen
+    const interval = setInterval(() => {
+      checkJobStatus(jobIdToPoll);
+    }, 3000);
+
+    setPollingInterval(interval);
+
+    // Stoppe Polling nach 5 Minuten (maximale Wartezeit)
+    setTimeout(() => {
+      if (interval) {
+        clearInterval(interval);
+        setPollingInterval(null);
+      }
+    }, 5 * 60 * 1000);
+  };
+
+  // Job-Status prüfen
+  const checkJobStatus = async (jobIdToCheck: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(
+        `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/jobs/${jobIdToCheck}/status`,
+        {
+          headers: {
+            'x-auth-token': token || ''
+          }
+        }
+      );
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        const jobStatus = result.data.job?.status;
+        const job = result.data.job;
+
+        // Wenn Job fertig ist (erfolgreich oder fehlgeschlagen), Polling stoppen
+        if (jobStatus === 'SENT' || jobStatus === 'ACCEPTED' || jobStatus === 'REJECTED' || jobStatus === 'FAILED') {
+          if (pollingInterval) {
+            clearInterval(pollingInterval);
+            setPollingInterval(null);
+          }
+          setJobId(null);
+
+          // Benachrichtigung anzeigen
+          if (jobStatus === 'SENT' || jobStatus === 'ACCEPTED') {
+            setSnackbar({
+              open: true,
+              message: `✅ Abrechnung erfolgreich verarbeitet${jobStatus === 'ACCEPTED' ? ' und von der Kasse akzeptiert' : ''}`,
+              severity: 'success'
+            });
+            
+            // Performance-Status aktualisieren
+            if (onStatusChange) {
+              onStatusChange(jobStatus === 'ACCEPTED' ? 'accepted' : 'sent');
+            }
+          } else if (jobStatus === 'REJECTED' || jobStatus === 'FAILED') {
+            const errorMessage = job?.lastError || job?.response?.error || 'Unbekannter Fehler';
+            setSnackbar({
+              open: true,
+              message: `❌ Abrechnung ${jobStatus === 'REJECTED' ? 'von der Kasse abgelehnt' : 'fehlgeschlagen'}: ${errorMessage}`,
+              severity: 'error'
+            });
+            
+            // Performance-Status aktualisieren
+            if (onStatusChange) {
+              onStatusChange(jobStatus === 'REJECTED' ? 'rejected' : 'failed');
+            }
+          }
+        }
+      }
+    } catch (error: any) {
+      console.error('Fehler beim Prüfen des Job-Status:', error);
+      // Fehler nicht anzeigen, da Polling im Hintergrund läuft
+    }
+  };
+
+  // Job-Status manuell abfragen
+  const handleCheckStatus = async () => {
+    if (!jobId && !performance.billingData?.invoiceNumber) return;
+    
+    const idToCheck = jobId || performance.billingData?.invoiceNumber;
+    if (!idToCheck) return;
+    
+    setLoading(true);
+    
+    try {
+      await checkJobStatus(idToCheck);
+    } catch (error: any) {
+      setSnackbar({
+        open: true,
+        message: `Status-Abfrage fehlgeschlagen: ${error.message}`,
+        severity: 'error'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Bestätigungsdialog öffnen
+  const handleConfirmClick = () => {
+    setConfirmDialogOpen(true);
+  };
+
+  // Menu öffnen
+  const handleMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleMenuClose = () => {
+    setAnchorEl(null);
+  };
+
+  // Berechnung der Anzeigedaten
+  const route = getBillingRoute();
+  const copayAmount = Math.round(performance.totalPrice * 0.2);
+  const refundAmount = Math.round(performance.totalPrice * 0.8);
+  const patientAmount = performance.totalPrice - refundAmount;
+
+  // Bestätigungsdialog-Inhalt
+  const getConfirmationContent = () => {
+    switch (route) {
+      case 'KASSE':
+        return (
+          <Box>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Die Leistung wird direkt an die Krankenkasse gemeldet:
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Leistung:</strong> {performance.serviceDescription}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Betrag:</strong> {performance.totalPrice.toFixed(2)} €
+              </Typography>
+              <Typography variant="body2">
+                <strong>Selbstbehalt:</strong> {copayAmount.toFixed(2)} €
+              </Typography>
+              <Typography variant="body2">
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
+              </Typography>
+            </Box>
+          </Box>
+        );
+      
+      case 'PATIENT+KASSE_REFUND':
+        return (
+          <Box>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Wahlarztleistung wird abgerechnet:
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Leistung:</strong> {performance.serviceDescription}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Gesamtbetrag:</strong> {performance.totalPrice.toFixed(2)} €
+              </Typography>
+              <Typography variant="body2">
+                <strong>Rückerstattung:</strong> {refundAmount.toFixed(2)} €
+              </Typography>
+              <Typography variant="body2">
+                <strong>Patient zahlt:</strong> {patientAmount.toFixed(2)} €
+              </Typography>
+              <Typography variant="body2">
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
+              </Typography>
+            </Box>
+          </Box>
+        );
+      
+      case 'PATIENT+INSURANCE':
+        return (
+          <Box>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Rechnung wird erstellt und an die Versicherung eingereicht:
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Leistung:</strong> {performance.serviceDescription}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Betrag:</strong> {performance.totalPrice.toFixed(2)} €
+              </Typography>
+              <Typography variant="body2">
+                <strong>Versicherung:</strong> {performance.patientId?.insuranceProvider || 'Nicht angegeben'}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
+              </Typography>
+            </Box>
+          </Box>
+        );
+      
+      case 'PATIENT':
+        return (
+          <Box>
+            <Typography variant="body2" color="textSecondary" gutterBottom>
+              Honorarnote wird erstellt und an den Patienten gesendet:
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Leistung:</strong> {performance.serviceDescription}
+              </Typography>
+              <Typography variant="body2">
+                <strong>Betrag:</strong> {performance.totalPrice.toFixed(2)} €
+              </Typography>
+              <Typography variant="body2">
+                <strong>Patient:</strong> {performance.patientId 
+                  ? `${performance.patientId.firstName} ${performance.patientId.lastName}`
+                  : 'Unbekannter Patient'}
+              </Typography>
+            </Box>
+            <Box sx={{ mt: 2, p: 1.5, bgcolor: 'info.light', borderRadius: 1, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <Typography variant="body2" sx={{ flex: 1 }}>
+                <strong>Automatisch senden:</strong> Die Abrechnung wird automatisch verarbeitet. 
+                Sie erhalten eine Benachrichtigung, sobald die Verarbeitung abgeschlossen ist.
+              </Typography>
+            </Box>
+          </Box>
+        );
+      
+      default:
+        return <Typography>Leistung wird abgerechnet</Typography>;
+    }
+  };
+
+  // Button ist deaktiviert wenn bereits abgerechnet oder kein Patient zugeordnet
+  const isDisabled = performance.status !== 'recorded' || loading || !performance.patientId;
+  
+  // Tooltip-Text basierend auf dem Grund für die Deaktivierung
+  const getDisabledTooltip = () => {
+    if (loading) return 'Wird verarbeitet...';
+    if (!performance.patientId) return 'Leistung hat keinen zugeordneten Patienten';
+    if (performance.status !== 'recorded') return `Leistung bereits abgerechnet (Status: ${performance.status})`;
+    return getButtonLabel();
+  };
+
+  return (
+    <>
+      {compact ? (
+        <Tooltip title={getDisabledTooltip()}>
+          <span>
+            <IconButton
+              onClick={handleConfirmClick}
+              disabled={isDisabled}
+              color={getButtonColor() as any}
+              size="small"
+            >
+              {loading ? (
+                <CircularProgress size={20} />
+              ) : (
+                <ReceiptIcon />
+              )}
+            </IconButton>
+          </span>
+        </Tooltip>
+      ) : (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Tooltip title={isDisabled ? getDisabledTooltip() : ''}>
+            <span>
+              <Button
+                variant="contained"
+                color={getButtonColor() as any}
+                startIcon={loading ? <CircularProgress size={20} /> : <ReceiptIcon />}
+                onClick={handleConfirmClick}
+                disabled={isDisabled}
+                fullWidth={!compact}
+              >
+                {getButtonLabel()}
+              </Button>
+            </span>
+          </Tooltip>
+          
+          {performance.status !== 'recorded' && (
+            <>
+              {getStatusChip()}
+              
+              <IconButton
+                onClick={handleMenuOpen}
+                size="small"
+              >
+                <MoreVertIcon />
+              </IconButton>
+              
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleMenuClose}
+              >
+                <MenuItem onClick={handleCheckStatus}>
+                  <ListItemIcon>
+                    <RefreshIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Status prüfen</ListItemText>
+                </MenuItem>
+                
+                <MenuItem onClick={() => {/* TODO: Historie öffnen */}}>
+                  <ListItemIcon>
+                    <HistoryIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Abrechnungshistorie</ListItemText>
+                </MenuItem>
+              </Menu>
+            </>
+          )}
+        </Box>
+      )}
+
+      {/* Bestätigungsdialog */}
+      <Dialog
+        open={confirmDialogOpen}
+        onClose={() => setConfirmDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <ReceiptIcon color="primary" />
+            <Typography variant="h6">
+              {getButtonLabel()}
+            </Typography>
+          </Box>
+        </DialogTitle>
+        
+        <DialogContent>
+          {getConfirmationContent()}
+          
+        </DialogContent>
+        
+        <DialogActions>
+          <Button
+            onClick={() => setConfirmDialogOpen(false)}
+            disabled={loading}
+          >
+            Abbrechen
+          </Button>
+          <Button
+            onClick={handleOneClickBilling}
+            variant="contained"
+            color={getButtonColor() as any}
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
+          >
+            {loading ? 'Wird verarbeitet...' : 'Bestätigen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar für Benachrichtigungen */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </>
+  );
+};
+
+export default OneClickBillingButton;

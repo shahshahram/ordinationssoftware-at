@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Paper, IconButton, Tooltip, Typography } from '@mui/material';
+import { Box, Paper, IconButton, Tooltip, Typography, useTheme, useMediaQuery } from '@mui/material';
 import { Edit, Delete } from '@mui/icons-material';
 import { DashboardWidget } from '../../store/slices/dashboardWidgetsSlice';
 import StatisticWidget from './StatisticWidget';
@@ -29,6 +29,9 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
   isEditMode = false,
   onMessageClick
 }) => {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const renderWidget = () => {
     switch (widget.widgetType) {
       case 'statistic':
@@ -84,14 +87,17 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
     <Paper
       elevation={2}
       sx={{
-        height: '100%',
+        minHeight: '100%',
+        height: 'auto',
         width: '100%',
+        maxWidth: '100%',
         position: 'relative',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
-        borderRadius: 2,
+        borderRadius: { xs: 1, sm: 2 },
         transition: 'all 0.2s ease-in-out',
+        boxSizing: 'border-box',
         '&:hover': isEditMode ? {
           boxShadow: 6,
           transform: 'translateY(-2px)',
@@ -111,30 +117,45 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
           className="widget-actions"
           sx={{
             position: 'absolute',
-            top: 8,
-            right: 8,
+            top: { xs: 4, sm: 8 },
+            right: { xs: 4, sm: 8 },
             zIndex: 10,
-            opacity: 0,
+            opacity: isMobile ? 1 : 0,
             transition: 'opacity 0.2s',
             display: 'flex',
-            gap: 0.5,
+            gap: { xs: 0.5, sm: 0.5 },
             bgcolor: 'background.paper',
             borderRadius: 1,
-            p: 0.5,
+            p: { xs: 0.5, sm: 0.5 },
             boxShadow: 2
           }}
         >
           {onEdit && (
             <Tooltip title="Bearbeiten">
-              <IconButton size="small" onClick={() => onEdit(widget)}>
-                <Edit fontSize="small" />
+              <IconButton 
+                size="small" 
+                onClick={() => onEdit(widget)}
+                sx={{ 
+                  minWidth: { xs: '44px', sm: 'auto' },
+                  minHeight: { xs: '44px', sm: 'auto' }
+                }}
+              >
+                <Edit fontSize={isMobile ? 'medium' : 'small'} />
               </IconButton>
             </Tooltip>
           )}
           {onDelete && (
             <Tooltip title="Löschen">
-              <IconButton size="small" color="error" onClick={() => onDelete(widget)}>
-                <Delete fontSize="small" />
+              <IconButton 
+                size="small" 
+                color="error" 
+                onClick={() => onDelete(widget)}
+                sx={{ 
+                  minWidth: { xs: '44px', sm: 'auto' },
+                  minHeight: { xs: '44px', sm: 'auto' }
+                }}
+              >
+                <Delete fontSize={isMobile ? 'medium' : 'small'} />
               </IconButton>
             </Tooltip>
           )}

@@ -31,63 +31,70 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data }) => {
       );
     }
 
+    // Responsive Chart-Größen - verwende feste Zahlen für Charts
     const width = isMobile ? 300 : 400;
     const height = isMobile ? 200 : 250;
 
     switch (chartType) {
       case 'line':
         return (
-          <LineChart
-            width={width}
-            height={height}
-            series={[
-              {
-                data: chartData.map((d: { label: string; value: number }) => d.value),
-                label: widget.title,
-                color: theme.palette.primary.main,
-              },
-            ]}
-            xAxis={[{
-              scaleType: 'point',
-              data: chartData.map((d: { label: string; value: number }) => d.label),
-            }]}
-          />
+          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', overflow: 'auto' }}>
+            <LineChart
+              width={width}
+              height={height}
+              series={[
+                {
+                  data: chartData.map((d: { label: string; value: number }) => d.value),
+                  label: widget.title,
+                  color: theme.palette.primary.main,
+                },
+              ]}
+              xAxis={[{
+                scaleType: 'point',
+                data: chartData.map((d: { label: string; value: number }) => d.label),
+              }]}
+            />
+          </Box>
         );
       case 'bar':
         return (
-          <BarChart
-            width={width}
-            height={height}
-            series={[
-              {
-                data: chartData.map((d: { label: string; value: number }) => d.value),
-                label: widget.title,
-                color: theme.palette.primary.main,
-              },
-            ]}
-            xAxis={[{
-              scaleType: 'band',
-              data: chartData.map((d: { label: string; value: number }) => d.label),
-            }]}
-          />
+          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', overflow: 'auto' }}>
+            <BarChart
+              width={width}
+              height={height}
+              series={[
+                {
+                  data: chartData.map((d: { label: string; value: number }) => d.value),
+                  label: widget.title,
+                  color: theme.palette.primary.main,
+                },
+              ]}
+              xAxis={[{
+                scaleType: 'band',
+                data: chartData.map((d: { label: string; value: number }) => d.label),
+              }]}
+            />
+          </Box>
         );
       case 'pie':
         return (
-          <PieChart
-            width={width}
-            height={height}
-            series={[
-              {
-                data: chartData.map((d: { label: string; value: number }, index: number) => ({
-                  id: index,
-                  value: d.value,
-                  label: d.label,
-                })),
-                innerRadius: 30,
-                outerRadius: 100,
-              },
-            ]}
-          />
+          <Box sx={{ width: '100%', display: 'flex', justifyContent: 'center', overflow: 'auto' }}>
+            <PieChart
+              width={width}
+              height={height}
+              series={[
+                {
+                  data: chartData.map((d: { label: string; value: number }, index: number) => ({
+                    id: index,
+                    value: d.value,
+                    label: d.label,
+                  })),
+                  innerRadius: 30,
+                  outerRadius: 100,
+                },
+              ]}
+            />
+          </Box>
         );
       default:
         return null;
@@ -95,7 +102,13 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data }) => {
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 2, sm: 3 } }}>
+    <Box sx={{ 
+      minHeight: '100%',
+      height: 'auto',
+      display: 'flex', 
+      flexDirection: 'column', 
+      p: { xs: 1.5, sm: 3 } 
+    }}>
       <Typography 
         variant={isMobile ? 'subtitle1' : 'h6'} 
         gutterBottom 
@@ -103,7 +116,16 @@ const ChartWidget: React.FC<ChartWidgetProps> = ({ widget, data }) => {
       >
         {widget.title}
       </Typography>
-      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'auto' }}>
+      <Box 
+        sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          overflow: 'auto',
+          width: '100%',
+          minHeight: isMobile ? 200 : 250
+        }}
+      >
         {renderChart()}
       </Box>
     </Box>

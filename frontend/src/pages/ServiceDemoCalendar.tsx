@@ -34,6 +34,9 @@ import {
   Tooltip,
   Menu,
   useTheme,
+  useMediaQuery,
+  Drawer,
+  Fab,
 } from '@mui/material';
 import {
   Favorite,
@@ -65,6 +68,8 @@ import {
   Block,
   LockOpen,
   Merge,
+  Close,
+  FilterList,
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, endOfWeek, isSameDay, isSameMonth, eachDayOfInterval, parseISO, addMonths, subMonths, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -206,6 +211,8 @@ const ServiceDemoCalendar: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   
   // Redux State
   const { appointments, loading: appointmentsLoading } = useAppSelector((state) => state.appointments);
@@ -263,6 +270,8 @@ const ServiceDemoCalendar: React.FC = () => {
   const [selectedStaffForColumns, setSelectedStaffForColumns] = useState<string[]>(defaultSettings.selectedStaffForColumns); // Für Personenspalten-Auswahl
   const [useStaffColumns, setUseStaffColumns] = useState(defaultSettings.useStaffColumns); // Toggle zwischen alter und neuer Ansicht
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
   
   // TimeBlock State
   const [timeBlocks, setTimeBlocks] = useState<any[]>([]);
@@ -2148,106 +2157,196 @@ const ServiceDemoCalendar: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          px: 3,
-          py: 1.5,
+          px: { xs: 1, sm: 2, md: 3 },
+          py: { xs: 1, sm: 1.5 },
           bgcolor: 'background.paper',
           borderBottom: '1px solid',
           borderColor: 'divider',
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          gap: { xs: 1, sm: 0 }
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, flex: { xs: '1 1 100%', sm: 'none' } }}>
+          <Typography 
+            variant="h6" 
+            sx={{ 
+              fontWeight: 600,
+              fontSize: { xs: '1rem', sm: '1.25rem' }
+            }}
+          >
             Dienstkalender
           </Typography>
-          <Chip 
-            label={`Warteliste ${waitingListCount || 0}`} 
-            size="small" 
-            sx={{ 
-              bgcolor: 'error.main',
-              color: 'error.contrastText',
-              cursor: 'pointer',
-              '&:hover': {
-                bgcolor: 'error.dark',
-              }
-            }}
-            onClick={() => navigate('/waiting-list')}
-          />
+          {!isMobile && (
+            <Chip 
+              label={`Warteliste ${waitingListCount || 0}`} 
+              size="small" 
+              sx={{ 
+                bgcolor: 'error.main',
+                color: 'error.contrastText',
+                cursor: 'pointer',
+                '&:hover': {
+                  bgcolor: 'error.dark',
+                }
+              }}
+              onClick={() => navigate('/waiting-list')}
+            />
+          )}
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'center', maxWidth: 400 }}>
-          <TextField
-            placeholder="Patienten suchen"
-            size="small"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <Search fontSize="small" />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ flex: 1 }}
-          />
-        </Box>
-
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Button
-            variant="contained"
-            startIcon={<Add />}
-            size="small"
-            onClick={handleNewPatient}
-            sx={{ bgcolor: 'primary.main' }}
-          >
-            Neuer Patient
-          </Button>
-          <IconButton size="small">
-            <Wifi />
-          </IconButton>
-          <IconButton 
-            size="small"
-            onClick={() => setOpenTaskDialog(true)}
-            title="Aufgabe erstellen"
-          >
-            <CheckBox />
-          </IconButton>
-          <IconButton 
-            size="small"
-            onClick={() => navigate('/internal-messages')}
-            title="Interne Nachrichten"
-          >
-            <Mail />
-          </IconButton>
-          <IconButton size="small">
-            <Euro />
-          </IconButton>
-          <IconButton size="small">
-            <Help />
-          </IconButton>
-          <IconButton size="small">
-            <Build />
-          </IconButton>
-          <Box
-            sx={{
-              width: 32,
-              height: 32,
-              borderRadius: '50%',
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-            }}
-          >
-            MM
+        {!isMobile && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1, justifyContent: 'center', maxWidth: 400 }}>
+            <TextField
+              placeholder="Patienten suchen"
+              size="small"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ flex: 1 }}
+            />
           </Box>
-          <IconButton size="small">
-            <Fullscreen />
-          </IconButton>
+        )}
+
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 }, flexWrap: 'wrap' }}>
+          {isMobile ? (
+            <>
+              <IconButton 
+                size="small"
+                onClick={() => setOpenSearchDialog(true)}
+                sx={{ minWidth: '44px', minHeight: '44px' }}
+                title="Suche"
+              >
+                <Search />
+              </IconButton>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                size="small"
+                onClick={handleNewPatient}
+                sx={{ 
+                  bgcolor: 'primary.main',
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '44px', sm: 'auto' },
+                  px: { xs: 1, sm: 2 }
+                }}
+              >
+                {isMobile ? 'Neu' : 'Neuer Patient'}
+              </Button>
+              <IconButton 
+                size="small"
+                onClick={(e) => setMobileMenuAnchor(e.currentTarget)}
+                sx={{ minWidth: '44px', minHeight: '44px' }}
+              >
+                <MoreVert />
+              </IconButton>
+            </>
+          ) : (
+            <>
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                size="small"
+                onClick={handleNewPatient}
+                sx={{ bgcolor: 'primary.main' }}
+              >
+                Neuer Patient
+              </Button>
+              <IconButton size="small">
+                <Wifi />
+              </IconButton>
+              <IconButton 
+                size="small"
+                onClick={() => setOpenTaskDialog(true)}
+                title="Aufgabe erstellen"
+              >
+                <CheckBox />
+              </IconButton>
+              <IconButton 
+                size="small"
+                onClick={() => navigate('/internal-messages')}
+                title="Interne Nachrichten"
+              >
+                <Mail />
+              </IconButton>
+              <IconButton size="small">
+                <Euro />
+              </IconButton>
+              <IconButton size="small">
+                <Help />
+              </IconButton>
+              <IconButton size="small">
+                <Build />
+              </IconButton>
+              <Box
+                sx={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: '50%',
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                }}
+              >
+                MM
+              </Box>
+              <IconButton size="small">
+                <Fullscreen />
+              </IconButton>
+            </>
+          )}
         </Box>
       </Box>
+
+      {/* Mobile Menu */}
+      <Menu
+        anchorEl={mobileMenuAnchor}
+        open={Boolean(mobileMenuAnchor)}
+        onClose={() => setMobileMenuAnchor(null)}
+        PaperProps={{
+          sx: { minWidth: 200 }
+        }}
+      >
+        <MenuItem onClick={() => { navigate('/waiting-list'); setMobileMenuAnchor(null); }}>
+          <ListItemIcon>
+            <Schedule fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary={`Warteliste (${waitingListCount || 0})`} />
+        </MenuItem>
+        <MenuItem onClick={() => { setOpenTaskDialog(true); setMobileMenuAnchor(null); }}>
+          <ListItemIcon>
+            <CheckBox fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Aufgabe erstellen" />
+        </MenuItem>
+        <MenuItem onClick={() => { navigate('/internal-messages'); setMobileMenuAnchor(null); }}>
+          <ListItemIcon>
+            <Mail fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Interne Nachrichten" />
+        </MenuItem>
+        <Divider />
+        <MenuItem onClick={() => setMobileMenuAnchor(null)}>
+          <ListItemIcon>
+            <Wifi fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Status" />
+        </MenuItem>
+        <MenuItem onClick={() => setMobileMenuAnchor(null)}>
+          <ListItemIcon>
+            <Help fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Hilfe" />
+        </MenuItem>
+      </Menu>
 
       {/* Calendar Controls */}
       <Box
@@ -2255,11 +2354,14 @@ const ServiceDemoCalendar: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          px: 3,
-          py: 1.5,
+          px: { xs: 1, sm: 2, md: 3 },
+          py: { xs: 0.75, sm: 1.5 },
           bgcolor: 'background.paper',
           borderBottom: '1px solid',
           borderColor: 'divider',
+          flexWrap: { xs: 'wrap', sm: 'nowrap' },
+          gap: { xs: 0.5, sm: 0 },
+          minHeight: { xs: 'auto', sm: 'auto' }
         }}
       >
         {viewMode === 'month' ? (
@@ -2372,15 +2474,32 @@ const ServiceDemoCalendar: React.FC = () => {
         </Box>
       </Box>
 
+      {/* Mobile FAB for Sidebar */}
+      {isMobile && (
+        <Fab
+          color="primary"
+          aria-label="Filter & Einstellungen"
+          sx={{
+            position: 'fixed',
+            bottom: 16,
+            left: 16,
+            zIndex: 1000
+          }}
+          onClick={() => setSidebarOpen(true)}
+        >
+          <FilterList />
+        </Fab>
+      )}
+
       {/* Main Content */}
       <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Left Sidebar */}
+        {/* Left Sidebar - Desktop */}
         <Box
           sx={{
-            width: 280,
+            width: { xs: 0, sm: 280 },
             bgcolor: theme.palette.mode === 'dark' ? 'background.paper' : '#1e3a5f',
             color: theme.palette.mode === 'dark' ? 'text.primary' : 'white',
-            display: 'flex',
+            display: { xs: 'none', sm: 'flex' },
             flexDirection: 'column',
             overflow: 'auto',
             borderRight: '1px solid',
@@ -2661,13 +2780,152 @@ const ServiceDemoCalendar: React.FC = () => {
           </Box>
         </Box>
 
+        {/* Mobile Sidebar Drawer */}
+        <Drawer
+          anchor="left"
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          PaperProps={{
+            sx: {
+              width: 280,
+              bgcolor: theme.palette.mode === 'dark' ? 'background.paper' : '#1e3a5f',
+              color: theme.palette.mode === 'dark' ? 'text.primary' : 'white',
+            }
+          }}
+        >
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Filter & Einstellungen
+              </Typography>
+              <IconButton 
+                onClick={() => setSidebarOpen(false)}
+                sx={{ color: 'inherit' }}
+                size="small"
+              >
+                <Close />
+              </IconButton>
+            </Box>
+            
+            {/* Kalender Section */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+                Kalender
+              </Typography>
+              {locations.map((location) => (
+                <FormControlLabel
+                  key={location._id}
+                  control={
+                    <Checkbox
+                      checked={selectedLocations.includes(location._id)}
+                      onChange={() => handleLocationToggle(location._id)}
+                      sx={{
+                        color: location.color_hex || '#ffc107',
+                        '&.Mui-checked': { color: location.color_hex || '#ffc107' },
+                      }}
+                    />
+                  }
+                  label={location.name}
+                  sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', mb: 1, display: 'block' }}
+                />
+              ))}
+            </Box>
+
+            <Divider sx={{ borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(255,255,255,0.2)', mb: 3 }} />
+
+            {/* EnhancedCalendar Filter */}
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
+                Filter
+              </Typography>
+              
+              <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                <InputLabel sx={{ color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)' }}>Personal</InputLabel>
+                <Select
+                  value={medicalFilter}
+                  onChange={(e) => setMedicalFilter(e.target.value as 'all' | 'medical' | 'non-medical')}
+                  sx={{ 
+                    color: theme.palette.mode === 'dark' ? 'text.primary' : 'white',
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.mode === 'dark' ? 'divider' : 'rgba(255,255,255,0.3)' },
+                    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: theme.palette.mode === 'dark' ? 'primary.main' : 'rgba(255,255,255,0.5)' },
+                    '& .MuiSvgIcon-root': { color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)' }
+                  }}
+                >
+                  <MenuItem value="all">Alle</MenuItem>
+                  <MenuItem value="medical">Medizinisch</MenuItem>
+                  <MenuItem value="non-medical">Nicht-medizinisch</MenuItem>
+                </Select>
+              </FormControl>
+
+              <Box>
+                <Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.secondary' : 'rgba(255,255,255,0.7)', mb: 1, display: 'block' }}>
+                  Anzeigeoptionen
+                </Typography>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showLocationHours}
+                      onChange={(e) => setShowLocationHours(e.target.checked)}
+                      size="small"
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': { color: '#ffc107' },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#ffc107' }
+                      }}
+                    />
+                  }
+                  label={<Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', fontSize: '0.75rem' }}>Öffnungszeiten</Typography>}
+                  sx={{ mb: 0.5, display: 'block' }}
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showStaffHours}
+                      onChange={(e) => setShowStaffHours(e.target.checked)}
+                      size="small"
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': { color: '#ffc107' },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#ffc107' }
+                      }}
+                    />
+                  }
+                  label={<Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', fontSize: '0.75rem' }}>Arbeitszeiten</Typography>}
+                  sx={{ mb: 0.5, display: 'block' }}
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={showBreaks}
+                      onChange={(e) => setShowBreaks(e.target.checked)}
+                      size="small"
+                      sx={{
+                        '& .MuiSwitch-switchBase.Mui-checked': { color: '#ffc107' },
+                        '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#ffc107' }
+                      }}
+                    />
+                  }
+                  label={<Typography variant="caption" sx={{ color: theme.palette.mode === 'dark' ? 'text.primary' : 'white', fontSize: '0.75rem' }}>Pausen</Typography>}
+                  sx={{ display: 'block' }}
+                />
+              </Box>
+            </Box>
+          </Box>
+        </Drawer>
+
         {/* Main Calendar Grid */}
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'auto', bgcolor: 'background.default' }}>
           {/* Day Headers */}
           {viewMode === 'month' ? (
             // Monatsansicht: Einfache Header
-          <Box sx={{ display: 'flex', borderBottom: '2px solid', borderColor: 'divider' }}>
-            <Box sx={{ width: 80, p: 1 }} /> {/* Time column spacer */}
+          <Box sx={{ 
+            display: 'flex', 
+            borderBottom: '2px solid', 
+            borderColor: 'divider',
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            bgcolor: 'background.paper'
+          }}>
+            {!isMobile && <Box sx={{ width: 80, p: 1, flexShrink: 0 }} />} {/* Time column spacer - nur auf Desktop */}
               {Array.from({ length: 7 }, (_, i) => {
                 const day = addDays(startOfWeek(currentDate, { locale: de, weekStartsOn: 1 }), i);
                 return (
@@ -2675,14 +2933,26 @@ const ServiceDemoCalendar: React.FC = () => {
                     key={i}
                     sx={{
                       flex: 1,
-                      p: 1,
+                      minWidth: 0,
+                      p: { xs: 0.5, sm: 1 },
                       textAlign: 'center',
                       borderLeft: '1px solid',
                       borderColor: 'divider',
                       bgcolor: 'action.hover',
+                      flexShrink: 0
                     }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                    <Typography 
+                      variant="body2" 
+                      sx={{ 
+                        fontWeight: 600, 
+                        color: 'text.primary',
+                        fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
                       {format(day, 'EEE', { locale: de })}
                     </Typography>
                   </Box>
@@ -2826,31 +3096,40 @@ const ServiceDemoCalendar: React.FC = () => {
 
           {/* Time Grid */}
           <Box sx={{ display: 'flex', flex: 1, position: 'relative' }}>
-            {/* Time Scale */}
-            <Box sx={{ width: 80, borderRight: '1px solid', borderColor: 'divider' }}>
-              {timeSlots.map((time) => (
-                <Box
-                  key={time}
-                  sx={{
-                    height: 40,
-                    display: 'flex',
-                    alignItems: 'flex-start',
-                    justifyContent: 'flex-end',
-                    pr: 1,
-                    pt: 0.5,
-                  }}
-                >
-                  <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
-                    {time}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
+            {/* Time Scale - nur auf Desktop */}
+            {!isMobile && (
+              <Box sx={{ width: 80, borderRight: '1px solid', borderColor: 'divider' }}>
+                {timeSlots.map((time) => (
+                  <Box
+                    key={time}
+                    sx={{
+                      height: 40,
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      justifyContent: 'flex-end',
+                      pr: 1,
+                      pt: 0.5,
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                      {time}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
 
             {/* Calendar Columns */}
             {viewMode === 'month' ? (
               // Monatsansicht: Grid-Layout ohne Zeitslots
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', flex: 1, overflow: 'auto' }}>
+              <Box sx={{ 
+                display: 'grid', 
+                gridTemplateColumns: { xs: 'repeat(7, 1fr)', sm: 'repeat(7, 1fr)' }, 
+                flex: 1, 
+                overflow: 'auto',
+                gap: { xs: 0, sm: 0 },
+                width: '100%'
+              }}>
                 {displayedDays.map((day) => {
                   const dayAppointments = getAppointmentsForDay(day);
                   const isCurrentMonth = isSameMonth(day, currentDate);
@@ -2874,11 +3153,11 @@ const ServiceDemoCalendar: React.FC = () => {
                         }
                       }}
                       sx={{
-                        minHeight: 100,
+                        minHeight: { xs: 80, sm: 100 },
                         borderLeft: '1px solid',
                         borderBottom: '1px solid',
                         borderColor: 'divider',
-                        p: 0.5,
+                        p: { xs: 0.25, sm: 0.5 },
                         bgcolor: isCurrentMonth ? 'background.paper' : 'action.hover',
                         cursor: 'pointer',
                         position: 'relative',

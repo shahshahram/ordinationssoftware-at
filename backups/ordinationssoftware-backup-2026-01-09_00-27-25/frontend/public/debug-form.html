@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Form Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .debug {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 20px;
+        }
+        .debug h3 {
+            margin-top: 0;
+        }
+        .debug pre {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Debug Form Test</h1>
+    <p>Diese Seite testet die Autocomplete-Funktionalität für Allergien und Medikamente.</p>
+    
+    <form id="testForm">
+        <div class="form-group">
+            <label for="allergies">Allergien (kommagetrennt):</label>
+            <input type="text" id="allergies" placeholder="z.B. Pollen, Nüsse, Milch">
+        </div>
+        
+        <div class="form-group">
+            <label for="medications">Aktuelle Medikamente (kommagetrennt):</label>
+            <input type="text" id="medications" placeholder="z.B. Aspirin, Ibuprofen, Paracetamol">
+        </div>
+        
+        <div class="form-group">
+            <label for="conditions">Vorerkrankungen (kommagetrennt):</label>
+            <input type="text" id="conditions" placeholder="z.B. Diabetes, Bluthochdruck, Asthma">
+        </div>
+        
+        <button type="button" onclick="testFormData()">Formular testen</button>
+        <button type="button" onclick="clearForm()">Formular leeren</button>
+    </form>
+    
+    <div class="debug">
+        <h3>Debug Information</h3>
+        <div id="debugOutput">
+            <p>Klicken Sie auf "Formular testen", um die Daten zu sehen.</p>
+        </div>
+    </div>
+
+    <script>
+        function testFormData() {
+            const allergies = document.getElementById('allergies').value
+                .split(',')
+                .map(item => item.trim())
+                .filter(item => item.length > 0);
+            
+            const medications = document.getElementById('medications').value
+                .split(',')
+                .map(item => item.trim())
+                .filter(item => item.length > 0);
+            
+            const conditions = document.getElementById('conditions').value
+                .split(',')
+                .map(item => item.trim())
+                .filter(item => item.length > 0);
+            
+            const formData = {
+                allergies: allergies,
+                currentMedications: medications,
+                preExistingConditions: conditions
+            };
+            
+            console.log('Test Form Data:', formData);
+            
+            document.getElementById('debugOutput').innerHTML = `
+                <h4>Formular-Daten:</h4>
+                <pre>${JSON.stringify(formData, null, 2)}</pre>
+                
+                <h4>Arrays:</h4>
+                <p><strong>Allergien:</strong> ${allergies.length} Einträge - ${JSON.stringify(allergies)}</p>
+                <p><strong>Medikamente:</strong> ${medications.length} Einträge - ${JSON.stringify(medications)}</p>
+                <p><strong>Vorerkrankungen:</strong> ${conditions.length} Einträge - ${JSON.stringify(conditions)}</p>
+                
+                <h4>API-Request Body (simuliert):</h4>
+                <pre>${JSON.stringify({
+                    ...formData,
+                    firstName: "Test",
+                    lastName: "Patient",
+                    dateOfBirth: "1990-01-01",
+                    gender: "m",
+                    socialSecurityNumber: "1234567890",
+                    insuranceProvider: "ÖGK (Österreichische Gesundheitskasse)",
+                    phone: "1234567890",
+                    address: {
+                        street: "Teststraße 1",
+                        zipCode: "1234",
+                        city: "Wien",
+                        country: "Österreich"
+                    },
+                    dataProtectionConsent: true
+                }, null, 2)}</pre>
+            `;
+        }
+        
+        function clearForm() {
+            document.getElementById('allergies').value = '';
+            document.getElementById('medications').value = '';
+            document.getElementById('conditions').value = '';
+            document.getElementById('debugOutput').innerHTML = '<p>Formular geleert.</p>';
+        }
+        
+        // Test mit Beispieldaten
+        document.getElementById('allergies').value = 'Pollen, Nüsse, Milch';
+        document.getElementById('medications').value = 'Aspirin, Ibuprofen, Paracetamol';
+        document.getElementById('conditions').value = 'Diabetes, Bluthochdruck, Asthma';
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+

@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selbst-Check-in</title>
+    <style>
+        /* Basic Reset & Body Styling */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        /* Container & Card Styling */
+        .container {
+            background-color: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        h1 {
+            color: #0056b3;
+            font-size: 2.2em;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+        
+        p {
+            font-size: 1.1em;
+            color: #555;
+            margin-bottom: 30px;
+        }
+        
+        /* Progress Bar */
+        .progress-container {
+            margin-bottom: 30px;
+        }
+        
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background-color: #0056b3;
+            transition: width 0.3s ease;
+        }
+        
+        .progress-text {
+            margin-top: 10px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        
+        /* Step Navigation */
+        .step-nav {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 30px;
+        }
+        
+        .step {
+            flex: 1;
+            padding: 10px;
+            margin: 0 5px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            font-size: 0.9em;
+            font-weight: 500;
+            color: #666;
+            transition: all 0.3s ease;
+        }
+        
+        .step.active {
+            background-color: #0056b3;
+            color: white;
+        }
+        
+        .step.completed {
+            background-color: #28a745;
+            color: white;
+        }
+        
+        /* Form Styling */
+        .form-step {
+            display: none;
+            text-align: left;
+        }
+        
+        .form-step.active {
+            display: block;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: #444;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            color: #333;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: #007bff;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+        }
+        
+        .form-group input[type="date"] {
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            appearance: none;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .form-row-4 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 15px;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-top: 5px;
+        }
+        
+        .checkbox-group label {
+            margin-bottom: 0;
+            font-weight: normal;
+        }
+        
+        .required {
+            color: #dc3545;
+        }
+        
+        /* Button Styling */
+        .button-group {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        
+        .button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 500;
+            transition: background-color 0.3s ease;
+        }
+        
+        .button:hover {
+            background-color: #0056b3;
+        }
+        
+        .button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .button-secondary {
+            background-color: #6c757d;
+        }
+        
+        .button-secondary:hover {
+            background-color: #545b62;
+        }
+        
+        .submit-button {
+            background-color: #28a745;
+            font-size: 1.1em;
+            padding: 15px 30px;
+        }
+        
+        .submit-button:hover {
+            background-color: #218838;
+        }
+        
+        /* Alert Styling */
+        .alert {
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            font-weight: 500;
+        }
+        
+        .alert-info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        .alert-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        /* Loading Spinner */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* Success Page */
+        .success-page {
+            text-align: center;
+        }
+        
+        .success-icon {
+            font-size: 4em;
+            color: #28a745;
+            margin-bottom: 20px;
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+                margin: 10px;
+            }
+            
+            .form-row,
+            .form-row-3,
+            .form-row-4 {
+                grid-template-columns: 1fr;
+            }
+            
+            .step-nav {
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .step {
+                margin: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Loading State -->
+        <div id="loadingState" class="text-center">
+            <div class="loading"></div>
+            <p>Check-in Session wird validiert...</p>
+        </div>
+
+        <!-- Error State -->
+        <div id="errorState" style="display: none;">
+            <div class="alert alert-error">
+                <h3>Ungültiger oder abgelaufener Check-in Link</h3>
+                <p id="errorMessage"></p>
+                <p>Bitte wenden Sie sich an das Praxispersonal für Unterstützung.</p>
+            </div>
+        </div>
+
+        <!-- Success State -->
+        <div id="successState" style="display: none;" class="success-page">
+            <div class="success-icon">✓</div>
+            <h2>Check-in erfolgreich!</h2>
+            <p>Vielen Dank für Ihre Angaben. Sie können das Tablet nun an das Praxispersonal zurückgeben.</p>
+            <div id="patientInfo" style="margin-top: 20px; font-size: 0.9em; color: #666;"></div>
+        </div>
+
+        <!-- Form State -->
+        <div id="formState" style="display: none;">
+            <h1>Willkommen zum Selbst-Check-in</h1>
+            <p>Bitte füllen Sie das folgende Formular aus, um Ihre Daten zu aktualisieren oder sich neu zu registrieren.</p>
+            
+            <!-- Progress Bar -->
+            <div class="progress-container">
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-text" id="progressText">Schritt 1 von 6</div>
+            </div>
+            
+            <!-- Step Navigation -->
+            <div class="step-nav">
+                <div class="step" id="step1">Persönliche Daten</div>
+                <div class="step" id="step2">Kontakt & Adresse</div>
+                <div class="step" id="step3">Medizinische Infos</div>
+                <div class="step" id="step4">Besuchsgrund</div>
+                <div class="step" id="step5">Einverständnisse</div>
+                <div class="step" id="step6">Bestätigung</div>
+            </div>
+            
+            <form id="checkinForm">
+                <!-- Step 1: Persönliche Daten -->
+                <div class="form-step active" id="formStep1">
+                    <h3>Persönliche Daten</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="firstName">Vorname <span class="required">*</span></label>
+                            <input type="text" id="firstName" name="firstName" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="lastName">Nachname <span class="required">*</span></label>
+                            <input type="text" id="lastName" name="lastName" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="dateOfBirth">Geburtsdatum <span class="required">*</span></label>
+                            <input type="date" id="dateOfBirth" name="dateOfBirth" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="gender">Geschlecht <span class="required">*</span></label>
+                            <select id="gender" name="gender" required>
+                                <option value="m">Männlich</option>
+                                <option value="w">Weiblich</option>
+                                <option value="d">Divers</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="socialSecurityNumber">Sozialversicherungsnummer</label>
+                            <input type="text" id="socialSecurityNumber" name="socialSecurityNumber" 
+                                   placeholder="1234567890" maxlength="10">
+                        </div>
+                        <div class="form-group">
+                            <label for="insuranceProvider">Versicherungsanstalt</label>
+                            <select id="insuranceProvider" name="insuranceProvider">
+                                <option value="">Bitte wählen...</option>
+                                <option value="ÖGK (Österreichische Gesundheitskasse)">ÖGK (Österreichische Gesundheitskasse)</option>
+                                <option value="BVAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)">BVAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)</option>
+                                <option value="SVS (Sozialversicherung der Selbständigen)">SVS (Sozialversicherung der Selbständigen)</option>
+                                <option value="KFA (Krankenfürsorgeanstalt der Bediensteten der Stadt Wien)">KFA (Krankenfürsorgeanstalt der Bediensteten der Stadt Wien)</option>
+                                <option value="VAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)">VAEB (Versicherungsanstalt für Eisenbahnen und Bergbau)</option>
+                                <option value="BVA (Versicherungsanstalt öffentlich Bediensteter)">BVA (Versicherungsanstalt öffentlich Bediensteter)</option>
+                                <option value="PVA (Pensionsversicherungsanstalt)">PVA (Pensionsversicherungsanstalt)</option>
+                                <option value="AUVA (Allgemeine Unfallversicherungsanstalt)">AUVA (Allgemeine Unfallversicherungsanstalt)</option>
+                                <option value="GKK (Gebietskrankenkasse)">GKK (Gebietskrankenkasse)</option>
+                                <option value="VA (Versicherungsanstalt)">VA (Versicherungsanstalt)</option>
+                                <option value="Privatversicherung">Privatversicherung</option>
+                                <option value="Selbstzahler">Selbstzahler</option>
+                                <option value="Andere">Andere</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Kontakt & Adresse -->
+                <div class="form-step" id="formStep2">
+                    <h3>Kontakt & Adresse</h3>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="phone">Telefonnummer <span class="required">*</span></label>
+                            <input type="tel" id="phone" name="phone" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="email">E-Mail</label>
+                            <input type="email" id="email" name="email">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Adresse <span class="required">*</span></label>
+                        <div class="form-row-4">
+                            <input type="text" id="street" name="street" placeholder="Straße und Hausnummer" required>
+                            <input type="text" id="zipCode" name="zipCode" placeholder="PLZ" maxlength="4" required>
+                            <input type="text" id="city" name="city" placeholder="Ort" required>
+                            <input type="text" id="country" name="country" value="Österreich" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="emergencyContactName">Notfallkontakt (Name)</label>
+                            <input type="text" id="emergencyContactName" name="emergencyContactName">
+                        </div>
+                        <div class="form-group">
+                            <label for="emergencyContactPhone">Notfallkontakt (Telefon)</label>
+                            <input type="tel" id="emergencyContactPhone" name="emergencyContactPhone">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 3: Medizinische Informationen -->
+                <div class="form-step" id="formStep3">
+                    <h3>Medizinische Informationen (optional)</h3>
+                    <div class="alert alert-info">
+                        Diese Informationen helfen uns bei der besseren medizinischen Versorgung. 
+                        Sie können diese Felder auch leer lassen.
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="preExistingConditions">Vorerkrankungen</label>
+                        <textarea id="preExistingConditions" name="preExistingConditions" rows="3" 
+                                  placeholder="z.B. Diabetes mellitus, Hypertonie, Herzerkrankungen..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="currentMedications">Aktuelle Medikamente</label>
+                        <textarea id="currentMedications" name="currentMedications" rows="3" 
+                                  placeholder="z.B. Aspirin 100mg täglich, Metformin 500mg 2x täglich..."></textarea>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="allergies">Allergien</label>
+                        <textarea id="allergies" name="allergies" rows="2" 
+                                  placeholder="z.B. Penicillin, Nüsse, Pollen, Hausstaubmilben..."></textarea>
+                        <small style="color: #666; font-size: 0.9em;">Trennen Sie mehrere Allergien mit Kommas</small>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="bloodType">Blutgruppe</label>
+                            <select id="bloodType" name="bloodType">
+                                <option value="">Bitte wählen...</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                                <option value="0+">0+</option>
+                                <option value="0-">0-</option>
+                                <option value="Unbekannt">Unbekannt</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="isPregnant">Schwanger</label>
+                            <select id="isPregnant" name="isPregnant">
+                                <option value="false">Nein</option>
+                                <option value="true">Ja</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 4: Besuchsgrund -->
+                <div class="form-step" id="formStep4">
+                    <h3>Besuchsgrund</h3>
+                    <div class="form-group">
+                        <label for="referralSource">Zuweisung durch</label>
+                        <select id="referralSource" name="referralSource">
+                            <option value="self">Selbstzuweiser</option>
+                            <option value="physician">Hausarzt</option>
+                            <option value="hospital">Krankenhaus</option>
+                            <option value="specialist">Facharzt</option>
+                            <option value="other">Andere</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="visitReason">Grund des Besuchs <span class="required">*</span></label>
+                        <textarea id="visitReason" name="visitReason" rows="4" 
+                                  placeholder="Bitte beschreiben Sie Ihr Hauptanliegen und die Beschwerden..." required></textarea>
+                    </div>
+                </div>
+
+                <!-- Step 5: Einverständniserklärungen -->
+                <div class="form-step" id="formStep5">
+                    <h3>Einverständniserklärungen</h3>
+                    <div class="alert alert-warning">
+                        Diese Einverständniserklärungen sind für die ordnungsgemäße Behandlung erforderlich.
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="dataProtectionConsent" name="dataProtectionConsent" required>
+                        <label for="dataProtectionConsent">
+                            <strong>Datenschutz-Einverständnis (DSGVO) *</strong><br>
+                            <small>Ich stimme der Verarbeitung meiner personenbezogenen Daten gemäß der 
+                            Datenschutz-Grundverordnung (DSGVO) zu. Meine Daten werden ausschließlich 
+                            für medizinische Zwecke und die ordnungsgemäße Abrechnung verwendet.</small>
+                        </label>
+                    </div>
+                    
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="electronicCommunicationConsent" name="electronicCommunicationConsent">
+                        <label for="electronicCommunicationConsent">
+                            <strong>Elektronische Kommunikation</strong><br>
+                            <small>Ich stimme zu, dass mir Termine, Befunde und andere medizinische 
+                            Informationen per E-Mail zugesendet werden dürfen.</small>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Step 6: Bestätigung -->
+                <div class="form-step" id="formStep6">
+                    <h3>Bestätigung</h3>
+                    <div class="alert alert-info">
+                        Bitte überprüfen Sie Ihre Angaben vor dem Absenden.
+                    </div>
+                    <div id="confirmationSummary"></div>
+                </div>
+
+                <!-- Navigation Buttons -->
+                <div class="button-group">
+                    <button type="button" id="prevButton" class="button button-secondary" style="display: none;">Zurück</button>
+                    <button type="button" id="nextButton" class="button">Weiter</button>
+                    <button type="submit" id="submitButton" class="button submit-button" style="display: none;">Daten absenden</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let currentStep = 1;
+        const totalSteps = 6;
+        let checkInToken = null;
+        let formData = {};
+
+        // Initialize the form
+        function init() {
+            // Get token from URL
+            const urlParams = new URLSearchParams(window.location.search);
+            checkInToken = urlParams.get('token');
+            
+            if (!checkInToken) {
+                showError('Kein Check-in Token in der URL gefunden.');
+                return;
+            }
+            
+            // Validate token
+            validateToken();
+        }
+
+        // Validate check-in token
+        async function validateToken() {
+            try {
+                const response = await fetch(`http://192.168.178.163:5001/api/checkin/validate/${checkInToken}`, {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showForm();
+                } else {
+                    showError(data.message || 'Token ist ungültig');
+                }
+            } catch (error) {
+                console.error('Error validating token:', error);
+                showError('Fehler beim Validieren des Tokens');
+            }
+        }
+
+        // Show form
+        function showForm() {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('formState').style.display = 'block';
+            updateProgress();
+        }
+
+        // Show error
+        function showError(message) {
+            document.getElementById('loadingState').style.display = 'none';
+            document.getElementById('errorState').style.display = 'block';
+            document.getElementById('errorMessage').textContent = message;
+        }
+
+        // Show success
+        function showSuccess(patientInfo) {
+            document.getElementById('formState').style.display = 'none';
+            document.getElementById('successState').style.display = 'block';
+            
+            if (patientInfo) {
+                const infoDiv = document.getElementById('patientInfo');
+                infoDiv.innerHTML = `
+                    <p>Patient ID: ${patientInfo.patientId}</p>
+                    <p>${patientInfo.isNewPatient ? 'Neu registriert' : 'Daten aktualisiert'}</p>
+                    <p style="color: #ff6b35; font-weight: bold; margin-top: 20px;">
+                        ⏰ Diese Seite wird in 30 Sekunden automatisch geschlossen.
+                    </p>
+                `;
+            }
+            
+            // Auto-close after 30 seconds
+            setTimeout(() => {
+                // Clear the page content and show a final message
+                document.body.innerHTML = `
+                    <div style="display: flex; justify-content: center; align-items: center; min-height: 100vh; background-color: #f5f5f5; font-family: Arial, sans-serif;">
+                        <div style="text-align: center; background: white; padding: 40px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.1);">
+                            <div style="font-size: 4em; color: #28a745; margin-bottom: 20px;">✓</div>
+                            <h2 style="color: #28a745; margin-bottom: 15px;">Check-in abgeschlossen!</h2>
+                            <p style="color: #666; font-size: 1.1em; margin-bottom: 20px;">
+                                Vielen Dank! Das Tablet kann nun an das Praxispersonal zurückgegeben werden.
+                            </p>
+                            <p style="color: #999; font-size: 0.9em;">
+                                Die Verbindung wurde automatisch getrennt.
+                            </p>
+                        </div>
+                    </div>
+                `;
+            }, 30000);
+        }
+
+        // Update progress bar
+        function updateProgress() {
+            const progress = (currentStep / totalSteps) * 100;
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = `Schritt ${currentStep} von ${totalSteps}`;
+            
+            // Update step navigation
+            for (let i = 1; i <= totalSteps; i++) {
+                const step = document.getElementById(`step${i}`);
+                if (i < currentStep) {
+                    step.className = 'step completed';
+                } else if (i === currentStep) {
+                    step.className = 'step active';
+                } else {
+                    step.className = 'step';
+                }
+            }
+        }
+
+        // Show step
+        function showStep(step) {
+            // Hide all steps
+            for (let i = 1; i <= totalSteps; i++) {
+                document.getElementById(`formStep${i}`).classList.remove('active');
+            }
+            
+            // Show current step
+            document.getElementById(`formStep${step}`).classList.add('active');
+            
+            // Update buttons
+            const prevButton = document.getElementById('prevButton');
+            const nextButton = document.getElementById('nextButton');
+            const submitButton = document.getElementById('submitButton');
+            
+            if (step === 1) {
+                prevButton.style.display = 'none';
+            } else {
+                prevButton.style.display = 'inline-block';
+            }
+            
+            if (step === totalSteps) {
+                nextButton.style.display = 'none';
+                submitButton.style.display = 'inline-block';
+                updateConfirmationSummary();
+            } else {
+                nextButton.style.display = 'inline-block';
+                submitButton.style.display = 'none';
+            }
+        }
+
+        // Update confirmation summary
+        function updateConfirmationSummary() {
+            const summary = document.getElementById('confirmationSummary');
+            const data = getFormData();
+            
+            summary.innerHTML = `
+                <div style="text-align: left; background: #f8f9fa; padding: 20px; border-radius: 8px;">
+                    <h4>Persönliche Daten:</h4>
+                    <p><strong>Name:</strong> ${data.firstName} ${data.lastName}</p>
+                    <p><strong>Geburtsdatum:</strong> ${data.dateOfBirth}</p>
+                    <p><strong>Geschlecht:</strong> ${data.gender === 'm' ? 'Männlich' : data.gender === 'w' ? 'Weiblich' : 'Divers'}</p>
+                    <p><strong>Telefon:</strong> ${data.phone}</p>
+                    <p><strong>E-Mail:</strong> ${data.email || 'Nicht angegeben'}</p>
+                    <p><strong>Adresse:</strong> ${data.street}, ${data.zipCode} ${data.city}, ${data.country}</p>
+                    <p><strong>Besuchsgrund:</strong> ${data.visitReason}</p>
+                </div>
+            `;
+        }
+
+        // Get form data
+        function getFormData() {
+            const form = document.getElementById('checkinForm');
+            const formData = new FormData(form);
+            const data = {};
+            
+            for (let [key, value] of formData.entries()) {
+                data[key] = value;
+            }
+            
+            // Add address object
+            data.address = {
+                street: data.street,
+                zipCode: data.zipCode,
+                city: data.city,
+                country: data.country
+            };
+            
+            // Add emergency contact object
+            data.emergencyContact = {
+                name: data.emergencyContactName,
+                phone: data.emergencyContactPhone
+            };
+            
+            // Process medications and allergies
+            if (data.currentMedications) {
+                data.currentMedications = data.currentMedications.split('\n').map(line => {
+                    const parts = line.trim().split(' ');
+                    return {
+                        name: parts[0] || '',
+                        dosage: parts[1] || '',
+                        frequency: parts.slice(2).join(' ') || ''
+                    };
+                }).filter(med => med.name);
+            }
+            
+            if (data.allergies) {
+                data.allergies = data.allergies.split(',').map(item => ({
+                    type: 'other',
+                    description: item.trim(),
+                    severity: 'moderate'
+                })).filter(allergy => allergy.description);
+            }
+            
+            if (data.preExistingConditions) {
+                data.preExistingConditions = data.preExistingConditions.split(',').map(item => item.trim()).filter(item => item);
+            }
+            
+            // Convert checkboxes
+            data.dataProtectionConsent = document.getElementById('dataProtectionConsent').checked;
+            data.electronicCommunicationConsent = document.getElementById('electronicCommunicationConsent').checked;
+            data.isPregnant = data.isPregnant === 'true';
+            
+            return data;
+        }
+
+        // Validate current step
+        function validateStep(step) {
+            switch (step) {
+                case 1:
+                    return document.getElementById('firstName').value &&
+                           document.getElementById('lastName').value &&
+                           document.getElementById('dateOfBirth').value &&
+                           document.getElementById('gender').value;
+                case 2:
+                    return document.getElementById('phone').value &&
+                           document.getElementById('street').value &&
+                           document.getElementById('zipCode').value &&
+                           document.getElementById('city').value;
+                case 3:
+                    return true; // Optional step
+                case 4:
+                    return document.getElementById('visitReason').value;
+                case 5:
+                    return document.getElementById('dataProtectionConsent').checked;
+                case 6:
+                    return true; // Confirmation step
+                default:
+                    return false;
+            }
+        }
+
+        // Next step
+        function nextStep() {
+            if (validateStep(currentStep)) {
+                if (currentStep < totalSteps) {
+                    currentStep++;
+                    showStep(currentStep);
+                    updateProgress();
+                }
+            } else {
+                alert('Bitte füllen Sie alle Pflichtfelder aus.');
+            }
+        }
+
+        // Previous step
+        function prevStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                showStep(currentStep);
+                updateProgress();
+            }
+        }
+
+        // Submit form
+        async function submitForm() {
+            try {
+                const data = getFormData();
+                
+                // Show loading
+                const submitButton = document.getElementById('submitButton');
+                const originalText = submitButton.textContent;
+                submitButton.innerHTML = '<div class="loading"></div> Sende...';
+                submitButton.disabled = true;
+                
+                const response = await fetch(`http://192.168.178.163:5001/api/checkin/submit/${checkInToken}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ patientData: data }),
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showSuccess(result.data);
+                } else {
+                    alert(`Fehler beim Speichern: ${result.message || 'Unbekannter Fehler'}`);
+                    submitButton.textContent = originalText;
+                    submitButton.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error submitting form:', error);
+                alert('Ein unerwarteter Fehler ist aufgetreten.');
+                const submitButton = document.getElementById('submitButton');
+                submitButton.textContent = 'Daten absenden';
+                submitButton.disabled = false;
+            }
+        }
+
+        // Event listeners
+        document.getElementById('nextButton').addEventListener('click', nextStep);
+        document.getElementById('prevButton').addEventListener('click', prevStep);
+        document.getElementById('submitButton').addEventListener('click', (e) => {
+            e.preventDefault();
+            submitForm();
+        });
+
+        // Social security number formatting
+        document.getElementById('socialSecurityNumber').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 10);
+        });
+
+        // ZIP code formatting
+        document.getElementById('zipCode').addEventListener('input', (e) => {
+            e.target.value = e.target.value.replace(/\D/g, '').slice(0, 4);
+        });
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>

@@ -77,7 +77,14 @@ const TasksWidget: React.FC<TasksWidgetProps> = ({ widget, data }) => {
 
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1.5, sm: 2 }, position: 'relative' }}>
+    <Box sx={{ 
+      minHeight: '100%',
+      height: 'auto',
+      display: 'flex', 
+      flexDirection: 'column', 
+      p: { xs: 1.5, sm: 2 }, 
+      position: 'relative' 
+    }}>
       <Typography 
         variant={isMobile ? 'subtitle1' : 'h6'} 
         gutterBottom 
@@ -85,7 +92,11 @@ const TasksWidget: React.FC<TasksWidgetProps> = ({ widget, data }) => {
       >
         {widget.title}
       </Typography>
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+      <Box sx={{ 
+        flex: items.length === 0 ? 'none' : 1,
+        overflow: items.length > 4 ? 'auto' : 'visible',
+        minHeight: items.length === 0 ? 'auto' : 'none'
+      }}>
         {items.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body2" color="text.secondary">
@@ -99,20 +110,24 @@ const TasksWidget: React.FC<TasksWidgetProps> = ({ widget, data }) => {
                 key={item.id || index} 
                 divider={index < items.length - 1}
                 sx={{ 
-                  py: { xs: 0.5, sm: 1 },
+                  py: { xs: 1, sm: 1.5 },
                   px: { xs: 0.5, sm: 1 },
                   opacity: item.completed ? 0.6 : 1
                 }}
               >
-                <ListItemIcon sx={{ minWidth: { xs: 32, sm: 40 } }}>
+                <ListItemIcon sx={{ minWidth: { xs: 36, sm: 40 } }}>
                   <Checkbox
                     checked={item.completed}
                     icon={<RadioButtonUnchecked />}
                     checkedIcon={<CheckCircle />}
-                    size="small"
+                    size={isMobile ? 'medium' : 'small'}
                     onChange={(e) => handleToggleComplete(item, e as any)}
                     onClick={(e) => e.stopPropagation()}
                     disabled={!item.task || loading}
+                    sx={{
+                      minWidth: { xs: '44px', sm: 'auto' },
+                      minHeight: { xs: '44px', sm: 'auto' }
+                    }}
                   />
                 </ListItemIcon>
                   <ListItemText
@@ -144,7 +159,11 @@ const TasksWidget: React.FC<TasksWidgetProps> = ({ widget, data }) => {
                     label={item.priority === 'urgent' ? 'Dringend' : item.priority === 'high' ? 'Hoch' : item.priority === 'medium' ? 'Mittel' : 'Niedrig'}
                     size="small"
                     color={getPriorityColor(item.priority) as any}
-                    sx={{ ml: 1 }}
+                    sx={{ 
+                      ml: { xs: 0.5, sm: 1 },
+                      fontSize: { xs: '0.7rem', sm: '0.75rem' },
+                      height: { xs: '24px', sm: 'auto' }
+                    }}
                   />
                 )}
               </ListItem>
@@ -157,12 +176,14 @@ const TasksWidget: React.FC<TasksWidgetProps> = ({ widget, data }) => {
       {isMedicalStaff && (
         <Fab
           color="primary"
-          size="small"
+          size={isMobile ? 'medium' : 'small'}
           onClick={() => setCreateDialogOpen(true)}
           sx={{
             position: 'absolute',
-            bottom: 16,
-            right: 16
+            bottom: { xs: 12, sm: 16 },
+            right: { xs: 12, sm: 16 },
+            minWidth: { xs: '56px', sm: 'auto' },
+            minHeight: { xs: '56px', sm: 'auto' }
           }}
         >
           <Add />
