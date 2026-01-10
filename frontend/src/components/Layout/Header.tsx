@@ -5,6 +5,9 @@ import { logout } from '../../store/slices/authSlice';
 import { fetchUnreadCount } from '../../store/slices/internalMessagesSlice';
 import { setCurrentLocation, fetchUserLocations } from '../../store/slices/locationSlice';
 import { toggleTheme } from '../../store/slices/uiSlice';
+import { updateNavigationMode } from '../../store/slices/navigationSlice';
+import DropdownNavigation from './DropdownNavigation';
+import SidebarNavigation from './SidebarNavigation';
 import {
   AppBar,
   Toolbar,
@@ -29,19 +32,23 @@ import {
   LocationOn,
   LightMode,
   DarkMode,
+  ViewSidebar,
+  ViewList,
 } from '@mui/icons-material';
 
 interface HeaderProps {
   onMenuClick: () => void;
+  navigationOpen: boolean;
 }
 
-const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
+const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
   const { unreadCount } = useAppSelector((state) => state.internalMessages);
   const { currentLocation, availableLocations, hasNoAssignment } = useAppSelector((state) => state.locations);
   const { theme } = useAppSelector((state) => state.ui);
+  const { mode: navigationMode } = useAppSelector((state) => state.navigation);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [messagesDialogOpen, setMessagesDialogOpen] = React.useState(false);
   
@@ -94,33 +101,39 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
     dispatch(toggleTheme());
   };
 
+  const handleNavigationModeToggle = () => {
+    const newMode = navigationMode === 'dropdown' ? 'sidebar' : 'dropdown';
+    dispatch(updateNavigationMode(newMode));
+  };
+
   return (
-    <AppBar
-      position="sticky"
-      elevation={1}
-      sx={{
-        backgroundColor: 'background.paper',
-        color: 'text.primary',
-        borderBottom: 1,
-        borderColor: 'divider',
-      }}
-    >
-      <Toolbar>
-        <IconButton
-          color="inherit"
-          aria-label="open drawer"
-          onClick={(e) => {
-            // Entferne Focus vor dem Öffnen des Drawers, um aria-hidden Warnung zu vermeiden
-            if (e.currentTarget) {
-              e.currentTarget.blur();
-            }
-            onMenuClick();
-          }}
-          edge="start"
-          sx={{ mr: 2 }}
-        >
-          <MenuIcon />
-        </IconButton>
+    <Box sx={{ position: 'relative', width: '100%' }}>
+      <AppBar
+        position="sticky"
+        elevation={1}
+        sx={{
+          backgroundColor: 'background.paper',
+          color: 'text.primary',
+          borderBottom: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <Toolbar>
+          <IconButton
+            color="inherit"
+            aria-label="open navigation"
+            onClick={(e) => {
+              // Entferne Focus vor dem Öffnen der Navigation, um aria-hidden Warnung zu vermeiden
+              if (e.currentTarget) {
+                e.currentTarget.blur();
+              }
+              onMenuClick();
+            }}
+            edge="start"
+            sx={{ mr: 2 }}
+          >
+            <MenuIcon />
+          </IconButton>
 
         <Typography
           variant="h6"
@@ -206,6 +219,17 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
             </Typography>
           )}
 
+          {/* Navigation Mode Toggle */}
+          <Tooltip title={navigationMode === 'dropdown' ? 'Sidebar-Navigation aktivieren' : 'Dropdown-Navigation aktivieren'}>
+            <IconButton 
+              color="inherit"
+              onClick={handleNavigationModeToggle}
+              aria-label={navigationMode === 'dropdown' ? 'Sidebar-Navigation aktivieren' : 'Dropdown-Navigation aktivieren'}
+            >
+              {navigationMode === 'dropdown' ? <ViewSidebar /> : <ViewList />}
+            </IconButton>
+          </Tooltip>
+
           {/* Theme Toggle */}
           <Tooltip title={theme === 'dark' ? 'Hellmodus aktivieren' : 'Dunkelmodus aktivieren'}>
             <IconButton 
@@ -287,7 +311,15 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick }) => {
           </Menu>
         </Box>
       </Toolbar>
-    </AppBar>
+      </AppBar>
+      
+      {/* Navigation - Dropdown oder Sidebar basierend auf Präferenz */}
+      {navigationMode === 'dropdown' ? (
+        <DropdownNavigation open={navigationOpen} onClose={onMenuClick} />
+      ) : (
+        <SidebarNavigation open={navigationOpen} onClose={onMenuClick} />
+      )}
+    </Box>
   );
 };
 

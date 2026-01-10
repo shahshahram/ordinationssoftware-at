@@ -59,6 +59,7 @@ import {
   Star,
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import api from '../utils/api';
@@ -298,6 +299,7 @@ const Appointments: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMode, setDialogMode] = useState<'add' | 'edit' | 'view'>('add');
@@ -2559,13 +2561,36 @@ const Appointments: React.FC = () => {
   }, [searchTerm]);
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3} sx={{ flexShrink: 0 }}>
+    <Box sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      overflow: 'hidden',
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
+      <Box 
+        display="flex" 
+        justifyContent="space-between" 
+        alignItems={{ xs: 'flex-start', sm: 'center' }} 
+        mb={{ xs: 2, sm: 3 }} 
+        sx={{ flexShrink: 0 }}
+        flexDirection={{ xs: 'column', sm: 'row' }}
+        gap={{ xs: 2, sm: 0 }}
+      >
         <Box>
-          <Typography variant="h4" gutterBottom>
+          <Typography 
+            variant="h4" 
+            gutterBottom
+            sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}
+          >
             Terminverwaltung
           </Typography>
-          <Typography variant="subtitle1" color="text.secondary">
+          <Typography 
+            variant="subtitle1" 
+            color="text.secondary"
+            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+          >
             Verwalten Sie Ihre Termine und das Wartezimmer
           </Typography>
         </Box>
@@ -2573,14 +2598,26 @@ const Appointments: React.FC = () => {
           variant="contained"
           startIcon={<Add />}
           onClick={handleAddAppointment}
+          sx={{
+            fontSize: { xs: '0.875rem', sm: '1rem' },
+            minHeight: { xs: '44px', sm: 'auto' },
+            width: { xs: '100%', sm: 'auto' }
+          }}
+          fullWidth={isMobile}
         >
-          Neuer Termin
+          {isMobile ? 'Neu' : 'Neuer Termin'}
         </Button>
       </Box>
 
       {/* Search and Filters */}
-      <Paper sx={{ p: 2, mb: 3, flexShrink: 0 }}>
-        <Box sx={{ display: 'flex', gap: 2, mb: 2, alignItems: 'center' }}>
+      <Paper sx={{ p: { xs: 1.5, sm: 2 }, mb: { xs: 2, sm: 3 }, flexShrink: 0 }}>
+        <Box sx={{ 
+          display: 'flex', 
+          gap: { xs: 1, sm: 2 }, 
+          mb: { xs: 1.5, sm: 2 }, 
+          alignItems: 'center',
+          flexWrap: 'wrap'
+        }}>
           <TextField
             placeholder="Termine suchen..."
             value={searchTerm}
@@ -2588,32 +2625,42 @@ const Appointments: React.FC = () => {
             InputProps={{
               startAdornment: <Search sx={{ mr: 1, color: 'text.secondary' }} />
             }}
-            sx={{ flexGrow: 1 }}
+            sx={{ 
+              flexGrow: 1,
+              minWidth: { xs: '100%', sm: '200px' },
+              '& .MuiOutlinedInput-root': {
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                minHeight: { xs: '48px', sm: 'auto' }
+              }
+            }}
+            fullWidth={isMobile}
           />
-          <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel>Status</InputLabel>
+          <FormControl sx={{ minWidth: { xs: 'calc(50% - 4px)', sm: 120 }, width: { xs: 'calc(50% - 4px)', sm: 'auto' } }}>
+            <InputLabel sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Status</InputLabel>
             <Select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as string)}
+              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' }, minHeight: { xs: '48px', sm: 'auto' } }}
             >
-              <MenuItem value="all">Alle</MenuItem>
-              <MenuItem value="geplant">Geplant</MenuItem>
-              <MenuItem value="bestätigt">Bestätigt</MenuItem>
-              <MenuItem value="wartend">Wartend</MenuItem>
-              <MenuItem value="in_behandlung">In Behandlung</MenuItem>
-              <MenuItem value="abgeschlossen">Abgeschlossen</MenuItem>
-              <MenuItem value="abgesagt">Abgesagt</MenuItem>
+              <MenuItem value="all" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Alle</MenuItem>
+              <MenuItem value="geplant" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Geplant</MenuItem>
+              <MenuItem value="bestätigt" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Bestätigt</MenuItem>
+              <MenuItem value="wartend" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Wartend</MenuItem>
+              <MenuItem value="in_behandlung" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>In Behandlung</MenuItem>
+              <MenuItem value="abgeschlossen" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Abgeschlossen</MenuItem>
+              <MenuItem value="abgesagt" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Abgesagt</MenuItem>
             </Select>
           </FormControl>
-          <FormControl sx={{ minWidth: 120 }}>
-            <InputLabel>Typ</InputLabel>
+          <FormControl sx={{ minWidth: { xs: 'calc(50% - 4px)', sm: 120 }, width: { xs: 'calc(50% - 4px)', sm: 'auto' } }}>
+            <InputLabel sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Typ</InputLabel>
             <Select
               value={filterType}
               onChange={(e) => setFilterType(e.target.value as string)}
+              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' }, minHeight: { xs: '48px', sm: 'auto' } }}
             >
-              <MenuItem value="all">Alle</MenuItem>
+              <MenuItem value="all" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Alle</MenuItem>
               {appointmentTypes.map((type) => (
-                <MenuItem key={type.value} value={type.value}>
+                <MenuItem key={type.value} value={type.value} sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Box
                       sx={{
@@ -2630,18 +2677,19 @@ const Appointments: React.FC = () => {
               ))}
             </Select>
           </FormControl>
-          <FormControl sx={{ minWidth: 140 }}>
-            <InputLabel>Buchungsart</InputLabel>
+          <FormControl sx={{ minWidth: { xs: 'calc(50% - 4px)', sm: 140 }, width: { xs: 'calc(50% - 4px)', sm: 'auto' } }}>
+            <InputLabel sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Buchungsart</InputLabel>
             <Select
               value={filterOnline}
               onChange={(e) => setFilterOnline(e.target.value as string)}
+              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' }, minHeight: { xs: '48px', sm: 'auto' } }}
             >
-              <MenuItem value="all">Alle</MenuItem>
-              <MenuItem value="online">Online</MenuItem>
-              <MenuItem value="offline">Vor Ort</MenuItem>
+              <MenuItem value="all" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Alle</MenuItem>
+              <MenuItem value="online" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Online</MenuItem>
+              <MenuItem value="offline" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Vor Ort</MenuItem>
             </Select>
           </FormControl>
-          <IconButton>
+          <IconButton sx={{ minWidth: { xs: '44px', sm: 'auto' }, minHeight: { xs: '44px', sm: 'auto' } }}>
             <Refresh />
           </IconButton>
         </Box>
@@ -2651,46 +2699,81 @@ const Appointments: React.FC = () => {
           exclusive
           onChange={handleViewModeChange}
           aria-label="Ansichtsmodus"
+          sx={{
+            width: { xs: '100%', sm: 'auto' },
+            '& .MuiToggleButton-root': {
+              fontSize: { xs: '0.75rem', sm: '0.875rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              px: { xs: 1, sm: 2 },
+              flex: { xs: 1, sm: 'none' }
+            }
+          }}
+          fullWidth={isMobile}
         >
           <ToggleButton value="day" aria-label="Tag">
-            <CalendarToday sx={{ mr: 1 }} />
-            Tag
+            <CalendarToday sx={{ mr: { xs: 0.5, sm: 1 }, fontSize: { xs: '1rem', sm: '1.25rem' } }} />
+            {!isMobile && 'Tag'}
           </ToggleButton>
           <ToggleButton value="week" aria-label="Woche">
-            <ViewWeek sx={{ mr: 1 }} />
-            Woche
+            <ViewWeek sx={{ mr: { xs: 0.5, sm: 1 }, fontSize: { xs: '1rem', sm: '1.25rem' } }} />
+            {!isMobile && 'Woche'}
           </ToggleButton>
           <ToggleButton value="month" aria-label="Monat">
-            <ViewModule sx={{ mr: 1 }} />
-            Monat
+            <ViewModule sx={{ mr: { xs: 0.5, sm: 1 }, fontSize: { xs: '1rem', sm: '1.25rem' } }} />
+            {!isMobile && 'Monat'}
           </ToggleButton>
         </ToggleButtonGroup>
       </Paper>
 
       {/* Appointments List */}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, flex: 1, overflow: 'auto' }}>
-        <Box sx={{ flex: '1 1 600px', minWidth: '600px' }}>
+      <Box sx={{ 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: { xs: 2, sm: 3 }, 
+        flex: 1, 
+        overflow: 'auto',
+        WebkitOverflowScrolling: 'touch',
+        willChange: 'scroll-position',
+        touchAction: 'pan-y'
+      }}>
+        <Box sx={{ 
+          flex: { xs: '1 1 100%', sm: '1 1 600px' }, 
+          minWidth: { xs: '100%', sm: '600px' } 
+        }}>
           <Card>
-            <CardContent>
-              <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6">
+            <CardContent sx={{ p: { xs: 1.5, sm: 2 } }}>
+              <Box 
+                display="flex" 
+                justifyContent="space-between" 
+                alignItems={{ xs: 'flex-start', sm: 'center' }} 
+                mb={2}
+                flexDirection={{ xs: 'column', sm: 'row' }}
+                gap={{ xs: 1, sm: 0 }}
+              >
+                <Typography 
+                  variant="h6"
+                  sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+                >
                   Termine ({filteredAppointments.length})
                 </Typography>
-                <Box display="flex" gap={1}>
+                <Box display="flex" gap={1} flexWrap="wrap">
                   <Chip
                     label={`Geplant: ${filteredAppointments.filter(a => a.status === 'geplant').length}`}
                     size="small"
                     color="info"
+                    sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' }, height: { xs: '24px', sm: 'auto' } }}
                   />
                   <Chip
                     label={`Wartend: ${filteredAppointments.filter(a => a.status === 'wartend').length}`}
                     size="small"
                     color="warning"
+                    sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' }, height: { xs: '24px', sm: 'auto' } }}
                   />
                   <Chip
                     label={`In Behandlung: ${filteredAppointments.filter(a => a.status === 'in_behandlung').length}`}
                     size="small"
                     color="error"
+                    sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' }, height: { xs: '24px', sm: 'auto' } }}
                   />
                 </Box>
               </Box>
@@ -2725,8 +2808,8 @@ const Appointments: React.FC = () => {
                   <Paper
                     key={appointment._id}
                     sx={{
-                      p: 3,
-                      mb: 2.5,
+                      p: { xs: 1.5, sm: 3 },
+                      mb: { xs: 2, sm: 2.5 },
                       display: 'flex',
                       alignItems: 'flex-start',
                       justifyContent: 'space-between',
@@ -2740,27 +2823,28 @@ const Appointments: React.FC = () => {
                       }
                     }}
                   >
-                    <Box display="flex" alignItems="flex-start" sx={{ flexGrow: 1, gap: 2 }}>
+                    <Box display="flex" alignItems="flex-start" sx={{ flexGrow: 1, gap: { xs: 1, sm: 2 } }}>
                       <Avatar 
                         sx={{ 
-                          width: 56, 
-                          height: 56,
+                          width: { xs: 40, sm: 56 }, 
+                          height: { xs: 40, sm: 56 },
                           mr: 1, 
                           bgcolor: `${getStatusColor(appointment.status)}.main`,
-                          fontSize: '1.5rem'
+                          fontSize: { xs: '1.2rem', sm: '1.5rem' },
+                          flexShrink: 0
                         }}
                       >
                         {getStatusIcon(appointment.status)}
                       </Avatar>
                       <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                         {/* Zeit und Patient - Hauptzeile */}
-                        <Box display="flex" alignItems="center" gap={2} mb={1.5} flexWrap="wrap">
+                        <Box display="flex" alignItems="center" gap={{ xs: 1, sm: 2 }} mb={{ xs: 1, sm: 1.5 }} flexWrap="wrap">
                           <Typography 
                             variant="h6" 
                             fontWeight="bold"
                             sx={{ 
                               color: 'primary.main',
-                              fontSize: '1.25rem',
+                              fontSize: { xs: '1rem', sm: '1.25rem' },
                               minWidth: 'fit-content'
                             }}
                           >
@@ -3475,10 +3559,14 @@ const Appointments: React.FC = () => {
         onClose={handleCloseDialog} 
         maxWidth="md" 
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
           sx: {
-            borderRadius: 3,
-            boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
           }
         }}
         slotProps={{
@@ -3501,7 +3589,13 @@ const Appointments: React.FC = () => {
           icon={<Event />}
           gradientColors={{ from: '#06b6d4', to: '#0891b2' }}
         />
-        <DialogContent sx={{ pt: 3, px: 3 }}>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 }, 
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Box>
             <Tabs 
               value={activeTab} 

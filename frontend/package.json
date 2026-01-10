@@ -68,6 +68,7 @@
   },
   "scripts": {
     "start": "HOST=0.0.0.0 react-scripts start",
+    "start:https": "HOST=0.0.0.0 HTTPS=true react-scripts start",
     "start:local": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",

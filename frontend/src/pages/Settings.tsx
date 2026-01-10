@@ -27,7 +27,9 @@ import {
   DialogActions,
   Tabs,
   Tab,
-  Tooltip
+  Tooltip,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Visibility,
@@ -47,6 +49,9 @@ import GradientDialogTitle from '../components/GradientDialogTitle';
 
 const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user } = useSelector((state: any) => state.auth);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -439,11 +444,23 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
+    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+      <Typography 
+        variant="h4" 
+        gutterBottom
+        sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}
+      >
         Einstellungen
       </Typography>
-      <Typography variant="subtitle1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
+      <Typography 
+        variant="subtitle1" 
+        color="text.secondary" 
+        gutterBottom 
+        sx={{ 
+          mb: { xs: 2, sm: 3 },
+          fontSize: { xs: '0.875rem', sm: '1rem' }
+        }}
+      >
         System- und Benutzereinstellungen
       </Typography>
 
@@ -459,11 +476,11 @@ const Settings: React.FC = () => {
         </Alert>
       )}
 
-      <Grid container spacing={3}>
+      <Grid container spacing={{ xs: 2, sm: 3 }}>
         {/* Update-Monitoring */}
         <Grid size={{ xs: 12 }}>
           <Card>
-            <CardContent>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <UpdateMonitoring refreshInterval={30000} />
             </CardContent>
           </Card>
@@ -472,9 +489,13 @@ const Settings: React.FC = () => {
         {/* Abrechnungseinstellungen */}
         <Grid size={{ xs: 12, md: 8 }}>
           <Card>
-            <CardContent>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}
+                >
                   Abrechnungseinstellungen
                 </Typography>
                 <Tooltip title="Hilfe & Leitfaden">
@@ -482,12 +503,13 @@ const Settings: React.FC = () => {
                     onClick={() => setHelpDialogBillingOpen(true)}
                     color="primary"
                     size="small"
+                    sx={{ minWidth: { xs: '44px', sm: 'auto' }, minHeight: { xs: '44px', sm: 'auto' } }}
                   >
                     <HelpOutline />
                   </IconButton>
                 </Tooltip>
               </Box>
-              <Divider sx={{ my: 2 }} />
+              <Divider sx={{ my: { xs: 1.5, sm: 2 } }} />
               
               <Box sx={{ mb: 3 }}>
                 <FormControlLabel
@@ -590,9 +612,13 @@ const Settings: React.FC = () => {
         {/* ELDA-Konfiguration */}
         <Grid size={{ xs: 12, md: 8 }}>
           <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <Typography variant="h6" gutterBottom>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: { xs: 1.5, sm: 2 } }}>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}
+                >
                   ELDA-Konfiguration
                 </Typography>
                 <Tooltip title="Hilfe & Leitfaden">
@@ -600,6 +626,7 @@ const Settings: React.FC = () => {
                     onClick={() => setHelpDialogELDAOpen(true)}
                     color="primary"
                     size="small"
+                    sx={{ minWidth: { xs: '44px', sm: 'auto' }, minHeight: { xs: '44px', sm: 'auto' } }}
                   >
                     <HelpOutline />
                   </IconButton>
@@ -1282,15 +1309,29 @@ const Settings: React.FC = () => {
         onClose={() => setHelpDialogBillingOpen(false)} 
         maxWidth="md" 
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
-          sx: { minHeight: '600px' }
+          sx: { 
+            minHeight: { xs: '100%', sm: '600px' },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
         }}
       >
         <GradientDialogTitle 
           title="Leitfaden: Abrechnungseinstellungen" 
           onClose={() => setHelpDialogBillingOpen(false)}
         />
-        <DialogContent>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Tabs 
             value={helpTab} 
             onChange={(_, v) => setHelpTab(v)} 
@@ -1483,15 +1524,29 @@ const Settings: React.FC = () => {
         onClose={() => setHelpDialogELDAOpen(false)} 
         maxWidth="md" 
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
-          sx: { minHeight: '600px' }
+          sx: { 
+            minHeight: { xs: '100%', sm: '600px' },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
         }}
       >
         <GradientDialogTitle 
           title="Leitfaden: ELDA-Konfiguration" 
           onClose={() => setHelpDialogELDAOpen(false)}
         />
-        <DialogContent>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Tabs 
             value={helpTab} 
             onChange={(_, v) => setHelpTab(v)} 
@@ -1716,15 +1771,29 @@ const Settings: React.FC = () => {
         onClose={() => setHelpDialogWAHonlineOpen(false)} 
         maxWidth="md" 
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
-          sx: { minHeight: '600px' }
+          sx: { 
+            minHeight: { xs: '100%', sm: '600px' },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
         }}
       >
         <GradientDialogTitle 
           title="Leitfaden: WAHonline-Integration" 
           onClose={() => setHelpDialogWAHonlineOpen(false)}
         />
-        <DialogContent>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Tabs 
             value={helpTab} 
             onChange={(_, v) => setHelpTab(v)} 
@@ -1874,15 +1943,29 @@ const Settings: React.FC = () => {
         onClose={() => setHelpDialogEmailOpen(false)} 
         maxWidth="lg" 
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
-          sx: { minHeight: '700px' }
+          sx: { 
+            minHeight: { xs: '100%', sm: '700px' },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
         }}
       >
         <GradientDialogTitle 
           title="Detaillierte Konfigurationsanleitung: E-Mail" 
           onClose={() => setHelpDialogEmailOpen(false)}
         />
-        <DialogContent>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Tabs 
             value={helpTab} 
             onChange={(_, v) => setHelpTab(v)} 
@@ -2308,15 +2391,29 @@ const Settings: React.FC = () => {
         onClose={() => setHelpDialogSmsOpen(false)} 
         maxWidth="lg" 
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
-          sx: { minHeight: '700px' }
+          sx: { 
+            minHeight: { xs: '100%', sm: '700px' },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
         }}
       >
         <GradientDialogTitle 
           title="Detaillierte Konfigurationsanleitung: SMS" 
           onClose={() => setHelpDialogSmsOpen(false)}
         />
-        <DialogContent>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Tabs 
             value={helpTab} 
             onChange={(_, v) => setHelpTab(v)} 

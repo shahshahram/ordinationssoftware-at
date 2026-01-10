@@ -7,6 +7,7 @@ import api from '../utils/api';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { Person as PersonIcon } from '@mui/icons-material';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import {
   Box,
   Typography,
@@ -74,6 +75,7 @@ import {
   Schedule,
   Block,
   ExpandMore,
+  PhotoCamera,
 } from '@mui/icons-material';
 import AdditionalInsuranceForm from '../components/Billing/AdditionalInsuranceForm';
 import ECardValidation from '../components/ECardValidation';
@@ -841,6 +843,11 @@ const Patients: React.FC = () => {
       }
     };
 
+    const handlePhotos = (e: React.MouseEvent) => {
+      e.stopPropagation(); // Prevent card click
+      navigate(`/patient-organizer/${patient._id}?tab=fotos`);
+    };
+
     const handleEmail = (e: React.MouseEvent) => {
       e.stopPropagation(); // Prevent card click
       if (patient.email) {
@@ -1112,6 +1119,18 @@ const Patients: React.FC = () => {
               </IconButton>
               <IconButton 
                 size="small" 
+                onClick={handlePhotos}
+                sx={{ 
+                  bgcolor: 'secondary.50', 
+                  color: 'secondary.main',
+                  '&:hover': { bgcolor: 'secondary.100' }
+                }}
+                title="Fotos anzeigen"
+              >
+                <PhotoCamera fontSize="small" />
+              </IconButton>
+              <IconButton 
+                size="small" 
                 onClick={handleEmail}
                 sx={{ 
                   bgcolor: 'success.50', 
@@ -1158,6 +1177,11 @@ const Patients: React.FC = () => {
       } else {
         alert('Keine Telefonnummer verfügbar');
       }
+    };
+
+    const handlePhotos = (e: React.MouseEvent) => {
+      e.stopPropagation(); // Prevent list item click
+      navigate(`/patient-organizer/${patient._id}?tab=fotos`);
     };
 
     const handleEmail = (e: React.MouseEvent) => {
@@ -1401,6 +1425,20 @@ const Patients: React.FC = () => {
           </IconButton>
           <IconButton 
             size="small" 
+            onClick={handlePhotos}
+            sx={{ 
+              bgcolor: 'secondary.50', 
+              color: 'secondary.main',
+              minWidth: { xs: '44px', sm: 'auto' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              '&:hover': { bgcolor: 'secondary.100' }
+            }}
+            title="Fotos anzeigen"
+          >
+            <PhotoCamera fontSize={isMobile ? 'medium' : 'small'} />
+          </IconButton>
+          <IconButton 
+            size="small" 
             onClick={handleEmail}
             sx={{ 
               bgcolor: 'success.50', 
@@ -1432,8 +1470,16 @@ const Patients: React.FC = () => {
     );
   };
 
+  const { marginTopValue } = useGlobalNavigationOffset();
+
   return (
-    <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ 
+      minHeight: '100vh', 
+      display: 'flex', 
+      flexDirection: 'column',
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       {/* Modern Header */}
       <Box 
         display="flex" 
@@ -1755,7 +1801,7 @@ const Patients: React.FC = () => {
           overflow: 'auto',
           maxHeight: { xs: 'calc(100vh - 400px)', sm: 'calc(100vh - 350px)' },
           minHeight: { xs: '300px', sm: '400px' },
-          '-webkit-overflow-scrolling': 'touch',
+          WebkitOverflowScrolling: 'touch',
           willChange: 'scroll-position',
           touchAction: 'pan-y',
           '&::-webkit-scrollbar': {

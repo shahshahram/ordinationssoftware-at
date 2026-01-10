@@ -25,6 +25,7 @@ import tasksReducer from './slices/tasksSlice';
 import vitalSignsReducer from './slices/vitalSignsSlice';
 import contactReducer from './slices/contactSlice';
 import waitingListReducer from './slices/waitingListSlice';
+import navigationReducer from './slices/navigationSlice';
 
 export const store = configureStore({
   reducer: {
@@ -54,6 +55,7 @@ export const store = configureStore({
     vitalSigns: vitalSignsReducer,
     contacts: contactReducer,
     waitingList: waitingListReducer,
+    navigation: navigationReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

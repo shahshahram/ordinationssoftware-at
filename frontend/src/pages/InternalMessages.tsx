@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -38,7 +38,9 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
-  Fab
+  Fab,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Send,
@@ -97,11 +99,17 @@ import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import { addNotification } from '../store/slices/uiSlice';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 const InternalMessages: React.FC = () => {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
+  const location = useLocation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user } = useAppSelector((state) => state.auth);
+  const { marginTopValue } = useGlobalNavigationOffset();
   const { inbox, sent, archived, unreadCount, selectedMessage, loading } = useAppSelector(
     (state) => state.internalMessages
   );
@@ -402,27 +410,53 @@ const InternalMessages: React.FC = () => {
   const systemFolders = folders.filter(f => f.isSystem);
   const customFolders = folders.filter(f => !f.isSystem);
 
+  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
+
   return (
-    <Box sx={{ display: 'flex', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+    <Box sx={{ 
+      display: 'flex', 
+      height: '100%',
+      minHeight: 0,
+      overflow: 'hidden',
+      position: 'relative',
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+      zIndex: (theme) => theme.zIndex.drawer - 1, // Niedriger als globale Sidebar, damit die globale Sidebar darüber liegt
+    }}
+    >
       {/* Sidebar mit Ordnern */}
       <Drawer
-        variant="permanent"
+        variant={isMobile ? 'temporary' : 'permanent'}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
         sx={{
-          width: 280,
+          width: { xs: 280, sm: 280 },
           flexShrink: 0,
+          zIndex: (theme) => theme.zIndex.drawer + 1, // Höher als globale Sidebar
           '& .MuiDrawer-paper': {
-            width: 280,
+            width: { xs: 280, sm: 280 },
             boxSizing: 'border-box',
             borderRight: '1px solid',
             borderColor: 'divider',
             position: 'relative',
-            height: '100%'
+            height: '100%',
+            zIndex: (theme) => theme.zIndex.drawer + 1, // Höher als globale Sidebar
           }
         }}
       >
-        <Toolbar sx={{ minHeight: '64px !important', borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Toolbar sx={{ 
+          minHeight: { xs: '56px !important', sm: '64px !important' }, 
+          borderBottom: '1px solid', 
+          borderColor: 'divider',
+          px: { xs: 1, sm: 2 }
+        }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
-            <Typography variant="h6" noWrap component="div">
+            <Typography 
+              variant="h6" 
+              noWrap 
+              component="div"
+              sx={{ fontSize: { xs: '1rem', sm: '1.25rem' } }}
+            >
               Ordner
             </Typography>
             <Tooltip title="Neuen Ordner erstellen">
@@ -432,6 +466,7 @@ const InternalMessages: React.FC = () => {
                   setFolderFormData({ name: '', description: '', color: '#1976d2', icon: 'folder' });
                   setFolderDialogOpen(true);
                 }}
+                sx={{ minWidth: { xs: '44px', sm: 'auto' }, minHeight: { xs: '44px', sm: 'auto' } }}
               >
                 <CreateNewFolder />
               </IconButton>
@@ -546,11 +581,30 @@ const InternalMessages: React.FC = () => {
       </Drawer>
 
       {/* Hauptbereich */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <Box sx={{ 
+        flex: 1, 
+        display: 'flex', 
+        flexDirection: 'column', 
+        overflow: 'hidden',
+      }}>
         {/* Toolbar */}
         <AppBar position="static" color="default" elevation={1}>
-          <Toolbar>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flex: 1 }}>
+          <Toolbar sx={{ minHeight: { xs: '56px !important', sm: '64px !important' }, px: { xs: 1, sm: 2 } }}>
+            <Box sx={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: { xs: 1, sm: 2 }, 
+              flex: 1,
+              flexWrap: { xs: 'wrap', sm: 'nowrap' }
+            }}>
+              {isMobile && (
+                <IconButton
+                  onClick={() => setSidebarOpen(true)}
+                  sx={{ minWidth: '44px', minHeight: '44px' }}
+                >
+                  <Folder />
+                </IconButton>
+              )}
               <TextField
                 size="small"
                 placeholder="Nachrichten durchsuchen..."
@@ -563,15 +617,31 @@ const InternalMessages: React.FC = () => {
                     </InputAdornment>
                   )
                 }}
-                sx={{ minWidth: 300 }}
+                sx={{ 
+                  minWidth: { xs: 'calc(100% - 100px)', sm: 300 },
+                  flex: { xs: 1, sm: 'none' },
+                  '& .MuiOutlinedInput-root': {
+                    fontSize: { xs: '0.875rem', sm: '1rem' },
+                    minHeight: { xs: '40px', sm: 'auto' }
+                  }
+                }}
               />
               <Button
                 variant="contained"
                 startIcon={<Send />}
                 onClick={() => handleCompose()}
                 size="small"
+                sx={{
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '40px', sm: 'auto' },
+                  px: { xs: 1.5, sm: 2 },
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: { xs: '120px', sm: 'none' }
+                }}
               >
-                Neu
+                {isMobile ? 'Neu' : 'Neue Nachricht'}
               </Button>
               {selectedMessages.length > 0 && (
                 <>
@@ -623,7 +693,16 @@ const InternalMessages: React.FC = () => {
         {/* Nachrichtenliste und Detailansicht */}
         <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
           {/* Nachrichtenliste */}
-          <Box sx={{ width: '40%', borderRight: '1px solid', borderColor: 'divider', overflow: 'auto' }}>
+          <Box sx={{ 
+            width: { xs: selectedMessage ? '0%' : '100%', sm: '40%' },
+            borderRight: { xs: 'none', sm: '1px solid' },
+            borderColor: 'divider',
+            overflow: 'auto',
+            transition: 'width 0.3s ease',
+            WebkitOverflowScrolling: 'touch',
+            willChange: 'scroll-position',
+            touchAction: 'pan-y'
+          }}>
             {loading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                 <CircularProgress />
@@ -678,17 +757,27 @@ const InternalMessages: React.FC = () => {
                         }}
                         size="small"
                       />
-                      <ListItemIcon>
+                      <ListItemIcon sx={{ minWidth: { xs: '36px', sm: 'auto' } }}>
                         {isUnread ? (
-                          <MailOutline color="primary" />
+                          <MailOutline color="primary" fontSize={isMobile ? 'small' : 'medium'} />
                         ) : (
-                          <Mail color="action" />
+                          <Mail color="action" fontSize={isMobile ? 'small' : 'medium'} />
                         )}
                       </ListItemIcon>
                       <ListItemText
                         primary={
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                            <Typography variant="body2" sx={{ fontWeight: isUnread ? 600 : 400, flex: 1 }}>
+                            <Typography 
+                              variant="body2" 
+                              sx={{ 
+                                fontWeight: isUnread ? 600 : 400, 
+                                flex: 1,
+                                fontSize: { xs: '0.875rem', sm: '0.875rem' },
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
                               {message.subject}
                             </Typography>
                             {message.priority === 'urgent' && (
@@ -723,8 +812,9 @@ const InternalMessages: React.FC = () => {
                           e.stopPropagation();
                           setMessageMenuAnchor({ element: e.currentTarget, messageId: message._id });
                         }}
+                        sx={{ minWidth: { xs: '44px', sm: 'auto' }, minHeight: { xs: '44px', sm: 'auto' } }}
                       >
-                        <MoreVert fontSize="small" />
+                        <MoreVert fontSize={isMobile ? 'small' : 'small'} />
                       </IconButton>
                     </ListItem>
                   );
@@ -734,11 +824,40 @@ const InternalMessages: React.FC = () => {
           </Box>
 
           {/* Detailansicht */}
-          <Box sx={{ flex: 1, p: 3, overflow: 'auto' }}>
+          <Box sx={{ 
+            flex: 1, 
+            p: { xs: 1.5, sm: 3 }, 
+            overflow: 'auto',
+            display: { xs: selectedMessage ? 'block' : 'none', sm: 'block' },
+            width: { xs: selectedMessage ? '100%' : '0%', sm: 'auto' },
+            transition: 'width 0.3s ease',
+            WebkitOverflowScrolling: 'touch',
+            willChange: 'scroll-position',
+            touchAction: 'pan-y'
+          }}>
             {selectedMessage ? (
-              <Paper sx={{ p: 3 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                  <Typography variant="h5">{selectedMessage.subject}</Typography>
+              <Paper sx={{ p: { xs: 2, sm: 3 } }}>
+                <Box sx={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  mb: 2,
+                  flexDirection: { xs: 'column', sm: 'row' },
+                  gap: { xs: 1, sm: 0 }
+                }}>
+                  {isMobile && (
+                    <IconButton
+                      onClick={() => dispatch(setSelectedMessage(null))}
+                      sx={{ alignSelf: 'flex-start', minWidth: '44px', minHeight: '44px' }}
+                    >
+                      <Close />
+                    </IconButton>
+                  )}
+                  <Typography 
+                    variant="h5"
+                    sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}
+                  >
+                    {selectedMessage.subject}
+                  </Typography>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     {selectedMessage.priority !== 'normal' && (
                       <Chip
@@ -850,14 +969,26 @@ const InternalMessages: React.FC = () => {
                 )}
                 
                 {/* Aktionen */}
-                <Box sx={{ mt: 3, display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                <Box sx={{ 
+                  mt: 3, 
+                  display: 'flex', 
+                  gap: { xs: 0.5, sm: 1 }, 
+                  justifyContent: 'flex-end',
+                  flexWrap: 'wrap'
+                }}>
                   {activeTab === 'inbox' && (
                     <Button
                       variant="outlined"
                       startIcon={<Reply />}
                       onClick={() => handleCompose(selectedMessage)}
+                      sx={{
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                        minHeight: { xs: '36px', sm: 'auto' },
+                        px: { xs: 1, sm: 2 },
+                        '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+                      }}
                     >
-                      Antworten
+                      {isMobile ? 'Antw.' : 'Antworten'}
                     </Button>
                   )}
                   {(activeTab === 'inbox' || activeTab === 'sent') && (
@@ -865,29 +996,58 @@ const InternalMessages: React.FC = () => {
                       variant="outlined"
                       startIcon={<Forward />}
                       onClick={() => handleForward(selectedMessage)}
+                      sx={{
+                        fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                        minHeight: { xs: '36px', sm: 'auto' },
+                        px: { xs: 1, sm: 2 },
+                        '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+                      }}
                     >
-                      Weiterleiten
+                      {isMobile ? 'Weiterl.' : 'Weiterleiten'}
                     </Button>
                   )}
                   <Button
                     variant="outlined"
                     startIcon={<Archive />}
                     onClick={() => handleArchive(selectedMessage)}
+                    sx={{
+                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                      minHeight: { xs: '36px', sm: 'auto' },
+                      px: { xs: 1, sm: 2 },
+                      '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+                    }}
                   >
-                    Archivieren
+                    {isMobile ? 'Archiv' : 'Archivieren'}
                   </Button>
                   <Button
                     variant="outlined"
                     color="error"
                     startIcon={<Delete />}
                     onClick={() => handleDelete(selectedMessage)}
+                    sx={{
+                      fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                      minHeight: { xs: '36px', sm: 'auto' },
+                      px: { xs: 1, sm: 2 },
+                      '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+                    }}
                   >
                     Löschen
                   </Button>
                 </Box>
               </Paper>
             ) : (
-              <Box sx={{ textAlign: 'center', py: 8 }}>
+              <Box sx={{ textAlign: 'center', py: 8, px: 2 }}>
+                <Typography 
+                  variant="h5" 
+                  sx={{ 
+                    mb: 3,
+                    color: 'primary.main',
+                    fontWeight: 600,
+                    fontSize: { xs: '1.25rem', sm: '1.5rem' }
+                  }}
+                >
+                  Interne Nachrichten
+                </Typography>
                 <MailOutline sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
                 <Typography variant="body1" color="text.secondary">
                   Wählen Sie eine Nachricht aus
@@ -908,11 +1068,27 @@ const InternalMessages: React.FC = () => {
         }}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
           {replyingTo ? 'Antworten' : forwardingFrom ? 'Weiterleiten' : 'Neue Nachricht'}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <Autocomplete
               options={staffProfiles.filter((profile, index, self) =>
@@ -967,17 +1143,32 @@ const InternalMessages: React.FC = () => {
               onChange={(e) => setComposeData(prev => ({ ...prev, message: e.target.value }))}
               required
               multiline
-              rows={10}
+              rows={isMobile ? 8 : 10}
               fullWidth
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  fontSize: { xs: '0.875rem', sm: '1rem' }
+                }
+              }}
             />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            setComposeOpen(false);
-            setReplyingTo(null);
-            setForwardingFrom(null);
-          }}>
+        <DialogActions sx={{ 
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          gap: { xs: 1, sm: 2 }
+        }}>
+          <Button 
+            onClick={() => {
+              setComposeOpen(false);
+              setReplyingTo(null);
+              setForwardingFrom(null);
+            }}
+            sx={{
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' }
+            }}
+          >
             Abbrechen
           </Button>
           <Button
@@ -985,6 +1176,10 @@ const InternalMessages: React.FC = () => {
             startIcon={<Send />}
             onClick={handleSend}
             disabled={!composeData.recipientId || !composeData.subject || !composeData.message}
+            sx={{
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' }
+            }}
           >
             Senden
           </Button>
@@ -1000,9 +1195,23 @@ const InternalMessages: React.FC = () => {
         }}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
+        }}
       >
-        <DialogTitle>Neuen Ordner erstellen</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>Neuen Ordner erstellen</DialogTitle>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 }
+        }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
               label="Ordnername"
@@ -1051,9 +1260,23 @@ const InternalMessages: React.FC = () => {
         }}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
+        }}
       >
-        <DialogTitle>Ordner bearbeiten</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>Ordner bearbeiten</DialogTitle>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 }
+        }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
               label="Ordnername"
@@ -1099,9 +1322,23 @@ const InternalMessages: React.FC = () => {
         onClose={() => setMoveDialogOpen(false)}
         maxWidth="sm"
         fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: {
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
+        }}
       >
-        <DialogTitle>Nachrichten verschieben</DialogTitle>
-        <DialogContent>
+        <DialogTitle sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>Nachrichten verschieben</DialogTitle>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 }
+        }}>
           <Box sx={{ mt: 2 }}>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               {selectedMessages.length} Nachricht(en) in Ordner verschieben:

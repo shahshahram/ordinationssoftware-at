@@ -41,6 +41,8 @@ import {
   Dialog,
   DialogContent,
   DialogActions,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import {
   Assessment,
@@ -262,6 +264,9 @@ interface BIDashboardData {
 
 const BillingReports: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState<Date | null>(startOfMonth(subMonths(new Date(), 1)));
@@ -571,14 +576,29 @@ const BillingReports: React.FC = () => {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
-      <Box sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+      <Box sx={{ p: { xs: 2, sm: 3 } }}>
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: { xs: 'flex-start', sm: 'center' }, 
+          mb: { xs: 2, sm: 3 },
+          flexDirection: { xs: 'column', sm: 'row' },
+          gap: { xs: 1, sm: 0 }
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 1, sm: 2 }, flexWrap: 'wrap' }}>
             <Box>
-              <Typography variant="h4" gutterBottom>
+              <Typography 
+                variant="h4" 
+                gutterBottom
+                sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}
+              >
                 Abrechnungsberichte
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography 
+                variant="body2" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+              >
                 Professionelle Auswertungen und Analysen für Rechnungen, Leistungen und Patienten
               </Typography>
             </Box>
@@ -586,6 +606,7 @@ const BillingReports: React.FC = () => {
               <IconButton
                 onClick={() => setHelpDialogOpen(true)}
                 color="primary"
+                sx={{ minWidth: { xs: '44px', sm: 'auto' }, minHeight: { xs: '44px', sm: 'auto' } }}
               >
                 <HelpOutline />
               </IconButton>
@@ -593,21 +614,33 @@ const BillingReports: React.FC = () => {
           </Box>
         </Box>
 
-          <Paper sx={{ mb: 3 }}>
-            <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
-              <Tab label="BI-Dashboard" icon={<Assessment />} />
-              <Tab label="Patient-Analyse" icon={<People />} />
-              <Tab label="Leistungsanalyse" icon={<MedicalServices />} />
-              <Tab label="Trend-Analyse" icon={<TrendingUp />} />
-              <Tab label="Profitabilität" icon={<BarChart />} />
-              <Tab label="Effizienz-Analyse" icon={<ShowChart />} />
-              <Tab label="Top-Patienten" icon={<Star />} />
+          <Paper sx={{ mb: { xs: 2, sm: 3 }, overflow: 'auto' }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={(e, newValue) => setActiveTab(newValue)}
+              variant={isMobile ? 'scrollable' : 'standard'}
+              scrollButtons="auto"
+              sx={{
+                '& .MuiTab-root': {
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '48px', sm: 'auto' },
+                  px: { xs: 1, sm: 2 }
+                }
+              }}
+            >
+              <Tab label={isMobile ? "BI" : "BI-Dashboard"} icon={<Assessment />} iconPosition={isMobile ? 'top' : 'start'} />
+              <Tab label={isMobile ? "Patienten" : "Patient-Analyse"} icon={<People />} iconPosition={isMobile ? 'top' : 'start'} />
+              <Tab label={isMobile ? "Leistungen" : "Leistungsanalyse"} icon={<MedicalServices />} iconPosition={isMobile ? 'top' : 'start'} />
+              <Tab label={isMobile ? "Trend" : "Trend-Analyse"} icon={<TrendingUp />} iconPosition={isMobile ? 'top' : 'start'} />
+              <Tab label={isMobile ? "Profit" : "Profitabilität"} icon={<BarChart />} iconPosition={isMobile ? 'top' : 'start'} />
+              <Tab label={isMobile ? "Effizienz" : "Effizienz-Analyse"} icon={<ShowChart />} iconPosition={isMobile ? 'top' : 'start'} />
+              <Tab label={isMobile ? "Top" : "Top-Patienten"} icon={<Star />} iconPosition={isMobile ? 'top' : 'start'} />
             </Tabs>
           </Paper>
 
         {/* Filter */}
-        <Card sx={{ mb: 3, p: 2 }}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Card sx={{ mb: { xs: 2, sm: 3 }, p: { xs: 1.5, sm: 2 } }}>
+          <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, alignItems: 'center', flexWrap: 'wrap' }}>
             <DatePicker
               label="Von"
               value={startDate}
@@ -664,8 +697,14 @@ const BillingReports: React.FC = () => {
                   loadTopPatients();
                 }
               }}
+              sx={{
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                minHeight: { xs: '44px', sm: 'auto' },
+                px: { xs: 1.5, sm: 2 }
+              }}
+              fullWidth={isMobile}
             >
-              Aktualisieren
+              {isMobile ? 'Aktualisieren' : 'Aktualisieren'}
             </Button>
           </Box>
         </Card>
@@ -2811,15 +2850,29 @@ const BillingReports: React.FC = () => {
         onClose={() => setHelpDialogOpen(false)} 
         maxWidth="md" 
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
-          sx: { minHeight: '600px' }
+          sx: { 
+            minHeight: { xs: '100%', sm: '600px' },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
         }}
       >
         <GradientDialogTitle 
           title="Leitfaden: Abrechnungsberichte" 
           onClose={() => setHelpDialogOpen(false)}
         />
-        <DialogContent>
+        <DialogContent sx={{ 
+          pt: { xs: 2, sm: 3 },
+          px: { xs: 2, sm: 3 },
+          pb: { xs: 2, sm: 3 },
+          overflow: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
           <Tabs 
             value={helpTab} 
             onChange={(_, v) => setHelpTab(v)} 

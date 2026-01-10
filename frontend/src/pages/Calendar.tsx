@@ -33,6 +33,7 @@ import { fetchRooms } from '../store/slices/roomSlice';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import api from '../utils/api';
 import { Warning } from '@mui/icons-material';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface CalendarEvent {
   id: string;
@@ -67,6 +68,7 @@ interface NewEventState {
     const { appointments, loading, error } = useAppSelector((state) => state.appointments);
     const { staffProfiles } = useAppSelector((state) => state.staff);
     const { rooms } = useAppSelector((state) => state.rooms);
+    const { marginTopValue } = useGlobalNavigationOffset();
 
     // State
     const [currentDate, setCurrentDate] = useState(new Date());
@@ -954,7 +956,14 @@ interface NewEventState {
   }
 
   return (
-    <Box sx={{ p: 3, height: 'calc(100vh - 64px - 48px)', display: 'flex', flexDirection: 'column' }}>
+    <Box sx={{ 
+      p: 3, 
+      height: 'calc(100vh - 64px - 48px)', 
+      display: 'flex', 
+      flexDirection: 'column',
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Typography variant="h4" gutterBottom>Terminkalender</Typography>
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>

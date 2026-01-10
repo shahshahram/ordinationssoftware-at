@@ -376,6 +376,7 @@ router.put('/profile', auth, [
   body('profile.phone').optional().trim(),
   body('preferences.language').optional().isIn(['de', 'en']),
   body('preferences.theme').optional().isIn(['light', 'dark']),
+  body('profile.preferences.navigationMode').optional().isIn(['dropdown', 'sidebar']),
   body('profile.preferences.autoBillingEnabled').optional().isBoolean(),
   body('profile.preferences.eldaEnabled').optional().isBoolean(),
   body('profile.preferences.eldaMethod').optional().isIn(['ftps', 'webservice', 'auto']),

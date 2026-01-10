@@ -33,5 +33,11 @@ backend/certs/*.key
 backend/certs/*.pem
 !backend/certs/README.md
 
+# SSL certificates for local HTTPS development
+frontend/*.pem
+frontend/*.key
+frontend/*.crt
+frontend/localhost+*
+
 
 version-2026-01-07-full.bundle

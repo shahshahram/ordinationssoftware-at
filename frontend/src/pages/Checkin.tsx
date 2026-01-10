@@ -19,9 +19,11 @@ import {
   Error as ErrorIcon
 } from '@mui/icons-material';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 const Checkin: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -148,7 +150,15 @@ const Checkin: React.FC = () => {
 
   if (isValidating) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', flexDirection: 'column' }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '100vh', 
+        flexDirection: 'column',
+        mt: marginTopValue !== '0px' ? marginTopValue : 0,
+        transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+      }}>
         <CircularProgress size={60} />
         <Typography variant="h6" sx={{ mt: 2 }}>Check-in Session wird validiert...</Typography>
       </Box>

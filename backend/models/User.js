@@ -70,6 +70,7 @@ const UserSchema = new mongoose.Schema({
       timezone: { type: String, default: 'Europe/Vienna' },
       dateFormat: { type: String, default: 'DD.MM.YYYY' },
       timeFormat: { type: String, default: '24h' },
+      navigationMode: { type: String, enum: ['dropdown', 'sidebar'], default: 'dropdown' }, // Navigation-Modus: Dropdown oder Sidebar
       autoBillingEnabled: { type: Boolean, default: false }, // Systemeinstellung: Automatische Abrechnung
       eldaEnabled: { type: Boolean, default: false },
       eldaMethod: { type: String, enum: ['ftps', 'webservice', 'auto'], default: 'auto' },

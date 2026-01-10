@@ -555,34 +555,123 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
   }, [stream, videoRef]);
 
   const startCamera = useCallback(async () => {
-    // Stoppe zuerst den alten Stream, falls vorhanden
+    console.log('🎥 startCamera called', { stream: !!stream, videoRef: !!videoRef });
+    
+    // Wenn bereits ein Stream existiert, nicht erneut starten
     if (stream) {
-      stream.getTracks().forEach(track => track.stop());
+      console.log('⏭️ Stream already exists, skipping start');
+      return;
+    }
+    
+    // Prüfe, ob wir in Produktion sind (HTTPS sollte automatisch vorhanden sein)
+    const isProduction = process.env.NODE_ENV === 'production' || 
+                       window.location.hostname !== 'localhost' && 
+                       window.location.hostname !== '127.0.0.1' &&
+                       !window.location.hostname.startsWith('192.168.') &&
+                       !window.location.hostname.startsWith('10.') &&
+                       !window.location.hostname.startsWith('172.');
+    
+    // Prüfe, ob die Seite über HTTPS oder localhost aufgerufen wird
+    const isSecureContext = window.isSecureContext || 
+                           window.location.protocol === 'https:' || 
+                           window.location.hostname === 'localhost' || 
+                           window.location.hostname === '127.0.0.1';
+    
+    // In Produktion sollte HTTPS automatisch vorhanden sein
+    if (isProduction && window.location.protocol !== 'https:') {
+      const errorMessage = 'Kamera-Zugriff erfordert HTTPS. Bitte kontaktieren Sie den Administrator, um HTTPS für die Produktionsumgebung einzurichten.';
+      console.error('❌ Production without HTTPS:', errorMessage);
+      setError(errorMessage);
+      return;
+    }
+    
+    // In Entwicklung: Prüfe, ob navigator.mediaDevices verfügbar ist
+    if (!navigator.mediaDevices) {
+      const errorMessage = isProduction 
+        ? 'Kamera-Zugriff ist nicht verfügbar. Bitte kontaktieren Sie den Administrator.'
+        : 'Kamera-Zugriff erfordert eine sichere Verbindung (HTTPS). Die Seite wird aktuell über HTTP aufgerufen (' + window.location.protocol + '//' + window.location.hostname + '). Für die Entwicklung können Sie ngrok verwenden: "ngrok http 3000" oder mkcert für lokale Zertifikate.';
+      console.error('❌ navigator.mediaDevices not available:', errorMessage);
+      setError(errorMessage);
+      return;
+    }
+    
+    if (!isSecureContext && !navigator.mediaDevices.getUserMedia && !isProduction) {
+      const errorMessage = 'Kamera-Zugriff erfordert eine sichere Verbindung (HTTPS). Die Seite wird aktuell über HTTP aufgerufen (' + window.location.protocol + '//' + window.location.hostname + '). Für die Entwicklung können Sie ngrok verwenden: "ngrok http 3000" oder mkcert für lokale Zertifikate.';
+      console.error('❌ Insecure context and getUserMedia not available:', errorMessage);
+      setError(errorMessage);
+      return;
     }
     
     try {
-      const constraints: MediaStreamConstraints = {
-        video: {
-          facingMode: facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
-        audio: false
-      };
+      let mediaStream: MediaStream;
+      
+      // Prüfe, ob getUserMedia verfügbar ist
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        // Moderne Browser-API
+        console.log('📹 Using modern getUserMedia API...', { facingMode });
+        
+        const constraints: MediaStreamConstraints = {
+          video: {
+            facingMode: facingMode,
+          },
+          audio: false
+        };
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } else {
+        // Fallback für ältere Browser
+        console.log('📹 Using legacy getUserMedia API...');
+        const getUserMedia = (navigator as any).getUserMedia || 
+                            (navigator as any).webkitGetUserMedia || 
+                            (navigator as any).mozGetUserMedia || 
+                            (navigator as any).msGetUserMedia;
+        
+        if (!getUserMedia) {
+          throw new Error('getUserMedia wird von diesem Browser nicht unterstützt. Bitte verwenden Sie einen modernen Browser (Chrome, Firefox, Safari, Edge) und stellen Sie sicher, dass die Seite über HTTPS aufgerufen wird.');
+        }
+
+        // Legacy API verwendet Callback statt Promise
+        mediaStream = await new Promise<MediaStream>((resolve, reject) => {
+          const constraints: any = {
+            video: {
+              facingMode: facingMode,
+            },
+            audio: false
+          };
+          
+          getUserMedia.call(
+            navigator,
+            constraints,
+            (stream: MediaStream) => resolve(stream),
+            (error: any) => reject(error)
+          );
+        });
+      }
+
+      console.log('✅ Camera access granted', { tracks: mediaStream.getTracks().length });
       setStream(mediaStream);
+      setError(null); // Lösche vorherige Fehler
+      // Das Video-Element wird durch den useEffect aktualisiert, nicht hier
+      // Dies verhindert Race Conditions und mehrfache play() Aufrufe
     } catch (error: any) {
-      console.error('Error accessing camera:', error);
-      setError(
-        error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError'
-          ? 'Kamera-Zugriff wurde verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.'
-          : error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError'
-          ? 'Keine Kamera gefunden. Bitte stellen Sie sicher, dass eine Kamera angeschlossen ist.'
-          : 'Fehler beim Zugriff auf die Kamera. Bitte versuchen Sie es erneut.'
-      );
+      console.error('❌ Error accessing camera:', error);
+      let errorMessage = '';
+      
+      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+        errorMessage = 'Kamera-Zugriff wurde verweigert. Bitte erlauben Sie den Zugriff in den Browser-Einstellungen.';
+      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+        errorMessage = 'Keine Kamera gefunden. Bitte stellen Sie sicher, dass eine Kamera angeschlossen ist.';
+      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+        errorMessage = 'Kamera wird bereits von einer anderen Anwendung verwendet. Bitte schließen Sie andere Apps, die die Kamera nutzen.';
+      } else if (error.name === 'NotSupportedError' || error.message?.includes('getUserMedia')) {
+        errorMessage = 'Kamera-Zugriff wird von diesem Browser nicht unterstützt. Bitte verwenden Sie einen modernen Browser (Chrome, Firefox, Safari, Edge) und stellen Sie sicher, dass die Seite über HTTPS aufgerufen wird.';
+      } else {
+        errorMessage = error.message || `Fehler beim Zugriff auf die Kamera: ${error.name || 'Unbekannter Fehler'}. Bitte versuchen Sie es erneut.`;
+      }
+      
+      setError(errorMessage);
     }
-  }, [facingMode, stream]);
+  }, [facingMode]);
 
   const toggleCamera = useCallback(async () => {
     stopCamera();
@@ -700,6 +789,9 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
   useEffect(() => {
     if (!videoRef || !stream) return;
 
+    let playTimer: NodeJS.Timeout | null = null;
+    let isMounted = true;
+
     // Stoppe vorheriges Video, falls vorhanden
     if (videoRef.srcObject) {
       const oldStream = videoRef.srcObject as MediaStream;
@@ -708,23 +800,56 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
       videoRef.srcObject = null;
     }
 
-    // Setze neuen Stream und starte Wiedergabe
+    // Setze wichtige Attribute für Android-Kompatibilität
+    videoRef.setAttribute('autoplay', '');
+    videoRef.setAttribute('playsinline', '');
+    videoRef.setAttribute('muted', '');
+    videoRef.setAttribute('webkit-playsinline', '');
+
+    // Setze neuen Stream
     videoRef.srcObject = stream;
     
-    // Warte kurz, bevor play() aufgerufen wird, um sicherzustellen, dass srcObject gesetzt ist
-    const playPromise = videoRef.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          // Wiedergabe erfolgreich gestartet
-        })
-        .catch((err) => {
-          // Fehler wird ignoriert, da dies normal sein kann (z.B. wenn Dialog geschlossen wird)
-          if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
-            console.error('Error playing video:', err);
-          }
-        });
-    }
+    // Warte, bis das Video-Element bereit ist (loadedmetadata Event)
+    const handleLoadedMetadata = () => {
+      if (!isMounted || !videoRef || !stream) return;
+      
+      // Warte kurz, bevor play() aufgerufen wird, um sicherzustellen, dass srcObject gesetzt ist
+      // Dies ist besonders wichtig für Android-Geräte
+      playTimer = setTimeout(() => {
+        if (!isMounted || !videoRef || !stream) return;
+        
+        const playPromise = videoRef.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              // Wiedergabe erfolgreich gestartet
+            })
+            .catch((err) => {
+              // Fehler wird ignoriert, da dies normal sein kann (z.B. wenn Dialog geschlossen wird)
+              if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
+                console.error('Error playing video:', err);
+              }
+            });
+        }
+      }, 300);
+    };
+
+    // Fallback: Wenn loadedmetadata nicht ausgelöst wird, versuche trotzdem play()
+    const fallbackTimer = setTimeout(() => {
+      if (!isMounted || !videoRef || !stream) return;
+      if (videoRef.readyState >= 2) { // HAVE_CURRENT_DATA oder höher
+        handleLoadedMetadata();
+      }
+    }, 500);
+
+    videoRef.addEventListener('loadedmetadata', handleLoadedMetadata);
+    
+    return () => {
+      isMounted = false;
+      if (playTimer) clearTimeout(playTimer);
+      clearTimeout(fallbackTimer);
+      videoRef.removeEventListener('loadedmetadata', handleLoadedMetadata);
+    };
   }, [stream, videoRef]);
 
   // Handler für Datei-Upload im Scan-Modus (Mehrfachauswahl)
@@ -777,25 +902,29 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
     setFilePreviews(previews);
   }, []);
 
-  // Starte Kamera, wenn Scan-Dialog geöffnet wird und Kamera-Modus aktiv ist
-  useEffect(() => {
-    if (scanDialogOpen && !capturedImage && scanMode === 'camera') {
-      startCamera();
-    } else {
-      stopCamera();
-    }
-
-    return () => {
-      stopCamera();
-    };
-  }, [scanDialogOpen, capturedImage, scanMode, startCamera, stopCamera]);
-
   // Setze initialen Scan-Modus basierend auf Gerätetyp
   useEffect(() => {
     if (scanDialogOpen) {
       setScanMode(isMobileDevice ? 'camera' : 'file');
     }
   }, [scanDialogOpen, isMobileDevice]);
+
+  // Starte Kamera, wenn Scan-Dialog geöffnet wird und Kamera-Modus aktiv ist
+  useEffect(() => {
+    if (scanDialogOpen && !capturedImage && scanMode === 'camera' && !stream) {
+      // Warte länger, damit das Dialog und das Video-Element vollständig gerendert sind
+      // Dies ist besonders wichtig für Android-Geräte
+      const timer = setTimeout(() => {
+        console.log('🎥 Starting camera...', { videoRef: !!videoRef, scanDialogOpen, scanMode, hasStream: !!stream });
+        startCamera();
+      }, 500);
+      return () => {
+        clearTimeout(timer);
+      };
+    } else if (!scanDialogOpen || scanMode !== 'camera') {
+      stopCamera();
+    }
+  }, [scanDialogOpen, capturedImage, scanMode, startCamera, stopCamera, videoRef, stream]);
 
   // Validierung nach ALLEN Hooks
   if (!patientId) {
@@ -1496,10 +1625,13 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                     ref={(video) => {
                       if (video) {
                         setVideoRef(video);
-                        if (stream) {
-                          video.srcObject = stream;
-                          video.play().catch(err => console.error('Error playing video:', err));
-                        }
+                        // Setze wichtige Attribute für Android
+                        video.setAttribute('autoplay', '');
+                        video.setAttribute('playsinline', '');
+                        video.setAttribute('muted', '');
+                        video.setAttribute('webkit-playsinline', '');
+                        // Das srcObject wird durch den useEffect gesetzt, nicht hier
+                        // Dies verhindert Race Conditions und mehrfache play() Aufrufe
                       }
                     }}
                     autoPlay
@@ -1509,7 +1641,8 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                       width: '100%',
                       height: 'auto',
                       borderRadius: 8,
-                      transform: facingMode === 'user' ? 'scaleX(-1)' : 'none'
+                      transform: facingMode === 'user' ? 'scaleX(-1)' : 'none',
+                      objectFit: 'cover'
                     }}
                   />
                   {!stream && (
@@ -1520,11 +1653,60 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                         left: '50%',
                         transform: 'translate(-50%, -50%)',
                         textAlign: 'center',
-                        color: 'white'
+                        color: 'white',
+                        zIndex: 10,
+                        width: '90%',
+                        maxWidth: 400
                       }}
                     >
                       <CircularProgress sx={{ color: 'white', mb: 2 }} />
-                      <Typography>Kamera wird initialisiert...</Typography>
+                      <Typography sx={{ mb: 2 }}>Kamera wird initialisiert...</Typography>
+                      {error && (
+                        <>
+                          <Alert 
+                            severity="error" 
+                            sx={{ 
+                              mb: 2, 
+                              maxWidth: '100%',
+                              mx: 'auto',
+                              '& .MuiAlert-message': { fontSize: '0.875rem', whiteSpace: 'pre-line' }
+                            }}
+                          >
+                            {error}
+                          </Alert>
+                          {error.includes('HTTPS') && !error.includes('Produktion') && (
+                            <Alert 
+                              severity="info" 
+                              sx={{ 
+                                mb: 2, 
+                                maxWidth: '100%',
+                                mx: 'auto',
+                                '& .MuiAlert-message': { fontSize: '0.875rem' }
+                              }}
+                            >
+                              <Typography variant="body2" sx={{ mb: 1, fontWeight: 'bold' }}>
+                                Schnelllösung für Entwicklung:
+                              </Typography>
+                              <Typography variant="body2" component="div" sx={{ textAlign: 'left' }}>
+                                1. Terminal öffnen<br/>
+                                2. <code style={{ background: 'rgba(0,0,0,0.1)', padding: '2px 4px', borderRadius: '3px' }}>ngrok http 3000</code> ausführen<br/>
+                                3. Die ngrok HTTPS-URL auf dem mobilen Gerät verwenden
+                              </Typography>
+                            </Alert>
+                          )}
+                        </>
+                      )}
+                      <Button
+                        variant="contained"
+                        onClick={() => {
+                          setError(null);
+                          startCamera();
+                        }}
+                        sx={{ mt: 2 }}
+                        startIcon={<CameraAlt />}
+                      >
+                        Kamera erneut starten
+                      </Button>
                     </Box>
                   )}
                 </Box>

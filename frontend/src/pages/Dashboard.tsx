@@ -44,6 +44,7 @@ import QRCodeGenerator from '../components/QRCodeGenerator';
 import TabletMode from '../components/TabletMode';
 import InternalMessagesDialog from '../components/InternalMessagesDialog';
 import { fetchUnreadCount, fetchMessages, markAsRead, InternalMessage } from '../store/slices/internalMessagesSlice';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import {
   People,
   CalendarToday,
@@ -72,6 +73,7 @@ const Dashboard: React.FC = () => {
   const { widgets, loading, error } = useAppSelector((state) => state.dashboardWidgets);
   const { qrCode, isLoading: qrLoading, error: qrError } = useAppSelector((state) => state.checkin);
   const { user } = useAppSelector((state) => state.auth);
+  const { marginTopValue } = useGlobalNavigationOffset();
   
   const [editMode, setEditMode] = useState(false);
   const [widgetSelectorOpen, setWidgetSelectorOpen] = useState(false);
@@ -1437,7 +1439,9 @@ const Dashboard: React.FC = () => {
       width: '100%',
       maxWidth: '100%',
       overflowX: 'hidden',
-      boxSizing: 'border-box'
+      boxSizing: 'border-box',
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box 
         display="flex" 

@@ -4,6 +4,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import QRCodeGenerator from '../components/QRCodeGenerator';
 import api from '../utils/api';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { de } from 'date-fns/locale';
@@ -120,6 +121,7 @@ const Billing: React.FC = () => {
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { invoices, services, loading, error, statistics } = useAppSelector((state) => state.billing);
   const { patients } = useAppSelector((state) => state.patients);
+  const { marginTopValue } = useGlobalNavigationOffset();
   
   // Sicherheitsprüfung für invoices
   const safeInvoices = Array.isArray(invoices) ? invoices : [];
@@ -1115,7 +1117,10 @@ const Billing: React.FC = () => {
   };
 
   return (
-    <Box>
+    <Box sx={{
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box 
         display="flex" 
         justifyContent="space-between" 

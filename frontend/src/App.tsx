@@ -1,15 +1,16 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
-import { useAppSelector } from './store/hooks';
+import { useAppSelector, useAppDispatch } from './store/hooks';
+import { loadNavigationMode, setSidebarOpen } from './store/slices/navigationSlice';
 // import { Global } from '@emotion/react'; // Disabled to prevent accessibility issues
 
 // Layout Components
 import Layout from './components/Layout/Layout';
-import Sidebar from './components/Layout/Sidebar';
 import Header from './components/Layout/Header';
+import SidebarNavigation from './components/Layout/SidebarNavigation';
 import ProtectedRoute from './components/ProtectedRoute';
 import LocationProvider from './components/Location/LocationProvider';
 
@@ -226,16 +227,36 @@ const getTheme = (mode: 'light' | 'dark') => createTheme({
 //   />
 // );
 
-// App Content Component
-const AppContent: React.FC = () => {
-  const [sidebarOpen, setSidebarOpen] = React.useState(false);
+// Inner Content Component (muss innerhalb Router sein)
+const InnerAppContent: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const location = useLocation();
+  const navigationMode = useAppSelector((state) => state.navigation.mode);
+  const sidebarOpen = useAppSelector((state) => state.navigation.sidebarOpen);
+  const [localSidebarOpen, setLocalSidebarOpen] = React.useState(false);
+  
+  // Synchronisiere lokalen State mit Redux
+  React.useEffect(() => {
+    setLocalSidebarOpen(sidebarOpen);
+  }, [sidebarOpen]);
+  const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
+  const isInternalMessages = location.pathname === '/internal-messages';
+
+  // Lade Navigation-Modus beim Login
+  React.useEffect(() => {
+    if (isAuthenticated) {
+      dispatch(loadNavigationMode());
+    }
+  }, [isAuthenticated, dispatch]);
 
   const handleSidebarToggle = () => {
-    setSidebarOpen(!sidebarOpen);
+    const newState = !localSidebarOpen;
+    setLocalSidebarOpen(newState);
+    dispatch(setSidebarOpen(newState));
   };
 
   return (
-    <Router>
+    <>
       <Routes>
         {/* Public Routes */}
         <Route path="/login" element={<Login />} />
@@ -252,20 +273,29 @@ const AppContent: React.FC = () => {
             <ProtectedRoute>
               <LocationProvider>
                 <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-                  <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+                  {/* Sidebar Navigation (nur wenn Sidebar-Modus aktiv) */}
+                  {navigationMode === 'sidebar' && (
+                    <SidebarNavigation open={localSidebarOpen} onClose={() => {
+                      setLocalSidebarOpen(false);
+                      dispatch(setSidebarOpen(false));
+                    }} />
+                  )}
                   <Box
                     component="main"
                     sx={{
                       flexGrow: 1,
                       display: 'flex',
                       flexDirection: 'column',
-                      ml: { sm: sidebarOpen ? '240px' : '0px' },
+                      ml: { 
+                        sm: navigationMode === 'sidebar' && localSidebarOpen ? '240px' : '0px',
+                        xs: 0 
+                      },
                       transition: 'margin 0.3s ease',
                       overflow: 'hidden',
                       height: '100vh',
                     }}
                   >
-                    <Header onMenuClick={handleSidebarToggle} />
+                    <Header onMenuClick={handleSidebarToggle} navigationOpen={localSidebarOpen} />
                     <Layout>
                     <Routes>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -799,6 +829,15 @@ const AppContent: React.FC = () => {
           }
         />
       </Routes>
+    </>
+  );
+};
+
+// App Content Component
+const AppContent: React.FC = () => {
+  return (
+    <Router>
+      <InnerAppContent />
     </Router>
   );
 };
