@@ -55,9 +55,11 @@ import {
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 const WaitingList: React.FC = () => {
   const dispatch = useAppDispatch();
+  const { marginTopValue } = useGlobalNavigationOffset();
   const { entries, loading, error, count } = useAppSelector((state) => state.waitingList);
   const { patients } = useAppSelector((state) => state.patients);
   const { locations } = useAppSelector((state) => state.locations);
@@ -251,7 +253,11 @@ const WaitingList: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" sx={{ fontWeight: 600 }}>
           Warteliste

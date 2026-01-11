@@ -42,6 +42,7 @@ import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface OGKBillingStats {
   period: string;
@@ -53,6 +54,7 @@ interface OGKBillingStats {
 
 const OGKBilling: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
   const [stats, setStats] = useState<OGKBillingStats | null>(null);
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -159,7 +161,11 @@ const OGKBilling: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Typography variant="h4">ÖGK-Abrechnung</Typography>

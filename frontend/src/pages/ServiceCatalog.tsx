@@ -67,6 +67,7 @@ import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 import { Refresh } from '@mui/icons-material';
 import RichTextEditor from '../components/RichTextEditor';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 // Interface-Definitionen
 interface Location {
@@ -280,6 +281,7 @@ const ServiceCatalog: React.FC = () => {
   const theme = useTheme();
   const dispatch = useDispatch();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { marginTopValue } = useGlobalNavigationOffset();
   
   const [services, setServices] = useState<ServiceCatalog[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -998,7 +1000,14 @@ const ServiceCatalog: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 2, width: '100%', maxWidth: '100vw', overflow: 'hidden' }}>
+    <Box sx={{ 
+      p: 2, 
+      width: '100%', 
+      maxWidth: '100vw', 
+      overflow: 'hidden',
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           Leistungskatalog

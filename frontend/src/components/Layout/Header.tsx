@@ -7,7 +7,6 @@ import { setCurrentLocation, fetchUserLocations } from '../../store/slices/locat
 import { toggleTheme } from '../../store/slices/uiSlice';
 import { updateNavigationMode } from '../../store/slices/navigationSlice';
 import DropdownNavigation from './DropdownNavigation';
-import SidebarNavigation from './SidebarNavigation';
 import {
   AppBar,
   Toolbar,
@@ -313,11 +312,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
       </Toolbar>
       </AppBar>
       
-      {/* Navigation - Dropdown oder Sidebar basierend auf Präferenz */}
-      {navigationMode === 'dropdown' ? (
+      {/* Navigation - Dropdown (Sidebar wird in App.tsx gerendert) */}
+      {navigationMode === 'dropdown' && (
         <DropdownNavigation open={navigationOpen} onClose={onMenuClick} />
-      ) : (
-        <SidebarNavigation open={navigationOpen} onClose={onMenuClick} />
       )}
     </Box>
   );

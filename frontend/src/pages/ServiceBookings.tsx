@@ -48,6 +48,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface ServiceBooking {
   _id: string;
@@ -127,6 +128,7 @@ const ServiceBookings: React.FC = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { user } = useSelector((state: RootState) => state.auth);
+  const { marginTopValue } = useGlobalNavigationOffset();
   
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
   const [services, setServices] = useState<ServiceCatalog[]>([]);
@@ -464,7 +466,11 @@ const ServiceBookings: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           Dienst-Kalender

@@ -80,6 +80,7 @@ import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useTheme, useMediaQuery } from '@mui/material';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import { createFilterOptions } from '@mui/material/Autocomplete';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
@@ -97,6 +98,7 @@ const AddressBook: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const { marginTopValue } = useGlobalNavigationOffset();
 
   const {
     contacts,
@@ -590,6 +592,8 @@ const AddressBook: React.FC = () => {
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
+        mt: marginTopValue !== '0px' ? marginTopValue : 0,
+        transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
       }}
     >
       {/* Header */}

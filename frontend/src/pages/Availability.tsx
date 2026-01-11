@@ -37,6 +37,7 @@ import { de } from 'date-fns/locale';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface AvailableSlot {
   start: string;
@@ -63,6 +64,7 @@ const stripHtmlTags = (html: string): string => {
 };
 
 const Availability: React.FC = () => {
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [staffId, setStaffId] = useState<string>('');
   const [serviceId, setServiceId] = useState<string>('');
   const [startDate, setStartDate] = useState<Date | null>(new Date());
@@ -309,7 +311,11 @@ const Availability: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Typography variant="h4" gutterBottom>
         Verfügbarkeiten
       </Typography>

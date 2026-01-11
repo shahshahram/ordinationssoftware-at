@@ -17,6 +17,7 @@ import { de } from 'date-fns/locale';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface ReportDefinition {
   _id?: string;
@@ -69,6 +70,7 @@ interface ReportExecution {
 }
 
 const Reports: React.FC = () => {
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [reports, setReports] = useState<ReportDefinition[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -436,7 +438,11 @@ const Reports: React.FC = () => {
   });
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
           <Typography variant="h4" gutterBottom>

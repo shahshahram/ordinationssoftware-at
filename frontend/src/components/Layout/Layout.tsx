@@ -15,21 +15,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       component="main"
       sx={{
         flexGrow: 1,
-        p: isInternalMessages ? 0 : 3,
+        px: isInternalMessages ? 0 : { xs: 2, sm: 3 }, // Symmetrisches Padding links und rechts
+        py: isInternalMessages ? 0 : { xs: 2, sm: 3 }, // Symmetrisches Padding oben und unten
         backgroundColor: 'background.default',
         overflow: isInternalMessages ? 'hidden' : 'auto',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
+        width: '100%', // Volle Breite
       }}
     >
-      {isInternalMessages ? (
-        children
-      ) : (
-        <Container maxWidth="xl" sx={{ height: '100%' }}>
-          {children}
-        </Container>
-      )}
+      {children}
     </Box>
   );
 };

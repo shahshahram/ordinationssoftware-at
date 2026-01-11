@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import { 
   fetchDocuments, 
   fetchStatistics, 
@@ -88,6 +89,7 @@ import {
 const Documents: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
+  const { marginTopValue } = useGlobalNavigationOffset();
   const { documents, loading, error, statistics } = useAppSelector((state) => state.documents);
   const { templates: documentTemplates } = useAppSelector((state) => state.documentTemplates);
   const { patients } = useAppSelector((state) => state.patients);
@@ -508,7 +510,10 @@ const Documents: React.FC = () => {
   };
 
   return (
-    <Box>
+    <Box sx={{
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           Dokumentenverwaltung

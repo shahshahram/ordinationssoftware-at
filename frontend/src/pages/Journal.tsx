@@ -47,6 +47,7 @@ import api from '../utils/api';
 import { format as formatDate } from 'date-fns';
 import { useSnackbar } from 'notistack';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface InvoiceJournalEntry {
   _id: string;
@@ -140,6 +141,7 @@ const toEuro = (value: number | undefined | null): number => {
 const Journal: React.FC = () => {
   const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
+  const { marginTopValue } = useGlobalNavigationOffset();
   
   const [activeTab, setActiveTab] = useState(0); // 0 = Rechnungen, 1 = Registrierkassa
   const [loading, setLoading] = useState(false);
@@ -471,7 +473,11 @@ const Journal: React.FC = () => {
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
         <Box>
           <Typography variant="h4" gutterBottom>

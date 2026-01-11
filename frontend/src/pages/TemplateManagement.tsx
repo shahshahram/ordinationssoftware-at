@@ -31,6 +31,7 @@ import DocumentEditor from '../components/DocumentEditor';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { createDocumentTemplate, updateDocumentTemplate } from '../store/slices/documentTemplateSlice';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -61,6 +62,7 @@ function TabPanel(props: TabPanelProps) {
 const TemplateManagement: React.FC = () => {
   const dispatch = useAppDispatch();
   const { loading, error } = useAppSelector(state => state.documentTemplates);
+  const { marginTopValue } = useGlobalNavigationOffset();
   
   const [tabValue, setTabValue] = useState(0);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -147,7 +149,11 @@ const TemplateManagement: React.FC = () => {
 
   return (
     <Container maxWidth="xl">
-      <Box sx={{ py: 3 }}>
+      <Box sx={{ 
+        py: 3,
+        mt: marginTopValue !== '0px' ? marginTopValue : 0,
+        transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+      }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Template Management
         </Typography>

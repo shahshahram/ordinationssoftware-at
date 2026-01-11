@@ -37,6 +37,7 @@ import {
   Grid,
 } from '@mui/material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import {
   Search,
   Add,
@@ -79,6 +80,7 @@ interface User {
 const Users: React.FC = () => {
   const dispatch = useAppDispatch();
   const { user: currentUser } = useAppSelector((state) => state.auth);
+  const { marginTopValue } = useGlobalNavigationOffset();
   
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
@@ -455,7 +457,11 @@ const Users: React.FC = () => {
   const isEditable = dialogMode === 'add' || dialogMode === 'edit';
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h4" component="h1">
           Benutzerverwaltung

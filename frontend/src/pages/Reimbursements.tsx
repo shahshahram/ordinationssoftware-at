@@ -48,6 +48,7 @@ import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface Reimbursement {
   _id: string;
@@ -82,6 +83,7 @@ interface Reimbursement {
 const Reimbursements: React.FC = () => {
   const dispatch = useAppDispatch();
   const { enqueueSnackbar } = useSnackbar();
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -198,7 +200,11 @@ const Reimbursements: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <Typography variant="h4">Erstattungsverwaltung</Typography>

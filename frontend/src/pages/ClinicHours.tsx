@@ -50,6 +50,7 @@ import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface ClinicHours {
   _id?: string;
@@ -74,6 +75,7 @@ const weekdays = [
 ];
 
 const ClinicHours: React.FC = () => {
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [clinicHours, setClinicHours] = useState<ClinicHours[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -181,7 +183,11 @@ const ClinicHours: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="h4">Ordinationszeiten</Typography>

@@ -27,8 +27,13 @@ const DropdownNavigation: React.FC<DropdownNavigationProps> = ({ open, onClose }
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   const handleNavigation = (path: string) => {
-    navigate(path);
-    onClose();
+    // Navigiere nur, wenn wir nicht bereits auf dieser Seite sind
+    if (location.pathname !== path) {
+      navigate(path);
+    } else {
+      // Wenn wir bereits auf dieser Seite sind, schließe das Dropdown trotzdem
+      onClose();
+    }
   };
 
   const handleToggleExpand = (itemText: string) => {
@@ -50,6 +55,13 @@ const DropdownNavigation: React.FC<DropdownNavigationProps> = ({ open, onClose }
     }
     return location.pathname === item.path;
   };
+
+  // Schließe das Dropdown, wenn sich die Location ändert (nach Navigation)
+  useEffect(() => {
+    if (open) {
+      onClose();
+    }
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Click-Outside Handler
   useEffect(() => {

@@ -272,31 +272,34 @@ const InnerAppContent: React.FC = () => {
           element={
             <ProtectedRoute>
               <LocationProvider>
-                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-                  {/* Sidebar Navigation (nur wenn Sidebar-Modus aktiv) */}
-                  {navigationMode === 'sidebar' && (
-                    <SidebarNavigation open={localSidebarOpen} onClose={() => {
-                      setLocalSidebarOpen(false);
-                      dispatch(setSidebarOpen(false));
-                    }} />
-                  )}
-                  <Box
-                    component="main"
-                    sx={{
-                      flexGrow: 1,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      ml: { 
-                        sm: navigationMode === 'sidebar' && localSidebarOpen ? '240px' : '0px',
-                        xs: 0 
-                      },
-                      transition: 'margin 0.3s ease',
-                      overflow: 'hidden',
-                      height: '100vh',
-                    }}
-                  >
-                    <Header onMenuClick={handleSidebarToggle} navigationOpen={localSidebarOpen} />
-                    <Layout>
+                <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
+                  {/* Header außerhalb des main-Box, damit er immer volle Breite hat */}
+                  <Header onMenuClick={handleSidebarToggle} navigationOpen={localSidebarOpen} />
+                  
+                  <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                    {/* Sidebar Navigation (nur wenn Sidebar-Modus aktiv) */}
+                    {navigationMode === 'sidebar' && (
+                      <SidebarNavigation open={localSidebarOpen} onClose={() => {
+                        setLocalSidebarOpen(false);
+                        dispatch(setSidebarOpen(false));
+                      }} />
+                    )}
+                    <Box
+                      component="main"
+                      sx={{
+                        flexGrow: 1,
+                        display: 'flex',
+                        flexDirection: 'column',
+                        ml: { 
+                          sm: navigationMode === 'sidebar' && localSidebarOpen ? '240px' : '0px',
+                          xs: 0 
+                        },
+                        transition: 'margin 0.3s ease',
+                        overflow: 'hidden',
+                        minHeight: 0, // Wichtig für Flexbox overflow
+                      }}
+                    >
+                      <Layout>
                     <Routes>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<Dashboard />} />
@@ -822,8 +825,9 @@ const InnerAppContent: React.FC = () => {
                       />
                     </Routes>
                   </Layout>
+                    </Box>
+                  </Box>
                 </Box>
-              </Box>
               </LocationProvider>
             </ProtectedRoute>
           }

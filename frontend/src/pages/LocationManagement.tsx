@@ -88,6 +88,7 @@ import {
 import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import LocationWeeklyScheduleComponent from '../components/LocationWeeklySchedule';
 import api from '../utils/api';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -113,6 +114,7 @@ function TabPanel(props: TabPanelProps) {
 
 const LocationManagement: React.FC = () => {
   const dispatch = useAppDispatch();
+  const { marginTopValue } = useGlobalNavigationOffset();
   const { locations, locationHours, locationClosures, staffAssignments, loading, error, currentLocation } = useAppSelector(state => state.locations);
   const { staffProfiles } = useAppSelector(state => state.staff);
   const { schedules: weeklySchedules } = useAppSelector(state => state.locationWeeklySchedules);
@@ -1101,7 +1103,11 @@ const LocationManagement: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="h4" component="h1">

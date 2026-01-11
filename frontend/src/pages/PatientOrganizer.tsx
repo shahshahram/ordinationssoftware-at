@@ -82,6 +82,7 @@ import {
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, updatePatient, Patient } from '../store/slices/patientSlice';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import { differenceInWeeks, addWeeks, parseISO, format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
@@ -158,6 +159,7 @@ const PatientOrganizer: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const { marginTopValue } = useGlobalNavigationOffset();
   const { patients, loading: patientsLoading } = useAppSelector((s: any) => s.patients);
   const { appointments, loading: appointmentsLoading } = useAppSelector((s: any) => s.appointments);
   const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((s: any) => s.diagnoses);
@@ -2255,7 +2257,9 @@ const PatientOrganizer: React.FC = () => {
       contain: 'layout style paint',
       willChange: 'auto',
       transform: 'translateZ(0)',
-      overflowX: 'hidden'
+      overflowX: 'hidden',
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       {/* Floating Action Button für Sidebar */}
       <Fab

@@ -78,6 +78,7 @@ import {
 } from '../store/slices/documentTemplateSlice';
 import api from '../utils/api';
 import { getPlaceholderLegend } from '../utils/placeholders';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -104,6 +105,7 @@ function TabPanel(props: TabPanelProps) {
 const LetterTemplates: React.FC = () => {
   const dispatch = useAppDispatch();
   const { locations } = useAppSelector(state => state.locations);
+  const { marginTopValue } = useGlobalNavigationOffset();
 
   const [tabValue, setTabValue] = useState(0);
   const [selectedLocationForLetterhead, setSelectedLocationForLetterhead] = useState<Location | null>(null);
@@ -235,7 +237,11 @@ const LetterTemplates: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
         <Box>
           <Typography variant="h4" gutterBottom>

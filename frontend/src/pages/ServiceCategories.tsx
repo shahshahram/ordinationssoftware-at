@@ -45,6 +45,7 @@ import {
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface ServiceCategory {
   _id?: string;
@@ -61,6 +62,7 @@ interface ServiceCategory {
 }
 
 const ServiceCategories: React.FC = () => {
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [categories, setCategories] = useState<ServiceCategory[]>([]);
   const [categoryTree, setCategoryTree] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -209,7 +211,11 @@ const ServiceCategories: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Service-Kategorien</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>

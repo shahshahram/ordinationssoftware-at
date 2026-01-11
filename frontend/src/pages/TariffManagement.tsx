@@ -57,6 +57,7 @@ import { useSnackbar } from 'notistack';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 interface Tariff {
   _id: string;
@@ -89,6 +90,7 @@ interface TariffInfo {
 
 const TariffManagement: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [activeTab, setActiveTab] = useState(0);
   const [tariffs, setTariffs] = useState<Tariff[]>([]);
   const [loading, setLoading] = useState(false);
@@ -229,7 +231,11 @@ const TariffManagement: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4">Tarifverwaltung</Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Drawer,
   List,
@@ -34,8 +34,11 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ open, onClose }) 
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   const handleNavigation = (path: string) => {
-    navigate(path);
-    if (isMobile) {
+    // Navigiere nur, wenn wir nicht bereits auf dieser Seite sind
+    if (location.pathname !== path) {
+      navigate(path);
+    } else {
+      // Wenn wir bereits auf dieser Seite sind, schließe die Sidebar trotzdem
       onClose();
     }
   };
@@ -59,6 +62,13 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ open, onClose }) 
     }
     return location.pathname === item.path;
   };
+
+  // Schließe die Sidebar, wenn sich die Location ändert (nach Navigation)
+  useEffect(() => {
+    if (open) {
+      onClose();
+    }
+  }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const drawerContent = (
     <Box sx={{ width: 240, height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -274,28 +284,30 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ open, onClose }) 
       </Drawer>
 
       {/* Desktop Drawer */}
-      <Drawer
-        variant="persistent"
-        open={open}
-        ModalProps={{
-          disableAutoFocus: true,
-          disableEnforceFocus: true,
-          disableRestoreFocus: true,
-        }}
-        sx={{
-          display: { xs: 'none', sm: 'block' },
-          zIndex: (theme) => theme.zIndex.drawer,
-          '& .MuiDrawer-paper': {
-            boxSizing: 'border-box',
-            width: 240,
-            position: 'relative',
-            height: '100vh',
+      {open && (
+        <Drawer
+          variant="persistent"
+          open={open}
+          ModalProps={{
+            disableAutoFocus: true,
+            disableEnforceFocus: true,
+            disableRestoreFocus: true,
+          }}
+          sx={{
+            display: { xs: 'none', sm: 'block' },
             zIndex: (theme) => theme.zIndex.drawer,
-          },
-        }}
-      >
-        {drawerContent}
-      </Drawer>
+            '& .MuiDrawer-paper': {
+              boxSizing: 'border-box',
+              width: 240,
+              position: 'relative',
+              height: '100vh',
+              zIndex: (theme) => theme.zIndex.drawer,
+            },
+          }}
+        >
+          {drawerContent}
+        </Drawer>
+      )}
     </>
   );
 };

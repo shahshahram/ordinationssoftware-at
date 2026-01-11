@@ -46,6 +46,7 @@ import { loadUser } from '../store/slices/authSlice';
 import api from '../utils/api';
 import UpdateMonitoring from '../components/UpdateMonitoring';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -53,6 +54,7 @@ const Settings: React.FC = () => {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user } = useSelector((state: any) => state.auth);
+  const { marginTopValue } = useGlobalNavigationOffset();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -444,7 +446,11 @@ const Settings: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: { xs: 2, sm: 3 } }}>
+    <Box sx={{ 
+      p: { xs: 2, sm: 3 },
+      mt: marginTopValue !== '0px' ? marginTopValue : 0,
+      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+    }}>
       <Typography 
         variant="h4" 
         gutterBottom
