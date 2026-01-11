@@ -267,6 +267,8 @@ interface Service {
     first_name?: string;
     last_name?: string;
   }>;
+  requires_device_selection?: boolean;
+  device_quantity_required?: number;
 }
 
 // Legacy interface für Rückwärtskompatibilität
@@ -1204,12 +1206,50 @@ const Appointments: React.FC = () => {
       // Hole zugewiesene Räume, Geräte und Personal aus der Leistung
       const selectedService = services.find(s => s._id === formData.serviceId);
       const assignedRooms = selectedService?.assigned_rooms?.map((r: { _id: string }) => r._id || r) || [];
-      const assignedDevices = selectedService?.assigned_devices?.map((d: { _id: string }) => d._id || d) || [];
-      const assignedUsers = selectedService?.assigned_users?.map((u: { _id: string }) => u._id || u) || [];
       
-      // Füge ausgewähltes Personal hinzu
+      // Geräte nur senden, wenn der Service eine Geräteauswahl erfordert UND Geräte zugewiesen sind
+      // Ansonsten undefined senden, damit das Backend die richtige Fehlermeldung zurückgeben kann
+      let assignedDevices: string[] | undefined = undefined;
+      if (selectedService?.requires_device_selection && selectedService?.assigned_devices && selectedService.assigned_devices.length > 0) {
+        // Filtere ungültige Werte und konvertiere zu Device-IDs
+        const validDeviceIds = selectedService.assigned_devices
+          .map((d: { _id: string } | string) => {
+            if (typeof d === 'string') return d;
+            return d?._id || String(d);
+          })
+          .filter((id: string | null | undefined) => id && id.trim().length > 0) as string[];
+        
+        if (validDeviceIds.length > 0) {
+          assignedDevices = validDeviceIds;
+          console.log('✅ Service requires device selection, sending devices:', assignedDevices);
+        } else {
+          console.log('⚠️ Service requires device selection but no valid devices found in assigned_devices');
+          assignedDevices = undefined; // Keine gültigen Geräte, nicht senden
+        }
+      } else if (selectedService?.requires_device_selection) {
+        console.log('⚠️ Service requires device selection but no devices assigned to service');
+        assignedDevices = undefined; // Nicht senden, damit Backend die richtige Fehlermeldung zurückgibt
+      } else {
+        console.log('❌ Service does not require device selection, not sending devices');
+        assignedDevices = undefined;
+      }
+      
+      // Wenn ein Mitarbeiter ausgewählt wurde, verwende nur diesen
+      // Ansonsten verwende alle zugewiesenen Benutzer aus dem Service
+      let assignedUsers: string[] = [];
+      console.log('🔍 handleSaveAppointment - selectedStaff:', selectedStaff);
+      console.log('🔍 handleSaveAppointment - selectedService?.assigned_users:', selectedService?.assigned_users);
       if (selectedStaff) {
-        assignedUsers.push(selectedStaff);
+        // Nur den ausgewählten Mitarbeiter verwenden
+        assignedUsers = [selectedStaff];
+        console.log('✅ Using selected staff only:', selectedStaff);
+      } else {
+        // Alle Service-Benutzer verwenden (falls kein Mitarbeiter ausgewählt wurde)
+        assignedUsers = selectedService?.assigned_users?.map((u: { _id: string } | string) => {
+          if (typeof u === 'string') return u;
+          return u._id || String(u);
+        }) || [];
+        console.log('⚠️ No selectedStaff, using all service users:', assignedUsers);
       }
 
       const newAppointment = {
@@ -1229,6 +1269,9 @@ const Appointments: React.FC = () => {
       
       console.log('Creating appointment with service data:', {
         service: selectedService?.name,
+        serviceId: selectedService?._id,
+        requiresDeviceSelection: selectedService?.requires_device_selection,
+        serviceAssignedDevices: selectedService?.assigned_devices,
         assignedRooms,
         assignedDevices,
         assignedUsers
@@ -1301,14 +1344,46 @@ const Appointments: React.FC = () => {
         selectedService = formData.service as Service;
       }
       const assignedRooms = selectedService?.assigned_rooms?.map((r: { _id: string }) => r._id || r) || [];
-      const assignedDevices = selectedService?.assigned_devices?.map((d: { _id: string }) => d._id || d) || [];
-      const assignedUsers = selectedService?.assigned_users?.map((u: { _id: string }) => u._id || u) || [];
       
-      // Füge ausgewähltes Personal hinzu
-      if (selectedStaff) {
-        if (!assignedUsers.includes(selectedStaff)) {
-          assignedUsers.push(selectedStaff);
+      // Geräte nur senden, wenn der Service eine Geräteauswahl erfordert UND Geräte zugewiesen sind
+      // Ansonsten undefined senden, damit das Backend die richtige Fehlermeldung zurückgeben kann
+      let assignedDevices: string[] | undefined = undefined;
+      if (selectedService?.requires_device_selection && selectedService?.assigned_devices && selectedService.assigned_devices.length > 0) {
+        // Filtere ungültige Werte und konvertiere zu Device-IDs
+        const validDeviceIds = selectedService.assigned_devices
+          .map((d: { _id: string } | string) => {
+            if (typeof d === 'string') return d;
+            return d?._id || String(d);
+          })
+          .filter((id: string | null | undefined) => id && id.trim().length > 0) as string[];
+        
+        if (validDeviceIds.length > 0) {
+          assignedDevices = validDeviceIds;
+          console.log('✅ Service requires device selection, sending devices:', assignedDevices);
+        } else {
+          console.log('⚠️ Service requires device selection but no valid devices found in assigned_devices');
+          assignedDevices = undefined; // Keine gültigen Geräte, nicht senden
         }
+      } else if (selectedService?.requires_device_selection) {
+        console.log('⚠️ Service requires device selection but no devices assigned to service');
+        assignedDevices = undefined; // Nicht senden, damit Backend die richtige Fehlermeldung zurückgibt
+      } else {
+        console.log('❌ Service does not require device selection, not sending devices');
+        assignedDevices = undefined;
+      }
+      
+      // Wenn ein Mitarbeiter ausgewählt wurde, verwende nur diesen
+      // Ansonsten verwende alle zugewiesenen Benutzer aus dem Service
+      let assignedUsers: string[] = [];
+      if (selectedStaff) {
+        // Nur den ausgewählten Mitarbeiter verwenden
+        assignedUsers = [selectedStaff];
+      } else {
+        // Alle Service-Benutzer verwenden (falls kein Mitarbeiter ausgewählt wurde)
+        assignedUsers = selectedService?.assigned_users?.map((u: { _id: string } | string) => {
+          if (typeof u === 'string') return u;
+          return u._id || String(u);
+        }) || [];
       }
 
       // Validiere type - nur gültige Werte erlaubt
@@ -1327,7 +1402,7 @@ const Appointments: React.FC = () => {
         location_id: selectedLocation || undefined,
         service: selectedService?._id || formData.serviceId || undefined,
         assigned_rooms: assignedRooms.length > 0 ? assignedRooms : undefined,
-        assigned_devices: assignedDevices.length > 0 ? assignedDevices : undefined,
+        assigned_devices: assignedDevices,
         assigned_users: assignedUsers.length > 0 ? assignedUsers : undefined
       };
 
@@ -1969,6 +2044,8 @@ const Appointments: React.FC = () => {
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const patientId = searchParams.get('patient');
+    const openDialogParam = searchParams.get('openDialog');
+    
     if (patientId) {
       console.log('Patient filter from URL:', patientId);
       // Find patient by ID
@@ -1976,9 +2053,21 @@ const Appointments: React.FC = () => {
       if (patient) {
         setPatientSearchValue(patient);
         setSearchTerm(`${patient.firstName} ${patient.lastName}`);
+        
+        // Wenn Dialog geöffnet ist, belege auch formData vor
+        if (openDialogParam === 'true' && openDialog) {
+          setFormData(prev => ({
+            ...prev,
+            patientId: patient._id,
+            patient: patient,
+            patientName: `${patient.firstName} ${patient.lastName}`,
+            patientPhone: patient.phone || '',
+            patientEmail: patient.email || ''
+          }));
+        }
       }
     }
-  }, [location.search, patients]);
+  }, [location.search, patients, openDialog]);
 
   // Handle URL parameters for opening dialog with prefilled date and time
   useEffect(() => {
@@ -1993,6 +2082,28 @@ const Appointments: React.FC = () => {
       // Open dialog and prefill date and time
       setOpenDialog(true);
       setDialogMode('add');
+      
+      // Prüfe ob Patient aus URL vorbelegt werden soll
+      const patientIdFromUrl = searchParams.get('patient');
+      if (patientIdFromUrl) {
+        // Warte auf Patienten, falls sie noch nicht geladen sind
+        if (patients.length > 0) {
+          const patient = patients.find(p => p._id === patientIdFromUrl);
+          if (patient) {
+            setPatientSearchValue(patient);
+            setFormData(prev => ({
+              ...prev,
+              patientId: patient._id,
+              patient: patient,
+              patientName: `${patient.firstName} ${patient.lastName}`,
+              patientPhone: patient.phone || '',
+              patientEmail: patient.email || ''
+            }));
+          }
+        }
+        // Wenn Patienten noch nicht geladen sind, wird der useEffect für patientSearchValue
+        // den Patienten später vorbelegen, wenn er geladen wird
+      }
       
       if (dateParam && timeParam) {
         // Prefill form with date and time from URL
@@ -2010,6 +2121,25 @@ const Appointments: React.FC = () => {
         newSearchParams.delete('openDialog');
         newSearchParams.delete('date');
         newSearchParams.delete('time');
+        if (patientIdFromUrl) {
+          newSearchParams.delete('patient');
+        }
+        const newSearch = newSearchParams.toString();
+        navigate(location.pathname + (newSearch ? `?${newSearch}` : ''), { replace: true });
+      } else if (patientIdFromUrl) {
+        // Remove URL parameters after reading them (auch wenn kein Datum/Zeit)
+        // Aber nur wenn Patienten bereits geladen sind, sonst warte noch
+        if (patients.length > 0) {
+          const newSearchParams = new URLSearchParams(location.search);
+          newSearchParams.delete('openDialog');
+          newSearchParams.delete('patient');
+          const newSearch = newSearchParams.toString();
+          navigate(location.pathname + (newSearch ? `?${newSearch}` : ''), { replace: true });
+        }
+      } else {
+        // Kein Patient, entferne nur openDialog
+        const newSearchParams = new URLSearchParams(location.search);
+        newSearchParams.delete('openDialog');
         const newSearch = newSearchParams.toString();
         navigate(location.pathname + (newSearch ? `?${newSearch}` : ''), { replace: true });
       }
@@ -2058,7 +2188,7 @@ const Appointments: React.FC = () => {
         // This will be handled by the useEffect dependency on appointments
       }
     }
-  }, [location.search, navigate, location.pathname, appointments, reduxAppointments]);
+  }, [location.search, navigate, location.pathname, appointments, reduxAppointments, patients]);
 
   // Initialize with real data from API - only once
   useEffect(() => {
@@ -2594,19 +2724,41 @@ const Appointments: React.FC = () => {
             Verwalten Sie Ihre Termine und das Wartezimmer
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={handleAddAppointment}
-          sx={{
-            fontSize: { xs: '0.875rem', sm: '1rem' },
-            minHeight: { xs: '44px', sm: 'auto' },
-            width: { xs: '100%', sm: 'auto' }
-          }}
-          fullWidth={isMobile}
-        >
-          {isMobile ? 'Neu' : 'Neuer Termin'}
-        </Button>
+        <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, flexDirection: { xs: 'column', sm: 'row' }, width: { xs: '100%', sm: 'auto' } }}>
+          <Button
+            variant="outlined"
+            startIcon={<Schedule />}
+            onClick={() => navigate('/service-demo-calendar')}
+            sx={{
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              width: { xs: '100%', sm: 'auto' },
+              borderColor: 'primary.main',
+              color: 'primary.main',
+              '&:hover': {
+                borderColor: 'primary.dark',
+                bgcolor: 'primary.light',
+                color: 'primary.dark'
+              }
+            }}
+            fullWidth={isMobile}
+          >
+            {isMobile ? 'Dienstkalender' : 'Dienstkalender'}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={handleAddAppointment}
+            sx={{
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              width: { xs: '100%', sm: 'auto' }
+            }}
+            fullWidth={isMobile}
+          >
+            {isMobile ? 'Neu' : 'Neuer Termin'}
+          </Button>
+        </Box>
       </Box>
 
       {/* Search and Filters */}
@@ -3674,6 +3826,15 @@ const Appointments: React.FC = () => {
                       // Speichere in den letzten 10 Leistungen
                       addToRecentServices(newValue._id);
                       
+                      // Debug: Zeige zugewiesene Geräte
+                      console.log('🔍 Service ausgewählt:', {
+                        name: newValue.name,
+                        code: newValue.code,
+                        assigned_devices: newValue.assigned_devices,
+                        assigned_devices_count: newValue.assigned_devices?.length || 0,
+                        requires_device_selection: newValue.requires_device_selection
+                      });
+                      
                       // Automatisch den Raum aus der Leistung übernehmen, falls vorhanden
                       if (newValue.assigned_rooms && newValue.assigned_rooms.length > 0) {
                         const firstRoom = newValue.assigned_rooms[0];
@@ -4441,6 +4602,11 @@ const Appointments: React.FC = () => {
                     handleFormChange('date', slotDate.toISOString().split('T')[0]);
                     handleFormChange('time', slotDate.toTimeString().slice(0, 5));
                     handleFormChange('room', slot.location || '');
+                    // Setze den ausgewählten Mitarbeiter
+                    if (slot.staff && slot.staff._id) {
+                      setSelectedStaff(slot.staff._id);
+                      console.log('✅ Selected staff from slot:', slot.staff._id, slot.staff.firstName, slot.staff.lastName);
+                    }
                     setShowAvailabilityDialog(false);
                   }}
                 >

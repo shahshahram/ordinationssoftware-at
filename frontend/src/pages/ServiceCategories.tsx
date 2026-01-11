@@ -35,6 +35,7 @@ import {
   ListItemText,
   ListItemIcon,
   Collapse,
+  Tooltip,
 } from '@mui/material';
 import {
   Add,
@@ -42,10 +43,12 @@ import {
   Delete,
   Refresh,
   Category,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface ServiceCategory {
   _id?: string;
@@ -80,6 +83,7 @@ const ServiceCategories: React.FC = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [viewMode, setViewMode] = useState<'list' | 'tree'>('list');
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const { enqueueSnackbar } = useSnackbar();
 
   useEffect(() => {
@@ -217,7 +221,17 @@ const ServiceCategories: React.FC = () => {
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Service-Kategorien</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">Service-Kategorien</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
             variant={viewMode === 'list' ? 'contained' : 'outlined'}
@@ -404,6 +418,113 @@ const ServiceCategories: React.FC = () => {
           <Button onClick={handleCloseDialog}>Abbrechen</Button>
           <Button onClick={handleSave} variant="contained">
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Service-Kategorien"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+            <Box>
+              <Typography variant="h6" gutterBottom color="primary">
+                Service-Kategorien
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Service-Kategorien helfen dabei, Leistungen zu organisieren und zu gruppieren. 
+                Sie können hierarchische Kategorien erstellen (Hauptkategorien und Unterkategorien).
+              </Typography>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Kategorie erstellen
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Klicken Sie auf <strong>"+ Neue Kategorie"</strong></li>
+                <li>Geben Sie einen <strong>Namen</strong> ein (z.B. "Konsultationen")</li>
+                <li>Geben Sie einen <strong>Code</strong> ein (z.B. "KONS")</li>
+                <li>Wählen Sie eine <strong>übergeordnete Kategorie</strong> (optional, für Hierarchien)</li>
+                <li>Wählen Sie eine <strong>Farbe</strong> für die Darstellung</li>
+                <li>Geben Sie eine <strong>Sortierreihenfolge</strong> ein</li>
+                <li>Wählen Sie <strong>sichtbar für Rollen</strong> (optional)</li>
+                <li>Klicken Sie auf <strong>"Speichern"</strong></li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Hierarchische Kategorien
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Erstellen Sie Haupt- und Unterkategorien für bessere Organisation:
+              </Typography>
+              <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                <li>Erstellen Sie zuerst die <strong>Hauptkategorie</strong></li>
+                <li>Erstellen Sie dann die <strong>Unterkategorien</strong></li>
+                <li>Wählen Sie bei den Unterkategorien die Hauptkategorie als <strong>"Übergeordnete Kategorie"</strong></li>
+              </Box>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Beispiel:</strong> Hauptkategorie "Konsultationen" mit Unterkategorien 
+                  "Allgemeine Konsultation", "Spezialkonsultation", "Notfallkonsultation"
+                </Typography>
+              </Alert>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Ansichten
+              </Typography>
+              <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                <li><strong>Listenansicht:</strong> Zeigt alle Kategorien in einer flachen Liste - gut für Suche und Filterung</li>
+                <li><strong>Baumansicht:</strong> Zeigt Kategorien hierarchisch - gut für Übersicht über Kategorienstruktur</li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Kategorie für bestimmte Rollen sichtbar machen
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Kategorie bearbeiten</li>
+                <li><strong>"Sichtbar für Rollen"</strong> auswählen</li>
+                <li>Gewünschte Rollen auswählen (z.B. nur "Arzt")</li>
+                <li>Speichern</li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Kategorien sortieren
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Kategorie bearbeiten</li>
+                <li><strong>"Sortierreihenfolge"</strong> anpassen (niedrigere Zahl = weiter oben)</li>
+                <li>Speichern</li>
+              </Box>
+            </Box>
+
+            <Alert severity="success" sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Tipp:</strong> Verwenden Sie hierarchische Kategorien für bessere Organisation. 
+                Nutzen Sie Farben zur visuellen Unterscheidung.
+              </Typography>
+            </Alert>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

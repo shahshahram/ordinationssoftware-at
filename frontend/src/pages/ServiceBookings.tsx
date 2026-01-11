@@ -30,7 +30,8 @@ import {
   Grid,
   Divider,
   Tabs,
-  Tab
+  Tab,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -38,7 +39,8 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   CalendarToday as CalendarIcon,
-  Person as PersonIcon
+  Person as PersonIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -49,6 +51,7 @@ import { RootState } from '../store/store';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface ServiceBooking {
   _id: string;
@@ -142,6 +145,7 @@ const ServiceBookings: React.FC = () => {
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [totalCount, setTotalCount] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [filterLocation, setFilterLocation] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -472,9 +476,19 @@ const ServiceBookings: React.FC = () => {
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Dienst-Kalender
-        </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="h4" component="h1">
+            Dienst-Kalender
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="outlined"
@@ -892,6 +906,116 @@ const ServiceBookings: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Buchungen"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+            <Box>
+              <Typography variant="h6" gutterBottom color="primary">
+                Buchungen
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Die Buchungsverwaltung zeigt alle Service-Buchungen an, die über das Service-Booking-System 
+                erstellt wurden. Dies unterscheidet sich von normalen Terminen und ist speziell für 
+                Service-orientierte Buchungen gedacht.
+              </Typography>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Buchung erstellen
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Klicken Sie auf <strong>"+ Neue Buchung"</strong></li>
+                <li>Wählen Sie einen <strong>Service</strong> aus</li>
+                <li>Wählen Sie einen <strong>Patienten</strong> aus</li>
+                <li>Wählen Sie einen <strong>Standort</strong> aus</li>
+                <li>Wählen Sie einen <strong>Mitarbeiter</strong> aus</li>
+                <li>Wählen Sie <strong>Startzeit</strong> und <strong>Datum</strong></li>
+                <li>Die <strong>Endzeit</strong> wird automatisch basierend auf Service-Dauer berechnet</li>
+                <li>Wählen Sie den <strong>Buchungstyp</strong> (Online, Intern, Telefon oder Walk-In)</li>
+                <li>Wählen Sie den <strong>Status</strong> (Geplant, Bestätigt, etc.)</li>
+                <li>Geben Sie <strong>Notizen</strong> ein (optional)</li>
+                <li>Klicken Sie auf <strong>"Speichern"</strong></li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Buchungsstatus
+              </Typography>
+              <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                <li><strong>Geplant:</strong> Buchung ist geplant, aber noch nicht bestätigt</li>
+                <li><strong>Bestätigt:</strong> Buchung ist bestätigt</li>
+                <li><strong>In Bearbeitung:</strong> Service wird gerade durchgeführt</li>
+                <li><strong>Abgeschlossen:</strong> Service ist abgeschlossen</li>
+                <li><strong>Storniert:</strong> Buchung wurde storniert</li>
+                <li><strong>Nicht erschienen:</strong> Patient ist nicht erschienen</li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Buchung stornieren
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Buchung bearbeiten</li>
+                <li>Status auf <strong>"Storniert"</strong> ändern</li>
+                <li>Stornierungsgrund eingeben (optional)</li>
+                <li>Speichern</li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Abrechnungsstatus
+              </Typography>
+              <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                <li><strong>Nicht abgerechnet:</strong> Noch nicht abgerechnet</li>
+                <li><strong>Abgerechnet:</strong> Bereits abgerechnet</li>
+                <li><strong>Teilweise abgerechnet:</strong> Teilweise abgerechnet</li>
+                <li><strong>Storniert:</strong> Abrechnung storniert</li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Filter
+              </Typography>
+              <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                <li><strong>Status:</strong> Filter nach Buchungsstatus</li>
+                <li><strong>Buchungstyp:</strong> Filter nach Buchungstyp</li>
+                <li><strong>Standort:</strong> Filter nach Standort</li>
+                <li><strong>Service:</strong> Filter nach Service</li>
+                <li><strong>Mitarbeiter:</strong> Filter nach zugewiesenem Mitarbeiter</li>
+                <li><strong>Datum:</strong> Filter nach Datum</li>
+              </Box>
+            </Box>
+
+            <Alert severity="success" sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Tipp:</strong> Verwenden Sie Filter, um schnell bestimmte Buchungen zu finden. 
+                Aktualisieren Sie den Status regelmäßig.
+              </Typography>
+            </Alert>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

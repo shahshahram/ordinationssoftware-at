@@ -210,12 +210,49 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       const assignedDeviceIds = deviceIdMap.get(serviceObj._id.toString()) || [];
       
       // Handle assigned_devices - check each ID in both Device and Resource
-      if (assignedDeviceIds && assignedDeviceIds.length > 0) {
+      // Prüfe zuerst, ob bereits populated devices vorhanden sind (durch .populate())
+      const hasPopulatedDevices = serviceObj.assigned_devices && 
+                                  Array.isArray(serviceObj.assigned_devices) && 
+                                  serviceObj.assigned_devices.length > 0 &&
+                                  typeof serviceObj.assigned_devices[0] === 'object' &&
+                                  serviceObj.assigned_devices[0]._id;
+      
+      if (hasPopulatedDevices) {
+        // Verwende bereits populated devices und transformiere sie
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔍 Service ${serviceObj._id} (${serviceObj.name}) has ${serviceObj.assigned_devices.length} populated devices`);
+        }
+        
+        serviceObj.assigned_devices = serviceObj.assigned_devices.map((device) => ({
+          _id: device._id,
+          name: device.name,
+          type: device.type || 'other',
+          status: device.status || 'available',
+          description: device.description,
+          location: device.location_id ? {
+            _id: device.location_id._id || device.location_id,
+            name: device.location_id.name || '',
+            code: device.location_id.code || ''
+          } : undefined
+        }));
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`✅ Service ${serviceObj._id} (${serviceObj.name}): Transformed ${serviceObj.assigned_devices.length} populated devices`);
+        }
+      } else if (assignedDeviceIds && assignedDeviceIds.length > 0) {
+        // Wenn keine populated devices vorhanden sind, lade sie manuell
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`🔍 Service ${serviceObj._id} (${serviceObj.name}) has ${assignedDeviceIds.length} assigned device IDs:`, assignedDeviceIds);
+        }
+        
         const enrichedDevices = await Promise.all(assignedDeviceIds.map(async (deviceId) => {
           
           // First, try to find in Device model
           const deviceDoc = await Device.findById(deviceId);
           if (deviceDoc) {
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ Found device ${deviceId} in Device model: ${deviceDoc.name}`);
+            }
             return {
               _id: deviceDoc._id,
               name: deviceDoc.name,
@@ -233,6 +270,9 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
           // Try to find in Resource model
           const resourceDevice = await Resource.findById(deviceId);
           if (resourceDevice && resourceDevice.type === 'equipment') {
+            if (process.env.NODE_ENV === 'development') {
+              console.log(`✅ Found device ${deviceId} in Resource model: ${resourceDevice.name}`);
+            }
             return {
               _id: resourceDevice._id,
               name: resourceDevice.name,
@@ -247,10 +287,24 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
             };
           }
           
+          if (process.env.NODE_ENV === 'development') {
+            console.log(`❌ Device ${deviceId} not found in Device or Resource model`);
+          }
           return null;
         }));
         
-        serviceObj.assigned_devices = enrichedDevices.filter(d => d !== null);
+        const validDevices = enrichedDevices.filter(d => d !== null);
+        serviceObj.assigned_devices = validDevices;
+        
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`📊 Service ${serviceObj._id} (${serviceObj.name}): ${validDevices.length} of ${assignedDeviceIds.length} devices found`);
+        }
+      } else {
+        // Keine Geräte zugewiesen
+        serviceObj.assigned_devices = [];
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`📊 Service ${serviceObj._id} (${serviceObj.name}): No assigned devices`);
+        }
       }
       
       // Handle assigned_rooms - check each ID in both Room and Resource

@@ -33,6 +33,8 @@ import {
   DarkMode,
   ViewSidebar,
   ViewList,
+  Fullscreen,
+  FullscreenExit,
 } from '@mui/icons-material';
 
 interface HeaderProps {
@@ -50,6 +52,7 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
   const { mode: navigationMode } = useAppSelector((state) => state.navigation);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [messagesDialogOpen, setMessagesDialogOpen] = React.useState(false);
+  const [isFullscreen, setIsFullscreen] = React.useState(false);
   
   // Lade unreadCount beim Mount und alle 30 Sekunden
   useEffect(() => {
@@ -104,6 +107,36 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
     const newMode = navigationMode === 'dropdown' ? 'sidebar' : 'dropdown';
     dispatch(updateNavigationMode(newMode));
   };
+
+  const handleFullscreenToggle = () => {
+    if (!document.fullscreenElement) {
+      // Vollbild aktivieren
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch((err) => {
+        console.error('Fehler beim Aktivieren des Vollbildmodus:', err);
+      });
+    } else {
+      // Vollbild deaktivieren
+      document.exitFullscreen().then(() => {
+        setIsFullscreen(false);
+      }).catch((err) => {
+        console.error('Fehler beim Deaktivieren des Vollbildmodus:', err);
+      });
+    }
+  };
+
+  // Prüfe Fullscreen-Status beim Mount und bei Änderungen
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+    };
+  }, []);
 
   return (
     <Box sx={{ position: 'relative', width: '100%' }}>
@@ -237,6 +270,17 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
               aria-label={theme === 'dark' ? 'Hellmodus aktivieren' : 'Dunkelmodus aktivieren'}
             >
               {theme === 'dark' ? <LightMode /> : <DarkMode />}
+            </IconButton>
+          </Tooltip>
+
+          {/* Fullscreen Toggle */}
+          <Tooltip title={isFullscreen ? 'Vollbildmodus beenden' : 'Vollbildmodus aktivieren'}>
+            <IconButton 
+              color="inherit"
+              onClick={handleFullscreenToggle}
+              aria-label={isFullscreen ? 'Vollbildmodus beenden' : 'Vollbildmodus aktivieren'}
+            >
+              {isFullscreen ? <FullscreenExit /> : <Fullscreen />}
             </IconButton>
           </Tooltip>
 

@@ -36,6 +36,7 @@ import {
   Tabs,
   Tab,
   Divider,
+  Tooltip,
 } from '@mui/material';
 import api from '../utils/api';
 import GradientDialogTitle from '../components/GradientDialogTitle';
@@ -57,6 +58,7 @@ import {
   Settings,
   CheckCircle,
   Cancel,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 
 interface Resource {
@@ -144,6 +146,7 @@ const Resources: React.FC = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMode, setDialogMode] = useState<'add' | 'edit' | 'view'>('add');
   const [activeTab, setActiveTab] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [snackbar, setSnackbar] = useState({ 
     open: false, 
     message: '', 
@@ -470,9 +473,19 @@ const Resources: React.FC = () => {
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Ressourcenverwaltung
-        </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="h4" component="h1">
+            Ressourcenverwaltung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Button
           variant="contained"
           startIcon={<Add />}
@@ -1078,6 +1091,152 @@ const Resources: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Ressourcen"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, mt: 2 }}>
+            <Box>
+              <Typography variant="h6" gutterBottom color="primary">
+                Ressourcenverwaltung
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Die Ressourcenverwaltung ermöglicht es, Räume, Geräte, Services und Personal als Ressourcen 
+                zu verwalten. Dies ist eine alternative Verwaltungsmethode zu den spezifischen 
+                Verwaltungsseiten für Geräte und Räume.
+              </Typography>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Ressource erstellen
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Klicken Sie auf <strong>"+ Neue Ressource"</strong></li>
+                <li>Wählen Sie den <strong>Typ</strong>:
+                  <ul>
+                    <li><strong>Raum:</strong> Räumliche Ressource</li>
+                    <li><strong>Gerät:</strong> Equipment/Gerät</li>
+                    <li><strong>Service:</strong> Service-Ressource</li>
+                    <li><strong>Personal:</strong> Personal-Ressource</li>
+                  </ul>
+                </li>
+                <li>Füllen Sie die <strong>Grunddaten</strong> aus:
+                  <ul>
+                    <li><strong>Name:</strong> Name der Ressource</li>
+                    <li><strong>Kategorie:</strong> Kategorie (z.B. "Laser", "Ultraschall" für Geräte)</li>
+                    <li><strong>Beschreibung:</strong> Beschreibung der Ressource</li>
+                    <li><strong>Aktiv:</strong> Ist die Ressource aktiv?</li>
+                  </ul>
+                </li>
+                <li>Konfigurieren Sie <strong>Online-Buchung</strong> (optional):
+                  <ul>
+                    <li>Aktivieren Sie <strong>"Online-Buchung aktiviert"</strong></li>
+                    <li>Geben Sie <strong>Vorausbuchungszeiten</strong> ein</li>
+                    <li>Konfigurieren Sie <strong>Arbeitszeiten</strong> pro Wochentag</li>
+                    <li>Geben Sie <strong>Pausenzeiten</strong> ein (optional)</li>
+                    <li>Geben Sie <strong>gesperrte Daten</strong> ein (optional)</li>
+                    <li>Geben Sie einen <strong>Preis</strong> ein (optional)</li>
+                  </ul>
+                </li>
+                <li>Füllen Sie <strong>Eigenschaften</strong> aus (je nach Typ)</li>
+                <li>Klicken Sie auf <strong>"Speichern"</strong></li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Typ-basierte Auswahl in Services
+              </Typography>
+              <Typography variant="body2" paragraph>
+                <strong>Wichtig:</strong> Wenn Sie Ressourcen mit Kategorien anlegen, können Sie diese 
+                in Services für die Typ-basierte Auswahl verwenden.
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Legen Sie Ressourcen mit <strong>Kategorien</strong> an:
+                  <ul>
+                    <li>Gerät: Typ "Gerät", Kategorie "Laser" (z.B. "Laser A", "Laser B")</li>
+                    <li>Raum: Typ "Raum", Kategorie "treatment" (z.B. "Behandlungsraum 1", "Behandlungsraum 2")</li>
+                  </ul>
+                </li>
+                <li>Erstellen Sie einen Service:
+                  <ul>
+                    <li>Gerätetyp: "Laser" (muss mit Kategorie übereinstimmen)</li>
+                    <li>Auswahlmodus: "Typ"</li>
+                    <li>Anzahl benötigt: 1</li>
+                  </ul>
+                </li>
+                <li>Das System prüft automatisch, ob mindestens 1 Ressource mit dieser Kategorie verfügbar ist</li>
+              </Box>
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Beispiel:</strong> 3 Laser-Geräte (Kategorie "Laser") vorhanden. 
+                  Wenn alle 3 belegt sind, kann der Service nicht gebucht werden.
+                </Typography>
+              </Alert>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Arbeitszeiten konfigurieren
+              </Typography>
+              <Typography variant="body2" paragraph>
+                Für jeden Wochentag können Sie konfigurieren:
+              </Typography>
+              <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                <li><strong>Arbeiten:</strong> Ist die Ressource an diesem Tag verfügbar?</li>
+                <li><strong>Startzeit:</strong> Beginn der Verfügbarkeit (z.B. "09:00")</li>
+                <li><strong>Endzeit:</strong> Ende der Verfügbarkeit (z.B. "17:00")</li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Pausenzeiten konfigurieren
+              </Typography>
+              <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                <li><strong>Startzeit:</strong> Beginn der Pause (z.B. "12:00")</li>
+                <li><strong>Endzeit:</strong> Ende der Pause (z.B. "13:00")</li>
+                <li><strong>Tage:</strong> An welchen Tagen gilt die Pause?</li>
+              </Box>
+            </Box>
+
+            <Box>
+              <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                Ressource für bestimmte Zeit sperren
+              </Typography>
+              <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                <li>Ressource bearbeiten</li>
+                <li>Tab <strong>"Online-Buchung"</strong> öffnen</li>
+                <li><strong>"Gesperrte Daten"</strong> öffnen</li>
+                <li>Datum hinzufügen</li>
+                <li>Speichern</li>
+              </Box>
+            </Box>
+
+            <Alert severity="success" sx={{ mt: 2 }}>
+              <Typography variant="body2">
+                <strong>Tipp:</strong> Verwenden Sie konsistente Kategorienamen für Typ-basierte Auswahl. 
+                Dokumentieren Sie Ihre Kategorien.
+              </Typography>
+            </Alert>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

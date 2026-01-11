@@ -128,16 +128,25 @@ const Billing: React.FC = () => {
   
   // Lese Status-Filter aus URL Query-Parametern
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [patientIdFromUrl, setPatientIdFromUrl] = useState<string | null>(null);
   
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const statusParam = searchParams.get('status');
+    const patientIdParam = searchParams.get('patientId');
+    
     if (statusParam) {
       // Unterstütze mehrere Status durch Komma-getrennte Liste
       const statuses = statusParam.split(',').map(s => s.trim()).filter(s => s);
       setStatusFilter(statuses);
     } else {
       setStatusFilter([]);
+    }
+    
+    if (patientIdParam) {
+      setPatientIdFromUrl(patientIdParam);
+    } else {
+      setPatientIdFromUrl(null);
     }
   }, [location.search]);
   
@@ -220,6 +229,11 @@ const Billing: React.FC = () => {
       params.status = statusFilter.join(',');
     }
     
+    // Wenn patientIdFromUrl vorhanden ist, füge Patient-Filter hinzu
+    if (patientIdFromUrl) {
+      params.patientId = patientIdFromUrl;
+    }
+    
     // Datumsfilter hinzufügen - Format in lokaler Zeit (nicht UTC)
     if (dateFilter.start) {
       params.startDate = formatDateString(dateFilter.start) || '';
@@ -232,7 +246,7 @@ const Billing: React.FC = () => {
     dispatch(fetchServices({}));
     dispatch(fetchStatistics({}));
     dispatch(fetchPatients(1));
-  }, [dispatch, statusFilter, dateFilter]);
+  }, [dispatch, statusFilter, dateFilter, patientIdFromUrl]);
   
   // Lade Totals für heute, Monat, Jahr
   useEffect(() => {
@@ -303,6 +317,11 @@ const Billing: React.FC = () => {
   }, [error, dispatch]);
 
   const handleAddNew = () => {
+    // Wenn patientIdFromUrl vorhanden ist, verwende diesen Patienten
+    const selectedPatient = patientIdFromUrl 
+      ? patients?.find((p: Patient) => p._id === patientIdFromUrl || p.id === patientIdFromUrl)
+      : null;
+    
     setFormData({
       billingType: 'privat',
       services: [],
@@ -319,7 +338,19 @@ const Billing: React.FC = () => {
         taxNumber: 'ATU12345678',
         chamberNumber: 'WKÖ'
       } as any,
-      patient: {
+      patient: selectedPatient ? {
+        id: selectedPatient._id || selectedPatient.id || '',
+        name: `${selectedPatient.firstName || ''} ${selectedPatient.lastName || ''}`.trim(),
+        address: {
+          street: selectedPatient.address?.street || '',
+          city: selectedPatient.address?.city || '',
+          postalCode: selectedPatient.address?.zipCode || selectedPatient.address?.postalCode || '',
+          country: selectedPatient.address?.country || 'Österreich'
+        },
+        insuranceProvider: selectedPatient.insuranceProvider || '',
+        insuranceNumber: selectedPatient.insuranceNumber || '',
+        socialSecurityNumber: selectedPatient.socialSecurityNumber || ''
+      } as any : {
         id: '',
         name: '',
         address: {
@@ -819,6 +850,12 @@ const Billing: React.FC = () => {
   const handleQuickBill = (service: Service) => {
     // Öffne Dialog mit vorausgefüllter Schnell-Leistung
     const priceInEuro = getServicePriceInEuro(service);
+    
+    // Wenn patientIdFromUrl vorhanden ist, verwende diesen Patienten
+    const selectedPatient = patientIdFromUrl 
+      ? patients?.find((p: Patient) => p._id === patientIdFromUrl || p.id === patientIdFromUrl)
+      : null;
+    
     setDialogMode('add');
     setFormData({
       billingType: 'privat',
@@ -844,7 +881,19 @@ const Billing: React.FC = () => {
         taxNumber: 'ATU12345678',
         chamberNumber: 'WKÖ'
       } as any,
-      patient: {
+      patient: selectedPatient ? {
+        id: selectedPatient._id || selectedPatient.id || '',
+        name: `${selectedPatient.firstName || ''} ${selectedPatient.lastName || ''}`.trim(),
+        address: {
+          street: selectedPatient.address?.street || '',
+          city: selectedPatient.address?.city || '',
+          postalCode: selectedPatient.address?.zipCode || selectedPatient.address?.postalCode || '',
+          country: selectedPatient.address?.country || 'Österreich'
+        },
+        insuranceProvider: selectedPatient.insuranceProvider || '',
+        insuranceNumber: selectedPatient.insuranceNumber || '',
+        socialSecurityNumber: selectedPatient.socialSecurityNumber || ''
+      } as any : {
         id: '',
         name: '',
         address: {
@@ -1055,11 +1104,20 @@ const Billing: React.FC = () => {
     }
     
     // Suchfilter anwenden
-    return (
-      (invoice.invoiceNumber || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (invoice.patient?.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (invoice.billingType || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    const searchLower = searchTerm.toLowerCase();
+    const matchesInvoiceNumber = (invoice.invoiceNumber || '').toLowerCase().includes(searchLower);
+    const matchesPatient = (invoice.patient?.name || '').toLowerCase().includes(searchLower);
+    const matchesBillingType = (invoice.billingType || '').toLowerCase().includes(searchLower);
+    
+    // Suche nach Leistungen (Services)
+    const matchesServices = invoice.services && Array.isArray(invoice.services) && invoice.services.some((service: any) => {
+      const serviceCode = (service.serviceCode || '').toLowerCase();
+      const description = (service.description || '').toLowerCase();
+      const name = (service.name || '').toLowerCase();
+      return serviceCode.includes(searchLower) || description.includes(searchLower) || name.includes(searchLower);
+    });
+    
+    return matchesInvoiceNumber || matchesPatient || matchesBillingType || matchesServices;
   });
 
   const paginatedInvoices = filteredInvoices.slice(
@@ -1148,6 +1206,20 @@ const Billing: React.FC = () => {
           </Tooltip>
         </Box>
         <Box display="flex" gap={{ xs: 1, sm: 2 }} flexWrap="wrap" width={{ xs: '100%', sm: 'auto' }}>
+          <Button
+            variant="outlined"
+            startIcon={<Article />}
+            onClick={() => navigate('/journal')}
+            sx={{ 
+              borderRadius: 2,
+              fontSize: { xs: '0.875rem', sm: '1rem' },
+              minHeight: { xs: '44px', sm: 'auto' },
+              flex: { xs: 1, sm: 'none' }
+            }}
+            fullWidth={isMobile}
+          >
+            {isMobile ? 'Journal' : 'Journal'}
+          </Button>
           <Button
             variant="outlined"
             startIcon={<Receipt />}
@@ -1444,6 +1516,23 @@ const Billing: React.FC = () => {
               </Button>
               <Button
                 size="small"
+                variant={statusFilter.includes('sent') && statusFilter.includes('overdue') && statusFilter.length === 2 ? 'contained' : 'outlined'}
+                onClick={() => {
+                  // Setze Status-Filter auf "sent" und "overdue" für offene Rechnungen
+                  setStatusFilter(['sent', 'overdue']);
+                  // Entferne Datumsfilter, um alle offenen Rechnungen zu zeigen
+                  setDateFilter({ start: null, end: null });
+                }}
+                sx={{ 
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '36px', sm: 'auto' },
+                  flex: { xs: '1 1 calc(50% - 4px)', sm: 'none' }
+                }}
+              >
+                {isMobile ? 'Offen' : 'Offene Rechnungen'}
+              </Button>
+              <Button
+                size="small"
                 variant="outlined"
                 onClick={() => {
                   setDateFilter({ start: null, end: null });
@@ -1464,7 +1553,7 @@ const Billing: React.FC = () => {
           {/* Patientensuche */}
           <TextField
             fullWidth
-            placeholder="Rechnungen suchen (Nummer, Patient, Typ)..."
+            placeholder="Rechnungen suchen (Nummer, Patient, Typ, Leistung)..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             InputProps={{
@@ -1522,7 +1611,50 @@ const Billing: React.FC = () => {
                       </Typography>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">
+                      <Typography 
+                        variant="body2"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Extrahiere patientId - kann String oder Objekt sein
+                          let patientId: string | null = null;
+                          const patientIdValue = invoice.patient?.id;
+                          
+                          console.log('🔍 Patient Click Debug:', {
+                            invoiceId: invoice._id || invoice.id,
+                            patientIdValue,
+                            patientIdType: typeof patientIdValue,
+                            patientIdValueIsObject: typeof patientIdValue === 'object',
+                            patient: invoice.patient
+                          });
+                          
+                          if (patientIdValue) {
+                            if (typeof patientIdValue === 'string') {
+                              patientId = patientIdValue;
+                            } else if (typeof patientIdValue === 'object') {
+                              // TypeScript erkennt es als Objekt (populated)
+                              const patientIdObj = patientIdValue as any;
+                              patientId = patientIdObj._id || patientIdObj.id || patientIdObj.toString() || null;
+                            }
+                          }
+                          
+                          console.log('🔍 Extracted patientId:', patientId);
+                          
+                          if (patientId) {
+                            console.log('🚀 Navigating to:', `/patient-organizer/${patientId}`);
+                            navigate(`/patient-organizer/${patientId}`);
+                          } else {
+                            console.warn('⚠️ No patientId found, cannot navigate');
+                          }
+                        }}
+                        sx={{
+                          cursor: invoice.patient?.id ? 'pointer' : 'default',
+                          color: invoice.patient?.id ? 'primary.main' : 'text.primary',
+                          '&:hover': invoice.patient?.id ? {
+                            textDecoration: 'underline',
+                            color: 'primary.dark'
+                          } : {}
+                        }}
+                      >
                         {invoice.patient?.name || 'Unbekannter Patient'}
                       </Typography>
                     </TableCell>
@@ -2385,7 +2517,35 @@ const Billing: React.FC = () => {
                       <TableRow key={invoice._id}>
                         <TableCell>{invoice.invoiceNumber}</TableCell>
                         <TableCell>
-                          {invoice.patient?.id?.firstName} {invoice.patient?.id?.lastName}
+                          <Typography
+                            onClick={() => {
+                              // Extrahiere patientId - kann String oder Objekt sein
+                              let patientId: string | null = null;
+                              const patientIdValue = invoice.patient?.id;
+                              if (patientIdValue) {
+                                if (typeof patientIdValue === 'string') {
+                                  patientId = patientIdValue;
+                                } else {
+                                  // TypeScript erkennt es als Objekt
+                                  const patientIdObj = patientIdValue as any;
+                                  patientId = patientIdObj._id || patientIdObj.id || null;
+                                }
+                              }
+                              if (patientId) {
+                                navigate(`/patient-organizer/${patientId}`);
+                              }
+                            }}
+                            sx={{
+                              cursor: invoice.patient?.id ? 'pointer' : 'default',
+                              color: invoice.patient?.id ? 'primary.main' : 'text.primary',
+                              '&:hover': invoice.patient?.id ? {
+                                textDecoration: 'underline',
+                                color: 'primary.dark'
+                              } : {}
+                            }}
+                          >
+                            {invoice.patient?.id?.firstName} {invoice.patient?.id?.lastName}
+                          </Typography>
                         </TableCell>
                         <TableCell>€{(invoice.totalAmount || 0).toFixed(2)}</TableCell>
                         <TableCell>€{(invoice.copay || 0).toFixed(2)}</TableCell>

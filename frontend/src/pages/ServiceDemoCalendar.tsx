@@ -46,7 +46,6 @@ import {
   ArrowForwardIos,
   Today,
   MoreVert,
-  Wifi,
   CheckBox,
   Mail,
   Euro,
@@ -71,7 +70,7 @@ import {
   Close,
   FilterList,
 } from '@mui/icons-material';
-import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, endOfWeek, isSameDay, isSameMonth, eachDayOfInterval, parseISO, addMonths, subMonths, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, endOfWeek, isSameDay, isSameMonth, eachDayOfInterval, parseISO, addMonths, subMonths, startOfDay, endOfDay, differenceInYears } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -99,6 +98,18 @@ const stripHtmlTags = (html: string): string => {
   const tmp = document.createElement('DIV');
   tmp.innerHTML = html;
   return tmp.textContent || tmp.innerText || '';
+};
+
+// Hilfsfunktion zum Berechnen des Alters
+const calculateAge = (dateOfBirth: string | Date | null | undefined): number | null => {
+  if (!dateOfBirth) return null;
+  try {
+    const birthDate = typeof dateOfBirth === 'string' ? parseISO(dateOfBirth) : dateOfBirth;
+    if (isNaN(birthDate.getTime())) return null;
+    return differenceInYears(new Date(), birthDate);
+  } catch (error) {
+    return null;
+  }
 };
 
 interface CalendarAppointment {
@@ -167,6 +178,8 @@ interface Service {
     first_name?: string;
     last_name?: string;
   }>;
+  requires_device_selection?: boolean;
+  device_quantity_required?: number;
 }
 
 interface AppointmentFormData {
@@ -1979,15 +1992,32 @@ const ServiceDemoCalendar: React.FC = () => {
       // Get assigned rooms, devices and staff from service
       const selectedService = services.find(s => s._id === formData.serviceId);
       const assignedRooms = selectedService?.assigned_rooms?.map((r: { _id: string }) => r._id || r) || [];
-      const assignedDevices = selectedService?.assigned_devices?.map((d: { _id: string }) => d._id || d) || [];
-      const assignedUsers = selectedService?.assigned_users?.map((u: { _id: string }) => u._id || u) || [];
       
-      // Add selected staff
+      // Geräte nur senden, wenn der Service eine Geräteauswahl erfordert
+      // Ansonsten leeres Array senden, um Fehler zu vermeiden
+      let assignedDevices: string[] = [];
+      if (selectedService?.requires_device_selection && selectedService?.assigned_devices) {
+        assignedDevices = selectedService.assigned_devices.map((d: { _id: string } | string) => {
+          if (typeof d === 'string') return d;
+          return d._id || String(d);
+        });
+        console.log('✅ Service requires device selection, sending devices:', assignedDevices);
+      } else {
+        console.log('⚠️ Service does not require device selection, sending empty array');
+      }
+      
+      // Wenn ein Mitarbeiter ausgewählt wurde, verwende nur diesen
+      // Ansonsten verwende alle zugewiesenen Benutzer aus dem Service
+      let assignedUsers: string[] = [];
       if (selectedStaff) {
-        // Stelle sicher, dass selectedStaff nicht bereits in assignedUsers ist
-        if (!assignedUsers.includes(selectedStaff)) {
-        assignedUsers.push(selectedStaff);
-        }
+        // Nur den ausgewählten Mitarbeiter verwenden
+        assignedUsers = [selectedStaff];
+      } else {
+        // Alle Service-Benutzer verwenden (falls kein Mitarbeiter ausgewählt wurde)
+        assignedUsers = selectedService?.assigned_users?.map((u: { _id: string } | string) => {
+          if (typeof u === 'string') return u;
+          return u._id || String(u);
+        }) || [];
       }
 
       console.log('💾 Creating appointment with staff data:', {
@@ -2008,7 +2038,7 @@ const ServiceDemoCalendar: React.FC = () => {
         locationId: selectedLocation,
         service: selectedService?._id,
         assigned_rooms: assignedRooms,
-        assigned_devices: assignedDevices,
+        assigned_devices: assignedDevices.length > 0 ? assignedDevices : undefined,
         assigned_users: assignedUsers,
         room: formData.room ? (typeof formData.room === 'string' ? formData.room : (formData.room as any)?._id || formData.room) : undefined,
         status: formData.status || 'geplant',
@@ -2224,6 +2254,26 @@ const ServiceDemoCalendar: React.FC = () => {
                 <Search />
               </IconButton>
               <Button
+                variant="outlined"
+                startIcon={<EventIcon />}
+                size="small"
+                onClick={() => navigate('/demo-calendar')}
+                sx={{ 
+                  borderColor: 'primary.main',
+                  color: 'primary.main',
+                  fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                  minHeight: { xs: '44px', sm: 'auto' },
+                  px: { xs: 1, sm: 2 },
+                  '&:hover': {
+                    borderColor: 'primary.dark',
+                    bgcolor: 'primary.light',
+                    color: 'primary.dark'
+                  }
+                }}
+              >
+                {isMobile ? 'Termine' : 'Terminkalender'}
+              </Button>
+              <Button
                 variant="contained"
                 startIcon={<Add />}
                 size="small"
@@ -2248,6 +2298,23 @@ const ServiceDemoCalendar: React.FC = () => {
           ) : (
             <>
               <Button
+                variant="outlined"
+                startIcon={<EventIcon />}
+                size="small"
+                onClick={() => navigate('/demo-calendar')}
+                sx={{ 
+                  borderColor: 'primary.main',
+                  color: 'primary.main',
+                  '&:hover': {
+                    borderColor: 'primary.dark',
+                    bgcolor: 'primary.light',
+                    color: 'primary.dark'
+                  }
+                }}
+              >
+                Terminkalender
+              </Button>
+              <Button
                 variant="contained"
                 startIcon={<Add />}
                 size="small"
@@ -2256,9 +2323,6 @@ const ServiceDemoCalendar: React.FC = () => {
               >
                 Neuer Patient
               </Button>
-              <IconButton size="small">
-                <Wifi />
-              </IconButton>
               <IconButton 
                 size="small"
                 onClick={() => setOpenTaskDialog(true)}
@@ -2273,33 +2337,12 @@ const ServiceDemoCalendar: React.FC = () => {
               >
                 <Mail />
               </IconButton>
-              <IconButton size="small">
-                <Euro />
-              </IconButton>
-              <IconButton size="small">
-                <Help />
-              </IconButton>
-              <IconButton size="small">
-                <Build />
-              </IconButton>
-              <Box
-                sx={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: '50%',
-                  bgcolor: 'primary.main',
-                  color: 'primary.contrastText',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '0.875rem',
-                  fontWeight: 600,
-                }}
+              <IconButton 
+                size="small"
+                onClick={() => navigate('/billing')}
+                title="Rechnungen"
               >
-                MM
-              </Box>
-              <IconButton size="small">
-                <Fullscreen />
+                <Euro />
               </IconButton>
             </>
           )}
@@ -2334,12 +2377,6 @@ const ServiceDemoCalendar: React.FC = () => {
           <ListItemText primary="Interne Nachrichten" />
         </MenuItem>
         <Divider />
-        <MenuItem onClick={() => setMobileMenuAnchor(null)}>
-          <ListItemIcon>
-            <Wifi fontSize="small" />
-          </ListItemIcon>
-          <ListItemText primary="Status" />
-        </MenuItem>
         <MenuItem onClick={() => setMobileMenuAnchor(null)}>
           <ListItemIcon>
             <Help fontSize="small" />
@@ -3303,10 +3340,24 @@ const ServiceDemoCalendar: React.FC = () => {
                               // Prüfe Allergien frühzeitig
                               const hasAllergies = patientObj && patientObj.allergies && Array.isArray(patientObj.allergies) && patientObj.allergies.length > 0;
                               
+                              // Hole Patient-Objekt für Alter-Berechnung
+                              let patientObjForAge: any = null;
+                              if (patient) {
+                                if (typeof patient === 'object' && patient !== null) {
+                                  patientObjForAge = patient;
+                                } else if (typeof patient === 'string') {
+                                  patientObjForAge = patientMap.get(patient);
+                                }
+                              }
+                              if (!patientObjForAge && appointment.patientId) {
+                                patientObjForAge = patientMap.get(appointment.patientId);
+                              }
+                              const age = patientObjForAge?.dateOfBirth ? calculateAge(patientObjForAge.dateOfBirth) : null;
+                              
                               return (
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
                                   <Typography variant="caption" sx={{ fontSize: '0.65rem', fontWeight: 600 }}>
-                              {format(appointment.start, 'HH:mm')} {appointment.patientName}
+                              {format(appointment.start, 'HH:mm')} {appointment.patientName}{age !== null ? ` (${age} J.)` : ''}
                             </Typography>
                                   {hasAllergies && (
                                     <Warning sx={{ fontSize: '0.65rem', color: '#ff9800' }} />
@@ -4130,6 +4181,29 @@ const ServiceDemoCalendar: React.FC = () => {
                                             }}
                                           >
                                             {appointment.patientName}
+                                            {(() => {
+                                              const apt = appointment.appointment;
+                                              const patient = apt?.patient;
+                                              let patientObj: any = null;
+                                              
+                                              if (patient) {
+                                                if (typeof patient === 'object' && patient !== null) {
+                                                  patientObj = patient;
+                                                } else if (typeof patient === 'string') {
+                                                  // Wenn patient nur eine ID ist, suche im patientMap
+                                                  const patientId = patient;
+                                                  patientObj = patientId ? patientMap.get(patientId) : null;
+                                                }
+                                              }
+                                              
+                                              // Wenn patientObj nicht gefunden wurde, versuche es über appointment.patientId
+                                              if (!patientObj && appointment.patientId) {
+                                                patientObj = patientMap.get(appointment.patientId);
+                                              }
+                                              
+                                              const age = patientObj?.dateOfBirth ? calculateAge(patientObj.dateOfBirth) : null;
+                                              return age !== null ? ` (${age} J.)` : '';
+                                            })()}
                                           </Typography>
                                           {hasAllergies && (
                                             <Warning sx={{ fontSize: '0.7rem', color: '#ff9800' }} />
@@ -4812,6 +4886,29 @@ const ServiceDemoCalendar: React.FC = () => {
                           }}
                         >
                           {appointment.patientName}
+                          {(() => {
+                            const apt = appointment.appointment;
+                            const patient = apt?.patient;
+                            let patientObj: any = null;
+                            
+                            if (patient) {
+                              if (typeof patient === 'object' && patient !== null) {
+                                patientObj = patient;
+                              } else if (typeof patient === 'string') {
+                                // Wenn patient nur eine ID ist, suche im patientMap
+                                const patientId = patient;
+                                patientObj = patientId ? patientMap.get(patientId) : null;
+                              }
+                            }
+                            
+                            // Wenn patientObj nicht gefunden wurde, versuche es über appointment.patientId
+                            if (!patientObj && appointment.patientId) {
+                              patientObj = patientMap.get(appointment.patientId);
+                            }
+                            
+                            const age = patientObj?.dateOfBirth ? calculateAge(patientObj.dateOfBirth) : null;
+                            return age !== null ? ` (${age} J.)` : '';
+                          })()}
                         </Typography>
                                 {hasAllergies && (
                                   <Warning sx={{ fontSize: '0.7rem', color: '#ff9800' }} />

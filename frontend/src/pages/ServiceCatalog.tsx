@@ -39,6 +39,7 @@ import {
   OutlinedInput,
   Tabs,
   Tab,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -60,6 +61,7 @@ import {
   Group as GroupIcon,
   QuestionAnswer as QuestionAnswerIcon,
   EventNote as EventNoteIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
@@ -305,6 +307,8 @@ const ServiceCatalog: React.FC = () => {
   const [filterSpecialty, setFilterSpecialty] = useState('');
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [activeTab, setActiveTab] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   const [formData, setFormData] = useState({
     code: '',
@@ -1009,9 +1013,19 @@ const ServiceCatalog: React.FC = () => {
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Leistungskatalog
-        </Typography>
+        <Box display="flex" alignItems="center" gap={2}>
+          <Typography variant="h4" component="h1">
+            Leistungskatalog
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
@@ -2771,6 +2785,402 @@ const ServiceCatalog: React.FC = () => {
           </Button>
           <Button variant="contained" onClick={handleSave}>
             {editingService ? 'Speichern' : 'Erstellen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Leistungskatalog"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs value={helpTab} onChange={(_, newValue) => setHelpTab(newValue)} sx={{ mb: 3 }}>
+            <Tab label="Übersicht" />
+            <Tab label="Leistung erstellen" />
+            <Tab label="Geräte & Räume" />
+            <Tab label="Online-Buchung" />
+            <Tab label="Preis & Abrechnung" />
+            <Tab label="Tipps" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Leistungskatalog
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Leistungskatalog ist das zentrale Verwaltungstool für alle medizinischen Leistungen 
+                  und Services in der Ordinationssoftware. Hier können Sie Leistungen erstellen, bearbeiten, 
+                  kategorisieren und konfigurieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Leistungen erstellen, bearbeiten und löschen</li>
+                  <li>✅ Kategorisierung und Organisation</li>
+                  <li>✅ Personal, Geräte und Räume zuweisen</li>
+                  <li>✅ Preise und Abrechnung konfigurieren</li>
+                  <li>✅ Online-Buchung aktivieren</li>
+                  <li>✅ Pufferzeiten und Dauer einstellen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Tabs im Leistungsformular
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Grunddaten:</strong> Code, Name, Beschreibung, Kategorie</li>
+                  <li><strong>Personal:</strong> Zugewiesene Benutzer, Rollen</li>
+                  <li><strong>Geräte:</strong> Gerätezuweisung, Typ-basierte Auswahl</li>
+                  <li><strong>Räume:</strong> Raumzuweisung, Typ-basierte Auswahl</li>
+                  <li><strong>Zeit & Dauer:</strong> Grunddauer, Pufferzeiten</li>
+                  <li><strong>Preis & Abrechnung:</strong> Preise, Abrechnungscodes</li>
+                  <li><strong>Online-Buchung:</strong> Online-Buchbarkeit, Kontingente</li>
+                  <li><strong>Patienteneignung:</strong> Altersgrenzen, Einverständnis</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Leistung erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie eine neue Leistung:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: Grunddaten
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf <strong>"Neue Leistung"</strong></li>
+                  <li>Geben Sie einen <strong>Code</strong> ein (z.B. "K001")</li>
+                  <li>Geben Sie einen <strong>Namen</strong> ein (z.B. "Konsultation")</li>
+                  <li>Wählen Sie eine <strong>Kategorie</strong> aus</li>
+                  <li>Wählen Sie einen <strong>Standort</strong> aus</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Personal zuweisen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab <strong>"Personal"</strong></li>
+                  <li>Wählen Sie <strong>zugewiesene Benutzer</strong> aus</li>
+                  <li>Aktivieren Sie <strong>"Benutzer-Auswahl erforderlich"</strong> (optional)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 3: Geräte/Räume zuweisen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab <strong>"Geräte"</strong> oder <strong>"Räume"</strong></li>
+                  <li>Wählen Sie <strong>Auswahlmodus</strong>:
+                    <ul>
+                      <li><strong>Spezifisch:</strong> Konkrete Geräte/Räume zuweisen</li>
+                      <li><strong>Typ:</strong> Nach Geräte-/Raumtyp (automatische Verfügbarkeitsprüfung)</li>
+                    </ul>
+                  </li>
+                  <li>Geben Sie die <strong>Anzahl benötigter Geräte/Räume</strong> ein</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 4: Zeit & Dauer
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab <strong>"Zeit & Dauer"</strong></li>
+                  <li>Geben Sie die <strong>Grunddauer</strong> in Minuten ein (z.B. 30)</li>
+                  <li>Geben Sie <strong>Puffer Vorher</strong> ein (z.B. 5 Minuten)</li>
+                  <li>Geben Sie <strong>Puffer Nachher</strong> ein (z.B. 10 Minuten)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 5: Speichern
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf <strong>"Speichern"</strong></li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Geräte & Räume
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Es gibt zwei Möglichkeiten, Geräte und Räume zuzuweisen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Spezifische Auswahl
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Weisen Sie konkrete Geräte oder Räume zu. Diese müssen bei der Terminbuchung 
+                  explizit ausgewählt werden.
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie <strong>"Spezifisch"</strong> als Auswahlmodus</li>
+                  <li>Wählen Sie konkrete Geräte/Räume aus der Liste</li>
+                  <li>Das System prüft, ob diese spezifischen Geräte/Räume verfügbar sind</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Typ-basierte Auswahl
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Geben Sie einen Geräte- oder Raumtyp an. Das System prüft automatisch, ob 
+                  genügend Geräte/Räume dieses Typs verfügbar sind.
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie <strong>"Typ"</strong> als Auswahlmodus</li>
+                  <li>Geben Sie den <strong>Gerätetyp</strong> oder <strong>Raumtyp</strong> ein</li>
+                  <li>Geben Sie die <strong>Anzahl benötigter Geräte/Räume</strong> ein</li>
+                  <li>Das System zählt automatisch alle verfügbaren Geräte/Räume dieses Typs</li>
+                </Box>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Beispiel:</strong> Service "Ultraschall" benötigt 1 Gerät vom Typ "Ultraschall". 
+                    Wenn 3 Ultraschall-Geräte vorhanden sind und alle belegt sind, kann der Service nicht gebucht werden.
+                  </Typography>
+                </Alert>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Kategorien für Typ-basierte Auswahl
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Bei Ressourcen (Geräte/Räume) wird die <strong>Kategorie</strong> für die Typ-basierte 
+                  Auswahl verwendet:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gerät: Kategorie muss mit <strong>Gerätetyp</strong> im Service übereinstimmen</li>
+                  <li>Raum: Kategorie muss mit <strong>Raumtyp</strong> im Service übereinstimmen</li>
+                  <li>Beispiel: Ressource mit Kategorie "Laser" → Service mit Gerätetyp "Laser"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Online-Buchung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Aktivieren Sie die Online-Buchung, damit Patienten Termine online buchen können.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Online-Buchung aktivieren
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab <strong>"Online-Buchung"</strong></li>
+                  <li>Aktivieren Sie <strong>"Online buchbar"</strong></li>
+                  <li>Optional: Aktivieren Sie <strong>"Bestätigung erforderlich"</strong></li>
+                  <li>Optional: Aktivieren Sie <strong>"Terminbestätigung erforderlich"</strong></li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Online-Kontingente
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Begrenzen Sie die Anzahl der Online-Buchungen für bestimmte Zeitfenster:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Zeitfenster:</strong> Start- und Endzeit (z.B. 09:00 - 12:00)</li>
+                  <li><strong>Wochentage:</strong> An welchen Tagen gilt das Kontingent?</li>
+                  <li><strong>Max. Online-Buchungen:</strong> Maximale Anzahl pro Tag</li>
+                  <li><strong>Priorität:</strong> Priorität des Kontingents</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Anamnese-Fragen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Definieren Sie Fragen, die Patienten bei der Online-Buchung beantworten müssen:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Fragentypen:</strong> Text, Textarea, Number, Boolean, Select, Multiselect</li>
+                  <li><strong>Erforderlich:</strong> Muss die Frage beantwortet werden?</li>
+                  <li><strong>Optionen:</strong> Verfügbare Optionen (bei Select/Multiselect)</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Preis & Abrechnung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Konfigurieren Sie Preise und Abrechnungscodes für die Leistung.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Grundpreis
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Preis (€):</strong> Grundpreis der Leistung in Euro</li>
+                  <li><strong>Abrechnungscode:</strong> Code für die Abrechnung</li>
+                  <li><strong>Abrechnungstyp:</strong> Kassenarzt, Wahlarzt, Privat oder Beides</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  ÖGK-Abrechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>EBM-Code:</strong> EBM-Code für ÖGK-Abrechnung</li>
+                  <li><strong>EBM-Preis:</strong> Preis für ÖGK-Abrechnung</li>
+                  <li><strong>Genehmigung erforderlich:</strong> Muss die Abrechnung genehmigt werden?</li>
+                  <li><strong>Abrechnungshäufigkeit:</strong> Einmalig oder periodisch</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Wahlarzt-Abrechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Preis:</strong> Wahlarzt-Preis</li>
+                  <li><strong>Erstattungssatz:</strong> Prozentsatz der Erstattung (z.B. 80%)</li>
+                  <li><strong>Max. Erstattung:</strong> Maximale Erstattung</li>
+                  <li><strong>Vorabgenehmigung erforderlich:</strong> Muss vorab genehmigt werden?</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Privat-Abrechnung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Preis:</strong> Privat-Preis</li>
+                  <li><strong>Keine Versicherung:</strong> Gilt für Patienten ohne Versicherung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Tipps & Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konsistente Codierung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie ein einheitliches Codierungssystem (z.B. "K001", "K002")</li>
+                  <li>✅ Verwenden Sie aussagekräftige Codes</li>
+                  <li>✅ Dokumentieren Sie Ihre Codierung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Kategorien nutzen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Ordnen Sie Leistungen in Kategorien ein</li>
+                  <li>✅ Verwenden Sie hierarchische Kategorien (Haupt- und Unterkategorien)</li>
+                  <li>✅ Nutzen Sie Farben zur visuellen Unterscheidung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Pufferzeiten realistisch setzen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Berücksichtigen Sie Vorbereitungszeiten</li>
+                  <li>✅ Berücksichtigen Sie Nachbereitungszeiten</li>
+                  <li>✅ Testen Sie die Pufferzeiten in der Praxis</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Typ-basierte Auswahl
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie Typ-basierte Auswahl für flexible Geräte/Räume</li>
+                  <li>✅ Verwenden Sie konsistente Kategorienamen</li>
+                  <li>✅ Dokumentieren Sie Ihre Kategorien</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Online-Buchung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Aktivieren Sie Online-Buchung gezielt</li>
+                  <li>✅ Verwenden Sie Online-Kontingente für beliebte Zeiten</li>
+                  <li>✅ Prüfen Sie regelmäßig die Online-Buchungen</li>
+                </Box>
+              </Box>
+
+              <Alert severity="success" sx={{ mt: 2 }}>
+                <Typography variant="body2">
+                  <strong>Tipp:</strong> Verwenden Sie Filter, um schnell bestimmte Leistungen zu finden. 
+                  Exportieren Sie regelmäßig für Backup.
+                </Typography>
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

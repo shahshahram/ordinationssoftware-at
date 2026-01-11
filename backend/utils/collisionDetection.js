@@ -458,6 +458,281 @@ class CollisionDetection {
       };
     }
   }
+
+  /**
+   * Prüft Geräte-Verfügbarkeit nach Typ
+   * @param {String} deviceType - Gerätetyp (z.B. 'Ultraschall')
+   * @param {Date} startTime - Startzeit des Termins
+   * @param {Date} endTime - Endzeit des Termins
+   * @param {Number} quantityRequired - Benötigte Anzahl an Geräten
+   * @param {String} locationId - Optional: Standort-ID für Filterung
+   * @param {Number} maxAvailable - Optional: Maximale verfügbare Anzahl (falls nicht alle Geräte verwendet werden sollen)
+   * @param {String} excludeAppointmentId - Optional: Termin-ID zum Ausschließen (bei Updates)
+   * @returns {Object} Verfügbarkeitsergebnis
+   */
+  static async checkDeviceTypeAvailability(deviceType, startTime, endTime, quantityRequired = 1, locationId = null, maxAvailable = null, excludeAppointmentId = null) {
+    const Resource = require('../models/Resource');
+    
+    try {
+      // Zähle alle aktiven Geräte dieses Typs
+      const deviceQuery = {
+        type: deviceType,
+        isActive: true
+      };
+      
+      if (locationId) {
+        deviceQuery.location_id = locationId;
+      }
+      
+      const totalDevices = await Device.countDocuments(deviceQuery);
+      
+      // Zähle auch Geräte im Resource-Modell
+      // Im Resource-Modell wird 'category' für die Geräte-Gruppierung verwendet
+      const resourceQuery = {
+        type: 'equipment',
+        category: deviceType, // category wird für die Gruppierung verwendet (z.B. "Laser", "Ultraschall")
+        isActive: true
+      };
+      
+      // Standort-Filterung für Resource-Modell (falls properties.location vorhanden)
+      // Hinweis: Resource-Modell hat kein location_id Feld direkt, sondern properties.location als String
+      // Für präzise Standort-Filterung müsste ein location_id Feld hinzugefügt werden
+      
+      const totalResourceDevices = await Resource.countDocuments(resourceQuery);
+      const totalAvailableDevices = totalDevices + totalResourceDevices;
+      
+      // Wenn maxAvailable gesetzt ist, verwende den kleineren Wert
+      const maxDevices = maxAvailable ? Math.min(totalAvailableDevices, maxAvailable) : totalAvailableDevices;
+      
+      if (maxDevices < quantityRequired) {
+        return {
+          available: false,
+          message: `Nicht genügend Geräte verfügbar. Benötigt: ${quantityRequired}, Verfügbar: ${maxDevices}`,
+          totalAvailable: maxDevices,
+          required: quantityRequired
+        };
+      }
+      
+      // Finde alle Termine im Zeitraum, die Geräte dieses Typs verwenden
+      const appointmentQuery = {
+        assigned_devices: { $exists: true, $ne: [] },
+        startTime: { $lt: endTime },
+        endTime: { $gt: startTime },
+        status: { $nin: ['cancelled', 'abgesagt', 'no_show'] }
+      };
+      
+      if (excludeAppointmentId) {
+        appointmentQuery._id = { $ne: excludeAppointmentId };
+      }
+      
+      const conflictingAppointments = await Appointment.find(appointmentQuery)
+        .populate('assigned_devices', 'type location_id')
+        .select('assigned_devices startTime endTime');
+      
+      // Zähle belegte Geräte dieses Typs
+      let bookedDevicesCount = 0;
+      
+      for (const appointment of conflictingAppointments) {
+        if (!appointment.assigned_devices || !Array.isArray(appointment.assigned_devices)) continue;
+        
+        for (const device of appointment.assigned_devices) {
+          if (!device) continue;
+          
+          // Prüfe ob Gerät vom richtigen Typ ist
+          const deviceId = device._id || device;
+          const deviceDoc = await Device.findById(deviceId);
+          
+          if (deviceDoc && deviceDoc.type === deviceType) {
+            // Prüfe ob Standort-Filter passt
+            if (!locationId || (deviceDoc.location_id && deviceDoc.location_id.toString() === locationId.toString())) {
+              bookedDevicesCount++;
+            }
+          } else {
+            // Prüfe auch Resource-Modell
+            // Im Resource-Modell wird 'category' für die Geräte-Gruppierung verwendet
+            const resourceDevice = await Resource.findOne({
+              _id: deviceId,
+              type: 'equipment',
+              category: deviceType // category wird für die Gruppierung verwendet (z.B. "Laser", "Ultraschall")
+            });
+            
+            if (resourceDevice) {
+              // Standort-Filterung für Resource-Modell
+              // Hinweis: Resource-Modell hat properties.location als String, nicht locationId
+              if (!locationId) {
+                bookedDevicesCount++;
+              } else {
+                // Fallback: Prüfe properties.location als String (falls vorhanden)
+                const resourceLocation = resourceDevice.properties?.location;
+                if (!resourceLocation || resourceLocation.toString().includes(locationId.toString())) {
+                  bookedDevicesCount++;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      const availableDevices = maxDevices - bookedDevicesCount;
+      const isAvailable = availableDevices >= quantityRequired;
+      
+      return {
+        available: isAvailable,
+        message: isAvailable 
+          ? `${availableDevices} Geräte verfügbar` 
+          : `Nicht genügend Geräte verfügbar. Benötigt: ${quantityRequired}, Verfügbar: ${availableDevices}`,
+        totalAvailable: maxDevices,
+        booked: bookedDevicesCount,
+        available: availableDevices,
+        required: quantityRequired
+      };
+      
+    } catch (error) {
+      console.error('Error checking device type availability:', error);
+      return {
+        available: false,
+        message: 'Fehler bei der Verfügbarkeitsprüfung',
+        error: error.message
+      };
+    }
+  }
+
+  /**
+   * Prüft Raum-Verfügbarkeit nach Typ
+   * @param {String} roomType - Raumtyp (z.B. 'treatment')
+   * @param {Date} startTime - Startzeit des Termins
+   * @param {Date} endTime - Endzeit des Termins
+   * @param {Number} quantityRequired - Benötigte Anzahl an Räumen
+   * @param {String} locationId - Optional: Standort-ID für Filterung
+   * @param {Number} maxAvailable - Optional: Maximale verfügbare Anzahl
+   * @param {String} excludeAppointmentId - Optional: Termin-ID zum Ausschließen (bei Updates)
+   * @returns {Object} Verfügbarkeitsergebnis
+   */
+  static async checkRoomTypeAvailability(roomType, startTime, endTime, quantityRequired = 1, locationId = null, maxAvailable = null, excludeAppointmentId = null) {
+    const Resource = require('../models/Resource');
+    
+    try {
+      // Zähle alle aktiven Räume dieses Typs
+      const roomQuery = {
+        type: roomType,
+        isActive: true
+      };
+      
+      if (locationId) {
+        roomQuery.location_id = locationId;
+      }
+      
+      const totalRooms = await Room.countDocuments(roomQuery);
+      
+      // Zähle auch Räume im Resource-Modell
+      // Im Resource-Modell wird 'category' für die Raum-Gruppierung verwendet
+      const resourceQuery = {
+        type: 'room',
+        category: roomType, // category wird für die Gruppierung verwendet (z.B. "treatment", "consultation")
+        isActive: true
+      };
+      
+      // Standort-Filterung für Resource-Modell (falls properties.location vorhanden)
+      // Hinweis: Resource-Modell hat kein location_id Feld direkt, sondern properties.location als String
+      
+      const totalResourceRooms = await Resource.countDocuments(resourceQuery);
+      const totalAvailableRooms = totalRooms + totalResourceRooms;
+      
+      // Wenn maxAvailable gesetzt ist, verwende den kleineren Wert
+      const maxRooms = maxAvailable ? Math.min(totalAvailableRooms, maxAvailable) : totalAvailableRooms;
+      
+      if (maxRooms < quantityRequired) {
+        return {
+          available: false,
+          message: `Nicht genügend Räume verfügbar. Benötigt: ${quantityRequired}, Verfügbar: ${maxRooms}`,
+          totalAvailable: maxRooms,
+          required: quantityRequired
+        };
+      }
+      
+      // Finde alle Termine im Zeitraum, die Räume dieses Typs verwenden
+      const appointmentQuery = {
+        assigned_rooms: { $exists: true, $ne: [] },
+        startTime: { $lt: endTime },
+        endTime: { $gt: startTime },
+        status: { $nin: ['cancelled', 'abgesagt', 'no_show'] }
+      };
+      
+      if (excludeAppointmentId) {
+        appointmentQuery._id = { $ne: excludeAppointmentId };
+      }
+      
+      const conflictingAppointments = await Appointment.find(appointmentQuery)
+        .populate('assigned_rooms', 'type location_id')
+        .select('assigned_rooms startTime endTime');
+      
+      // Zähle belegte Räume dieses Typs
+      let bookedRoomsCount = 0;
+      
+      for (const appointment of conflictingAppointments) {
+        if (!appointment.assigned_rooms || !Array.isArray(appointment.assigned_rooms)) continue;
+        
+        for (const room of appointment.assigned_rooms) {
+          if (!room) continue;
+          
+          // Prüfe ob Raum vom richtigen Typ ist
+          const roomId = room._id || room;
+          const roomDoc = await Room.findById(roomId);
+          
+          if (roomDoc && roomDoc.type === roomType) {
+            // Prüfe ob Standort-Filter passt
+            if (!locationId || (roomDoc.location_id && roomDoc.location_id.toString() === locationId.toString())) {
+              bookedRoomsCount++;
+            }
+          } else {
+            // Prüfe auch Resource-Modell
+            // Im Resource-Modell wird 'category' für die Raum-Gruppierung verwendet
+            const resourceRoom = await Resource.findOne({
+              _id: roomId,
+              type: 'room',
+              category: roomType // category wird für die Gruppierung verwendet
+            });
+            
+            if (resourceRoom) {
+              // Standort-Filterung für Resource-Modell
+              // Hinweis: Resource-Modell hat properties.location als String, nicht locationId
+              if (!locationId) {
+                bookedRoomsCount++;
+              } else {
+                // Fallback: Prüfe properties.location als String (falls vorhanden)
+                const resourceLocation = resourceRoom.properties?.location;
+                if (!resourceLocation || resourceLocation.toString().includes(locationId.toString())) {
+                  bookedRoomsCount++;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      const availableRooms = maxRooms - bookedRoomsCount;
+      const isAvailable = availableRooms >= quantityRequired;
+      
+      return {
+        available: isAvailable,
+        message: isAvailable 
+          ? `${availableRooms} Räume verfügbar` 
+          : `Nicht genügend Räume verfügbar. Benötigt: ${quantityRequired}, Verfügbar: ${availableRooms}`,
+        totalAvailable: maxRooms,
+        booked: bookedRoomsCount,
+        available: availableRooms,
+        required: quantityRequired
+      };
+      
+    } catch (error) {
+      console.error('Error checking room type availability:', error);
+      return {
+        available: false,
+        message: 'Fehler bei der Verfügbarkeitsprüfung',
+        error: error.message
+      };
+    }
+  }
 }
 
 module.exports = CollisionDetection;

@@ -160,9 +160,14 @@ router.post('/', [
       status = 'geplant',
       service,
       assigned_users = [],
-      assigned_devices = [],
+      assigned_devices,
       assigned_rooms = []
     } = req.body;
+    
+    // Normalisiere assigned_devices: undefined/null wird zu undefined
+    const normalizedAssignedDevices = (assigned_devices && Array.isArray(assigned_devices) && assigned_devices.length > 0) 
+      ? assigned_devices 
+      : undefined;
     
     console.log('Received appointment creation request:', {
       title,
@@ -171,7 +176,7 @@ router.post('/', [
       patient,
       service,
       assigned_users,
-      assigned_devices,
+      assigned_devices: normalizedAssignedDevices,
       assigned_rooms
     });
 
@@ -192,13 +197,53 @@ router.post('/', [
       });
     }
 
+    // Service-Validierung falls Service angegeben (vor TimeBlock-Prüfung, um Pufferzeiten zu holen)
+    let serviceDoc = null;
+    let bufferBefore = 0;
+    let bufferAfter = 0;
+    let calculatedEndTime = new Date(endTime);
+    
+    if (service) {
+      serviceDoc = await ServiceCatalog.findById(service);
+      if (!serviceDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Service nicht gefunden'
+        });
+      }
+      
+      // Hole Pufferzeiten aus dem Service
+      bufferBefore = serviceDoc.buffer_before_min || 0;
+      bufferAfter = serviceDoc.buffer_after_min || 0;
+      
+      // Berechne Endzeit neu mit Pufferzeiten
+      // Die Endzeit sollte base_duration_min + buffer_after_min nach dem Start sein
+      // Startzeit wird um buffer_before_min nach hinten verschoben
+      const actualStartTime = new Date(new Date(startTime).getTime() + bufferBefore * 60 * 1000);
+      calculatedEndTime = new Date(actualStartTime.getTime() + (serviceDoc.base_duration_min || 30) * 60 * 1000 + bufferAfter * 60 * 1000);
+      
+      console.log('🔍 Service Pufferzeiten:', {
+        serviceName: serviceDoc.name,
+        bufferBefore,
+        bufferAfter,
+        baseDuration: serviceDoc.base_duration_min,
+        originalStartTime: startTime,
+        originalEndTime: endTime,
+        calculatedEndTime: calculatedEndTime.toISOString()
+      });
+    }
+    
     // Prüfe TimeBlocks (gesperrte Zeitslots) für das zugewiesene Personal
+    // Berücksichtige Pufferzeiten bei der Prüfung
     const TimeBlock = require('../models/TimeBlock');
     const appointmentStart = new Date(startTime);
-    const appointmentEnd = new Date(endTime);
+    const appointmentStartWithBuffer = new Date(appointmentStart.getTime() - bufferBefore * 60 * 1000);
+    const appointmentEnd = calculatedEndTime;
+    const appointmentEndWithBuffer = new Date(appointmentEnd.getTime() + bufferAfter * 60 * 1000);
     const doctorId = assigned_users && assigned_users.length > 0 ? assigned_users[0] : req.user.id;
     
     // Prüfe TimeBlocks: TimeBlocks mit Personal blockieren nur dieses Personal, TimeBlocks ohne Personal blockieren alle
+    // Verwende Zeiträume mit Pufferzeiten für die Prüfung
     const conflictingTimeBlocks = await TimeBlock.find({
       $or: [
         { staffId: doctorId }, // TimeBlock für dieses Personal (neues Feld)
@@ -206,8 +251,8 @@ router.post('/', [
         { staffId: { $exists: false }, doctor: { $exists: false } }, // Oder TimeBlocks ohne Personal (blockieren alle)
         { staffId: null, doctor: null } // Oder TimeBlocks mit null (blockieren alle)
       ],
-      startTime: { $lt: appointmentEnd },
-      endTime: { $gt: appointmentStart },
+      startTime: { $lt: appointmentEndWithBuffer },
+      endTime: { $gt: appointmentStartWithBuffer },
       status: { $in: ['blocked', 'reserved'] } // Nur aktive Sperren
     });
     
@@ -219,13 +264,13 @@ router.post('/', [
       });
     }
     
-    // Reserve slot first
+    // Reserve slot first (mit Pufferzeiten)
     let reservation = null;
     try {
       reservation = await SlotReservation.reserveSlot({
         resourceId,
-        startTime: new Date(startTime),
-        endTime: new Date(endTime),
+        startTime: appointmentStartWithBuffer, // Start mit Puffer
+        endTime: appointmentEndWithBuffer, // Ende mit Puffer
         reservedBy: req.user.id,
         metadata: { appointmentTitle: title }
       });
@@ -240,15 +285,7 @@ router.post('/', [
     }
 
     // Service-Validierung falls Service angegeben
-    if (service) {
-      const serviceDoc = await ServiceCatalog.findById(service);
-      if (!serviceDoc) {
-        return res.status(400).json({
-          success: false,
-          message: 'Service nicht gefunden'
-        });
-      }
-
+    if (service && serviceDoc) {
       // Prüfen ob Benutzer-Auswahl erforderlich ist
       if (serviceDoc.requires_user_selection && (!assigned_users || assigned_users.length === 0)) {
         return res.status(400).json({
@@ -315,11 +352,11 @@ router.post('/', [
           if (weeklySchedules.length === 0) {
             console.log(`No schedules found for user ${userId}, skipping availability check but checking absences`);
             
-            // Prüfe nur Abwesenheiten, wenn kein Schedule vorhanden ist
+            // Prüfe nur Abwesenheiten, wenn kein Schedule vorhanden ist (mit Pufferzeiten)
             const absences = await Absence.find({
               staffId: userId,
-              startsAt: { $lte: new Date(endTime) },
-              endsAt: { $gte: new Date(startTime) },
+              startsAt: { $lte: appointmentEndWithBuffer },
+              endsAt: { $gte: appointmentStartWithBuffer },
               status: 'approved'
             });
 
@@ -340,26 +377,43 @@ router.post('/', [
             const daySchedule = schedule.schedules.find(s => s.day === dayOfWeek);
             console.log(`Day schedule for ${dayOfWeek}:`, daySchedule ? { isWorking: daySchedule.isWorking, startTime: daySchedule.startTime, endTime: daySchedule.endTime } : 'N/A');
             if (daySchedule && daySchedule.isWorking) {
-              const appointmentTimeStr = appointmentDate.toTimeString().substring(0, 5);
-              console.log(`Checking time: ${appointmentTimeStr} against ${daySchedule.startTime} - ${daySchedule.endTime}`);
-              if (appointmentTimeStr >= daySchedule.startTime && 
-                  appointmentTimeStr < daySchedule.endTime) {
-                // Prüfe ob Zeit in Pause liegt
+              // Prüfe ob der gesamte Zeitraum (inkl. Pufferzeiten) in den Arbeitszeiten liegt
+              const [scheduleStartHour, scheduleStartMin] = daySchedule.startTime.split(':').map(Number);
+              const [scheduleEndHour, scheduleEndMin] = daySchedule.endTime.split(':').map(Number);
+              
+              const scheduleStart = new Date(appointmentDate);
+              scheduleStart.setHours(scheduleStartHour, scheduleStartMin, 0, 0);
+              
+              const scheduleEnd = new Date(appointmentDate);
+              scheduleEnd.setHours(scheduleEndHour, scheduleEndMin, 0, 0);
+              
+              // Prüfe ob Start (mit Puffer) und Ende (mit Puffer) in den Arbeitszeiten liegen
+              if (appointmentStartWithBuffer >= scheduleStart && appointmentEndWithBuffer <= scheduleEnd) {
+                // Prüfe ob Zeit in Pause liegt (mit Pufferzeiten)
                 if (daySchedule.breakStart && daySchedule.breakEnd) {
-                  if (appointmentTimeStr >= daySchedule.breakStart && 
-                      appointmentTimeStr < daySchedule.breakEnd) {
-                    console.log(`Staff is in break at ${appointmentTimeStr}`);
+                  const [breakStartHour, breakStartMin] = daySchedule.breakStart.split(':').map(Number);
+                  const [breakEndHour, breakEndMin] = daySchedule.breakEnd.split(':').map(Number);
+                  
+                  const breakStart = new Date(appointmentDate);
+                  breakStart.setHours(breakStartHour, breakStartMin, 0, 0);
+                  
+                  const breakEnd = new Date(appointmentDate);
+                  breakEnd.setHours(breakEndHour, breakEndMin, 0, 0);
+                  
+                  // Prüfe ob sich der Termin (mit Puffer) mit der Pause überschneidet
+                  if ((appointmentStartWithBuffer < breakEnd && appointmentEndWithBuffer > breakStart)) {
+                    console.log(`Staff is in break during appointment time (with buffers)`);
                     return res.status(400).json({
                       success: false,
                       message: `${userName} ist zu dieser Zeit in Pause. Bitte wählen Sie einen anderen Mitarbeiter oder einen anderen Zeitpunkt.`
                     });
                   }
                 }
-                console.log(`Staff is available!`);
+                console.log(`Staff is available (with buffers)!`);
                 isAvailable = true;
                 break;
               } else {
-                console.log(`Time ${appointmentTimeStr} is outside working hours ${daySchedule.startTime} - ${daySchedule.endTime}`);
+                console.log(`Appointment time (with buffers) is outside working hours ${daySchedule.startTime} - ${daySchedule.endTime}`);
               }
             }
           }
@@ -391,21 +445,142 @@ router.post('/', [
       }
 
       // Prüfen ob Geräte-Auswahl erforderlich ist
-      if (serviceDoc.requires_device_selection && (!assigned_devices || assigned_devices.length === 0)) {
+      console.log('🔍 Device selection check:', {
+        requires_device_selection: serviceDoc.requires_device_selection,
+        device_selection_mode: serviceDoc.device_selection_mode,
+        required_device_type: serviceDoc.required_device_type,
+        assigned_devices: normalizedAssignedDevices,
+        assigned_devices_type: typeof normalizedAssignedDevices,
+        assigned_devices_length: normalizedAssignedDevices?.length,
+        assigned_devices_is_array: Array.isArray(normalizedAssignedDevices),
+        service_assigned_devices: serviceDoc.assigned_devices,
+        service_assigned_devices_length: serviceDoc.assigned_devices?.length
+      });
+
+      // Typ-basierte Geräte-Verfügbarkeitsprüfung
+      if (serviceDoc.device_selection_mode === 'type' && serviceDoc.required_device_type) {
+        const CollisionDetection = require('../utils/collisionDetection');
+        const locationId = location_id || (req.user && req.user.location_id);
+        
+        const deviceTypeAvailability = await CollisionDetection.checkDeviceTypeAvailability(
+          serviceDoc.required_device_type,
+          appointmentStartWithBuffer,
+          appointmentEndWithBuffer,
+          serviceDoc.device_quantity_required || 1,
+          locationId,
+          serviceDoc.max_available_devices,
+          null // excludeAppointmentId wird später bei Updates gesetzt
+        );
+        
+        if (!deviceTypeAvailability.available) {
+          console.log('❌ Device type availability check failed:', deviceTypeAvailability);
+          return res.status(400).json({
+            success: false,
+            message: deviceTypeAvailability.message || 'Nicht genügend Geräte dieses Typs verfügbar'
+          });
+        }
+        
+        console.log('✅ Device type availability check passed:', deviceTypeAvailability);
+      }
+
+      if (serviceDoc.requires_device_selection && !normalizedAssignedDevices && serviceDoc.device_selection_mode !== 'type') {
+        console.log('❌ Service requires device selection but no devices provided');
         return res.status(400).json({
           success: false,
           message: 'Für diesen Service müssen Geräte ausgewählt werden'
         });
       }
 
-      // Prüfen ob zugewiesene Geräte verfügbar sind
-      if (assigned_devices && assigned_devices.length > 0) {
+      // Prüfen ob zugewiesene Geräte verfügbar sind (nur im 'specific'-Modus)
+      if (normalizedAssignedDevices && normalizedAssignedDevices.length > 0 && serviceDoc.device_selection_mode !== 'type') {
+        console.log('🔍 Checking device availability:', {
+          requestedDevices: normalizedAssignedDevices,
+          serviceId: serviceDoc?._id,
+          serviceName: serviceDoc?.name
+        });
+        
+        // Prüfe sowohl Device-Modell als auch Resource-Modell
+        const Resource = require('../models/Resource');
+        
+        // Normalisiere alle Device-IDs zu Strings für konsistente Vergleiche
+        const normalizedDeviceIds = normalizedAssignedDevices.map(id => id.toString());
+        
+        // Suche in Device-Modell
         const validDevices = await Device.find({ 
-          _id: { $in: assigned_devices },
+          _id: { $in: normalizedDeviceIds },
           isActive: true
         });
         
-        if (validDevices.length !== assigned_devices.length) {
+        // Suche in Resource-Modell (nur Equipment-Typ)
+        const validResourceDevices = await Resource.find({ 
+          _id: { $in: normalizedDeviceIds },
+          type: 'equipment',
+          isActive: true
+        });
+        
+        // Kombiniere beide Ergebnisse
+        const allValidDevices = [...validDevices, ...validResourceDevices];
+        const allValidDeviceIds = allValidDevices.map(d => d._id.toString());
+        
+        console.log('🔍 Device validation result:', {
+          requestedCount: normalizedDeviceIds.length,
+          validDeviceCount: validDevices.length,
+          validResourceDeviceCount: validResourceDevices.length,
+          totalValidCount: allValidDevices.length,
+          validDeviceIds: validDevices.map(d => d._id.toString()),
+          validResourceDeviceIds: validResourceDevices.map(d => d._id.toString()),
+          allValidDeviceIds,
+          requestedDeviceIds: normalizedDeviceIds
+        });
+        
+        if (allValidDeviceIds.length !== normalizedDeviceIds.length) {
+          const invalidDeviceIds = normalizedDeviceIds.filter(deviceId => {
+            return !allValidDeviceIds.includes(deviceId);
+          });
+          
+          // Prüfe, ob die Geräte existieren, aber inaktiv sind
+          const allDevices = await Device.find({ _id: { $in: normalizedDeviceIds } });
+          const allResources = await Resource.find({ 
+            _id: { $in: normalizedDeviceIds },
+            type: 'equipment'
+          });
+          const inactiveDevices = [
+            ...allDevices.filter(d => !d.isActive),
+            ...allResources.filter(d => !d.isActive)
+          ];
+          
+          // Prüfe, ob Geräte überhaupt nicht existieren
+          const existingDeviceIds = [
+            ...allDevices.map(d => d._id.toString()),
+            ...allResources.map(d => d._id.toString())
+          ];
+          const nonExistentDevices = normalizedDeviceIds.filter(id => !existingDeviceIds.includes(id));
+          
+          console.log('❌ Device validation failed:', {
+            invalidDeviceIds,
+            inactiveDevices: inactiveDevices.map(d => ({ 
+              id: d._id.toString(), 
+              name: d.name, 
+              isActive: d.isActive,
+              model: d.constructor.modelName
+            })),
+            nonExistentDevices
+          });
+          
+          if (nonExistentDevices.length > 0) {
+            return res.status(400).json({
+              success: false,
+              message: 'Ein oder mehrere Geräte existieren nicht'
+            });
+          }
+          
+          if (inactiveDevices.length > 0) {
+            return res.status(400).json({
+              success: false,
+              message: `Folgende Geräte sind nicht aktiv: ${inactiveDevices.map(d => d.name).join(', ')}`
+            });
+          }
+          
           return res.status(400).json({
             success: false,
             message: 'Ein oder mehrere Geräte sind nicht verfügbar'
@@ -413,18 +588,40 @@ router.post('/', [
         }
 
         // Prüfen ob Geräte dem Service zugewiesen sind
-        const serviceDeviceIds = serviceDoc.assigned_devices.map(d => d.toString());
-        const invalidDevices = assigned_devices.filter(deviceId => !serviceDeviceIds.includes(deviceId.toString()));
+        // Normalisiere serviceDeviceIds - handle sowohl ObjectIds als auch Strings
+        const serviceDeviceIds = (serviceDoc.assigned_devices || []).map(d => {
+          if (typeof d === 'string') return d;
+          if (d && d._id) return d._id.toString();
+          return d.toString();
+        });
+        
+        console.log('🔍 Checking device service assignment:', {
+          serviceDeviceIds,
+          requestedDeviceIds: normalizedDeviceIds,
+          serviceDocAssignedDevices: serviceDoc.assigned_devices,
+          serviceDocAssignedDevicesType: typeof serviceDoc.assigned_devices,
+          serviceDocAssignedDevicesIsArray: Array.isArray(serviceDoc.assigned_devices)
+        });
+        
+        const invalidDevices = normalizedDeviceIds.filter(deviceId => !serviceDeviceIds.includes(deviceId));
         
         if (invalidDevices.length > 0) {
+          console.log('❌ Device service assignment failed:', {
+            invalidDeviceIds: invalidDevices,
+            serviceDeviceIds,
+            requestedDeviceIds: normalizedDeviceIds
+          });
+          
           return res.status(400).json({
             success: false,
             message: 'Ein oder mehrere Geräte sind nicht für diesen Service verfügbar'
           });
         }
+        
+        console.log('✅ All devices are valid and assigned to service');
 
         // Prüfen ob genügend Geräte ausgewählt wurden
-        if (assigned_devices.length < serviceDoc.device_quantity_required) {
+        if (normalizedAssignedDevices.length < serviceDoc.device_quantity_required) {
           return res.status(400).json({
             success: false,
             message: `Für diesen Service werden mindestens ${serviceDoc.device_quantity_required} Geräte benötigt`
@@ -432,16 +629,42 @@ router.post('/', [
         }
       }
 
+      // Typ-basierte Raum-Verfügbarkeitsprüfung
+      if (serviceDoc.room_selection_mode === 'type' && serviceDoc.required_room_type) {
+        const CollisionDetection = require('../utils/collisionDetection');
+        const locationId = location_id || (req.user && req.user.location_id);
+        
+        const roomTypeAvailability = await CollisionDetection.checkRoomTypeAvailability(
+          serviceDoc.required_room_type,
+          appointmentStartWithBuffer,
+          appointmentEndWithBuffer,
+          serviceDoc.room_quantity_required || 1,
+          locationId,
+          serviceDoc.max_available_rooms,
+          null // excludeAppointmentId wird später bei Updates gesetzt
+        );
+        
+        if (!roomTypeAvailability.available) {
+          console.log('❌ Room type availability check failed:', roomTypeAvailability);
+          return res.status(400).json({
+            success: false,
+            message: roomTypeAvailability.message || 'Nicht genügend Räume dieses Typs verfügbar'
+          });
+        }
+        
+        console.log('✅ Room type availability check passed:', roomTypeAvailability);
+      }
+
       // Prüfen ob Raum-Auswahl erforderlich ist
-      if (serviceDoc.requires_room_selection && (!assigned_rooms || assigned_rooms.length === 0)) {
+      if (serviceDoc.requires_room_selection && (!assigned_rooms || assigned_rooms.length === 0) && serviceDoc.room_selection_mode !== 'type') {
         return res.status(400).json({
           success: false,
           message: 'Für diesen Service müssen Räume ausgewählt werden'
         });
       }
 
-      // Prüfen ob zugewiesene Räume verfügbar sind
-      if (assigned_rooms && assigned_rooms.length > 0) {
+      // Prüfen ob zugewiesene Räume verfügbar sind (nur im 'specific'-Modus)
+      if (assigned_rooms && assigned_rooms.length > 0 && serviceDoc.room_selection_mode !== 'type') {
         const RoomModel = require('../models/Room');
         const ResourceModel = require('../models/Resource');
         
@@ -486,14 +709,17 @@ router.post('/', [
     // Create appointment
     console.log('Creating appointment with assigned resources:', {
       assigned_users: assigned_users,
-      assigned_devices: assigned_devices,
+      assigned_devices: normalizedAssignedDevices,
       assigned_rooms: assigned_rooms
     });
+    
+    // Verwende berechnete Endzeit (mit Pufferzeiten) wenn Service vorhanden
+    const finalEndTime = serviceDoc ? calculatedEndTime : new Date(endTime);
     
     const appointment = new Appointment({
       title,
       startTime,
-      endTime,
+      endTime: finalEndTime, // Verwende berechnete Endzeit mit Pufferzeiten
       patient,
       doctor: req.user.id,
       type,
@@ -503,7 +729,7 @@ router.post('/', [
       slotReservationId: reservation._id,
       service,
       assigned_users,
-      assigned_devices,
+      assigned_devices: normalizedAssignedDevices,
       assigned_rooms,
       createdBy: req.user.id
     });
@@ -811,13 +1037,14 @@ router.get('/available-slots', auth, async (req, res) => {
       assigned_users: service.assigned_users
     });
 
-    // Zugewiesene Mitarbeiter abrufen
+    // Zugewiesene Mitarbeiter abrufen (nur aktive Benutzer)
     const User = require('../models/User');
     let assignedStaff = [];
     
     if (service.assigned_users && service.assigned_users.length > 0) {
       assignedStaff = await User.find({ 
         _id: { $in: service.assigned_users },
+        isActive: true, // Nur aktive Benutzer anzeigen
         ...(staffId ? { _id: staffId } : {})
       });
     }
@@ -864,20 +1091,70 @@ router.get('/available-slots', auth, async (req, res) => {
         status: 'approved'
       });
 
-      // Bereits gebuchte Termine abrufen
+      // Bereits gebuchte Termine abrufen - prüfe den gesamten Zeitbereich (gleiche Logik wie beim Erstellen)
+      // Hole alle Termine, die sich mit dem Zeitraum überschneiden könnten
       const existingAppointments = await Appointment.find({
-        $or: [
-          { assigned_users: staff._id },
-          { doctor: staff._id }
-        ],
-        startTime: { $gte: start, $lte: end },
-        status: { $nin: ['abgesagt', 'cancelled'] }
+        $and: [
+          {
+            $or: [
+              { assigned_users: staff._id },
+              { doctor: staff._id }
+            ]
+          },
+          {
+            // Termine, die sich mit dem Zeitraum überschneiden
+            startTime: { $lt: end },
+            endTime: { $gt: start }
+          },
+          {
+            status: { $nin: ['abgesagt', 'cancelled'] }
+          }
+        ]
+      });
+      
+      // SlotReservations abrufen (wird beim Erstellen auch geprüft)
+      const SlotReservation = require('../models/SlotReservation');
+      const TimeBlock = require('../models/TimeBlock');
+      
+      // Erstelle resourceId für diesen Mitarbeiter (gleiche Logik wie beim Erstellen)
+      const resourceId = `staff-${staff._id}`;
+      
+      // Hole alle SlotReservations für diesen Zeitraum (gleiche Logik wie beim Erstellen)
+      const existingReservations = await SlotReservation.find({
+        resourceId,
+        status: { $in: ['pending', 'confirmed'] },
+        startTime: { $lt: end },
+        endTime: { $gt: start }
+      });
+      
+      // Hole TimeBlocks für diesen Mitarbeiter (gleiche Logik wie beim Erstellen)
+      const timeBlocks = await TimeBlock.find({
+        $and: [
+          {
+            $or: [
+              { staffId: staff._id },
+              { doctor: staff._id },
+              { staffId: { $exists: false }, doctor: { $exists: false } },
+              { staffId: null, doctor: null }
+            ]
+          },
+          {
+            status: { $in: ['blocked', 'reserved'] }
+          },
+          {
+            startTime: { $lt: end },
+            endTime: { $gt: start }
+          }
+        ]
       });
 
       console.log(`Checking availability for staff ${staff._id}:`, {
         staffName: `${staff.firstName} ${staff.lastName}`,
         schedulesFound: schedules.length,
-        existingAppointments: existingAppointments.length
+        existingAppointments: existingAppointments.length,
+        existingReservations: existingReservations.length,
+        timeBlocks: timeBlocks.length,
+        resourceId
       });
 
       // Slots generieren für jeden Tag
@@ -920,27 +1197,71 @@ router.get('/available-slots', auth, async (req, res) => {
           const breakEnd = new Date(currentDate);
           breakEnd.setHours(breakEndHour, breakEndMin, 0, 0);
 
+          // Hole Pufferzeiten aus dem Service
+          const bufferBefore = service.buffer_before_min || 0;
+          const bufferAfter = service.buffer_after_min || 0;
+          const totalDuration = service.base_duration_min + bufferBefore + bufferAfter;
+          
           while (slotStart < dayEnd) {
+            // Berechne Slot-Endzeit mit Pufferzeiten
+            // Der Slot startet um bufferBefore früher und endet um bufferAfter später
+            const slotStartWithBuffer = new Date(slotStart.getTime() - bufferBefore * 60 * 1000);
             const slotEnd = new Date(slotStart.getTime() + service.base_duration_min * 60 * 1000);
+            const slotEndWithBuffer = new Date(slotEnd.getTime() + bufferAfter * 60 * 1000);
 
-            // Prüfe ob Slot in Pausenzeiten liegt
+            // Prüfe ob Slot in Pausenzeiten liegt (mit Pufferzeiten)
             if (daySchedule.breakStart && daySchedule.breakEnd) {
-              if (slotStart >= breakStart && slotStart < breakEnd) {
+              // Prüfe ob Slot-Start oder Slot-Ende (mit Puffer) in Pausenzeiten liegt
+              if ((slotStartWithBuffer >= breakStart && slotStartWithBuffer < breakEnd) ||
+                  (slotEndWithBuffer > breakStart && slotEndWithBuffer <= breakEnd) ||
+                  (slotStartWithBuffer < breakStart && slotEndWithBuffer > breakEnd)) {
                 slotStart = breakEnd;
                 continue;
               }
             }
 
-            // Prüfe ob Slot in Zukunft liegt (nicht vergangen)
-            if (slotStart < new Date()) {
+            // Prüfe ob Slot in Zukunft liegt (nicht vergangen) - mit Puffer
+            if (slotStartWithBuffer < new Date()) {
               slotStart = new Date(slotStart.getTime() + 15 * 60 * 1000);
               continue;
             }
 
-            // Prüfe Konflikte mit bestehenden Terminen
-            const hasConflict = existingAppointments.some(apt => 
-              (slotStart < new Date(apt.endTime) && slotEnd > new Date(apt.startTime))
+            // Prüfe ob Slot mit Pufferzeiten in die Arbeitszeit passt
+            if (slotStartWithBuffer < dayStart || slotEndWithBuffer > dayEnd) {
+              slotStart = new Date(slotStart.getTime() + 15 * 60 * 1000);
+              continue;
+            }
+
+            // Prüfe Konflikte mit bestehenden Terminen (mit Pufferzeiten)
+            // Ein Konflikt besteht, wenn sich die Zeiträume (inkl. Puffer) überschneiden
+            const hasAppointmentConflict = existingAppointments.some(apt => {
+              const aptStart = new Date(apt.startTime);
+              const aptEnd = new Date(apt.endTime);
+              // Hole Pufferzeiten des bestehenden Termins (falls Service vorhanden)
+              let aptBufferBefore = 0;
+              let aptBufferAfter = 0;
+              if (apt.service && typeof apt.service === 'object' && apt.service.buffer_before_min) {
+                aptBufferBefore = apt.service.buffer_before_min || 0;
+                aptBufferAfter = apt.service.buffer_after_min || 0;
+              }
+              const aptStartWithBuffer = new Date(aptStart.getTime() - aptBufferBefore * 60 * 1000);
+              const aptEndWithBuffer = new Date(aptEnd.getTime() + aptBufferAfter * 60 * 1000);
+              
+              // Überschneidung wenn sich die Zeiträume (inkl. Puffer) überschneiden
+              return (slotStartWithBuffer < aptEndWithBuffer && slotEndWithBuffer > aptStartWithBuffer);
+            });
+            
+            // Prüfe Konflikte mit SlotReservations (mit Pufferzeiten)
+            const hasReservationConflict = existingReservations.some(res => 
+              (slotStartWithBuffer < new Date(res.endTime) && slotEndWithBuffer > new Date(res.startTime))
             );
+            
+            // Prüfe Konflikte mit TimeBlocks (mit Pufferzeiten)
+            const hasTimeBlockConflict = timeBlocks.some(block => 
+              (slotStartWithBuffer < new Date(block.endTime) && slotEndWithBuffer > new Date(block.startTime))
+            );
+            
+            const hasConflict = hasAppointmentConflict || hasReservationConflict || hasTimeBlockConflict;
 
             if (!hasConflict) {
               availableSlots.push({

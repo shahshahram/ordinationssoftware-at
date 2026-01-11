@@ -209,6 +209,9 @@ const Journal: React.FC = () => {
       if (billingType) params.billingType = billingType;
       if (status) params.status = status;
 
+      // Debug-Logging
+      console.log('[Journal Frontend] Request params:', params);
+
       if (activeTab === 0) {
         // Rechnungsjournal
         const response = await api.get('/journal/invoices', params) as any;
@@ -543,6 +546,28 @@ const Journal: React.FC = () => {
         >
           Jahr
         </Button>
+        {activeTab === 0 && (
+          <Button
+            variant={status === 'sent,overdue' ? 'contained' : 'outlined'}
+            onClick={() => {
+              // Setze Status-Filter auf "sent,overdue" für offene Rechnungen
+              // Backend unterstützt mehrere Status durch Komma
+              setStatus('sent,overdue');
+              // Entferne alle Filter, um alle offenen Rechnungen zu zeigen
+              setFilterType('range');
+              setStartDate('');
+              setEndDate('');
+              setSelectedDate('');
+              setSelectedMonth('');
+              setSelectedYear('');
+              setLocationId(''); // Wichtig: locationId zurücksetzen, da viele Einträge locationId: null haben
+              setBillingType(''); // Optional: auch billingType zurücksetzen
+            }}
+            size="small"
+          >
+            Offene Rechnungen
+          </Button>
+        )}
       </Box>
 
       {/* Filter-Card */}
@@ -697,9 +722,30 @@ const Journal: React.FC = () => {
                   <FormControl fullWidth>
                     <InputLabel>Status</InputLabel>
                     <Select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value)}
+                      value={status === 'sent,overdue' ? '' : status}
+                      onChange={(e) => {
+                        // Wenn Quick-Filter aktiv ist, setze Status zurück
+                        if (status === 'sent,overdue') {
+                          setStatus('');
+                        } else {
+                          setStatus(e.target.value);
+                        }
+                      }}
                       label="Status"
+                      renderValue={(selected) => {
+                        if (status === 'sent,overdue') {
+                          return 'Offene Rechnungen';
+                        }
+                        if (!selected) return 'Alle';
+                        const labels: Record<string, string> = {
+                          'draft': 'Entwurf',
+                          'sent': 'Gesendet',
+                          'paid': 'Bezahlt',
+                          'overdue': 'Überfällig',
+                          'cancelled': 'Storniert'
+                        };
+                        return labels[selected] || selected;
+                      }}
                     >
                       <MenuItem value="">Alle</MenuItem>
                       <MenuItem value="draft">Entwurf</MenuItem>

@@ -259,13 +259,14 @@ router.get('/availability', async (req, res) => {
         try {
           serviceDoc = await ServiceCatalog.findById(serviceId);
           if (serviceDoc) {
-            // Lade zugewiesene Räume und Geräte
-            if (serviceDoc.assigned_rooms && serviceDoc.assigned_rooms.length > 0) {
+            // Lade zugewiesene Räume und Geräte (nur im 'specific'-Modus)
+            if (serviceDoc.room_selection_mode !== 'type' && serviceDoc.assigned_rooms && serviceDoc.assigned_rooms.length > 0) {
               requiredRooms = serviceDoc.assigned_rooms;
             }
-            if (serviceDoc.assigned_devices && serviceDoc.assigned_devices.length > 0) {
+            if (serviceDoc.device_selection_mode !== 'type' && serviceDoc.assigned_devices && serviceDoc.assigned_devices.length > 0) {
               requiredDevices = serviceDoc.assigned_devices;
             }
+            console.log(`[OnlineBooking] Service ${serviceId} - Room mode: ${serviceDoc.room_selection_mode || 'specific'}, Device mode: ${serviceDoc.device_selection_mode || 'specific'}`);
             console.log(`[OnlineBooking] Service ${serviceId} requires ${requiredRooms.length} rooms and ${requiredDevices.length} devices`);
           }
         } catch (serviceError) {
@@ -364,44 +365,93 @@ router.get('/availability', async (req, res) => {
         });
 
         // Prüfe Ressourcen-Verfügbarkeit (Räume und Geräte)
-        if (isSlotAvailable && (requiredRooms.length > 0 || requiredDevices.length > 0)) {
+        if (isSlotAvailable && serviceDoc) {
           const slotStartTime = new Date(`${date}T${slotStart}`);
           const slotEndTime = new Date(`${date}T${slotEnd}`);
+          const CollisionDetection = require('../utils/collisionDetection');
+          const locationId = serviceDoc.location_id || locationId;
           
-          // Prüfe ob alle benötigten Räume verfügbar sind
-          if (requiredRooms.length > 0) {
-            for (const roomId of requiredRooms) {
-              const roomBooked = existingAppointments.some(apt => {
-                if (!apt.assigned_rooms || !Array.isArray(apt.assigned_rooms)) return false;
-                if (!apt.assigned_rooms.some(r => r.toString() === roomId.toString())) return false;
-                
-                const aptStart = new Date(apt.startTime);
-                const aptEnd = new Date(apt.endTime);
-                return (slotStartTime < aptEnd && slotEndTime > aptStart);
-              });
+          // Typ-basierte Geräte-Prüfung
+          if (serviceDoc.device_selection_mode === 'type' && serviceDoc.required_device_type) {
+            try {
+              const deviceTypeAvailability = await CollisionDetection.checkDeviceTypeAvailability(
+                serviceDoc.required_device_type,
+                slotStartTime,
+                slotEndTime,
+                serviceDoc.device_quantity_required || 1,
+                locationId,
+                serviceDoc.max_available_devices,
+                null
+              );
               
-              if (roomBooked) {
+              if (!deviceTypeAvailability.available) {
                 isSlotAvailable = false;
-                break;
               }
+            } catch (error) {
+              console.error('[OnlineBooking] Error checking device type availability:', error);
+              isSlotAvailable = false;
             }
           }
           
-          // Prüfe ob alle benötigten Geräte verfügbar sind
-          if (isSlotAvailable && requiredDevices.length > 0) {
-            for (const deviceId of requiredDevices) {
-              const deviceBooked = existingAppointments.some(apt => {
-                if (!apt.assigned_devices || !Array.isArray(apt.assigned_devices)) return false;
-                if (!apt.assigned_devices.some(d => d.toString() === deviceId.toString())) return false;
-                
-                const aptStart = new Date(apt.startTime);
-                const aptEnd = new Date(apt.endTime);
-                return (slotStartTime < aptEnd && slotEndTime > aptStart);
-              });
+          // Typ-basierte Raum-Prüfung
+          if (isSlotAvailable && serviceDoc.room_selection_mode === 'type' && serviceDoc.required_room_type) {
+            try {
+              const roomTypeAvailability = await CollisionDetection.checkRoomTypeAvailability(
+                serviceDoc.required_room_type,
+                slotStartTime,
+                slotEndTime,
+                serviceDoc.room_quantity_required || 1,
+                locationId,
+                serviceDoc.max_available_rooms,
+                null
+              );
               
-              if (deviceBooked) {
+              if (!roomTypeAvailability.available) {
                 isSlotAvailable = false;
-                break;
+              }
+            } catch (error) {
+              console.error('[OnlineBooking] Error checking room type availability:', error);
+              isSlotAvailable = false;
+            }
+          }
+          
+          // Spezifische Geräte/Räume-Prüfung (nur im 'specific'-Modus)
+          if (isSlotAvailable && (requiredRooms.length > 0 || requiredDevices.length > 0)) {
+            // Prüfe ob alle benötigten Räume verfügbar sind
+            if (requiredRooms.length > 0) {
+              for (const roomId of requiredRooms) {
+                const roomBooked = existingAppointments.some(apt => {
+                  if (!apt.assigned_rooms || !Array.isArray(apt.assigned_rooms)) return false;
+                  if (!apt.assigned_rooms.some(r => r.toString() === roomId.toString())) return false;
+                  
+                  const aptStart = new Date(apt.startTime);
+                  const aptEnd = new Date(apt.endTime);
+                  return (slotStartTime < aptEnd && slotEndTime > aptStart);
+                });
+                
+                if (roomBooked) {
+                  isSlotAvailable = false;
+                  break;
+                }
+              }
+            }
+            
+            // Prüfe ob alle benötigten Geräte verfügbar sind
+            if (isSlotAvailable && requiredDevices.length > 0) {
+              for (const deviceId of requiredDevices) {
+                const deviceBooked = existingAppointments.some(apt => {
+                  if (!apt.assigned_devices || !Array.isArray(apt.assigned_devices)) return false;
+                  if (!apt.assigned_devices.some(d => d.toString() === deviceId.toString())) return false;
+                  
+                  const aptStart = new Date(apt.startTime);
+                  const aptEnd = new Date(apt.endTime);
+                  return (slotStartTime < aptEnd && slotEndTime > aptStart);
+                });
+                
+                if (deviceBooked) {
+                  isSlotAvailable = false;
+                  break;
+                }
               }
             }
           }
@@ -1176,7 +1226,24 @@ router.post('/book', [
       }
     }
     
-    const isAvailable = await checkAvailability(doctor.id, requestedDate, appointment.startTime);
+    // Berechne korrekte Dauer aus Service (mit Pufferzeiten) - VOR Verfügbarkeitsprüfung
+    const calculatedDuration = serviceDoc ? (
+      (serviceDoc.base_duration_min || 30) + 
+      (serviceDoc.buffer_before_min || 0) + 
+      (serviceDoc.buffer_after_min || 0)
+    ) : (appointment.duration || 30);
+    
+    // Prüfe Verfügbarkeit mit Pufferzeiten
+    const isAvailable = await checkAvailability(
+      doctor.id, 
+      requestedDate, 
+      appointment.startTime,
+      serviceDoc ? {
+        base_duration_min: serviceDoc.base_duration_min || 30,
+        buffer_before_min: serviceDoc.buffer_before_min || 0,
+        buffer_after_min: serviceDoc.buffer_after_min || 0
+      } : null
+    );
     
     if (!isAvailable) {
       return res.status(400).json({
@@ -1185,29 +1252,81 @@ router.post('/book', [
       });
     }
     
-    // Berechne korrekte Dauer aus Service (mit Pufferzeiten)
-    const calculatedDuration = serviceDoc ? (
-      (serviceDoc.base_duration_min || 30) + 
-      (serviceDoc.buffer_before_min || 0) + 
-      (serviceDoc.buffer_after_min || 0)
-    ) : (appointment.duration || 30);
+    // Berechne Zeiträume mit Pufferzeiten für Kollisionsprüfung (einmal für alle Ressourcen)
+    const bufferBefore = serviceDoc?.buffer_before_min || 0;
+    const bufferAfter = serviceDoc?.buffer_after_min || 0;
+    const baseDuration = serviceDoc?.base_duration_min || 30;
     
-    // Prüfe Ressourcen-Verfügbarkeit (Räume und Geräte) - Kollisionsprüfung
-    if (finalAssignedRooms && finalAssignedRooms.length > 0) {
+    const dateStr = requestedDate.toISOString().split('T')[0];
+    const [hours, minutes] = appointment.startTime.split(':').map(Number);
+    const startDateTime = new Date(requestedDate);
+    startDateTime.setHours(hours, minutes, 0, 0);
+    
+    // Berechne Zeiträume mit Pufferzeiten
+    const startDateTimeWithBuffer = new Date(startDateTime.getTime() - bufferBefore * 60 * 1000);
+    const actualStartTime = new Date(startDateTime.getTime() + bufferBefore * 60 * 1000);
+    const endDateTime = new Date(actualStartTime.getTime() + baseDuration * 60 * 1000);
+    const endDateTimeWithBuffer = new Date(endDateTime.getTime() + bufferAfter * 60 * 1000);
+    
+    // Typ-basierte Ressourcen-Verfügbarkeitsprüfung (wenn Service im Typ-Modus ist)
+    if (serviceDoc) {
       const CollisionDetection = require('../utils/collisionDetection');
-      const dateStr = requestedDate.toISOString().split('T')[0];
-      const [hours, minutes] = appointment.startTime.split(':').map(Number);
-      const startDateTime = new Date(requestedDate);
-      startDateTime.setHours(hours, minutes, 0, 0);
-      // Verwende berechnete Dauer mit Pufferzeiten
-      const endDateTime = new Date(startDateTime.getTime() + calculatedDuration * 60000);
+      const locationId = serviceDoc.location_id || (doctor && doctor.location_id);
       
-      // Prüfe jeden Raum auf Kollisionen
+      // Typ-basierte Geräte-Prüfung
+      if (serviceDoc.device_selection_mode === 'type' && serviceDoc.required_device_type) {
+        const deviceTypeAvailability = await CollisionDetection.checkDeviceTypeAvailability(
+          serviceDoc.required_device_type,
+          startDateTimeWithBuffer,
+          endDateTimeWithBuffer,
+          serviceDoc.device_quantity_required || 1,
+          locationId,
+          serviceDoc.max_available_devices,
+          null
+        );
+        
+        if (!deviceTypeAvailability.available) {
+          return res.status(400).json({
+            success: false,
+            message: deviceTypeAvailability.message || 'Nicht genügend Geräte dieses Typs verfügbar',
+            code: 'DEVICE_TYPE_UNAVAILABLE'
+          });
+        }
+      }
+      
+      // Typ-basierte Raum-Prüfung
+      if (serviceDoc.room_selection_mode === 'type' && serviceDoc.required_room_type) {
+        const roomTypeAvailability = await CollisionDetection.checkRoomTypeAvailability(
+          serviceDoc.required_room_type,
+          startDateTimeWithBuffer,
+          endDateTimeWithBuffer,
+          serviceDoc.room_quantity_required || 1,
+          locationId,
+          serviceDoc.max_available_rooms,
+          null
+        );
+        
+        if (!roomTypeAvailability.available) {
+          return res.status(400).json({
+            success: false,
+            message: roomTypeAvailability.message || 'Nicht genügend Räume dieses Typs verfügbar',
+            code: 'ROOM_TYPE_UNAVAILABLE'
+          });
+        }
+      }
+    }
+    
+    // Prüfe Ressourcen-Verfügbarkeit (Räume und Geräte) - Kollisionsprüfung (mit Pufferzeiten)
+    // Nur wenn im 'specific'-Modus
+    if (finalAssignedRooms && finalAssignedRooms.length > 0 && (!serviceDoc || serviceDoc.room_selection_mode !== 'type')) {
+      const CollisionDetection = require('../utils/collisionDetection');
+      
+      // Prüfe jeden Raum auf Kollisionen (mit Pufferzeiten)
       for (const roomId of finalAssignedRooms) {
         const roomCollisions = await CollisionDetection.checkRoomCollisions(
           roomId,
-          startDateTime,
-          endDateTime
+          startDateTimeWithBuffer, // Start mit Puffer
+          endDateTimeWithBuffer // Ende mit Puffer
         );
         
         if (roomCollisions.length > 0) {
@@ -1220,20 +1339,14 @@ router.post('/book', [
       }
     }
     
-    if (finalAssignedDevices && finalAssignedDevices.length > 0) {
+    if (finalAssignedDevices && finalAssignedDevices.length > 0 && (!serviceDoc || serviceDoc.device_selection_mode !== 'type')) {
       const CollisionDetection = require('../utils/collisionDetection');
-      const dateStr = requestedDate.toISOString().split('T')[0];
-      const [hours, minutes] = appointment.startTime.split(':').map(Number);
-      const startDateTime = new Date(requestedDate);
-      startDateTime.setHours(hours, minutes, 0, 0);
-      // Verwende berechnete Dauer mit Pufferzeiten
-      const endDateTime = new Date(startDateTime.getTime() + calculatedDuration * 60000);
       
-      // Prüfe alle Geräte auf Kollisionen
+      // Prüfe alle Geräte auf Kollisionen (mit Pufferzeiten)
       const deviceCollisions = await CollisionDetection.checkDeviceCollisions(
         finalAssignedDevices,
-        startDateTime,
-        endDateTime
+        startDateTimeWithBuffer, // Start mit Puffer
+        endDateTimeWithBuffer // Ende mit Puffer
       );
       
       if (deviceCollisions.length > 0) {
@@ -2223,18 +2336,38 @@ router.put('/cancel/:bookingNumber', [
 
 
 // Hilfsfunktionen
-async function checkAvailability(doctorId, date, time) {
-  console.log(`[OnlineBooking] checkAvailability called: doctorId=${doctorId}, date=${date}, time=${time}`);
+async function checkAvailability(doctorId, date, time, serviceInfo = null) {
+  console.log(`[OnlineBooking] checkAvailability called: doctorId=${doctorId}, date=${date}, time=${time}`, serviceInfo);
+  
+  // Hole Pufferzeiten aus Service-Info oder verwende Standardwerte
+  const bufferBefore = serviceInfo?.buffer_before_min || 0;
+  const bufferAfter = serviceInfo?.buffer_after_min || 0;
+  const baseDuration = serviceInfo?.base_duration_min || 30;
+  const totalDuration = baseDuration + bufferBefore + bufferAfter;
   
   // Konvertiere time (String "HH:MM") zu einem Date-Objekt für die Query
   const dateStr = date.toISOString().split('T')[0];
   const startDateTime = new Date(`${dateStr}T${time}`);
-  const endDateTime = new Date(startDateTime.getTime() + 30 * 60000); // 30 Minuten Dauer
+  // Berechne Endzeit mit Pufferzeiten
+  const actualStartTime = new Date(startDateTime.getTime() + bufferBefore * 60 * 1000);
+  const endDateTime = new Date(actualStartTime.getTime() + baseDuration * 60 * 1000);
+  const endDateTimeWithBuffer = new Date(endDateTime.getTime() + bufferAfter * 60 * 1000);
   
-  console.log(`[OnlineBooking] Checking availability for: ${dateStr} ${time} (${startDateTime.toISOString()} - ${endDateTime.toISOString()})`);
+  // Startzeit mit Puffer (für Kollisionsprüfung)
+  const startDateTimeWithBuffer = new Date(startDateTime.getTime() - bufferBefore * 60 * 1000);
   
-  // 1. Prüfe ob Termin bereits existiert
-  // startTime ist ein Date im Appointment-Modell, also müssen wir nach einem Date-Objekt suchen
+  console.log(`[OnlineBooking] Checking availability for: ${dateStr} ${time}`, {
+    startDateTime: startDateTime.toISOString(),
+    startWithBuffer: startDateTimeWithBuffer.toISOString(),
+    endDateTime: endDateTime.toISOString(),
+    endWithBuffer: endDateTimeWithBuffer.toISOString(),
+    bufferBefore,
+    bufferAfter,
+    baseDuration,
+    totalDuration
+  });
+  
+  // 1. Prüfe ob Termin bereits existiert (mit Pufferzeiten)
   const existingAppointments = await Appointment.find({
     doctor: doctorId,
     startTime: {
@@ -2246,22 +2379,40 @@ async function checkAvailability(doctorId, date, time) {
   
   console.log(`[OnlineBooking] Found ${existingAppointments.length} existing appointments for this date`);
   
-  // Prüfe ob der spezifische Zeitpunkt bereits belegt ist
+  // Prüfe ob der spezifische Zeitpunkt bereits belegt ist (mit Pufferzeiten)
   for (const existingAppointment of existingAppointments) {
     const existingStart = new Date(existingAppointment.startTime);
     const existingEnd = new Date(existingAppointment.endTime);
-    console.log(`[OnlineBooking] Checking against existing appointment: ${existingStart.toISOString()} - ${existingEnd.toISOString()}`);
     
-    // Prüfe ob der gewünschte Zeitpunkt mit einem bestehenden Termin kollidiert
-    if (startDateTime < existingEnd && endDateTime > existingStart) {
-      console.log(`[OnlineBooking] Time slot conflicts with existing appointment`);
+    // Hole Pufferzeiten des bestehenden Termins (falls Service vorhanden)
+    let existingBufferBefore = 0;
+    let existingBufferAfter = 0;
+    if (existingAppointment.service && typeof existingAppointment.service === 'object') {
+      const existingService = await ServiceCatalog.findById(existingAppointment.service);
+      if (existingService) {
+        existingBufferBefore = existingService.buffer_before_min || 0;
+        existingBufferAfter = existingService.buffer_after_min || 0;
+      }
+    }
+    
+    const existingStartWithBuffer = new Date(existingStart.getTime() - existingBufferBefore * 60 * 1000);
+    const existingEndWithBuffer = new Date(existingEnd.getTime() + existingBufferAfter * 60 * 1000);
+    
+    console.log(`[OnlineBooking] Checking against existing appointment:`, {
+      start: existingStart.toISOString(),
+      end: existingEnd.toISOString(),
+      startWithBuffer: existingStartWithBuffer.toISOString(),
+      endWithBuffer: existingEndWithBuffer.toISOString()
+    });
+    
+    // Prüfe ob der gewünschte Zeitpunkt (mit Puffer) mit einem bestehenden Termin (mit Puffer) kollidiert
+    if (startDateTimeWithBuffer < existingEndWithBuffer && endDateTimeWithBuffer > existingStartWithBuffer) {
+      console.log(`[OnlineBooking] Time slot conflicts with existing appointment (with buffers)`);
       return false;
     }
   }
 
-  // 2. Prüfe TimeBlocks (gesperrte Zeitslots)
-  // TimeBlocks mit Personal blockieren nur dieses Personal
-  // TimeBlocks ohne Personal blockieren alle
+  // 2. Prüfe TimeBlocks (gesperrte Zeitslots) - mit Pufferzeiten
   const timeBlocks = await TimeBlock.find({
     $or: [
       { doctor: doctorId }, // TimeBlock für dieses Personal
@@ -2280,21 +2431,20 @@ async function checkAvailability(doctorId, date, time) {
 
   console.log(`[OnlineBooking] Found ${timeBlocks.length} time blocks for this date`);
   
-  // Prüfe ob der gewünschte Zeitpunkt mit einem TimeBlock kollidiert
+  // Prüfe ob der gewünschte Zeitpunkt (mit Puffer) mit einem TimeBlock kollidiert
   for (const timeBlock of timeBlocks) {
     const blockStart = new Date(timeBlock.startTime);
     const blockEnd = new Date(timeBlock.endTime);
     console.log(`[OnlineBooking] Checking against time block: ${blockStart.toISOString()} - ${blockEnd.toISOString()}`);
     
-    // Prüfe ob der gewünschte Zeitpunkt mit einem TimeBlock kollidiert
-    if (startDateTime < blockEnd && endDateTime > blockStart) {
+    // Prüfe ob der gewünschte Zeitpunkt (mit Puffer) mit einem TimeBlock kollidiert
+    if (startDateTimeWithBuffer < blockEnd && endDateTimeWithBuffer > blockStart) {
       console.log(`[OnlineBooking] Time slot conflicts with time block: ${timeBlock.reason || 'Gesperrt'}`);
       return false;
     }
   }
 
-  // 2. Prüfe ob Arzt an diesem Tag arbeitet und ob Zeit in Pausenzeiten liegt
-  // Konvertiere Datum zu Wochentag (monday, tuesday, etc.)
+  // 3. Prüfe ob Arzt an diesem Tag arbeitet und ob Zeit in Pausenzeiten liegt (mit Pufferzeiten)
   const dayIndex = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
   const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const dayOfWeek = dayNames[dayIndex];
@@ -2319,11 +2469,32 @@ async function checkAvailability(doctorId, date, time) {
   for (const schedule of weeklySchedules) {
     const daySchedule = schedule.schedules.find(s => s.day === dayOfWeek);
     if (daySchedule && daySchedule.isWorking) {
-      // Prüfe ob Zeit innerhalb der Arbeitszeiten liegt
-      if (time >= daySchedule.startTime && time < daySchedule.endTime) {
-        // Prüfe ob Zeit in Pausenzeiten liegt
+      // Prüfe ob der gesamte Zeitraum (inkl. Pufferzeiten) in den Arbeitszeiten liegt
+      const [scheduleStartHour, scheduleStartMin] = daySchedule.startTime.split(':').map(Number);
+      const [scheduleEndHour, scheduleEndMin] = daySchedule.endTime.split(':').map(Number);
+      
+      const scheduleStart = new Date(date);
+      scheduleStart.setHours(scheduleStartHour, scheduleStartMin, 0, 0);
+      
+      const scheduleEnd = new Date(date);
+      scheduleEnd.setHours(scheduleEndHour, scheduleEndMin, 0, 0);
+      
+      // Prüfe ob Start (mit Puffer) und Ende (mit Puffer) in den Arbeitszeiten liegen
+      if (startDateTimeWithBuffer >= scheduleStart && endDateTimeWithBuffer <= scheduleEnd) {
+        // Prüfe ob Zeit in Pausenzeiten liegt (mit Pufferzeiten)
         if (daySchedule.breakStart && daySchedule.breakEnd) {
-          if (time >= daySchedule.breakStart && time < daySchedule.breakEnd) {
+          const [breakStartHour, breakStartMin] = daySchedule.breakStart.split(':').map(Number);
+          const [breakEndHour, breakEndMin] = daySchedule.breakEnd.split(':').map(Number);
+          
+          const breakStart = new Date(date);
+          breakStart.setHours(breakStartHour, breakStartMin, 0, 0);
+          
+          const breakEnd = new Date(date);
+          breakEnd.setHours(breakEndHour, breakEndMin, 0, 0);
+          
+          // Prüfe ob sich der Termin (mit Puffer) mit der Pause überschneidet
+          if (startDateTimeWithBuffer < breakEnd && endDateTimeWithBuffer > breakStart) {
+            console.log(`[OnlineBooking] Time slot conflicts with break time (with buffers)`);
             return false; // Zeit liegt in Pausenzeiten
           }
         }

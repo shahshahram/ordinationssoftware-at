@@ -260,10 +260,18 @@ InvoiceJournalSchema.statics.createFromInvoice = async function(invoice, journal
   
   // Finde ReceiptChain-Eintrag falls vorhanden
   if (invoice.rksvoData && invoice.rksvoData.tseSignature) {
-    const ReceiptChain = mongoose.model('ReceiptChain');
-    const receiptChain = await ReceiptChain.findOne({ invoiceId: invoice._id });
-    if (receiptChain) {
-      journalData.receiptChainId = receiptChain._id;
+    try {
+      // Prüfe ob ReceiptChain-Modell existiert
+      if (mongoose.models.ReceiptChain) {
+        const ReceiptChain = mongoose.model('ReceiptChain');
+        const receiptChain = await ReceiptChain.findOne({ invoiceId: invoice._id });
+        if (receiptChain) {
+          journalData.receiptChainId = receiptChain._id;
+        }
+      }
+    } catch (receiptChainError) {
+      // Ignoriere Fehler wenn ReceiptChain-Modell nicht existiert
+      console.log(`[InvoiceJournal] ReceiptChain-Modell nicht verfügbar, überspringe ReceiptChain-Referenz`);
     }
   }
   

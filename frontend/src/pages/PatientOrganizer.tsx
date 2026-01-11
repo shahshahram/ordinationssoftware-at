@@ -118,7 +118,7 @@ import ErrorBoundary from '../components/ErrorBoundary';
 import MedicalDataHistory from '../components/MedicalDataHistory';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
 import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
-import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, MonitorHeart, Receipt } from '@mui/icons-material';
+import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, MonitorHeart, Receipt, Article } from '@mui/icons-material';
 import api from '../utils/api';
 import { Specialization } from '../types/ambulanzbefund';
 import PerformanceForm from '../components/PerformanceForm';
@@ -187,6 +187,94 @@ const PatientOrganizer: React.FC = () => {
   
   // State für MedicalDataHistory (um frühere Schwangerschaften zu prüfen)
   const [medicalDataHistory, setMedicalDataHistory] = useState<any[]>([]);
+
+  // Helper-Funktion: Findet das letzte Erfassungsdatum und den Benutzer für ein medizinisches Datenfeld
+  const getFieldRecordedInfo = useCallback((fieldName: string): { date: string | null; user: string | null } => {
+    if (!medicalDataHistory || medicalDataHistory.length === 0) {
+      return { date: null, user: null };
+    }
+
+    // Durch die Historie gehen (bereits nach recordedAt sortiert, neueste zuerst)
+    for (const entry of medicalDataHistory) {
+      // Prüfe ob das Feld in changedFields vorkommt
+      if (entry.changedFields && Array.isArray(entry.changedFields)) {
+        const fieldChange = entry.changedFields.find((cf: any) => cf.field === fieldName);
+        if (fieldChange) {
+          // Feld wurde in diesem Eintrag geändert
+          const recordedBy = entry.recordedBy;
+          const userName = recordedBy 
+            ? `${recordedBy.firstName || ''} ${recordedBy.lastName || ''}`.trim() || recordedBy.email || 'Unbekannt'
+            : 'Unbekannt';
+          
+          return {
+            date: entry.recordedAt,
+            user: userName
+          };
+        }
+      }
+
+      // Prüfe ob das Feld im Snapshot einen Wert hat (für Felder, die initial erfasst wurden)
+      if (entry.snapshot && entry.snapshot[fieldName] !== undefined && entry.snapshot[fieldName] !== null) {
+        // Für Array-Felder: Prüfe ob Array nicht leer ist
+        if (Array.isArray(entry.snapshot[fieldName])) {
+          if (entry.snapshot[fieldName].length > 0) {
+            const recordedBy = entry.recordedBy;
+            const userName = recordedBy 
+              ? `${recordedBy.firstName || ''} ${recordedBy.lastName || ''}`.trim() || recordedBy.email || 'Unbekannt'
+              : 'Unbekannt';
+            
+            return {
+              date: entry.recordedAt,
+              user: userName
+            };
+          }
+        } else {
+          // Für einfache Felder
+          const recordedBy = entry.recordedBy;
+          const userName = recordedBy 
+            ? `${recordedBy.firstName || ''} ${recordedBy.lastName || ''}`.trim() || recordedBy.email || 'Unbekannt'
+            : 'Unbekannt';
+          
+          return {
+            date: entry.recordedAt,
+            user: userName
+          };
+        }
+      }
+    }
+
+    return { date: null, user: null };
+  }, [medicalDataHistory]);
+
+  // Theme-Hook für Dark Mode Erkennung
+  const currentTheme = useTheme();
+  const isDarkMode = currentTheme.palette.mode === 'dark';
+
+  // Helper-Komponente: Zeigt Erfassungsdatum und Benutzer an
+  const RecordedInfo: React.FC<{ fieldName: string }> = ({ fieldName }) => {
+    const info = getFieldRecordedInfo(fieldName);
+    
+    if (!info.date) return null;
+
+    const formattedDate = format(new Date(info.date), 'dd.MM.yyyy HH:mm', { locale: de });
+
+    return (
+      <Typography 
+        variant="caption" 
+        sx={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 0.5, 
+          ml: 1, 
+          fontStyle: 'italic',
+          color: isDarkMode ? 'rgba(255, 255, 255, 0.8)' : 'rgba(0, 0, 0, 0.6)'
+        }}
+      >
+        <CalendarToday sx={{ fontSize: '0.75rem', opacity: 0.8 }} />
+        erfasst am {formattedDate} von {info.user}
+      </Typography>
+    );
+  };
   const [hasPreviousPregnancy, setHasPreviousPregnancy] = useState(false);
   const [pregnancyAlertInfo, setPregnancyAlertInfo] = useState<{
     shouldShow: boolean;
@@ -2907,7 +2995,10 @@ const PatientOrganizer: React.FC = () => {
               variant="outlined"
               size="small"
               startIcon={<Schedule />}
-              onClick={() => navigate('/appointments')}
+              onClick={() => {
+                if (!patient || !patientId) return;
+                navigate(`/appointments?openDialog=true&patient=${patientId}`);
+              }}
               disabled={!patient}
               sx={{
                 fontSize: { xs: '0.7rem', sm: '0.875rem' },
@@ -2973,6 +3064,24 @@ const PatientOrganizer: React.FC = () => {
               }}
             >
               {isMobile ? 'Leistung' : 'Leistungsabrechnung'}
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<Article />}
+              onClick={() => {
+                if (!patient || !patientId) return;
+                navigate(`/billing?patientId=${patientId}`);
+              }}
+              disabled={!patient}
+              sx={{
+                fontSize: { xs: '0.7rem', sm: '0.875rem' },
+                minHeight: { xs: '36px', sm: 'auto' },
+                px: { xs: 1, sm: 2 },
+                '& .MuiButton-startIcon': { marginRight: { xs: 0.5, sm: 1 } }
+              }}
+            >
+              {isMobile ? 'Rechnung' : 'Rechnung'}
             </Button>
             <Button
               variant="outlined"
@@ -3311,29 +3420,61 @@ const PatientOrganizer: React.FC = () => {
               <Grid container spacing={2}>
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Grunddaten</Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Bloodtype color="action" />
-                    <Typography variant="body2"><strong>Blutgruppe:</strong> {patient.bloodType || 'Nicht erfasst'}</Typography>
-            </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Height color="action" />
-                    <Typography variant="body2"><strong>Größe:</strong> {patient.height ? `${patient.height} cm` : 'Nicht erfasst'}</Typography>
-              </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <MonitorWeight color="action" />
-                    <Typography variant="body2"><strong>Gewicht:</strong> {patient.weight ? `${patient.weight} kg` : 'Nicht erfasst'}</Typography>
-                </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Favorite color="action" />
-                    <Typography variant="body2"><strong>BMI:</strong> {patient.bmi ? patient.bmi.toFixed(1) : 'Nicht berechnet'}</Typography>
-              </Box>
+                  <Box sx={{ mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Bloodtype sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : undefined }} />
+                      <Typography 
+                        variant="body2"
+                        sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                      >
+                        <strong>Blutgruppe:</strong> {patient.bloodType || 'Nicht erfasst'}
+                      </Typography>
+                    </Box>
+                    {patient.bloodType && <RecordedInfo fieldName="bloodType" />}
+                  </Box>
+                  <Box sx={{ mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Height sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : undefined }} />
+                      <Typography 
+                        variant="body2"
+                        sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                      >
+                        <strong>Größe:</strong> {patient.height ? `${patient.height} cm` : 'Nicht erfasst'}
+                      </Typography>
+                    </Box>
+                    {patient.height && <RecordedInfo fieldName="height" />}
+                  </Box>
+                  <Box sx={{ mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <MonitorWeight sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : undefined }} />
+                      <Typography 
+                        variant="body2"
+                        sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                      >
+                        <strong>Gewicht:</strong> {patient.weight ? `${patient.weight} kg` : 'Nicht erfasst'}
+                      </Typography>
+                    </Box>
+                    {patient.weight && <RecordedInfo fieldName="weight" />}
+                  </Box>
+                  <Box sx={{ mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Favorite sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : undefined }} />
+                      <Typography 
+                        variant="body2"
+                        sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                      >
+                        <strong>BMI:</strong> {patient.bmi ? patient.bmi.toFixed(1) : 'Nicht berechnet'}
+                      </Typography>
+                    </Box>
+                    {patient.bmi && <RecordedInfo fieldName="bmi" />}
+                  </Box>
                 </Grid>
                 <Grid size={{ xs: 12 }}>
                   {/* Infektionen */}
                   {patient.infections && patient.infections.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Infektionen</Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 0.5 }}>
                         {patient.infections.map((infection, index) => {
                           const isMRSAOrMRGN = infection.type?.toUpperCase().includes('MRSA') || infection.type?.toUpperCase().includes('MRGN');
                           return (
@@ -3348,51 +3489,64 @@ const PatientOrganizer: React.FC = () => {
                           );
                         })}
                       </Box>
+                      <RecordedInfo fieldName="infections" />
                     </Box>
                   )}
                   
                   {patient.allergies && patient.allergies.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Allergien</Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 0.5 }}>
                         {patient.allergies.map((allergy, index) => (
-                    <Chip
-                      key={index}
+                          <Chip
+                            key={index}
                             label={typeof allergy === 'string' ? allergy : allergy.description}
                             color="warning"
-                      size="small"
-                    />
-                  ))}
-                </Box>
+                            size="small"
+                          />
+                        ))}
+                      </Box>
+                      <RecordedInfo fieldName="allergies" />
                     </Box>
                   )}
                   {patient.currentMedications && patient.currentMedications.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Aktuelle Medikamente</Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 0.5 }}>
                         {patient.currentMedications.map((medication, index) => (
-                    <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                          <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                             <LocalPharmacy color="primary" />
-                      <Box sx={{ flex: 1 }}>
-                              <Typography variant="body2">
+                            <Box sx={{ flex: 1 }}>
+                              <Typography 
+                                variant="body2"
+                                sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                              >
                                 {typeof medication === 'string' ? medication : medication.name}
-                        </Typography>
+                              </Typography>
+                            </Box>
+                          </Box>
+                        ))}
                       </Box>
+                      <RecordedInfo fieldName="currentMedications" />
                     </Box>
-                  ))}
-                </Box>
-                  </Box>
-                )}
+                  )}
                   
                   {/* Vorerkrankungen */}
                   {patient.preExistingConditions && patient.preExistingConditions.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Vorerkrankungen</Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 0.5 }}>
                         {patient.preExistingConditions.map((condition, index) => (
-                          <Typography key={index} variant="body2">• {condition}</Typography>
+                          <Typography 
+                            key={index} 
+                            variant="body2"
+                            sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                          >
+                            • {condition}
+                          </Typography>
                         ))}
                       </Box>
+                      <RecordedInfo fieldName="preExistingConditions" />
                     </Box>
                   )}
                   
@@ -3400,11 +3554,18 @@ const PatientOrganizer: React.FC = () => {
                   {patient.medicalHistory && patient.medicalHistory.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Medizinische Vorgeschichte</Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 0.5 }}>
                         {patient.medicalHistory.map((history, index) => (
-                          <Typography key={index} variant="body2">• {history}</Typography>
+                          <Typography 
+                            key={index} 
+                            variant="body2"
+                            sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                          >
+                            • {history}
+                          </Typography>
                         ))}
                       </Box>
+                      <RecordedInfo fieldName="medicalHistory" />
                     </Box>
                   )}
                   
@@ -3412,19 +3573,37 @@ const PatientOrganizer: React.FC = () => {
                   {patient.vaccinations && patient.vaccinations.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Impfungen</Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 0.5 }}>
                         {patient.vaccinations.map((vaccination, index) => (
                           <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                             <Vaccines color="primary" />
                             <Box sx={{ flex: 1 }}>
-                              <Typography variant="body2"><strong>{vaccination.name}</strong></Typography>
+                              <Typography 
+                                variant="body2"
+                                sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                              >
+                                <strong>{vaccination.name}</strong>
+                              </Typography>
                               {vaccination.date && (
-                                <Typography variant="caption" color="text.secondary">
+                                <Typography 
+                                  variant="caption" 
+                                  sx={{ 
+                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : undefined,
+                                    display: 'inline-block'
+                                  }}
+                                >
                                   Datum: {new Date(vaccination.date).toLocaleDateString('de-DE')}
                                 </Typography>
                               )}
                               {vaccination.nextDue && (
-                                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                                <Typography 
+                                  variant="caption" 
+                                  sx={{ 
+                                    ml: 1,
+                                    color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : undefined,
+                                    display: 'inline-block'
+                                  }}
+                                >
                                   Nächste fällig: {new Date(vaccination.nextDue).toLocaleDateString('de-DE')}
                                 </Typography>
                               )}
@@ -3432,6 +3611,7 @@ const PatientOrganizer: React.FC = () => {
                           </Box>
                         ))}
                       </Box>
+                      <RecordedInfo fieldName="vaccinations" />
                     </Box>
                   )}
                   
@@ -3439,19 +3619,29 @@ const PatientOrganizer: React.FC = () => {
                   {(patient.isPregnant || patient.isBreastfeeding) && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Schwangerschaft & Stillen</Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 0.5 }}>
                         {patient.isPregnant && (
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <PregnantWoman color="primary" />
-                            <Typography variant="body2">
+                            <Typography 
+                              variant="body2"
+                              sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                            >
                               Schwanger{patient.pregnancyWeek ? ` - ${patient.pregnancyWeek}. Woche` : ''}
                             </Typography>
                           </Box>
                         )}
                         {patient.isBreastfeeding && (
-                          <Typography variant="body2">Stillend</Typography>
+                          <Typography 
+                            variant="body2"
+                            sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                          >
+                            Stillend
+                          </Typography>
                         )}
                       </Box>
+                      {patient.isPregnant && <RecordedInfo fieldName="isPregnant" />}
+                      {patient.isBreastfeeding && <RecordedInfo fieldName="isBreastfeeding" />}
                     </Box>
                   )}
                   
@@ -3459,15 +3649,36 @@ const PatientOrganizer: React.FC = () => {
                   {(patient.hasPacemaker || patient.hasDefibrillator || (patient.implants && patient.implants.length > 0)) && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Implantate & Geräte</Typography>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                        {patient.hasPacemaker && <Typography variant="body2">• Schrittmacher</Typography>}
-                        {patient.hasDefibrillator && <Typography variant="body2">• Defibrillator</Typography>}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 0.5 }}>
+                        {patient.hasPacemaker && (
+                          <Typography 
+                            variant="body2"
+                            sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                          >
+                            • Schrittmacher
+                          </Typography>
+                        )}
+                        {patient.hasDefibrillator && (
+                          <Typography 
+                            variant="body2"
+                            sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                          >
+                            • Defibrillator
+                          </Typography>
+                        )}
                         {patient.implants && patient.implants.map((implant, index) => (
-                          <Typography key={index} variant="body2">
+                          <Typography 
+                            key={index} 
+                            variant="body2"
+                            sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                          >
                             • {implant.type}{implant.location ? ` (${implant.location})` : ''}{implant.date ? ` - ${new Date(implant.date).toLocaleDateString('de-DE')}` : ''}
                           </Typography>
                         ))}
                       </Box>
+                      {patient.hasPacemaker && <RecordedInfo fieldName="hasPacemaker" />}
+                      {patient.hasDefibrillator && <RecordedInfo fieldName="hasDefibrillator" />}
+                      {patient.implants && patient.implants.length > 0 && <RecordedInfo fieldName="implants" />}
                     </Box>
                   )}
                   
@@ -3475,12 +3686,19 @@ const PatientOrganizer: React.FC = () => {
                   {patient.smokingStatus && patient.smokingStatus !== 'non-smoker' && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Raucherstatus</Typography>
-                      <Typography variant="body2">
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          mb: 0.5,
+                          color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined
+                        }}
+                      >
                         {patient.smokingStatus === 'current-smoker' ? 'Raucher' : patient.smokingStatus === 'former-smoker' ? 'Ehemaliger Raucher' : 'Nichtraucher'}
                         {patient.cigarettesPerDay && ` - ${patient.cigarettesPerDay} Zigaretten/Tag`}
                         {patient.yearsOfSmoking && ` - ${patient.yearsOfSmoking} Jahre`}
                         {patient.quitSmokingDate && ` - Aufgehört: ${new Date(patient.quitSmokingDate).toLocaleDateString('de-DE')}`}
                       </Typography>
+                      <RecordedInfo fieldName="smokingStatus" />
                     </Box>
                   )}
                   
@@ -3488,7 +3706,17 @@ const PatientOrganizer: React.FC = () => {
                   {patient.medicalNotes && (
                     <Box sx={{ mb: 2 }}>
                       <Typography variant="subtitle2" fontWeight="bold" gutterBottom>Medizinische Notizen</Typography>
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{patient.medicalNotes}</Typography>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          whiteSpace: 'pre-wrap', 
+                          mb: 0.5,
+                          color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined
+                        }}
+                      >
+                        {patient.medicalNotes}
+                      </Typography>
+                      <RecordedInfo fieldName="notes" />
                     </Box>
                   )}
                 </Grid>

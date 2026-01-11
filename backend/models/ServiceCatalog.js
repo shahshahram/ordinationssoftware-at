@@ -116,6 +116,10 @@ const ServiceCatalogSchema = new mongoose.Schema({
     type: String, 
     trim: true 
   },
+  required_room_type: {
+    type: String,
+    trim: true
+  },
   
   // Geräte-Auswahl
   assigned_devices: [{
@@ -132,6 +136,15 @@ const ServiceCatalogSchema = new mongoose.Schema({
     default: 1,
     min: 1
   },
+  device_selection_mode: {
+    type: String,
+    enum: ['specific', 'type'],
+    default: 'specific'
+  },
+  max_available_devices: {
+    type: Number,
+    min: 1
+  },
   
   // Raum-Auswahl
   assigned_rooms: [{
@@ -146,6 +159,15 @@ const ServiceCatalogSchema = new mongoose.Schema({
   room_quantity_required: {
     type: Number,
     default: 1,
+    min: 1
+  },
+  room_selection_mode: {
+    type: String,
+    enum: ['specific', 'type'],
+    default: 'specific'
+  },
+  max_available_rooms: {
+    type: Number,
     min: 1
   },
   

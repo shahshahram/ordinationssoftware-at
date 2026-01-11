@@ -26,7 +26,7 @@ const router = express.Router();
 // @access  Private
 router.get('/invoices', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, billingType, startDate, endDate } = req.query;
+    const { page = 1, limit = 10, status, billingType, startDate, endDate, patientId } = req.query;
     
     const filter = {};
     // Unterstütze mehrere Status durch Komma-getrennte Liste
@@ -39,6 +39,7 @@ router.get('/invoices', auth, async (req, res) => {
       }
     }
     if (billingType) filter.billingType = billingType;
+    if (patientId) filter['patient.id'] = patientId;
     if (startDate || endDate) {
       filter.invoiceDate = {};
       if (startDate) {

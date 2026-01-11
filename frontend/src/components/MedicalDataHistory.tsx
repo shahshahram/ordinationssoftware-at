@@ -22,7 +22,8 @@ import {
   CircularProgress,
   Accordion,
   AccordionSummary,
-  AccordionDetails
+  AccordionDetails,
+  useTheme
 } from '@mui/material';
 import {
   History,
@@ -84,6 +85,8 @@ interface MedicalDataHistoryProps {
 }
 
 const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) => {
+  const theme = useTheme();
+  const isDarkMode = theme.palette.mode === 'dark';
   const [history, setHistory] = useState<MedicalDataHistoryEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -251,12 +254,25 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
             {value.map((med, idx) => (
-              <Box key={idx} sx={{ p: 0.5, bgcolor: 'grey.50', borderRadius: 0.5 }}>
-                <Typography variant="body2">
+              <Box 
+                key={idx} 
+                sx={{ 
+                  p: 0.5, 
+                  bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.05)' : 'grey.50', 
+                  borderRadius: 0.5 
+                }}
+              >
+                <Typography 
+                  variant="body2"
+                  sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined }}
+                >
                   {typeof med === 'string' ? med : (med.name || JSON.stringify(med))}
                 </Typography>
                 {typeof med === 'object' && med.dosage && (
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography 
+                    variant="caption" 
+                    sx={{ color: isDarkMode ? 'rgba(255, 255, 255, 0.7)' : undefined }}
+                  >
                     Dosierung: {med.dosage}
                   </Typography>
                 )}
@@ -707,7 +723,19 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
                             <Typography variant="caption" fontWeight="bold" color="error.dark" sx={{ mb: 0.5, display: 'block' }}>
                               Alter Wert:
                             </Typography>
-                            <Box sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)', p: 1.5, borderRadius: 0.5, border: '1px solid', borderColor: 'error.light' }}>
+                            <Box sx={{ 
+                              bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.9)', 
+                              p: 1.5, 
+                              borderRadius: 0.5, 
+                              border: '1px solid', 
+                              borderColor: 'error.light',
+                              '& .MuiTypography-root': {
+                                color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined
+                              },
+                              '& .MuiChip-label': {
+                                color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined
+                              }
+                            }}>
                               {renderDetailedValue(field.oldValue, field.field)}
                             </Box>
                           </Box>
@@ -725,7 +753,19 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
                             <Typography variant="caption" fontWeight="bold" color="success.dark" sx={{ mb: 0.5, display: 'block' }}>
                               Neuer Wert:
                             </Typography>
-                            <Box sx={{ bgcolor: 'rgba(255, 255, 255, 0.9)', p: 1.5, borderRadius: 0.5, border: '1px solid', borderColor: 'success.light' }}>
+                            <Box sx={{ 
+                              bgcolor: isDarkMode ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.9)', 
+                              p: 1.5, 
+                              borderRadius: 0.5, 
+                              border: '1px solid', 
+                              borderColor: 'success.light',
+                              '& .MuiTypography-root': {
+                                color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined
+                              },
+                              '& .MuiChip-label': {
+                                color: isDarkMode ? 'rgba(255, 255, 255, 0.9)' : undefined
+                              }
+                            }}>
                               {renderDetailedValue(field.newValue, field.field)}
                             </Box>
                           </Box>

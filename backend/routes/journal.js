@@ -65,7 +65,7 @@ router.get('/invoices', auth, checkPermission('billing.read'), async (req, res) 
       const end = new Date(year, 11, 31, 23, 59, 59, 999);
       dateFilter.invoiceDate = { $gte: start, $lte: end };
     } else if (startDate || endDate) {
-      // Freier Datumsbereich
+      // Freier Datumsbereich - nur wenn mindestens eines gesetzt ist
       dateFilter.invoiceDate = {};
       if (startDate) {
         const start = startOfDay(parseDateString(startDate));
@@ -75,6 +75,10 @@ router.get('/invoices', auth, checkPermission('billing.read'), async (req, res) 
         const end = endOfDay(parseDateString(endDate));
         dateFilter.invoiceDate.$lte = end;
       }
+      // Wenn das invoiceDate-Objekt leer ist (beide leer), entferne es
+      if (Object.keys(dateFilter.invoiceDate).length === 0) {
+        delete dateFilter.invoiceDate;
+      }
     }
     // Wenn kein Datumsfilter gesetzt ist, werden alle Einträge angezeigt (kein Filter)
 
@@ -82,10 +86,20 @@ router.get('/invoices', auth, checkPermission('billing.read'), async (req, res) 
     const filter = { ...dateFilter };
     if (locationId) filter.locationId = locationId;
     if (billingType) filter.billingType = billingType;
-    if (status) filter.status = status;
+    if (status) {
+      // Unterstütze mehrere Status durch Komma-getrennte Liste
+      const statuses = status.split(',').map(s => s.trim()).filter(s => s);
+      if (statuses.length > 1) {
+        filter.status = { $in: statuses };
+      } else {
+        filter.status = statuses[0] || status;
+      }
+    }
 
     // Debug-Logging für Filter
     console.log('[Journal] Filter für Rechnungsjournal:', JSON.stringify(filter, null, 2));
+    console.log('[Journal] Status-Parameter:', status);
+    console.log('[Journal] Status-Filter:', filter.status);
 
     const journalEntries = await InvoiceJournal.find(filter)
       .populate('invoiceId', 'invoiceNumber')
