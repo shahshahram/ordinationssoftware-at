@@ -1376,10 +1376,15 @@ router.get('/bi-dashboard', auth, async (req, res) => {
           const privatePrice = serviceData.private?.price !== undefined && serviceData.private?.price !== null
             ? (serviceData.private.price > 1000 ? serviceData.private.price / 100 : serviceData.private.price)
             : 0;
+          // Unterstützt sowohl khoPrice als auch ebmPrice (Backward Compatibility)
+          const khoPrice = serviceData.ogk?.khoPrice !== undefined && serviceData.ogk?.khoPrice !== null
+            ? (serviceData.ogk.khoPrice > 1000 ? serviceData.ogk.khoPrice / 100 : serviceData.ogk.khoPrice)
+            : 0;
           const ebmPrice = serviceData.ogk?.ebmPrice !== undefined && serviceData.ogk?.ebmPrice !== null
             ? (serviceData.ogk.ebmPrice > 1000 ? serviceData.ogk.ebmPrice / 100 : serviceData.ogk.ebmPrice)
             : 0;
-          const finalPrice = price || wahlarztPrice || privatePrice || ebmPrice || 0;
+          const finalKhoPrice = khoPrice || ebmPrice;
+          const finalPrice = price || wahlarztPrice || privatePrice || finalKhoPrice || 0;
           return sum + finalPrice; // Direkt in Euro
         }
       }

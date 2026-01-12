@@ -9,12 +9,24 @@ const { body, validationResult } = require('express-validator');
 // GET /api/tariffs - Alle Tarife abrufen
 router.get('/', auth, async (req, res) => {
   try {
-    const { tariffType, specialty, isActive = true, page = 1, limit = 50 } = req.query;
+    const { tariffType, specialty, isActive, page = 1, limit = 50 } = req.query;
     
     const filter = {};
     if (tariffType) filter.tariffType = tariffType;
     if (specialty) filter.specialty = specialty;
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
+    // isActive-Filter nur anwenden, wenn explizit gesetzt
+    // Standardmäßig alle Tarife anzeigen (sowohl aktive als auch inaktive)
+    if (isActive !== undefined && isActive !== '') {
+      // Konvertiere String 'true'/'false' zu Boolean
+      const isActiveValue = isActive === 'true' || isActive === true || isActive === '1';
+      filter.isActive = isActiveValue;
+      console.log(`[Tariffs API] isActive Konvertierung: ${isActive} (${typeof isActive}) -> ${isActiveValue}`);
+    } else {
+      console.log(`[Tariffs API] isActive nicht gesetzt, zeige alle Tarife (aktiv und inaktiv)`);
+    }
+    
+    console.log(`[Tariffs API] Filter:`, JSON.stringify(filter));
+    console.log(`[Tariffs API] Query params:`, { tariffType, specialty, isActive, page, limit });
     
     const tariffs = await Tariff.find(filter)
       .populate('createdBy', 'firstName lastName')
@@ -23,6 +35,16 @@ router.get('/', auth, async (req, res) => {
       .skip((page - 1) * limit);
     
     const total = await Tariff.countDocuments(filter);
+    
+    console.log(`[Tariffs API] Gefunden: ${tariffs.length} von ${total} Tarifen`);
+    if (tariffs.length > 0) {
+      console.log(`[Tariffs API] Beispiel-Tarif:`, {
+        code: tariffs[0].code,
+        name: tariffs[0].name,
+        tariffType: tariffs[0].tariffType,
+        isActive: tariffs[0].isActive
+      });
+    }
     
     res.json({
       success: true,
@@ -71,7 +93,17 @@ router.get('/goae', auth, async (req, res) => {
 // GET /api/tariffs/kho - KHO/ET-Tarife abrufen
 router.get('/kho', auth, async (req, res) => {
   try {
-    const tariffs = await Tariff.findKHO();
+    const { insuranceProvider, federalState } = req.query;
+    
+    const options = {};
+    if (insuranceProvider) {
+      options.insuranceProvider = insuranceProvider;
+    }
+    if (federalState) {
+      options.federalState = federalState;
+    }
+    
+    const tariffs = await Tariff.findKHO(options);
     
     res.json({
       success: true,

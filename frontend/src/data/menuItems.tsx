@@ -93,7 +93,7 @@ export const menuItems: MenuItem[] = [
     subItems: [
       { text: 'Dokumente', icon: <Description />, path: '/documents' },
       { text: 'Briefvorlagen', icon: <Description />, path: '/letter-templates' },
-      { text: 'Template Management', icon: <Description />, path: '/template-management' },
+      // { text: 'Template Management', icon: <Description />, path: '/template-management' }, // Ausgeblendet
       { text: 'Dokument-Templates (Admin)', icon: <Build />, path: '/document-templates' },
       { text: 'Dekurs-Vorlagen (Admin)', icon: <Assignment />, path: '/dekurs-vorlagen' },
       { text: 'XDS Dokumente', icon: <Storage />, path: '/xds-documents' },
@@ -162,6 +162,7 @@ export const menuItems: MenuItem[] = [
         icon: <Receipt />, 
         path: '/billing-config',
         subItems: [
+          { text: 'Tarifverwaltung', icon: <Receipt />, path: '/tariff-management' },
           { text: 'Versicherungsverwaltung', icon: <HealthAndSafety />, path: '/insurance-providers' },
           { text: 'Kassa Teststrecke', icon: <Build />, path: '/kassa-test' },
           { text: 'ELDA Teststrecke', icon: <Build />, path: '/elda-test' },

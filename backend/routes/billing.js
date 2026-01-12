@@ -169,6 +169,37 @@ router.post('/invoices', auth, [
     };
 
     console.log('Creating invoice with data:', JSON.stringify(invoiceData, null, 2));
+    
+    // ÖGK-Validierung: Prüfe Duplikate und Limitierungen
+    if (invoiceData.billingType === 'kassenarzt' && invoiceData.patient?.id && invoiceData.services) {
+      try {
+        const billingValidation = require('../utils/billing-validation');
+        const invoiceDate = invoiceData.date ? new Date(invoiceData.date) : new Date();
+        
+        const validationResult = await billingValidation.validateBillingServices(
+          invoiceData.patient.id,
+          invoiceData.services,
+          invoiceDate
+        );
+        
+        if (!validationResult.isValid) {
+          return res.status(400).json({
+            success: false,
+            message: 'Validierungsfehler bei ÖGK-Abrechnung',
+            errors: validationResult.errors,
+            warnings: validationResult.warnings
+          });
+        }
+        
+        // Warnungen als Info zurückgeben (nicht blockierend)
+        if (validationResult.warnings.length > 0) {
+          console.warn('⚠️ Validierungswarnungen:', validationResult.warnings);
+        }
+      } catch (validationError) {
+        console.error('Fehler bei ÖGK-Validierung:', validationError);
+        // Validierungsfehler nicht blockierend, aber loggen
+      }
+    }
 
     // Automatische e-card-Validierung für Kassenarzt-Rechnungen
     if (invoiceData.billingType === 'kassenarzt' && invoiceData.patient?.id) {
@@ -410,6 +441,38 @@ router.put('/invoices/:id', auth, async (req, res) => {
       updateData.totalAmount = oldInvoice.totalAmount;
     }
 
+    // ÖGK-Validierung: Prüfe Duplikate und Limitierungen (für Updates)
+    if (updateData.billingType === 'kassenarzt' && updateData.patient?.id && updateData.services) {
+      try {
+        const billingValidation = require('../utils/billing-validation');
+        const invoiceDate = updateData.date || updateData.invoiceDate ? new Date(updateData.date || updateData.invoiceDate) : new Date();
+        
+        const validationResult = await billingValidation.validateBillingServices(
+          updateData.patient.id,
+          updateData.services,
+          invoiceDate,
+          req.params.id // excludeInvoiceId für Updates
+        );
+        
+        if (!validationResult.isValid) {
+          return res.status(400).json({
+            success: false,
+            message: 'Validierungsfehler bei ÖGK-Abrechnung',
+            errors: validationResult.errors,
+            warnings: validationResult.warnings
+          });
+        }
+        
+        // Warnungen als Info zurückgeben (nicht blockierend)
+        if (validationResult.warnings.length > 0) {
+          console.warn('⚠️ Validierungswarnungen:', validationResult.warnings);
+        }
+      } catch (validationError) {
+        console.error('Fehler bei ÖGK-Validierung:', validationError);
+        // Validierungsfehler nicht blockierend, aber loggen
+      }
+    }
+
     // Entferne _id und __v, da diese nicht aktualisiert werden sollten
     delete updateData._id;
     delete updateData.__v;
@@ -519,7 +582,7 @@ router.get('/services', auth, async (req, res) => {
     const transformedServices = services.map(service => ({
       ...service,
       prices: service.prices || {
-        kassenarzt: service.ogk?.ebmPrice || 0,
+        kassenarzt: service.ogk?.khoPrice || service.ogk?.ebmPrice || 0, // Unterstützt beide Felder
         wahlarzt: service.wahlarzt?.price || 0,
         privat: service.private?.price || service.price_cents || 0
       }

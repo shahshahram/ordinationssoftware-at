@@ -45,6 +45,7 @@ const AuditLogSchema = new mongoose.Schema({
       
       // System & Data Management
       'DATA_EXPORT', 'DATA_DELETION', 'AUDIT_LOG_EXPORT', 'SYSTEM_BACKUP', 'SYSTEM_RESTORE',
+      'backup.create', 'backup.restore', 'backup.restore.request', 'backup.restore.confirm', 'backup.delete', 'backup.validate',
       'staff_profiles.read', 'staff_profiles.create', 'staff_profiles.update', 'staff_profiles.delete', 'staff_profiles.toggle_status', 'staff_profiles.statistics',
       'work_shifts.read', 'work_shifts.create', 'work_shifts.update', 'work_shifts.delete', 'work_shifts.toggle_status',
       'absences.read', 'absences.create', 'absences.update', 'absences.delete', 'absences.approve',

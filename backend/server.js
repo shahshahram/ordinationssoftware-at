@@ -106,6 +106,9 @@ const contactsRoutes = require('./routes/contacts');
 const waitingListRoutes = require('./routes/waitingList');
 const insuranceProviderRoutes = require('./routes/insurance-providers');
 const dataProtectionRoutes = require('./routes/dataProtection');
+const tariffsRoutes = require('./routes/tariffs');
+const ogkTariffDownloadRoutes = require('./routes/ogk-tariff-download');
+const tariffImportRoutes = require('./routes/tariff-import');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -361,6 +364,9 @@ app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/waiting-list', waitingListRoutes);
   app.use('/api/insurance-providers', insuranceProviderRoutes);
   app.use('/api/data-protection', dataProtectionRoutes);
+  app.use('/api/tariffs', tariffsRoutes);
+  app.use('/api/ogk-tariff-download', ogkTariffDownloadRoutes);
+  app.use('/api/tariff-import', tariffImportRoutes);
   
   // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)
   if (USE_MODULE_MANAGER) {

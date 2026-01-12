@@ -1,5 +1,5 @@
 // Automatische ServiceCatalog-Updates
-// Synchronisiert EBM-Preise aus Tariff-Model mit ServiceCatalog
+// Synchronisiert KHO-Preise aus Tariff-Model mit ServiceCatalog
 
 const ServiceCatalog = require('../models/ServiceCatalog');
 const Tariff = require('../models/Tariff');
@@ -11,7 +11,8 @@ class ServiceCatalogUpdateService {
   }
 
   /**
-   * Aktualisiert EBM-Preise im ServiceCatalog basierend auf Tariff-Model
+   * Aktualisiert KHO-Preise im ServiceCatalog basierend auf Tariff-Model
+   * Unterstützt sowohl khoCode als auch ebmCode (Backward Compatibility)
    */
   async updateEBMPrices() {
     if (this.isRunning) {
@@ -20,7 +21,7 @@ class ServiceCatalogUpdateService {
     }
 
     this.isRunning = true;
-    console.log('🔄 Starte ServiceCatalog EBM-Preis-Update...');
+    console.log('🔄 Starte ServiceCatalog KHO-Preis-Update...');
 
     try {
       // Finde Admin-User für Updates
@@ -29,9 +30,9 @@ class ServiceCatalogUpdateService {
         throw new Error('Kein Admin-User gefunden');
       }
 
-      // Finde alle aktiven EBM-Tarife
-      const ebmTariffs = await Tariff.find({
-        tariffType: 'ebm',
+      // Finde alle aktiven KHO-Tarife (inkl. 'ebm' als Legacy)
+      const khoTariffs = await Tariff.find({
+        tariffType: { $in: ['kho', 'et', 'ebm'] },
         isActive: true,
         $or: [
           { validUntil: { $exists: false } },
@@ -40,38 +41,61 @@ class ServiceCatalogUpdateService {
         ]
       });
 
-      console.log(`📊 Gefundene EBM-Tarife: ${ebmTariffs.length}`);
+      console.log(`📊 Gefundene KHO-Tarife: ${khoTariffs.length}`);
 
       let updated = 0;
       let created = 0;
       let errors = [];
 
-      for (const tariff of ebmTariffs) {
+      for (const tariff of khoTariffs) {
         try {
-          // Suche ServiceCatalog-Einträge mit diesem EBM-Code
+          // Verwende khoCode oder ebmCode (Backward Compatibility)
+          const tariffCode = tariff.kho?.khoCode || tariff.kho?.ebmCode || tariff.code;
+          
+          // Suche ServiceCatalog-Einträge mit diesem KHO-Code (sowohl khoCode als auch ebmCode)
           const services = await ServiceCatalog.find({
-            'ogk.ebmCode': tariff.code,
+            $or: [
+              { 'ogk.khoCode': tariffCode },
+              { 'ogk.ebmCode': tariffCode } // Backward Compatibility
+            ],
             is_active: true
           });
 
           if (services.length === 0) {
             // Kein ServiceCatalog-Eintrag gefunden - könnte neu sein
-            console.log(`ℹ️ Kein ServiceCatalog-Eintrag für EBM-Code ${tariff.code} gefunden`);
+            console.log(`ℹ️ Kein ServiceCatalog-Eintrag für KHO-Code ${tariffCode} gefunden`);
             continue;
           }
 
           // Aktualisiere alle gefundenen Services
           for (const service of services) {
-            const oldPrice = service.ogk?.ebmPrice || 0;
-            const newPrice = tariff.kho?.price || 0;
+            const oldPrice = service.ogk?.khoPrice || service.ogk?.ebmPrice || 0;
+            const newPriceInCents = tariff.kho?.price || 0;
+            const newPriceInEuro = newPriceInCents / 100; // Konvertiere von Cent zu Euro
 
-            if (oldPrice !== newPrice && newPrice > 0) {
+            if (oldPrice !== newPriceInEuro && newPriceInEuro > 0) {
               service.ogk = service.ogk || {};
-              service.ogk.ebmPrice = newPrice;
+              
+              // Aktualisiere neue Felder
+              service.ogk.khoCode = tariffCode;
+              service.ogk.khoPrice = newPriceInEuro;
+              
+              // Aktualisiere auch Legacy-Felder für Backward Compatibility
+              service.ogk.ebmCode = tariffCode;
+              service.ogk.ebmPrice = newPriceInEuro;
+              
+              // Übernehme Versicherungsträger und Bundesland, falls vorhanden
+              if (tariff.kho?.insuranceProvider) {
+                service.ogk.insuranceProvider = tariff.kho.insuranceProvider;
+              }
+              if (tariff.kho?.federalState) {
+                service.ogk.federalState = tariff.kho.federalState;
+              }
+              
               service.updatedBy = adminUser._id;
               await service.save();
               updated++;
-              console.log(`✅ Service ${service.code} aktualisiert: €${(oldPrice/100).toFixed(2)} → €${(newPrice/100).toFixed(2)}`);
+              console.log(`✅ Service ${service.code} aktualisiert: €${oldPrice.toFixed(2)} → €${newPriceInEuro.toFixed(2)}`);
             }
           }
         } catch (error) {
@@ -87,7 +111,7 @@ class ServiceCatalogUpdateService {
         updated,
         created,
         errors,
-        totalTariffs: ebmTariffs.length
+        totalTariffs: khoTariffs.length
       };
     } catch (error) {
       console.error('❌ Fehler bei ServiceCatalog-Update:', error);

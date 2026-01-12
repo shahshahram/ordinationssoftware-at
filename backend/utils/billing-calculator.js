@@ -230,9 +230,9 @@ function calculateBilling(patient, service, billingType) {
       if (!coverage.canBillAsKassenarzt) {
         result.warnings.push('Patient hat keine gesetzliche Versicherung oder Service ist nicht als Kassenarzt abrechenbar');
       }
-      // ebmPrice ist jetzt in Euro (oder in Cent für Backward Compatibility)
-      result.grossAmount = toEuro(service.ogk?.ebmPrice || 0);
-      result.ebmCode = service.ogk?.ebmCode || null;
+      // khoPrice ist jetzt in Euro (oder ebmPrice für Backward Compatibility)
+      result.grossAmount = toEuro(service.ogk?.khoPrice || service.ogk?.ebmPrice || 0);
+      result.ebmCode = service.ogk?.khoCode || service.ogk?.ebmCode || null; // Unterstützt beide Felder
       result.copay = calculateCopay(service, patient, result.grossAmount, 'kassenarzt');
       result.insuranceAmount = result.grossAmount - result.copay;
       result.patientAmount = result.copay;
@@ -354,6 +354,65 @@ function roundAmount(amount) {
   return Math.round(amount);
 }
 
+/**
+ * Berechnet die voraussichtliche Erstattung für Wahlarzt-Leistungen
+ * @param {Array} services - Array von Service-Objekten
+ * @param {Object} patient - Patient-Objekt
+ * @returns {Promise<Object>} { totalRefund: number, serviceRefunds: Array, warnings: Array }
+ */
+async function calculateRefund(services, patient) {
+  const serviceRefunds = [];
+  const warnings = [];
+  let totalRefund = 0;
+  
+  try {
+    const ServiceCatalog = require('../models/ServiceCatalog');
+    
+    for (const service of services) {
+      const serviceCode = service.serviceCode;
+      const grossAmount = service.unitPrice || 0;
+      
+      // Lade Service-Details
+      const serviceDoc = await ServiceCatalog.findOne({ code: serviceCode });
+      if (!serviceDoc) {
+        warnings.push(`Service ${serviceCode} nicht gefunden`);
+        continue;
+      }
+      
+      // Prüfe ob Service als Wahlarzt abrechenbar ist
+      if (serviceDoc.billingType !== 'wahlarzt' && serviceDoc.billingType !== 'both') {
+        warnings.push(`Service ${serviceCode} ist nicht als Wahlarzt abrechenbar`);
+        continue;
+      }
+      
+      // Standard-Erstattung: 80% des Kassentarifs
+      const kassenarztPrice = toEuro(serviceDoc.ogk?.khoPrice || serviceDoc.ogk?.ebmPrice || 0);
+      const refundRate = serviceDoc.wahlarzt?.reimbursementRate || 0.80; // 80% Erstattung
+      const refund = kassenarztPrice * refundRate;
+      
+      serviceRefunds.push({
+        serviceCode: serviceCode,
+        serviceName: serviceDoc.name,
+        grossAmount: grossAmount,
+        kassenarztPrice: kassenarztPrice,
+        refundRate: refundRate,
+        refund: refund
+      });
+      
+      totalRefund += refund;
+    }
+    
+    return {
+      totalRefund: totalRefund,
+      serviceRefunds: serviceRefunds,
+      warnings: warnings
+    };
+  } catch (error) {
+    console.error('[Billing Calculator] Fehler bei Erstattungsberechnung:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   calculateCopay,
   checkInsuranceCoverage,
@@ -362,6 +421,7 @@ module.exports = {
   formatAmount,
   roundAmount,
   getInsuranceCopayRule,
+  calculateRefund,
   SELBSTBEHALT_RATES
 };
 

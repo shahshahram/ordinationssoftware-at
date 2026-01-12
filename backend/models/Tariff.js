@@ -24,7 +24,7 @@ const TariffSchema = new mongoose.Schema({
   // Tariftyp
   tariffType: {
     type: String,
-    enum: ['goae', 'kho', 'et', 'ebm', 'custom'],
+    enum: ['goae', 'kho', 'et', 'ebm', 'custom'], // 'ebm' ist Legacy, wird als 'kho' behandelt
     required: true,
     index: true
   },
@@ -41,14 +41,47 @@ const TariffSchema = new mongoose.Schema({
   
   // KHO/ET-spezifische Daten
   kho: {
-    ebmCode: { type: String, trim: true }, // EBM-Code
-    price: { type: Number, min: 0 }, // Preis in Cent
+    // Neue korrekte Felder
+    khoCode: { type: String, trim: true, index: true }, // KHO-Code (korrekte österreichische Bezeichnung)
+    khoPrice: { type: Number, min: 0 }, // Preis in Euro (neues Feld)
+    price: { type: Number, min: 0 }, // Preis in Cent (Legacy-Feld)
+    points: { type: Number, min: 0 }, // Verrechnungseinheiten (Punkte)
     category: { type: String, trim: true }, // Kategorie
     requiresApproval: { type: Boolean, default: false },
     billingFrequency: { 
       type: String, 
-      enum: ['once', 'daily', 'weekly', 'monthly'], 
+      enum: ['once', 'daily', 'weekly', 'monthly', 'quarterly'], 
       default: 'once' 
+    },
+    // Limitierung pro Quartal/Patient
+    limitation: {
+      maxPerQuarter: { type: Number, min: 0 }, // Maximale Anzahl pro Quartal (z.B. 1)
+      maxPerPatient: { type: Number, min: 0 }, // Maximale Anzahl pro Patient (z.B. 1)
+      period: { 
+        type: String, 
+        enum: ['day', 'week', 'month', 'quarter', 'year'], 
+        default: 'quarter' 
+      }, // Zeitraum für Limitierung
+      description: { type: String, trim: true } // Beschreibung der Limitierung (z.B. "1 / Q")
+    },
+    
+    // Legacy-Feld für Backward Compatibility
+    ebmCode: { type: String, trim: true }, // ⚠️ DEPRECATED: Verwende khoCode
+    
+    // Bundesland-spezifische Tarife (optional)
+    federalState: {
+      type: String,
+      enum: ['burgenland', 'kaernten', 'niederoesterreich', 'oberoesterreich', 'salzburg', 'steiermark', 'tirol', 'vorarlberg', 'wien', null],
+      default: null,
+      index: true
+    },
+    
+    // Versicherungsträger-spezifische Tarife
+    insuranceProvider: {
+      type: String,
+      enum: ['oegk', 'bvaeb', 'svs', 'kfa', 'pva', 'vaeb', 'auva', 'all'],
+      default: 'all', // 'all' = für alle Versicherungsträger gültig
+      index: true
     }
   },
   
@@ -125,7 +158,24 @@ const TariffSchema = new mongoose.Schema({
 TariffSchema.index({ tariffType: 1, isActive: 1 });
 TariffSchema.index({ specialty: 1, isActive: 1 });
 TariffSchema.index({ 'goae.section': 1, 'goae.number': 1 });
-TariffSchema.index({ 'kho.ebmCode': 1 });
+TariffSchema.index({ 'kho.khoCode': 1, 'kho.insuranceProvider': 1, 'kho.federalState': 1 });
+TariffSchema.index({ 'kho.ebmCode': 1 }); // Legacy-Index für Backward Compatibility
+
+// Pre-Hook: Migriere alte Felder
+TariffSchema.pre('save', function(next) {
+  if (this.kho) {
+    // Migriere ebmCode zu khoCode (Backward Compatibility)
+    if (this.kho.ebmCode && !this.kho.khoCode) {
+      this.kho.khoCode = this.kho.ebmCode;
+    }
+    // Migriere price zu khoPrice (wenn price vorhanden und khoPrice nicht)
+    if (this.kho.price !== undefined && this.kho.price !== null && (this.kho.khoPrice === undefined || this.kho.khoPrice === null)) {
+      // Wenn price > 1000, ist es wahrscheinlich in Cent, sonst in Euro
+      this.kho.khoPrice = this.kho.price > 1000 ? this.kho.price / 100 : this.kho.price;
+    }
+  }
+  next();
+});
 
 // Virtual für aktuellen Preis
 TariffSchema.virtual('currentPrice').get(function() {
@@ -136,6 +186,13 @@ TariffSchema.virtual('currentPrice').get(function() {
     return this.kho.price;
   }
   return 0;
+});
+
+// Virtual für KHO-Code (mit Fallback auf ebmCode)
+TariffSchema.virtual('khoCode').get(function() {
+  if (this.kho?.khoCode) return this.kho.khoCode;
+  if (this.kho?.ebmCode) return this.kho.ebmCode; // Backward Compatibility
+  return null;
 });
 
 // Statische Methoden
@@ -164,9 +221,30 @@ TariffSchema.statics.findGOAE = function(section = null) {
   return this.find(query).sort({ 'goae.section': 1, 'goae.number': 1 });
 };
 
-TariffSchema.statics.findKHO = function() {
-  return this.find({ tariffType: { $in: ['kho', 'et', 'ebm'] }, isActive: true })
-    .sort({ 'kho.ebmCode': 1 });
+TariffSchema.statics.findKHO = function(options = {}) {
+  const query = { 
+    tariffType: { $in: ['kho', 'et', 'ebm'] }, 
+    isActive: true 
+  };
+  
+  // Filter nach Versicherungsträger
+  if (options.insuranceProvider) {
+    query.$or = [
+      { 'kho.insuranceProvider': options.insuranceProvider },
+      { 'kho.insuranceProvider': 'all' }
+    ];
+  }
+  
+  // Filter nach Bundesland
+  if (options.federalState) {
+    query.$or = [
+      ...(query.$or || []),
+      { 'kho.federalState': options.federalState },
+      { 'kho.federalState': null }
+    ];
+  }
+  
+  return this.find(query).sort({ 'kho.khoCode': 1, 'kho.ebmCode': 1 });
 };
 
 module.exports = mongoose.model('Tariff', TariffSchema);

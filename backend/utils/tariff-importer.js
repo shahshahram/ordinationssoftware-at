@@ -1,7 +1,8 @@
 // Tarif-Importer für GOÄ, KHO, ET
 // Importiert Tarifdaten aus CSV/JSON-Dateien
 
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const csv = require('csv-parser');
 const Tariff = require('../models/Tariff');
@@ -57,7 +58,7 @@ class TariffImporter {
 
   /**
    * Importiert KHO/ET-Tarife aus CSV
-   * Format: code,name,ebmCode,price,category,requiresApproval,billingFrequency,specialty
+   * Format: code,name,khoCode|ebmCode,price,category,requiresApproval,billingFrequency,specialty,insuranceProvider,federalState
    */
   async importKHOFromCSV(filePath, userId) {
     const tariffs = [];
@@ -66,28 +67,52 @@ class TariffImporter {
       const stream = fs.createReadStream(filePath)
         .pipe(csv())
         .on('data', (row) => {
-          tariffs.push({
-            code: row.code || row.ebmCode,
-            name: row.name,
-            description: row.description || '',
-            tariffType: row.tariffType || 'kho',
-            kho: {
-              ebmCode: row.ebmCode,
-              price: Math.round(parseFloat(row.price || 0) * 100), // In Cent
-              category: row.category || '',
-              requiresApproval: row.requiresApproval === 'true',
-              billingFrequency: row.billingFrequency || 'once'
-            },
-            specialty: row.specialty || 'allgemein',
-            validFrom: row.validFrom ? new Date(row.validFrom) : new Date(),
-            validUntil: row.validUntil ? new Date(row.validUntil) : null,
-            isActive: row.isActive !== 'false',
-            createdBy: userId
-          });
+          try {
+            const khoCode = row.khoCode || row.ebmCode || row.code; // Unterstützt beide Felder
+            
+            if (!khoCode && !row.code) {
+              console.warn('[KHO Import] Zeile ohne Code übersprungen:', row);
+              return; // Überspringe Zeilen ohne Code
+            }
+            
+            tariffs.push({
+              code: row.code || khoCode,
+              name: row.name || 'Unbenannt',
+              description: row.description || '',
+              tariffType: row.tariffType || 'kho',
+              kho: {
+                khoCode: khoCode, // Neues korrektes Feld
+                ebmCode: row.ebmCode || khoCode, // Legacy-Feld für Backward Compatibility
+                price: Math.round(parseFloat(row.price || row.khoPrice || 0) * 100), // In Cent, unterstützt beide Felder
+                category: row.category || '',
+                requiresApproval: row.requiresApproval === 'true' || row.requiresApproval === true,
+                billingFrequency: row.billingFrequency || 'once',
+                insuranceProvider: row.insuranceProvider || 'all', // 'oegk', 'bvaeb', 'svs', etc.
+                federalState: row.federalState || null // Optional: Bundesland
+              },
+              specialty: row.specialty || 'allgemein',
+              validFrom: row.validFrom ? new Date(row.validFrom) : new Date(),
+              validUntil: row.validUntil ? new Date(row.validUntil) : null,
+              isActive: row.isActive !== 'false',
+              createdBy: userId
+            });
+          } catch (rowError) {
+            console.error('[KHO Import] Fehler beim Verarbeiten einer Zeile:', rowError, row);
+            // Überspringe fehlerhafte Zeilen, aber fahre fort
+          }
         })
         .on('end', async () => {
           try {
+            console.log(`[KHO Import] ${tariffs.length} Tarife aus CSV gelesen`);
+            
+            if (tariffs.length === 0) {
+              reject(new Error('Keine Tarife in der CSV-Datei gefunden. Bitte prüfen Sie das Datei-Format.'));
+              return;
+            }
+            
             const results = await this.saveTariffs(tariffs);
+            console.log(`[KHO Import] Speicherung abgeschlossen: ${results.created} erstellt, ${results.updated} aktualisiert, ${results.errors.length} Fehler`);
+            
             resolve({
               success: true,
               imported: results.created,
@@ -95,10 +120,14 @@ class TariffImporter {
               errors: results.errors
             });
           } catch (error) {
+            console.error('[KHO Import] Fehler beim Speichern der Tarife:', error);
             reject(error);
           }
         })
-        .on('error', reject);
+        .on('error', (error) => {
+          console.error('[KHO Import] Fehler beim Lesen der CSV-Datei:', error);
+          reject(new Error(`Fehler beim Lesen der CSV-Datei: ${error.message}`));
+        });
     });
   }
 
@@ -107,7 +136,7 @@ class TariffImporter {
    */
   async importFromJSON(filePath, userId) {
     try {
-      const data = await fs.readFile(filePath, 'utf8');
+      const data = await fsPromises.readFile(filePath, 'utf8');
       const tariffs = JSON.parse(data);
       
       const formattedTariffs = tariffs.map(tariff => ({

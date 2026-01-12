@@ -15,12 +15,12 @@ const upload = multer({
     fileSize: 10 * 1024 * 1024 // 10MB
   },
   fileFilter: (req, file, cb) => {
-    const allowedExtensions = ['.csv', '.json'];
+    const allowedExtensions = ['.csv', '.json', '.pdf'];
     const ext = path.extname(file.originalname).toLowerCase();
     if (allowedExtensions.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Nur CSV- und JSON-Dateien sind erlaubt'));
+      cb(new Error('Nur CSV-, JSON- und PDF-Dateien sind erlaubt'));
     }
   }
 });
@@ -80,14 +80,34 @@ router.post('/kho', [
       });
     }
 
-    const result = await tariffImporter.importKHOFromCSV(req.file.path, req.user._id);
+    const ext = path.extname(req.file.originalname).toLowerCase();
+    let result;
+
+    if (ext === '.pdf') {
+      // PDF-Import
+      console.log(`[KHO Import] PDF-Datei erkannt: ${req.file.path}`);
+      const ogkTariffDownloader = require('../services/ogkTariffDownloader');
+      const tariffs = await ogkTariffDownloader.parsePDF(req.file.path);
+      console.log(`[KHO Import] ${tariffs.length} Tarife aus PDF extrahiert`);
+      
+      // Konvertiere zu Tariff-Format und speichere
+      const tariffsWithUser = tariffs.map(t => ({
+        ...t,
+        createdBy: req.user._id
+      }));
+      result = await tariffImporter.saveTariffs(tariffsWithUser);
+      console.log(`[KHO Import] ${result.created} neue Tarife erstellt, ${result.updated} aktualisiert`);
+    } else {
+      // CSV-Import (bestehende Funktionalität)
+      result = await tariffImporter.importKHOFromCSV(req.file.path, req.user._id);
+    }
     
     // Lösche temporäre Datei
     await fs.unlink(req.file.path);
     
     res.json({
       success: true,
-      message: 'KHO/ET-Tarife erfolgreich importiert',
+      message: `KHO/ET-Tarife erfolgreich importiert (${ext === '.pdf' ? 'PDF' : 'CSV'})`,
       data: result
     });
   } catch (error) {

@@ -203,8 +203,18 @@ interface ServiceCatalog {
   // Abrechnungsfelder (Backend)
   billingType?: 'kassenarzt' | 'wahlarzt' | 'privat' | 'both';
   ogk?: {
+    // Neue korrekte Felder
+    khoCode?: string;
+    khoPrice?: number;
+    khoGroup?: string;
+    khoSubGroup?: string;
+    insuranceProvider?: 'oegk' | 'bvaeb' | 'svs' | 'kfa' | 'pva' | 'vaeb' | 'auva' | 'all';
+    federalState?: 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null;
+    // Legacy-Felder für Backward Compatibility
     ebmCode?: string;
     ebmPrice?: number;
+    ebmGroup?: string;
+    ebmSubGroup?: string;
     requiresApproval?: boolean;
     billingFrequency?: 'once' | 'periodic';
   };
@@ -369,10 +379,20 @@ const ServiceCatalog: React.FC = () => {
     // Abrechnungsfelder
     billingType: 'both',
     ogk: {
+      // Neue korrekte Felder
+      khoCode: '',
+      khoPrice: 0,
+      khoGroup: '',
+      khoSubGroup: '',
+      insuranceProvider: 'all' as 'oegk' | 'bvaeb' | 'svs' | 'kfa' | 'pva' | 'vaeb' | 'auva' | 'all',
+      federalState: null as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null,
+      // Legacy-Felder für Backward Compatibility
       ebmCode: '',
       ebmPrice: 0,
+      ebmGroup: '',
+      ebmSubGroup: '',
       requiresApproval: false,
-      billingFrequency: 'once'
+      billingFrequency: 'once' as 'once' | 'periodic'
     },
     wahlarzt: {
       price: 0,
@@ -715,10 +735,20 @@ const ServiceCatalog: React.FC = () => {
       // Abrechnungsfelder
       billingType: 'both',
       ogk: {
+        // Neue korrekte Felder
+        khoCode: '',
+        khoPrice: 0,
+        khoGroup: '',
+        khoSubGroup: '',
+        insuranceProvider: 'all' as 'oegk' | 'bvaeb' | 'svs' | 'kfa' | 'pva' | 'vaeb' | 'auva' | 'all',
+        federalState: null as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null,
+        // Legacy-Felder für Backward Compatibility
         ebmCode: '',
         ebmPrice: 0,
+        ebmGroup: '',
+        ebmSubGroup: '',
         requiresApproval: false,
-        billingFrequency: 'once'
+        billingFrequency: 'once' as 'once' | 'periodic'
       },
       wahlarzt: {
         price: 0,
@@ -824,10 +854,26 @@ const ServiceCatalog: React.FC = () => {
       // Abrechnungsfelder
       billingType: service.billingType || 'both',
       ogk: {
-        ebmCode: service.ogk?.ebmCode || '',
-        ebmPrice: service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
-          ? (service.ogk.ebmPrice > 1000 ? service.ogk.ebmPrice / 100 : service.ogk.ebmPrice)
-          : 0,
+        // Neue korrekte Felder
+        khoCode: service.ogk?.khoCode || service.ogk?.ebmCode || '',
+        khoPrice: service.ogk?.khoPrice !== undefined && service.ogk?.khoPrice !== null
+          ? (service.ogk.khoPrice > 1000 ? service.ogk.khoPrice / 100 : service.ogk.khoPrice)
+          : (service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
+            ? (service.ogk.ebmPrice > 1000 ? service.ogk.ebmPrice / 100 : service.ogk.ebmPrice)
+            : 0),
+        khoGroup: service.ogk?.khoGroup || service.ogk?.ebmGroup || '',
+        khoSubGroup: service.ogk?.khoSubGroup || service.ogk?.ebmSubGroup || '',
+        insuranceProvider: service.ogk?.insuranceProvider || 'all',
+        federalState: service.ogk?.federalState || null,
+        // Legacy-Felder für Backward Compatibility
+        ebmCode: service.ogk?.khoCode || service.ogk?.ebmCode || '',
+        ebmPrice: service.ogk?.khoPrice !== undefined && service.ogk?.khoPrice !== null
+          ? (service.ogk.khoPrice > 1000 ? service.ogk.khoPrice / 100 : service.ogk.khoPrice)
+          : (service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
+            ? (service.ogk.ebmPrice > 1000 ? service.ogk.ebmPrice / 100 : service.ogk.ebmPrice)
+            : 0),
+        ebmGroup: service.ogk?.khoGroup || service.ogk?.ebmGroup || '',
+        ebmSubGroup: service.ogk?.khoSubGroup || service.ogk?.ebmSubGroup || '',
         requiresApproval: service.ogk?.requiresApproval || false,
         billingFrequency: service.ogk?.billingFrequency || 'once'
       },
@@ -1917,29 +1963,83 @@ const ServiceCatalog: React.FC = () => {
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
                       <TextField
                         fullWidth
-                        label="EBM-Code"
-                        value={formData.ogk?.ebmCode || ''}
+                        label="KHO-Code"
+                        helperText="Kassenhonorarordnung-Code (korrekte österreichische Bezeichnung)"
+                        value={formData.ogk?.khoCode || formData.ogk?.ebmCode || ''}
                         onChange={(e) => setFormData({ 
                           ...formData, 
-                          ogk: { ...formData.ogk, ebmCode: e.target.value }
+                          ogk: { 
+                            ...formData.ogk, 
+                            khoCode: e.target.value,
+                            ebmCode: e.target.value // Backward Compatibility
+                          }
                         })}
                       />
                       <TextField
                         fullWidth
-                        label="EBM-Preis (Euro)"
+                        label="KHO-Preis (Euro)"
+                        helperText="Preis in Euro"
                         type="number"
                         inputProps={{ step: "0.01" }}
-                        value={formData.ogk?.ebmPrice !== undefined && formData.ogk?.ebmPrice !== null && formData.ogk?.ebmPrice !== 0
-                          ? (formData.ogk.ebmPrice > 1000 ? formData.ogk.ebmPrice / 100 : formData.ogk.ebmPrice)
-                          : ''}
+                        value={formData.ogk?.khoPrice !== undefined && formData.ogk?.khoPrice !== null && formData.ogk?.khoPrice !== 0
+                          ? (formData.ogk.khoPrice > 1000 ? formData.ogk.khoPrice / 100 : formData.ogk.khoPrice)
+                          : (formData.ogk?.ebmPrice !== undefined && formData.ogk?.ebmPrice !== null && formData.ogk?.ebmPrice !== 0
+                            ? (formData.ogk.ebmPrice > 1000 ? formData.ogk.ebmPrice / 100 : formData.ogk.ebmPrice)
+                            : '')}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
                           setFormData({ 
                             ...formData, 
-                            ogk: { ...formData.ogk, ebmPrice: euroValue }
+                            ogk: { 
+                              ...formData.ogk, 
+                              khoPrice: euroValue,
+                              ebmPrice: euroValue // Backward Compatibility
+                            }
                           });
                         }}
                       />
+                      <FormControl fullWidth>
+                        <InputLabel>Versicherungsträger</InputLabel>
+                        <Select
+                          value={formData.ogk?.insuranceProvider || 'all'}
+                          onChange={(e) => setFormData({ 
+                            ...formData, 
+                            ogk: { ...formData.ogk, insuranceProvider: e.target.value }
+                          })}
+                          label="Versicherungsträger"
+                        >
+                          <MenuItem value="all">Alle</MenuItem>
+                          <MenuItem value="oegk">ÖGK</MenuItem>
+                          <MenuItem value="bvaeb">BVAEB</MenuItem>
+                          <MenuItem value="svs">SVS</MenuItem>
+                          <MenuItem value="kfa">KFA</MenuItem>
+                          <MenuItem value="pva">PVA</MenuItem>
+                          <MenuItem value="vaeb">VAEB</MenuItem>
+                          <MenuItem value="auva">AUVA</MenuItem>
+                        </Select>
+                      </FormControl>
+                      <FormControl fullWidth>
+                        <InputLabel>Bundesland (optional)</InputLabel>
+                        <Select
+                          value={formData.ogk?.federalState || ''}
+                          onChange={(e) => setFormData({ 
+                            ...formData, 
+                            ogk: { ...formData.ogk, federalState: e.target.value || null }
+                          })}
+                          label="Bundesland (optional)"
+                        >
+                          <MenuItem value="">Keine Einschränkung</MenuItem>
+                          <MenuItem value="burgenland">Burgenland</MenuItem>
+                          <MenuItem value="kaernten">Kärnten</MenuItem>
+                          <MenuItem value="niederoesterreich">Niederösterreich</MenuItem>
+                          <MenuItem value="oberoesterreich">Oberösterreich</MenuItem>
+                          <MenuItem value="salzburg">Salzburg</MenuItem>
+                          <MenuItem value="steiermark">Steiermark</MenuItem>
+                          <MenuItem value="tirol">Tirol</MenuItem>
+                          <MenuItem value="vorarlberg">Vorarlberg</MenuItem>
+                          <MenuItem value="wien">Wien</MenuItem>
+                        </Select>
+                      </FormControl>
                       <FormControlLabel
                         control={
                           <Switch

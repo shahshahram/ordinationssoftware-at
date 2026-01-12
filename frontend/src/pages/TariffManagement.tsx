@@ -76,9 +76,11 @@ interface Tariff {
     multiplier: number;
   };
   kho?: {
-    ebmCode: string;
-    price: number;
-    category: string;
+    ebmCode?: string;
+    khoCode?: string;
+    khoPrice?: number;
+    price?: number;
+    category?: string;
   };
 }
 
@@ -98,11 +100,12 @@ const TariffManagement: React.FC = () => {
   const [downloadDialogOpen, setDownloadDialogOpen] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: boolean }>({});
   const [importDialogOpen, setImportDialogOpen] = useState(false);
-  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'xml'>('xml');
+  const [selectedFormat, setSelectedFormat] = useState<'csv' | 'xml'>('csv'); // CSV als Standard, da ÖGK-URLs oft PDF statt XML zurückgeben
   const [selectedTariffType, setSelectedTariffType] = useState<'ebm' | 'kho' | 'goae' | 'all'>('all');
   const [updateInfo, setUpdateInfo] = useState<any>(null);
 
   useEffect(() => {
+    console.log(`[TariffManagement] activeTab geändert zu: ${activeTab}`);
     loadTariffs();
     loadTariffInfo();
     checkForUpdates();
@@ -111,15 +114,41 @@ const TariffManagement: React.FC = () => {
   const loadTariffs = async () => {
     setLoading(true);
     try {
+      // Tab 0 = GOÄ, Tab 1 = KHO, Tab 2 = Alle
       const tariffType = activeTab === 0 ? 'goae' : activeTab === 1 ? 'kho' : null;
+      console.log(`[TariffManagement] activeTab: ${activeTab}, tariffType: ${tariffType}`);
       const params = new URLSearchParams();
       if (tariffType) params.append('tariffType', tariffType);
+      params.append('limit', '1000'); // Erhöhtes Limit, um alle Tarife zu laden
+      params.append('page', '1');
       
-      const response = await api.get<any>(`/tariffs?${params.toString()}`);
+      const url = `/tariffs?${params.toString()}`;
+      console.log(`[TariffManagement] Lade Tarife von: ${url}`);
+      const response = await api.get<any>(url);
+      console.log(`[TariffManagement] API-Antwort vollständig:`, JSON.stringify(response.data, null, 2));
       if ((response.data as any)?.success) {
-        setTariffs((response.data as any).data || []);
+        const loadedTariffs = (response.data as any).data || [];
+        console.log(`[TariffManagement] ${loadedTariffs.length} Tarife geladen (Typ: ${tariffType || 'alle'})`);
+        if (loadedTariffs.length > 0) {
+          console.log(`[TariffManagement] Erster Tarif:`, {
+            code: loadedTariffs[0].code,
+            name: loadedTariffs[0].name,
+            tariffType: loadedTariffs[0].tariffType,
+            isActive: loadedTariffs[0].isActive,
+            khoPrice: loadedTariffs[0].kho?.khoPrice,
+            price: loadedTariffs[0].kho?.price
+          });
+        } else {
+          console.warn(`[TariffManagement] ⚠️ Keine Tarife gefunden für Typ: ${tariffType || 'alle'}`);
+          console.warn(`[TariffManagement] Bitte auf Tab "KHO/ET-Tarife" klicken, um die importierten Tarife zu sehen!`);
+        }
+        setTariffs(loadedTariffs);
+      } else {
+        console.error('[TariffManagement] API-Antwort ohne success:', response.data);
+        setTariffs([]);
       }
     } catch (error: any) {
+      console.error('[TariffManagement] Fehler beim Laden der Tarife:', error);
       enqueueSnackbar('Fehler beim Laden der Tarife', { variant: 'error' });
     } finally {
       setLoading(false);
@@ -199,7 +228,8 @@ const TariffManagement: React.FC = () => {
       const response = await api.post<any>(endpoint, formData);
       
       if ((response.data as any)?.success) {
-        enqueueSnackbar('Tarife erfolgreich importiert', { variant: 'success' });
+        const fileType = file.name.endsWith('.pdf') ? 'PDF' : file.name.endsWith('.csv') ? 'CSV' : 'JSON';
+        enqueueSnackbar(`Tarife erfolgreich aus ${fileType} importiert`, { variant: 'success' });
         setImportDialogOpen(false);
         loadTariffs();
       }
@@ -395,7 +425,10 @@ const TariffManagement: React.FC = () => {
 
       {/* Tabs für verschiedene Tariftypen */}
       <Paper sx={{ mb: 3 }}>
-        <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
+        <Tabs value={activeTab} onChange={(e, newValue) => {
+          console.log(`[TariffManagement] Tab geändert von ${activeTab} zu ${newValue}`);
+          setActiveTab(newValue);
+        }}>
           <Tab label="GOÄ-Tarife" />
           <Tab label="KHO/ET-Tarife" />
           <Tab label="Alle Tarife" />
@@ -441,8 +474,8 @@ const TariffManagement: React.FC = () => {
                   <TableCell>
                     {tariff.goae?.basePrice 
                       ? formatAmount(tariff.goae.basePrice * (tariff.goae.multiplier || 1))
-                      : tariff.kho?.price 
-                      ? formatAmount(tariff.kho.price)
+                      : (tariff.kho?.khoPrice !== undefined || tariff.kho?.price !== undefined)
+                      ? formatAmount((tariff.kho?.khoPrice ?? tariff.kho?.price ?? 0))
                       : '-'}
                   </TableCell>
                   <TableCell>
@@ -553,7 +586,7 @@ const TariffManagement: React.FC = () => {
             <TextField
               fullWidth
               type="file"
-              inputProps={{ accept: '.csv,.json' }}
+              inputProps={{ accept: '.csv,.json,.pdf' }}
               onChange={(e) => {
                 const target = e.target as HTMLInputElement;
                 const file = target.files?.[0];
@@ -561,7 +594,7 @@ const TariffManagement: React.FC = () => {
                   handleFileImport(file, selectedTariffType === 'all' ? 'goae' : selectedTariffType as 'goae' | 'kho');
                 }
               }}
-              helperText="CSV oder JSON-Datei auswählen"
+              helperText="CSV, JSON oder PDF-Datei auswählen"
             />
           </Box>
         </DialogContent>

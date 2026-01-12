@@ -301,13 +301,49 @@ const ServiceCatalogSchema = new mongoose.Schema({
   
   // ÖGK-Kassenarzt-Abrechnung - alle Preise in Euro
   ogk: {
-    ebmCode: { type: String, trim: true },
-    ebmPrice: { type: Number, min: 0 }, // Preis in Euro
+    // Neue korrekte Felder (KHO statt EBM)
+    khoCode: { type: String, trim: true, index: true }, // KHO-Code (korrekte österreichische Bezeichnung)
+    khoPrice: { type: Number, min: 0 }, // KHO-Preis in Euro
+    khoGroup: { type: String, trim: true }, // z.B. "Konsultation", "Untersuchung", "Behandlung"
+    khoSubGroup: { type: String, trim: true }, // z.B. "Erstkonsultation", "Folgekonsultation"
+    points: { type: Number, min: 0 }, // Verrechnungseinheiten (Punkte)
+    
+    // Legacy-Felder für Backward Compatibility (werden automatisch migriert)
+    ebmCode: { type: String, trim: true }, // ⚠️ DEPRECATED: Verwende khoCode
+    ebmPrice: { type: Number, min: 0 }, // ⚠️ DEPRECATED: Verwende khoPrice
+    ebmGroup: { type: String, trim: true }, // ⚠️ DEPRECATED: Verwende khoGroup
+    ebmSubGroup: { type: String, trim: true }, // ⚠️ DEPRECATED: Verwende khoSubGroup
+    
     requiresApproval: { type: Boolean, default: false },
-    billingFrequency: { type: String, enum: ['once', 'periodic'], default: 'once' },
-    // Fachspezifische EBM-Gruppen
-    ebmGroup: { type: String, trim: true }, // z.B. "Konsultation", "Untersuchung", "Behandlung"
-    ebmSubGroup: { type: String, trim: true }, // z.B. "Erstkonsultation", "Folgekonsultation"
+    billingFrequency: { type: String, enum: ['once', 'periodic', 'quarterly'], default: 'once' },
+    // Limitierung pro Quartal/Patient
+    limitation: {
+      maxPerQuarter: { type: Number, min: 0 }, // Maximale Anzahl pro Quartal (z.B. 1)
+      maxPerPatient: { type: Number, min: 0 }, // Maximale Anzahl pro Patient (z.B. 1)
+      period: { 
+        type: String, 
+        enum: ['day', 'week', 'month', 'quarter', 'year'], 
+        default: 'quarter' 
+      }, // Zeitraum für Limitierung
+      description: { type: String, trim: true } // Beschreibung der Limitierung (z.B. "1 / Q")
+    },
+    
+    // Bundesland-spezifische Tarife (optional, falls Honorarordnung nach Bundesland getrennt)
+    federalState: {
+      type: String,
+      enum: ['burgenland', 'kaernten', 'niederoesterreich', 'oberoesterreich', 'salzburg', 'steiermark', 'tirol', 'vorarlberg', 'wien', null],
+      default: null,
+      index: true
+    },
+    
+    // Versicherungsträger-spezifische Tarife
+    insuranceProvider: {
+      type: String,
+      enum: ['oegk', 'bvaeb', 'svs', 'kfa', 'pva', 'vaeb', 'auva', 'all', null],
+      default: 'all', // 'all' = für alle Versicherungsträger gültig
+      index: true
+    },
+    
     // Zusatzleistungen
     additionalServices: [{
       code: { type: String, trim: true },
@@ -422,6 +458,8 @@ ServiceCatalogSchema.index({ category: 1, is_active: 1 });
 ServiceCatalogSchema.index({ required_role: 1, is_active: 1 });
 ServiceCatalogSchema.index({ online_bookable: 1, is_active: 1 });
 ServiceCatalogSchema.index({ quick_select: 1, is_active: 1 });
+ServiceCatalogSchema.index({ 'ogk.khoCode': 1, 'ogk.insuranceProvider': 1, 'ogk.federalState': 1 });
+ServiceCatalogSchema.index({ 'ogk.ebmCode': 1 }); // Legacy-Index für Backward Compatibility
 
 // Virtual für Gesamtdauer
 ServiceCatalogSchema.virtual('total_duration_min').get(function() {
@@ -438,16 +476,36 @@ ServiceCatalogSchema.virtual('price_euro').get(function() {
   return this.price_cents ? (this.price_cents / 100).toFixed(2) : null;
 });
 
-// Pre-Hook: Migriere price_cents zu price beim Laden (falls price_cents vorhanden, aber price nicht)
+// Pre-Hook: Migriere price_cents zu price und ebmCode/ebmPrice zu khoCode/khoPrice
 ServiceCatalogSchema.pre('save', function(next) {
-  // Wenn price_cents vorhanden ist, aber price nicht, migriere automatisch
+  // Migriere price_cents zu price
   if (this.price_cents && (this.price === undefined || this.price === null)) {
     this.price = this.price_cents / 100;
   }
-  // Wenn price vorhanden ist, aber price_cents nicht, setze price_cents für Backward Compatibility
   if (this.price !== undefined && this.price !== null && (!this.price_cents || this.price_cents === 0)) {
     this.price_cents = Math.round(this.price * 100);
   }
+  
+  // Migriere ebmCode/ebmPrice zu khoCode/khoPrice (Backward Compatibility)
+  if (this.ogk) {
+    if (this.ogk.ebmCode && !this.ogk.khoCode) {
+      this.ogk.khoCode = this.ogk.ebmCode;
+    }
+    if (this.ogk.ebmPrice !== undefined && this.ogk.ebmPrice !== null && (this.ogk.khoPrice === undefined || this.ogk.khoPrice === null)) {
+      this.ogk.khoPrice = this.ogk.ebmPrice;
+    }
+    if (this.ogk.ebmGroup && !this.ogk.khoGroup) {
+      this.ogk.khoGroup = this.ogk.ebmGroup;
+    }
+    if (this.ogk.ebmSubGroup && !this.ogk.khoSubGroup) {
+      this.ogk.khoSubGroup = this.ogk.ebmSubGroup;
+    }
+    // Setze billingFrequency auf 'quarterly' wenn limitation.maxPerQuarter vorhanden ist
+    if (this.ogk.limitation?.maxPerQuarter && this.ogk.billingFrequency === 'once') {
+      this.ogk.billingFrequency = 'quarterly';
+    }
+  }
+  
   next();
 });
 

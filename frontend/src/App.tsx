@@ -94,6 +94,7 @@ import LaborTestPage from './pages/LaborTestPage';
 import KassaTestPage from './pages/KassaTestPage';
 import ELDATestPage from './pages/ELDATestPage';
 import WAHonlineTestPage from './pages/WAHonlineTestPage';
+import TariffManagement from './pages/TariffManagement';
 
 // Theme-Funktion, die basierend auf dem Modus ein Theme erstellt
 const getTheme = (mode: 'light' | 'dark') => createTheme({
@@ -700,6 +701,14 @@ const InnerAppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['services.read']}>
                             <ServiceCategories />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/tariff-management" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['services.read']}>
+                            <TariffManagement />
                           </ProtectedRoute>
                         } 
                       />
