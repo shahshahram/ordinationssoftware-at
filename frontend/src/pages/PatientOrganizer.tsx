@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { 
   Box, 
   Paper, 
@@ -77,13 +77,16 @@ import {
   CloudDownload as CloudDownloadIcon,
   Search,
   FilterList,
-  Block
+  Block,
+  History,
+  ArrowBack,
+  List as ListIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, updatePatient, Patient } from '../store/slices/patientSlice';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
-import { differenceInWeeks, addWeeks, parseISO, format } from 'date-fns';
+import { differenceInWeeks, addWeeks, parseISO, format, formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
@@ -97,7 +100,7 @@ import PatientSidebar from '../components/PatientSidebar';
 import DiagnosisManager from '../components/DiagnosisManager';
 import MedicationManager from '../components/MedicationManager';
 import MedicationListInput, { convertMedicationsArrayToPatientFormat } from '../components/MedicationListInput';
-import { createMedication, fetchPatientMedications } from '../store/slices/medicationSlice';
+import { createMedication, fetchPatientMedications, clearPatientMedications } from '../store/slices/medicationSlice';
 import CDADocumentViewer from '../components/CDADocumentViewer';
 import PatientVisitHistory from '../components/PatientVisitHistory';
 import DekursHistory from '../components/DekursHistory';
@@ -493,6 +496,12 @@ const PatientOrganizer: React.FC = () => {
   const [notesDialogOpen, setNotesDialogOpen] = useState(false);
   const [notesEdit, setNotesEdit] = useState('');
   const [medicalNotesEdit, setMedicalNotesEdit] = useState('');
+  const [patientNotes, setPatientNotes] = useState<any[]>([]);
+  const [loadingNotes, setLoadingNotes] = useState(false);
+  const [editingNote, setEditingNote] = useState<any | null>(null);
+  const [noteHistoryDialogOpen, setNoteHistoryDialogOpen] = useState(false);
+  const [selectedNoteForHistory, setSelectedNoteForHistory] = useState<any | null>(null);
+  const [newNoteType, setNewNoteType] = useState<'general' | 'medical'>('general');
   const [onlineBookingBlockedEdit, setOnlineBookingBlockedEdit] = useState(false);
   
   // State für Stammdaten-Bearbeitung
@@ -549,6 +558,176 @@ const PatientOrganizer: React.FC = () => {
     return all.find(p => (p._id || p.id) === patientId);
   }, [patients, patientId]);
 
+  // Memoized Notizen-Liste für Performance-Optimierung (nach patient Definition)
+  const memoizedNotesList = useMemo(() => patientNotes.map((note: any) => (
+    <Card key={note._id || note.id} sx={{ mb: 2, p: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
+        <Box sx={{ flex: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Chip
+              label={note.noteType === 'general' ? 'Allgemein' : 'Medizinisch'}
+              size="small"
+              color={note.noteType === 'medical' ? 'primary' : 'default'}
+            />
+            {note.isEdited && (
+              <Chip
+                label={`${note.editCount || note.editHistory?.length || 0}x bearbeitet`}
+                size="small"
+                color="warning"
+                variant="outlined"
+              />
+            )}
+          </Box>
+          {editingNote?._id === note._id ? (
+            <Box>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                value={medicalNotesEdit}
+                onChange={(e) => setMedicalNotesEdit(e.target.value)}
+                variant="outlined"
+                sx={{ mb: 2 }}
+              />
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button
+                  size="small"
+                  variant="contained"
+                  startIcon={<Save />}
+                  onClick={async () => {
+                    try {
+                      const response: any = await api.put(`/patient-notes/${note._id}`, {
+                        content: medicalNotesEdit.trim()
+                      });
+                      if (response?.data?.success) {
+                        // Lade Notizen neu
+                        const notesResponse: any = await api.get(`/patient-notes/${patient?._id || patient?.id}?chronological=true`);
+                        if (notesResponse?.data?.success) {
+                          setPatientNotes(notesResponse.data.data || []);
+                        }
+                        // Lade Dekurs-Einträge neu, damit der aktualisierte EPA-Eintrag sofort sichtbar ist
+                        const currentPatientId = patient?._id || patient?.id;
+                        if (currentPatientId) {
+                          dispatch(fetchDekursEntries({ patientId: String(currentPatientId), limit: 1000 }));
+                        }
+                        setEditingNote(null);
+                        setMedicalNotesEdit('');
+                        setSnackbar({
+                          open: true,
+                          message: 'Notiz wurde erfolgreich aktualisiert',
+                          severity: 'success'
+                        });
+                      }
+                    } catch (error) {
+                      console.error('Fehler beim Aktualisieren der Notiz:', error);
+                      setSnackbar({
+                        open: true,
+                        message: 'Fehler beim Aktualisieren der Notiz',
+                        severity: 'error'
+                      });
+                    }
+                  }}
+                >
+                  Speichern
+                </Button>
+                <Button
+                  size="small"
+                  onClick={() => {
+                    setEditingNote(null);
+                    setMedicalNotesEdit('');
+                  }}
+                >
+                  Abbrechen
+                </Button>
+              </Box>
+            </Box>
+          ) : (
+            <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', mb: 1 }}>
+              {note.content}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1, fontSize: '0.75rem', color: 'text.secondary' }}>
+            <Typography variant="caption">
+              Erstellt: {format(new Date(note.createdAt), 'dd.MM.yyyy HH:mm', { locale: de })} 
+              {note.createdBy && typeof note.createdBy === 'object' && (
+                ` von ${note.createdBy.firstName} ${note.createdBy.lastName}`
+              )}
+            </Typography>
+            {note.lastModifiedBy && note.updatedAt && new Date(note.updatedAt).getTime() !== new Date(note.createdAt).getTime() && (
+              <Typography variant="caption" sx={{ color: 'warning.main' }}>
+                Bearbeitet: {format(new Date(note.updatedAt), 'dd.MM.yyyy HH:mm', { locale: de })}
+                {typeof note.lastModifiedBy === 'object' && (
+                  ` von ${note.lastModifiedBy.firstName} ${note.lastModifiedBy.lastName}`
+                )}
+              </Typography>
+            )}
+          </Box>
+          {note.editHistory && note.editHistory.length > 0 && (
+            <Button
+              size="small"
+              startIcon={<History />}
+              onClick={() => {
+                setSelectedNoteForHistory(note);
+                setNoteHistoryDialogOpen(true);
+              }}
+              sx={{ mt: 1 }}
+            >
+              Bearbeitungshistorie anzeigen ({note.editHistory.length})
+            </Button>
+          )}
+        </Box>
+        {!editingNote && (
+          <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
+            <IconButton
+              size="small"
+              onClick={() => {
+                setEditingNote(note);
+                setMedicalNotesEdit(note.content);
+              }}
+            >
+              <Edit fontSize="small" />
+            </IconButton>
+            <IconButton
+              size="small"
+              onClick={async () => {
+                if (!window.confirm('Möchten Sie diese Notiz wirklich löschen?')) return;
+                try {
+                  const response: any = await api.delete(`/patient-notes/${note._id}`);
+                  if (response?.data?.success) {
+                    // Lade Notizen neu
+                    const notesResponse: any = await api.get(`/patient-notes/${patient?._id || patient?.id}?chronological=true`);
+                    if (notesResponse?.data?.success) {
+                      setPatientNotes(notesResponse.data.data || []);
+                    }
+                    // Lade Dekurs-Einträge neu, damit der gelöschte EPA-Eintrag entfernt wird
+                    const currentPatientId = patient?._id || patient?.id;
+                    if (currentPatientId) {
+                      dispatch(fetchDekursEntries({ patientId: String(currentPatientId), limit: 1000 }));
+                    }
+                    setSnackbar({
+                      open: true,
+                      message: 'Notiz wurde erfolgreich gelöscht',
+                      severity: 'success'
+                    });
+                  }
+                } catch (error) {
+                  console.error('Fehler beim Löschen der Notiz:', error);
+                  setSnackbar({
+                    open: true,
+                    message: 'Fehler beim Löschen der Notiz',
+                    severity: 'error'
+                  });
+                }
+              }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </Box>
+        )}
+      </Box>
+    </Card>
+  )), [patientNotes, editingNote, medicalNotesEdit, patient]);
+
   React.useEffect(() => {
     if (!patients || (patients as Patient[]).length === 0) {
         dispatch(fetchPatients(1));
@@ -565,6 +744,12 @@ const PatientOrganizer: React.FC = () => {
 
   React.useEffect(() => {
     if (!patientId) return;
+    
+    // WICHTIG: Leere zuerst die Redux Stores, um alte Daten zu entfernen
+    // Dies verhindert, dass Daten von vorherigen Patienten angezeigt werden
+    dispatch({ type: 'diagnosis/clearPatientDiagnoses' });
+    dispatch(clearPatientMedications());
+    
     // Daten für den Patienten laden
     dispatch(fetchAppointments());
     dispatch(fetchPatientDiagnoses({ patientId: patientId } as any));
@@ -645,6 +830,25 @@ const PatientOrganizer: React.FC = () => {
     };
     
     loadMedicalDataHistory();
+    
+    // Lade Notizen
+    const loadNotes = async () => {
+      if (!patientId) return;
+      setLoadingNotes(true);
+      try {
+        const response: any = await api.get(`/patient-notes/${patientId}?chronological=true`);
+        if (response?.data?.success) {
+          setPatientNotes(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Fehler beim Laden der Notizen:', error);
+        setPatientNotes([]);
+      } finally {
+        setLoadingNotes(false);
+      }
+    };
+    
+    loadNotes();
   }, [dispatch, patientId]);
 
   // Funktion zur Berechnung des Schwangerschafts-Alerts
@@ -1948,8 +2152,13 @@ const PatientOrganizer: React.FC = () => {
 
   const patientDx = React.useMemo(() => {
     const dx = patientDiagnoses?.data || patientDiagnoses || [];
-    return (dx as PatientDiagnosis[]).slice().sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()).slice(0,8);
-  }, [patientDiagnoses]);
+    // WICHTIG: Filtere nach patientId, um nur Diagnosen des aktuellen Patienten anzuzeigen
+    const filtered = (dx as PatientDiagnosis[]).filter((diag: PatientDiagnosis) => {
+      const diagPatientId = diag.patientId || (diag as any).patient?._id || (diag as any).patient?.id || (diag as any).patient;
+      return diagPatientId === patientId;
+    });
+    return filtered.slice().sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()).slice(0,8);
+  }, [patientDiagnoses, patientId]);
 
   const isLoading = patientsLoading || appointmentsLoading || diagnosesLoading || documentsLoading;
 
@@ -2723,7 +2932,12 @@ const PatientOrganizer: React.FC = () => {
                 )}
                 {/* Diagnosen links */}
                 {(() => {
-                  const primaryDiagnosis = (patientDiagnoses || []).find((diag: PatientDiagnosis) => diag.isPrimary && diag.status === 'active');
+                  // WICHTIG: Filtere nach patientId, um nur Diagnosen des aktuellen Patienten anzuzeigen
+                  const filteredDiagnoses = (patientDiagnoses || []).filter((diag: PatientDiagnosis) => {
+                    const diagPatientId = diag.patientId || (diag as any).patient?._id || (diag as any).patient?.id || (diag as any).patient;
+                    return diagPatientId === patientId;
+                  });
+                  const primaryDiagnosis = filteredDiagnoses.find((diag: PatientDiagnosis) => diag.isPrimary && diag.status === 'active');
                   if (primaryDiagnosis) {
                     return (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1.5 }}>
@@ -2794,6 +3008,15 @@ const PatientOrganizer: React.FC = () => {
                   )}
                 </Box>
               )}
+              <Tooltip title="Zur Patientenliste">
+                <IconButton 
+                  onClick={() => navigate('/patients')}
+                  sx={{ color: 'inherit', mt: 1 }}
+                  size="large"
+                >
+                  <ListIcon />
+                </IconButton>
+              </Tooltip>
               <Tooltip title="Patienten-Workspace öffnen">
                 <IconButton 
                   onClick={() => setSidebarOpen(true)}
@@ -3123,8 +3346,6 @@ const PatientOrganizer: React.FC = () => {
               startIcon={<Description />}
               onClick={() => {
                 if (!patient) return;
-                setNotesEdit(patient.notes || '');
-                setMedicalNotesEdit(patient.medicalNotes || '');
                 setNotesDialogOpen(true);
               }}
               disabled={!patient}
@@ -4067,6 +4288,7 @@ const PatientOrganizer: React.FC = () => {
           )}
           </ErrorBoundary>
         </TabPanel>
+      </Box>
 
       {/* Template-Menü mit Kategorien */}
       <Menu
@@ -6058,15 +6280,17 @@ const PatientOrganizer: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Notizen Dialog */}
+      {/* Notizen Dialog - Chronologisch mit Bearbeitungshistorie */}
       <Dialog
         open={notesDialogOpen}
         onClose={() => {
           setNotesDialogOpen(false);
           setNotesEdit('');
           setMedicalNotesEdit('');
+          setEditingNote(null);
+          setNewNoteType('general');
         }}
-        maxWidth="md"
+        maxWidth="lg"
         fullWidth
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -6082,6 +6306,8 @@ const PatientOrganizer: React.FC = () => {
               setNotesDialogOpen(false);
               setNotesEdit('');
               setMedicalNotesEdit('');
+              setEditingNote(null);
+              setNewNoteType('general');
             }}
             sx={{ ml: 2 }}
           >
@@ -6090,31 +6316,93 @@ const PatientOrganizer: React.FC = () => {
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
+            {/* Neue Notiz erstellen */}
+            <Box sx={{ mb: 3, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+              <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                Neue Notiz erstellen
+              </Typography>
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel>Notiz-Typ</InputLabel>
+                <Select
+                  value={newNoteType}
+                  onChange={(e) => setNewNoteType(e.target.value as 'general' | 'medical')}
+                  label="Notiz-Typ"
+                >
+                  <MenuItem value="general">Allgemeine Notiz</MenuItem>
+                  <MenuItem value="medical">Medizinische Notiz</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                fullWidth
+                multiline
+                rows={4}
+                value={notesEdit}
+                onChange={(e) => setNotesEdit(e.target.value)}
+                placeholder={newNoteType === 'general' ? 'Allgemeine Notizen zum Patienten eingeben...' : 'Medizinische Notizen zum Patienten eingeben...'}
+                variant="outlined"
+                sx={{ mb: 2 }}
+              />
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={async () => {
+                  if (!patient || !notesEdit.trim()) return;
+                  try {
+                    const response: any = await api.post('/patient-notes', {
+                      patientId: patient._id || patient.id,
+                      content: notesEdit.trim(),
+                      noteType: newNoteType
+                    });
+                    if (response?.data?.success) {
+                      // Lade Notizen neu
+                      const notesResponse: any = await api.get(`/patient-notes/${patient._id || patient.id}?chronological=true`);
+                      if (notesResponse?.data?.success) {
+                        setPatientNotes(notesResponse.data.data || []);
+                      }
+                      // Lade Dekurs-Einträge neu, damit der neue EPA-Eintrag sofort sichtbar ist
+                      const currentPatientId = patient._id || patient.id;
+                      if (currentPatientId) {
+                        dispatch(fetchDekursEntries({ patientId: String(currentPatientId), limit: 1000 }));
+                      }
+                      setNotesEdit('');
+                      setSnackbar({
+                        open: true,
+                        message: 'Notiz wurde erfolgreich erstellt',
+                        severity: 'success'
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Fehler beim Erstellen der Notiz:', error);
+                    setSnackbar({
+                      open: true,
+                      message: 'Fehler beim Erstellen der Notiz',
+                      severity: 'error'
+                    });
+                  }
+                }}
+                disabled={!notesEdit.trim()}
+              >
+                Notiz hinzufügen
+              </Button>
+            </Box>
+
+            {/* Notizen-Liste (chronologisch) */}
             <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Allgemeine Notizen
+              Notizen (chronologisch - älteste zuerst)
             </Typography>
-            <TextField
-              fullWidth
-              multiline
-              rows={4}
-              value={notesEdit}
-              onChange={(e) => setNotesEdit(e.target.value)}
-              placeholder="Allgemeine Notizen zum Patienten eingeben..."
-              variant="outlined"
-              sx={{ mb: 3 }}
-            />
-            <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
-              Medizinische Notizen
-            </Typography>
-            <TextField
-              fullWidth
-              multiline
-              rows={6}
-              value={medicalNotesEdit}
-              onChange={(e) => setMedicalNotesEdit(e.target.value)}
-              placeholder="Medizinische Notizen zum Patienten eingeben..."
-              variant="outlined"
-            />
+            {loadingNotes ? (
+              <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                <CircularProgress />
+              </Box>
+            ) : patientNotes.length === 0 ? (
+              <Box sx={{ p: 3, textAlign: 'center', color: 'text.secondary' }}>
+                <Typography>Noch keine Notizen vorhanden</Typography>
+              </Box>
+            ) : (
+              <Box sx={{ maxHeight: '60vh', overflowY: 'auto' }}>
+                {memoizedNotesList}
+              </Box>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
@@ -6123,43 +6411,92 @@ const PatientOrganizer: React.FC = () => {
               setNotesDialogOpen(false);
               setNotesEdit('');
               setMedicalNotesEdit('');
+              setEditingNote(null);
+              setNewNoteType('general');
             }}
           >
-            Abbrechen
+            Schließen
           </Button>
-          <Button 
-            variant="contained"
-            startIcon={<Save />}
-            onClick={async () => {
-              if (!patient) return;
-              try {
-                const updatedPatient = {
-                  notes: notesEdit.trim(),
-                  medicalNotes: medicalNotesEdit.trim()
-                };
-                await dispatch(updatePatient({ 
-                  id: (patient._id || patient.id)!, 
-                  patientData: updatedPatient 
-                }));
-                setSnackbar({
-                  open: true,
-                  message: 'Notizen wurden gespeichert',
-                  severity: 'success'
-                });
-                setNotesDialogOpen(false);
-                setNotesEdit('');
-                setMedicalNotesEdit('');
-              } catch (error) {
-                console.error('Fehler beim Speichern der Notizen:', error);
-                setSnackbar({
-                  open: true,
-                  message: 'Fehler beim Speichern der Notizen',
-                  severity: 'error'
-                });
-              }
-            }}
-          >
-            Speichern
+        </DialogActions>
+      </Dialog>
+
+      {/* Bearbeitungshistorie Dialog */}
+      <Dialog
+        open={noteHistoryDialogOpen}
+        onClose={() => {
+          setNoteHistoryDialogOpen(false);
+          setSelectedNoteForHistory(null);
+        }}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Bearbeitungshistorie
+        </DialogTitle>
+        <DialogContent>
+          {selectedNoteForHistory && (
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>
+                Originale Notiz (erstellt am {format(new Date(selectedNoteForHistory.createdAt), 'dd.MM.yyyy HH:mm', { locale: de })}):
+              </Typography>
+              <Box sx={{ p: 2, bgcolor: 'background.paper', borderRadius: 1, mb: 2 }}>
+                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                  {selectedNoteForHistory.content}
+                </Typography>
+              </Box>
+              {selectedNoteForHistory.editHistory && selectedNoteForHistory.editHistory.length > 0 ? (
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom>
+                    Bearbeitungen:
+                  </Typography>
+                  {selectedNoteForHistory.editHistory.map((edit: any, index: number) => (
+                    <Card key={index} sx={{ mb: 2, p: 2 }}>
+                      <Typography variant="caption" color="text.secondary" gutterBottom>
+                        Bearbeitet am {format(new Date(edit.editedAt), 'dd.MM.yyyy HH:mm', { locale: de })}
+                        {edit.editedBy && typeof edit.editedBy === 'object' && (
+                          ` von ${edit.editedBy.firstName} ${edit.editedBy.lastName}`
+                        )}
+                      </Typography>
+                      {edit.changeReason && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                          Grund: {edit.changeReason}
+                        </Typography>
+                      )}
+                      <Box sx={{ mt: 1 }}>
+                        <Typography variant="caption" color="error.main" sx={{ display: 'block', mb: 0.5 }}>
+                          Vorheriger Inhalt:
+                        </Typography>
+                        <Box sx={{ p: 1, bgcolor: 'error.light', borderRadius: 0.5, mb: 1 }}>
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
+                            {edit.previousContent}
+                          </Typography>
+                        </Box>
+                        <Typography variant="caption" color="success.main" sx={{ display: 'block', mb: 0.5 }}>
+                          Neuer Inhalt:
+                        </Typography>
+                        <Box sx={{ p: 1, bgcolor: 'success.light', borderRadius: 0.5 }}>
+                          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', fontSize: '0.875rem' }}>
+                            {edit.newContent}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Card>
+                  ))}
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  Keine Bearbeitungen vorhanden
+                </Typography>
+              )}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => {
+            setNoteHistoryDialogOpen(false);
+            setSelectedNoteForHistory(null);
+          }}>
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>
@@ -6205,7 +6542,6 @@ const PatientOrganizer: React.FC = () => {
         } : undefined}
         patientDiagnoses={patientDiagnoses?.data || patientDiagnoses || []}
       />
-      </Box>
 
       {/* Medikamenten-Manager Dialog */}
       <Dialog

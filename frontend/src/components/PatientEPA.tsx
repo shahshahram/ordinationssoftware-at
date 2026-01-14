@@ -1684,7 +1684,9 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
       // Medikamente
       try {
-        const medicationsArray = Array.isArray(patientMedications) ? patientMedications : [];
+        const medicationsArray = Array.isArray(patientMedications) 
+          ? patientMedications.filter((med: any) => med.patientId === patientId)
+          : [];
         medicationsArray.forEach((medication: any) => {
           const medicationDate = new Date(medication.startDate || medication.createdAt || new Date());
           const statusText = medication.status === 'active' ? 'Aktiv' : 

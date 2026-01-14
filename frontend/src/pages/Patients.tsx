@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, loadMorePatients, createPatient, updatePatient, clearError, Patient } from '../store/slices/patientSlice';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
@@ -143,11 +143,32 @@ const Patients: React.FC = () => {
     notes: ''
   });
 
-  // Load patients from API
+  // Load patients from API - nur wenn noch nicht geladen
+  // WICHTIG: Keine Verzögerung wenn Daten bereits vorhanden - sofort rendern
   useEffect(() => {
+    // Prüfe ob Patienten bereits im Store sind - wenn ja, nichts tun
+    if (patients && patients.length > 0) {
+      return; // Patienten bereits vorhanden, keine Aktion nötig
+    }
+    
+    // Nur laden wenn wirklich keine Daten vorhanden sind
     dispatch(fetchPatients(1));
-    dispatch(fetchAppointments());
-  }, [dispatch]);
+  }, [dispatch]); // Nur dispatch als Dependency - vermeidet unnötige Re-Runs
+  
+  // Termine separat laden - verzögert, um Navigation zu beschleunigen
+  useEffect(() => {
+    // Prüfe ob Termine bereits im Store sind
+    if (appointments && appointments.length > 0) {
+      return; // Termine bereits vorhanden, keine Aktion nötig
+    }
+    
+    // Lade Termine asynchron nach Verzögerung, damit die Seite sofort angezeigt wird
+    const timeoutId = setTimeout(() => {
+      dispatch(fetchAppointments());
+    }, 1000);
+    
+    return () => clearTimeout(timeoutId);
+  }, [dispatch]); // Nur dispatch als Dependency
 
   // Reset scroll position when component mounts or when switching from other pages
   useEffect(() => {
@@ -280,89 +301,99 @@ const Patients: React.FC = () => {
     return fallbackDate;
   }, [appointments, lastVisitCache]);
 
-  // Lade letzte Besuche für alle Patienten asynchron
+  // Lade letzte Besuche für alle Patienten asynchron - VERZÖGERT, um initiales Rendering zu beschleunigen
   useEffect(() => {
-    const loadLastVisits = async () => {
-      if (!patients || patients.length === 0) return;
+    // Warte 500ms, damit die Seite zuerst gerendert wird
+    const timeoutId = setTimeout(() => {
+      const loadLastVisits = async () => {
+        if (!patients || patients.length === 0) return;
 
-      const visitPromises = patients.map(async (patient) => {
-        const patientId = patient._id || patient.id;
-        if (!patientId) return;
+        // Nur für die ersten 20 Patienten laden, um Performance zu verbessern
+        const patientsToProcess = patients.slice(0, 20);
 
-        // Prüfe ob bereits im Cache
-        if (lastVisitCache[patientId]) return;
+        const visitPromises = patientsToProcess.map(async (patient) => {
+          const patientId = patient._id || patient.id;
+          if (!patientId) return;
 
-        try {
-          const visitDates: Date[] = [];
+          // Prüfe ob bereits im Cache
+          if (lastVisitCache[patientId]) return;
 
-          // 1. Termine (bereits in Redux)
-          if (appointments && appointments.length > 0) {
-            const patientAppointments = appointments.filter((apt: Appointment) => {
-              const aptPatientId = typeof apt.patient === 'string' ? apt.patient : apt.patient?._id || apt.patient?.id;
-              return aptPatientId === patientId && apt.startTime;
-            });
-            
-            if (patientAppointments.length > 0) {
-              const lastAppointment = patientAppointments
-                .map(apt => new Date(apt.startTime))
-                .sort((a, b) => b.getTime() - a.getTime())[0];
-              visitDates.push(lastAppointment);
-            }
-          }
-
-          // 2. Letzter Dekurs-Eintrag
           try {
-            const dekursResponse: any = await api.get(`/dekurs/patient/${patientId}?limit=1`);
-            const dekursData = dekursResponse?.data || dekursResponse;
-            const dekursEntries = dekursData?.success ? dekursData.data : (Array.isArray(dekursData) ? dekursData : []);
-            if (dekursEntries && dekursEntries.length > 0 && dekursEntries[0].entryDate) {
-              visitDates.push(new Date(dekursEntries[0].entryDate));
-            }
-          } catch (dekursError) {
-            // Ignoriere Fehler
-          }
+            const visitDates: Date[] = [];
 
-          // 3. Letztes Dokument (Arztbrief oder Patientenbrief)
-          try {
-            const documentsResponse: any = await api.get(`/documents?patientId=${patientId}&limit=1`);
-            const documentsData = documentsResponse?.data || documentsResponse;
-            const documents = documentsData?.success ? documentsData.data : (Array.isArray(documentsData) ? documentsData : []);
-            if (documents && documents.length > 0) {
-              const lastDocument = documents
-                .filter((doc: any) => doc.type === 'arztbrief' || doc.type === 'patientenbrief' || doc.createdAt)
-                .map((doc: any) => new Date(doc.createdAt || doc.updatedAt))
-                .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0];
-              if (lastDocument) {
-                visitDates.push(lastDocument);
+            // 1. Termine (bereits in Redux) - sofort verfügbar
+            if (appointments && appointments.length > 0) {
+              const patientAppointments = appointments.filter((apt: Appointment) => {
+                const aptPatientId = typeof apt.patient === 'string' ? apt.patient : apt.patient?._id || apt.patient?.id;
+                return aptPatientId === patientId && apt.startTime;
+              });
+              
+              if (patientAppointments.length > 0) {
+                const lastAppointment = patientAppointments
+                  .map(apt => new Date(apt.startTime))
+                  .sort((a, b) => b.getTime() - a.getTime())[0];
+                visitDates.push(lastAppointment);
               }
             }
-          } catch (docError) {
-            // Ignoriere Fehler
-          }
 
-          // 4. Letzter Arztbesuch (aus PatientDataHistory oder MedicalDataHistory)
-          // Dies könnte später hinzugefügt werden, wenn die API verfügbar ist
+            // 2-4. Weitere Daten nur laden, wenn keine Termine gefunden wurden (Performance-Optimierung)
+            if (visitDates.length === 0) {
+              // 2. Letzter Dekurs-Eintrag
+              try {
+                const dekursResponse: any = await api.get(`/dekurs/patient/${patientId}?limit=1`);
+                const dekursData = dekursResponse?.data || dekursResponse;
+                const dekursEntries = dekursData?.success ? dekursData.data : (Array.isArray(dekursData) ? dekursData : []);
+                if (dekursEntries && dekursEntries.length > 0 && dekursEntries[0].entryDate) {
+                  visitDates.push(new Date(dekursEntries[0].entryDate));
+                }
+              } catch (dekursError) {
+                // Ignoriere Fehler
+              }
 
-          // Bestimme das neueste Datum
-          if (visitDates.length > 0) {
-            const lastVisit = visitDates.sort((a, b) => b.getTime() - a.getTime())[0];
-            setLastVisitCache(prev => ({ ...prev, [patientId]: lastVisit }));
-          } else {
-            // Fallback: Nutze createdAt
+              // 3. Letztes Dokument (nur wenn noch kein Datum gefunden)
+              if (visitDates.length === 0) {
+                try {
+                  const documentsResponse: any = await api.get(`/documents?patientId=${patientId}&limit=1`);
+                  const documentsData = documentsResponse?.data || documentsResponse;
+                  const documents = documentsData?.success ? documentsData.data : (Array.isArray(documentsData) ? documentsData : []);
+                  if (documents && documents.length > 0) {
+                    const lastDocument = documents
+                      .filter((doc: any) => doc.type === 'arztbrief' || doc.type === 'patientenbrief' || doc.createdAt)
+                      .map((doc: any) => new Date(doc.createdAt || doc.updatedAt))
+                      .sort((a: Date, b: Date) => b.getTime() - a.getTime())[0];
+                    if (lastDocument) {
+                      visitDates.push(lastDocument);
+                    }
+                  }
+                } catch (docError) {
+                  // Ignoriere Fehler
+                }
+              }
+            }
+
+            // Bestimme das neueste Datum
+            if (visitDates.length > 0) {
+              const lastVisit = visitDates.sort((a, b) => b.getTime() - a.getTime())[0];
+              setLastVisitCache(prev => ({ ...prev, [patientId]: lastVisit }));
+            } else {
+              // Fallback: Nutze createdAt
+              const fallbackDate = patient.createdAt ? new Date(patient.createdAt) : new Date(0);
+              setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
+            }
+          } catch (error) {
+            // Bei Fehler: Nutze createdAt als Fallback
             const fallbackDate = patient.createdAt ? new Date(patient.createdAt) : new Date(0);
             setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
           }
-        } catch (error) {
-          // Bei Fehler: Nutze createdAt als Fallback
-          const fallbackDate = patient.createdAt ? new Date(patient.createdAt) : new Date(0);
-          setLastVisitCache(prev => ({ ...prev, [patientId]: fallbackDate }));
-        }
-      });
+        });
 
-      await Promise.allSettled(visitPromises);
-    };
+        await Promise.allSettled(visitPromises);
+      };
 
-    loadLastVisits();
+      loadLastVisits();
+    }, 500); // 500ms Verzögerung für initiales Rendering
+
+    return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [patients, appointments]);
 
@@ -628,7 +659,8 @@ const Patients: React.FC = () => {
     // Sicherstellen, dass patients ein Array ist
     const patientsArray = Array.isArray(patients) ? patients : [];
     
-    console.log(`🔍 Filtering ${patientsArray.length} patients with activeFilters:`, activeFilters);
+    // Debug-Logging entfernt für bessere Performance
+    // console.log(`🔍 Filtering ${patientsArray.length} patients with activeFilters:`, activeFilters);
     
     let filtered = patientsArray.filter(patient => {
       // Search filter - verbesserte Suche mit Leerzeichen-Behandlung
@@ -662,10 +694,10 @@ const Patients: React.FC = () => {
           (patient.address?.city?.toLowerCase().includes(normalizedSearchTerm) || false) ||
           (patient.address?.zipCode?.includes(searchTerm) || false);
 
-        // Debug-Logging für Entwicklung
-        if (process.env.NODE_ENV === 'development' && searchTerm && matchesSearch) {
-          console.log(`🔍 Patient gefunden: ${patient.firstName} ${patient.lastName} für Suchbegriff: "${searchTerm}"`);
-        }
+        // Debug-Logging entfernt für bessere Performance
+        // if (process.env.NODE_ENV === 'development' && searchTerm && matchesSearch) {
+        //   console.log(`🔍 Patient gefunden: ${patient.firstName} ${patient.lastName} für Suchbegriff: "${searchTerm}"`);
+        // }
       }
 
       // Quick filters - Patient must match at least one active filter (OR logic)
@@ -705,14 +737,6 @@ const Patients: React.FC = () => {
               
               const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
               matches = createdDate > fiveDaysAgo;
-              
-              console.log(`🔍 Neu Patienten Filter für ${patient.firstName} ${patient.lastName}:`, {
-                createdAt: patient.createdAt,
-                _id: patient._id,
-                createdDate: createdDate.toISOString(),
-                fiveDaysAgo: fiveDaysAgo.toISOString(),
-                matches
-              });
               break;
             case 'active':
               matches = patient.status === 'aktiv' || patient.status === 'active';
@@ -732,7 +756,8 @@ const Patients: React.FC = () => {
           
           // Debug logging
           if (process.env.NODE_ENV === 'development') {
-            console.log(`🔍 Filter "${filter}" für Patient ${patient.firstName} ${patient.lastName}: ${matches}`);
+            // Debug-Logging entfernt
+            // console.log(`🔍 Filter "${filter}" für Patient ${patient.firstName} ${patient.lastName}: ${matches}`);
           }
           
           return matches;
@@ -743,7 +768,8 @@ const Patients: React.FC = () => {
       
       // Debug logging
       if (process.env.NODE_ENV === 'development' && activeFilters.length > 0) {
-        console.log(`🔍 Patient ${patient.firstName} ${patient.lastName}: search=${matchesSearch}, filters=${matchesFilters}, show=${shouldShow}`);
+        // Debug-Logging entfernt
+        // console.log(`🔍 Patient ${patient.firstName} ${patient.lastName}: search=${matchesSearch}, filters=${matchesFilters}, show=${shouldShow}`);
       }
       
       return shouldShow;
@@ -778,12 +804,14 @@ const Patients: React.FC = () => {
 
   // Filter handlers
   const handleFilterToggle = (filterId: string) => {
-    console.log(`🔍 Toggling filter: ${filterId}`);
+    // Debug-Logging entfernt
+    // console.log(`🔍 Toggling filter: ${filterId}`);
     setActiveFilters(prev => {
       const newFilters = prev.includes(filterId) 
         ? prev.filter(f => f !== filterId)
         : [...prev, filterId];
-      console.log(`🔍 New active filters:`, newFilters);
+      // Debug-Logging entfernt
+      // console.log(`🔍 New active filters:`, newFilters);
       return newFilters;
     });
   };

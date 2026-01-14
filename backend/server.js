@@ -86,6 +86,7 @@ const messageFoldersRoutes = require('./routes/messageFolders');
 const vitalSignsRoutes = require('./routes/vitalSigns');
 const medicalDataHistoryRoutes = require('./routes/medicalDataHistory');
 const patientDataHistoryRoutes = require('./routes/patientDataHistory');
+const patientNotesRoutes = require('./routes/patientNotes');
 const laborRoutes = require('./routes/labor');
 const tasksRoutes = require('./routes/tasks');
 const timeBlocksRoutes = require('./routes/timeBlocks');
@@ -343,8 +344,9 @@ function registerStaticRoutes(app) {
   app.use('/api/internal-messages', internalMessagesRoutes);
   app.use('/api/message-folders', messageFoldersRoutes);
   app.use('/api/vital-signs', vitalSignsRoutes);
-app.use('/api/medical-data-history', medicalDataHistoryRoutes);
+  app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/patient-data-history', patientDataHistoryRoutes);
+  app.use('/api/patient-notes', patientNotesRoutes);
   app.use('/api/labor', laborRoutes);
   app.use('/api/tasks', tasksRoutes);
   app.use('/api/time-blocks', timeBlocksRoutes);
