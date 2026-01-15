@@ -1778,6 +1778,17 @@ const Patients: React.FC = () => {
                   <Select
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value as any)}
+                    MenuProps={{
+                      // Verhindere aria-hidden Warnung
+                      disablePortal: false,
+                      PaperProps: {
+                        sx: {
+                          '& .MuiMenuItem-root:focus': {
+                            outline: 'none',
+                          }
+                        }
+                      }
+                    }}
                     sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
                   >
                     <MenuItem value="name" sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}>Name</MenuItem>

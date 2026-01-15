@@ -177,6 +177,7 @@ interface ServiceCatalog {
   online_bookable: boolean;
   price?: number; // Preis in Euro
   price_cents?: number; // Legacy: Für Backward Compatibility
+  taxRate?: number | null; // Umsatzsteuer in Prozent (null = automatische Logik)
   billing_code?: string;
   notes?: string;
   is_active: boolean;
@@ -220,12 +221,14 @@ interface ServiceCatalog {
   };
   wahlarzt?: {
     price?: number;
+    priceType?: 'netto' | 'brutto';
     reimbursementRate?: number;
     maxReimbursement?: number;
     requiresPreApproval?: boolean;
   };
   private?: {
     price?: number;
+    priceType?: 'netto' | 'brutto';
     noInsurance?: boolean;
   };
   copay?: {
@@ -370,6 +373,7 @@ const ServiceCatalog: React.FC = () => {
     }>,
     price: 0, // Preis in Euro
     price_cents: 0, // Legacy: Für Backward Compatibility
+    taxRate: null as number | null, // Umsatzsteuer in Prozent (null = automatische Logik)
     billing_code: '',
     notes: '',
     is_active: true,
@@ -396,12 +400,14 @@ const ServiceCatalog: React.FC = () => {
     },
     wahlarzt: {
       price: 0,
+      priceType: 'netto' as 'netto' | 'brutto',
       reimbursementRate: 80,
       maxReimbursement: 0,
       requiresPreApproval: false
     },
     private: {
       price: 0,
+      priceType: 'netto' as 'netto' | 'brutto',
       noInsurance: true
     },
     copay: {
@@ -726,6 +732,7 @@ const ServiceCatalog: React.FC = () => {
       max_waitlist: 0,
       price: 0, // Preis in Euro
       price_cents: 0, // Legacy: Für Backward Compatibility
+      taxRate: null, // Umsatzsteuer in Prozent (null = automatische Logik)
       billing_code: '',
       notes: '',
       is_active: true,
@@ -752,12 +759,14 @@ const ServiceCatalog: React.FC = () => {
       },
       wahlarzt: {
         price: 0,
+        priceType: 'netto' as 'netto' | 'brutto',
         reimbursementRate: 0.80,
         maxReimbursement: 0,
         requiresPreApproval: false
       },
       private: {
         price: 0,
+        priceType: 'netto' as 'netto' | 'brutto',
         noInsurance: true
       },
       copay: {
@@ -845,6 +854,7 @@ const ServiceCatalog: React.FC = () => {
       anamnesisQuestions: (service as any).anamnesisQuestions || [],
       price: service.price !== undefined && service.price !== null ? service.price : (service.price_cents ? service.price_cents / 100 : 0),
       price_cents: service.price_cents || (service.price ? Math.round(service.price * 100) : 0),
+      taxRate: (service as any).taxRate !== undefined ? (service as any).taxRate : null,
       billing_code: service.billing_code || '',
       notes: service.notes || '',
       is_active: service.is_active,
@@ -857,9 +867,9 @@ const ServiceCatalog: React.FC = () => {
         // Neue korrekte Felder
         khoCode: service.ogk?.khoCode || service.ogk?.ebmCode || '',
         khoPrice: service.ogk?.khoPrice !== undefined && service.ogk?.khoPrice !== null
-          ? (service.ogk.khoPrice > 1000 ? service.ogk.khoPrice / 100 : service.ogk.khoPrice)
+          ? service.ogk.khoPrice // ALLE PREISE SIND BEREITS IN EURO!
           : (service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
-            ? (service.ogk.ebmPrice > 1000 ? service.ogk.ebmPrice / 100 : service.ogk.ebmPrice)
+            ? service.ogk.ebmPrice // ALLE PREISE SIND BEREITS IN EURO!
             : 0),
         khoGroup: service.ogk?.khoGroup || service.ogk?.ebmGroup || '',
         khoSubGroup: service.ogk?.khoSubGroup || service.ogk?.ebmSubGroup || '',
@@ -868,9 +878,9 @@ const ServiceCatalog: React.FC = () => {
         // Legacy-Felder für Backward Compatibility
         ebmCode: service.ogk?.khoCode || service.ogk?.ebmCode || '',
         ebmPrice: service.ogk?.khoPrice !== undefined && service.ogk?.khoPrice !== null
-          ? (service.ogk.khoPrice > 1000 ? service.ogk.khoPrice / 100 : service.ogk.khoPrice)
+          ? service.ogk.khoPrice // ALLE PREISE SIND BEREITS IN EURO!
           : (service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
-            ? (service.ogk.ebmPrice > 1000 ? service.ogk.ebmPrice / 100 : service.ogk.ebmPrice)
+            ? service.ogk.ebmPrice // ALLE PREISE SIND BEREITS IN EURO!
             : 0),
         ebmGroup: service.ogk?.khoGroup || service.ogk?.ebmGroup || '',
         ebmSubGroup: service.ogk?.khoSubGroup || service.ogk?.ebmSubGroup || '',
@@ -878,25 +888,21 @@ const ServiceCatalog: React.FC = () => {
         billingFrequency: service.ogk?.billingFrequency || 'once'
       },
       wahlarzt: {
-        price: service.wahlarzt?.price !== undefined && service.wahlarzt?.price !== null
-          ? (service.wahlarzt.price > 1000 ? service.wahlarzt.price / 100 : service.wahlarzt.price)
-          : 0,
+        price: service.wahlarzt?.price !== undefined && service.wahlarzt?.price !== null ? service.wahlarzt.price : 0, // ALLE PREISE SIND BEREITS IN EURO!
+        priceType: service.wahlarzt?.priceType || 'netto',
         reimbursementRate: service.wahlarzt?.reimbursementRate || 80,
-        maxReimbursement: service.wahlarzt?.maxReimbursement !== undefined && service.wahlarzt?.maxReimbursement !== null
-          ? (service.wahlarzt.maxReimbursement > 1000 ? service.wahlarzt.maxReimbursement / 100 : service.wahlarzt.maxReimbursement)
-          : 0,
+        maxReimbursement: service.wahlarzt?.maxReimbursement !== undefined && service.wahlarzt?.maxReimbursement !== null ? service.wahlarzt.maxReimbursement : 0, // ALLE PREISE SIND BEREITS IN EURO!
         requiresPreApproval: service.wahlarzt?.requiresPreApproval || false
       },
       private: {
-        price: service.private?.price !== undefined && service.private?.price !== null
-          ? (service.private.price > 1000 ? service.private.price / 100 : service.private.price)
-          : 0,
+        price: service.private?.price !== undefined && service.private?.price !== null ? service.private.price : 0, // ALLE PREISE SIND BEREITS IN EURO!
+        priceType: service.private?.priceType || 'netto',
         noInsurance: service.private?.noInsurance ?? true
       },
       copay: {
         applicable: service.copay?.applicable ?? true,
         amount: service.copay?.amount !== undefined && service.copay?.amount !== null
-          ? (service.copay.amount > 1000 ? service.copay.amount / 100 : service.copay.amount)
+          ? service.copay.amount // ALLE PREISE SIND BEREITS IN EURO!
           : 0,
         percentage: service.copay?.percentage || 10,
         maxAmount: service.copay?.maxAmount || 28.50,
@@ -1020,11 +1026,11 @@ const ServiceCatalog: React.FC = () => {
 
   // Helper-Funktion: Konvertiert Wert zu Euro (automatische Erkennung)
   // Wenn Wert > 100000, wird angenommen, dass es in Cent ist (alte Daten)
-  // Normale Preise in Euro sind meist < 100000
+  // ALLE PREISE SIND BEREITS IN EURO - KEINE KONVERTIERUNG MEHR!
   const toEuro = (value: number | undefined | null): number => {
     if (!value && value !== 0) return 0;
-    // Wenn Wert sehr groß ist (> 100000), ist es wahrscheinlich in Cent (alte Daten)
-    return value > 100000 ? value / 100 : value;
+    // Alle Preise sind bereits in Euro - keine Konvertierung mehr!
+    return value;
   };
 
   const formatPrice = (price?: number) => {
@@ -1982,9 +1988,9 @@ const ServiceCatalog: React.FC = () => {
                         type="number"
                         inputProps={{ step: "0.01" }}
                         value={formData.ogk?.khoPrice !== undefined && formData.ogk?.khoPrice !== null && formData.ogk?.khoPrice !== 0
-                          ? (formData.ogk.khoPrice > 1000 ? formData.ogk.khoPrice / 100 : formData.ogk.khoPrice)
+                          ? formData.ogk.khoPrice // ALLE PREISE SIND BEREITS IN EURO!
                           : (formData.ogk?.ebmPrice !== undefined && formData.ogk?.ebmPrice !== null && formData.ogk?.ebmPrice !== 0
-                            ? (formData.ogk.ebmPrice > 1000 ? formData.ogk.ebmPrice / 100 : formData.ogk.ebmPrice)
+                            ? formData.ogk.ebmPrice // ALLE PREISE SIND BEREITS IN EURO!
                             : '')}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
@@ -2077,13 +2083,30 @@ const ServiceCatalog: React.FC = () => {
                       Wahlarzt
                     </Typography>
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
+                      <FormControl fullWidth>
+                        <InputLabel>Preis-Typ</InputLabel>
+                        <Select
+                          value={formData.wahlarzt?.priceType || 'netto'}
+                          onChange={(e) => {
+                            const priceType = e.target.value as 'netto' | 'brutto';
+                            setFormData({ 
+                              ...formData, 
+                              wahlarzt: { ...formData.wahlarzt, priceType }
+                            });
+                          }}
+                          label="Preis-Typ"
+                        >
+                          <MenuItem value="netto">Netto</MenuItem>
+                          <MenuItem value="brutto">Brutto</MenuItem>
+                        </Select>
+                      </FormControl>
                       <TextField
                         fullWidth
-                        label="Preis (Euro)"
+                        label={`Preis (${formData.wahlarzt?.priceType === 'brutto' ? 'Brutto' : 'Netto'}) in Euro`}
                         type="number"
                         inputProps={{ step: "0.01" }}
                         value={formData.wahlarzt?.price !== undefined && formData.wahlarzt?.price !== null && formData.wahlarzt?.price !== 0
-                          ? (formData.wahlarzt.price > 1000 ? formData.wahlarzt.price / 100 : formData.wahlarzt.price)
+                          ? formData.wahlarzt.price
                           : ''}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
@@ -2092,6 +2115,17 @@ const ServiceCatalog: React.FC = () => {
                             wahlarzt: { ...formData.wahlarzt, price: euroValue }
                           });
                         }}
+                        helperText={(() => {
+                          if (!formData.wahlarzt?.price || formData.wahlarzt.price === 0) return '';
+                          const taxRate = formData.taxRate !== null && formData.taxRate !== undefined ? formData.taxRate : 20;
+                          if (formData.wahlarzt.priceType === 'netto') {
+                            const brutto = formData.wahlarzt.price * (1 + taxRate / 100);
+                            return `Brutto: ${brutto.toFixed(2)} € (inkl. ${taxRate}% USt)`;
+                          } else {
+                            const netto = formData.wahlarzt.price / (1 + taxRate / 100);
+                            return `Netto: ${netto.toFixed(2)} € (exkl. ${taxRate}% USt)`;
+                          }
+                        })()}
                       />
                       <TextField
                         fullWidth
@@ -2109,7 +2143,7 @@ const ServiceCatalog: React.FC = () => {
                         type="number"
                         inputProps={{ step: "0.01" }}
                         value={formData.wahlarzt?.maxReimbursement !== undefined && formData.wahlarzt?.maxReimbursement !== null && formData.wahlarzt?.maxReimbursement !== 0
-                          ? (formData.wahlarzt.maxReimbursement > 1000 ? formData.wahlarzt.maxReimbursement / 100 : formData.wahlarzt.maxReimbursement)
+                          ? formData.wahlarzt.maxReimbursement
                           : ''}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
@@ -2142,13 +2176,30 @@ const ServiceCatalog: React.FC = () => {
                       Privatärztlich
                     </Typography>
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
+                      <FormControl fullWidth>
+                        <InputLabel>Preis-Typ</InputLabel>
+                        <Select
+                          value={formData.private?.priceType || 'netto'}
+                          onChange={(e) => {
+                            const priceType = e.target.value as 'netto' | 'brutto';
+                            setFormData({ 
+                              ...formData, 
+                              private: { ...formData.private, priceType }
+                            });
+                          }}
+                          label="Preis-Typ"
+                        >
+                          <MenuItem value="netto">Netto</MenuItem>
+                          <MenuItem value="brutto">Brutto</MenuItem>
+                        </Select>
+                      </FormControl>
                       <TextField
                         fullWidth
-                        label="Preis (Euro)"
+                        label={`Preis (${formData.private?.priceType === 'brutto' ? 'Brutto' : 'Netto'}) in Euro`}
                         type="number"
                         inputProps={{ step: "0.01" }}
                         value={formData.private?.price !== undefined && formData.private?.price !== null && formData.private?.price !== 0
-                          ? (formData.private.price > 1000 ? formData.private.price / 100 : formData.private.price)
+                          ? formData.private.price
                           : ''}
                         onChange={(e) => {
                           const euroValue = parseFloat(e.target.value) || 0;
@@ -2157,6 +2208,17 @@ const ServiceCatalog: React.FC = () => {
                             private: { ...formData.private, price: euroValue }
                           });
                         }}
+                        helperText={(() => {
+                          if (!formData.private?.price || formData.private.price === 0) return '';
+                          const taxRate = formData.taxRate !== null && formData.taxRate !== undefined ? formData.taxRate : 20;
+                          if (formData.private.priceType === 'netto') {
+                            const brutto = formData.private.price * (1 + taxRate / 100);
+                            return `Brutto: ${brutto.toFixed(2)} € (inkl. ${taxRate}% USt)`;
+                          } else {
+                            const netto = formData.private.price / (1 + taxRate / 100);
+                            return `Netto: ${netto.toFixed(2)} € (exkl. ${taxRate}% USt)`;
+                          }
+                        })()}
                       />
                       <FormControlLabel
                         control={
@@ -2173,6 +2235,39 @@ const ServiceCatalog: React.FC = () => {
                     </Box>
                   </Box>
                 )}
+
+                {/* Umsatzsteuer */}
+                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Umsatzsteuer (USt)
+                  </Typography>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
+                    <TextField
+                      fullWidth
+                      label="Umsatzsteuer (%)"
+                      type="number"
+                      inputProps={{ min: 0, max: 100, step: "0.1" }}
+                      value={formData.taxRate !== null && formData.taxRate !== undefined ? formData.taxRate : ''}
+                      onChange={(e) => {
+                        const value = e.target.value === '' ? null : parseFloat(e.target.value);
+                        setFormData({ 
+                          ...formData, 
+                          taxRate: value
+                        });
+                      }}
+                      helperText={formData.taxRate === null || formData.taxRate === undefined 
+                        ? "Leer lassen für automatische Logik: Kassenarzt = 0%, Wahlarzt/Privat = 20%"
+                        : "Explizite Umsatzsteuer für diese Leistung"}
+                    />
+                    <Box sx={{ display: 'flex', alignItems: 'center', mt: 2 }}>
+                      <Typography variant="body2" color="text.secondary">
+                        {formData.taxRate === null || formData.taxRate === undefined 
+                          ? "Automatisch: Kassenarzt = 0%, Wahlarzt/Privat = 20%"
+                          : `Festgelegt: ${formData.taxRate}%`}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </Box>
 
                 {/* Selbstbehalt */}
                 <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, p: 2 }}>
@@ -2198,7 +2293,7 @@ const ServiceCatalog: React.FC = () => {
                       type="number"
                       inputProps={{ step: "0.01" }}
                       value={formData.copay?.amount !== undefined && formData.copay?.amount !== null && formData.copay?.amount !== 0
-                        ? (formData.copay.amount > 1000 ? formData.copay.amount / 100 : formData.copay.amount)
+                        ? formData.copay.amount // ALLE PREISE SIND BEREITS IN EURO!
                         : ''}
                       onChange={(e) => {
                         const euroValue = parseFloat(e.target.value) || 0;

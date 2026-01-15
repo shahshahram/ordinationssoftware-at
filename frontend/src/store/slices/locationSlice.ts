@@ -46,6 +46,14 @@ export interface LocationOnlineBookingConfig {
   autoConfirmKnownPatients?: boolean;
 }
 
+export interface BankAccount {
+  iban?: string;
+  bic?: string;
+  bankName?: string;
+  accountHolder?: string;
+  isDefault?: boolean;
+}
+
 export interface LocationOwner {
   title?: string;
   firstName?: string;
@@ -57,6 +65,9 @@ export interface LocationOwner {
   phone?: string;
   email?: string;
   website?: string;
+  taxNumber?: string;
+  uidNumber?: string;
+  bankAccounts?: BankAccount[];
 }
 
 export interface LocationLogo {

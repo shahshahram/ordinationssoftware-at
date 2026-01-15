@@ -56,20 +56,28 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
   
   // Lade unreadCount beim Mount und alle 30 Sekunden
   useEffect(() => {
+    // Prüfe, ob User authentifiziert ist, bevor unreadCount geladen wird
+    if (!user) {
+      return;
+    }
+    
     // Warte kurz, damit der User-Token gesetzt ist
     const timer = setTimeout(() => {
       dispatch(fetchUnreadCount());
     }, 1000);
     
     const interval = setInterval(() => {
-      dispatch(fetchUnreadCount());
+      // Prüfe erneut, ob User noch authentifiziert ist
+      if (user) {
+        dispatch(fetchUnreadCount());
+      }
     }, 30000); // Alle 30 Sekunden aktualisieren (reduziert von 10 Sekunden)
     
     return () => {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, [dispatch]);
+  }, [dispatch, user]);
 
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -184,6 +192,19 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
                 value={currentLocation._id}
                 onChange={(e) => handleLocationChange(e.target.value)}
                 displayEmpty
+                MenuProps={{
+                  // Verhindere aria-hidden Warnung: Menu wird nicht auf Root-Element gesetzt
+                  disablePortal: false,
+                  // Stelle sicher, dass MenuProps korrekt gesetzt werden
+                  PaperProps: {
+                    sx: {
+                      // Verhindere aria-hidden auf fokussierten Elementen
+                      '& .MuiMenuItem-root:focus': {
+                        outline: 'none',
+                      }
+                    }
+                  }
+                }}
                 sx={{
                   '& .MuiSelect-select': {
                     display: 'flex',

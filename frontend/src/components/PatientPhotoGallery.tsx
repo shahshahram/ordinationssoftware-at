@@ -1084,6 +1084,19 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
             });
               }
             
+            // Sortiere Fotos innerhalb jedes Ordners nach Datum (neueste zuerst)
+            Object.keys(groupedPhotos).forEach((folderName) => {
+              groupedPhotos[folderName].sort((a, b) => {
+                try {
+                  const dateA = new Date(a.uploadedAt).getTime();
+                  const dateB = new Date(b.uploadedAt).getTime();
+                  return dateB - dateA; // Neueste zuerst
+                } catch {
+                  return 0;
+                }
+              });
+            });
+            
             // Sortiere Ordner nach Datum (neueste zuerst)
             const sortedFolders = Object.keys(groupedPhotos).sort((a, b) => {
                 try {
@@ -1275,7 +1288,18 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                       Weitere Fotos
                     </Typography>
                     <Divider sx={{ mb: 2 }} />
-                    {renderPhotoGrid(ungroupedPhotos)}
+                    {renderPhotoGrid(
+                      // Sortiere ungruppierte Fotos nach Datum (neueste zuerst)
+                      [...ungroupedPhotos].sort((a, b) => {
+                        try {
+                          const dateA = new Date(a.uploadedAt).getTime();
+                          const dateB = new Date(b.uploadedAt).getTime();
+                          return dateB - dateA; // Neueste zuerst
+                        } catch {
+                          return 0;
+                        }
+                      })
+                    )}
                   </Box>
                 )}
               </Stack>

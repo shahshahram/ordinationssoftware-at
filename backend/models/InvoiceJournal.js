@@ -89,7 +89,7 @@ const InvoiceJournalSchema = new mongoose.Schema({
   // Zahlungsstatus (Snapshot)
   status: {
     type: String,
-    enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'],
+    enum: ['draft', 'pending', 'sent', 'paid', 'overdue', 'cancelled'],
     required: true
   },
   

@@ -199,13 +199,15 @@ const setCorsHeaders = (req, res, next) => {
   next();
 };
 
-// Special route handler for image files to ensure CORS headers are always set
-// This must come BEFORE express.static to intercept image requests
+// Special route handler for image files and PDFs to ensure CORS headers and correct Content-Type are always set
+// This must come BEFORE express.static to intercept file requests
 const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+const pdfExtension = '.pdf';
 app.get('/uploads/*', (req, res, next) => {
   const isImage = imageExtensions.some(ext => req.path.toLowerCase().endsWith(ext));
+  const isPdf = req.path.toLowerCase().endsWith(pdfExtension);
   
-  if (isImage) {
+  if (isImage || isPdf) {
     const filePath = path.join(__dirname, 'uploads', req.path.replace('/uploads/', ''));
     
     // Check if file exists
@@ -229,7 +231,10 @@ app.get('/uploads/*', (req, res, next) => {
     res.setHeader('Expires', '0');
     
     // Set proper content type
-    if (filePath.endsWith('.png')) {
+    if (isPdf) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+    } else if (filePath.endsWith('.png')) {
       res.setHeader('Content-Type', 'image/png');
     } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
       res.setHeader('Content-Type', 'image/jpeg');
@@ -248,7 +253,7 @@ app.get('/uploads/*', (req, res, next) => {
 
 app.use('/uploads', setCorsHeaders);
 
-// Serve static files with CORS headers (fallback for non-image files)
+// Serve static files with CORS headers (fallback for non-image/non-PDF files)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   setHeaders: (res, filePath, stat) => {
     // Set CORS headers for all static files
@@ -259,6 +264,12 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
     }
     res.setHeader('Access-Control-Allow-Credentials', 'true');
+    
+    // Set Content-Type for PDFs (fallback if not handled by the route handler above)
+    if (filePath.toLowerCase().endsWith('.pdf')) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+    }
   }
 }));
 

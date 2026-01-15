@@ -166,7 +166,16 @@ const LocationManagement: React.FC = () => {
       licenseNumber: '',
       phone: '',
       email: '',
-      website: ''
+      website: '',
+      taxNumber: '',
+      uidNumber: '',
+      bankAccounts: [] as Array<{
+        iban: string;
+        bic: string;
+        bankName: string;
+        accountHolder: string;
+        isDefault: boolean;
+      }>
     } as LocationOwner,
     logo: null as any,
     billing: {
@@ -385,7 +394,10 @@ const LocationManagement: React.FC = () => {
           licenseNumber: location.owner.licenseNumber || '',
           phone: location.owner.phone || '',
           email: location.owner.email || '',
-          website: location.owner.website || ''
+          website: location.owner.website || '',
+          taxNumber: location.owner.taxNumber || '',
+          uidNumber: location.owner.uidNumber || '',
+          bankAccounts: location.owner.bankAccounts || []
         } : {
           title: '',
           firstName: '',
@@ -1991,6 +2003,156 @@ const LocationManagement: React.FC = () => {
                       })}
                       placeholder="https://..."
                     />
+                    <TextField
+                      fullWidth
+                      label="Steuernummer"
+                      value={locationForm.owner.taxNumber || ''}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, taxNumber: e.target.value }
+                      })}
+                      placeholder="z.B. 12/345/6789"
+                    />
+                    <TextField
+                      fullWidth
+                      label="UID-Nummer"
+                      value={locationForm.owner.uidNumber || ''}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        owner: { ...locationForm.owner, uidNumber: e.target.value }
+                      })}
+                      placeholder="z.B. ATU12345678"
+                      helperText="Wird in Rechnungen verwendet"
+                    />
+                  </Box>
+                  
+                  {/* Bankverbindungen */}
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="h6" gutterBottom>
+                      Bankverbindungen
+                    </Typography>
+                    {locationForm.owner.bankAccounts?.map((account, index) => (
+                      <Box key={index} sx={{ mb: 2, p: 2, border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                          <Typography variant="subtitle2">Bankverbindung {index + 1}</Typography>
+                          <Box>
+                            <FormControlLabel
+                              control={
+                                <Switch
+                                  checked={account.isDefault || false}
+                                  onChange={(e) => {
+                                    const newAccounts = [...(locationForm.owner.bankAccounts || [])];
+                                    newAccounts[index].isDefault = e.target.checked;
+                                    // Wenn als Standard gesetzt, alle anderen deaktivieren
+                                    if (e.target.checked) {
+                                      newAccounts.forEach((acc, i) => {
+                                        if (i !== index) acc.isDefault = false;
+                                      });
+                                    }
+                                    setLocationForm({
+                                      ...locationForm,
+                                      owner: { ...locationForm.owner, bankAccounts: newAccounts }
+                                    });
+                                  }}
+                                />
+                              }
+                              label="Standard"
+                            />
+                            <IconButton
+                              size="small"
+                              onClick={() => {
+                                const newAccounts = locationForm.owner.bankAccounts?.filter((_, i) => i !== index) || [];
+                                setLocationForm({
+                                  ...locationForm,
+                                  owner: { ...locationForm.owner, bankAccounts: newAccounts }
+                                });
+                              }}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Box>
+                        </Box>
+                        <TextField
+                          fullWidth
+                          label="IBAN"
+                          value={account.iban || ''}
+                          onChange={(e) => {
+                            const newAccounts = [...(locationForm.owner.bankAccounts || [])];
+                            newAccounts[index].iban = e.target.value;
+                            setLocationForm({
+                              ...locationForm,
+                              owner: { ...locationForm.owner, bankAccounts: newAccounts }
+                            });
+                          }}
+                          sx={{ mb: 2 }}
+                          placeholder="AT61 1904 3002 3457 3201"
+                        />
+                        <TextField
+                          fullWidth
+                          label="BIC"
+                          value={account.bic || ''}
+                          onChange={(e) => {
+                            const newAccounts = [...(locationForm.owner.bankAccounts || [])];
+                            newAccounts[index].bic = e.target.value;
+                            setLocationForm({
+                              ...locationForm,
+                              owner: { ...locationForm.owner, bankAccounts: newAccounts }
+                            });
+                          }}
+                          sx={{ mb: 2 }}
+                          placeholder="z.B. RZBAATWW"
+                        />
+                        <TextField
+                          fullWidth
+                          label="Bankname"
+                          value={account.bankName || ''}
+                          onChange={(e) => {
+                            const newAccounts = [...(locationForm.owner.bankAccounts || [])];
+                            newAccounts[index].bankName = e.target.value;
+                            setLocationForm({
+                              ...locationForm,
+                              owner: { ...locationForm.owner, bankAccounts: newAccounts }
+                            });
+                          }}
+                          sx={{ mb: 2 }}
+                          placeholder="z.B. Raiffeisenbank"
+                        />
+                        <TextField
+                          fullWidth
+                          label="Kontoinhaber"
+                          value={account.accountHolder || ''}
+                          onChange={(e) => {
+                            const newAccounts = [...(locationForm.owner.bankAccounts || [])];
+                            newAccounts[index].accountHolder = e.target.value;
+                            setLocationForm({
+                              ...locationForm,
+                              owner: { ...locationForm.owner, bankAccounts: newAccounts }
+                            });
+                          }}
+                          placeholder="Name des Kontoinhabers"
+                        />
+                      </Box>
+                    ))}
+                    <Button
+                      variant="outlined"
+                      startIcon={<AddIcon />}
+                      onClick={() => {
+                        const newAccounts = [...(locationForm.owner.bankAccounts || []), {
+                          iban: '',
+                          bic: '',
+                          bankName: '',
+                          accountHolder: '',
+                          isDefault: locationForm.owner.bankAccounts?.length === 0
+                        }];
+                        setLocationForm({
+                          ...locationForm,
+                          owner: { ...locationForm.owner, bankAccounts: newAccounts }
+                        });
+                      }}
+                      sx={{ mt: 1 }}
+                    >
+                      Bankverbindung hinzufügen
+                    </Button>
                   </Box>
                 </Box>
               </AccordionDetails>

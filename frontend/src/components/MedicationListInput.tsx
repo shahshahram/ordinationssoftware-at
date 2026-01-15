@@ -33,10 +33,12 @@ interface MedicationListInputProps {
 // Hilfsfunktion: Konvertiert Medication in das erwartete Format
 export const convertMedicationToPatientFormat = (
   medication: Medication | string
-): string | { name: string; dosage: string; frequency: string; startDate?: string; prescribedBy?: string } => {
+): string | { name: string; dosage: string; frequency: string; startDate?: string; prescribedBy?: string; instructions?: string; notes?: string; indication?: string; duration?: string } => {
   if (typeof medication === 'string') {
     return medication;
   }
+  
+  const medAny = medication as any;
   
   // Wenn es ein Katalog-Eintrag ist (_id vorhanden), nur Name zurückgeben
   if (medication._id) {
@@ -47,7 +49,11 @@ export const convertMedicationToPatientFormat = (
         : 'Nicht angegeben',
       frequency: 'Nicht angegeben',
       startDate: medication.startDate,
-      prescribedBy: medication.prescribedBy
+      prescribedBy: medication.prescribedBy,
+      instructions: medAny.instructions || '',
+      notes: medAny.notes || '',
+      indication: medAny.indication || '',
+      duration: medAny.duration || ''
     };
   }
   
@@ -57,14 +63,18 @@ export const convertMedicationToPatientFormat = (
     dosage: medication.dosage || 'Nicht angegeben',
     frequency: medication.frequency || 'Nicht angegeben',
     startDate: medication.startDate,
-    prescribedBy: medication.prescribedBy
+    prescribedBy: medication.prescribedBy,
+    instructions: medAny.instructions || '',
+    notes: medAny.notes || '',
+    indication: medAny.indication || '',
+    duration: medAny.duration || ''
   };
 };
 
 // Hilfsfunktion: Konvertiert ein Array von Medications in das Patient-Format
 export const convertMedicationsArrayToPatientFormat = (
   medications: (Medication | string)[]
-): Array<{ name: string; dosage: string; frequency: string; startDate?: string; prescribedBy?: string }> | string[] => {
+): Array<{ name: string; dosage: string; frequency: string; startDate?: string; prescribedBy?: string; instructions?: string; notes?: string; indication?: string; duration?: string }> | string[] => {
   const converted = medications.map(convertMedicationToPatientFormat);
   // Prüfe, ob alle Einträge Strings sind
   const allStrings = converted.every(item => typeof item === 'string');
@@ -72,7 +82,7 @@ export const convertMedicationsArrayToPatientFormat = (
     return converted as string[];
   }
   // Ansonsten sind alle Objekte
-  return converted as Array<{ name: string; dosage: string; frequency: string; startDate?: string; prescribedBy?: string }>;
+  return converted as Array<{ name: string; dosage: string; frequency: string; startDate?: string; prescribedBy?: string; instructions?: string; notes?: string; indication?: string; duration?: string }>;
 };
 
 const MedicationListInput: React.FC<MedicationListInputProps> = ({
@@ -145,7 +155,8 @@ const MedicationListInput: React.FC<MedicationListInputProps> = ({
     if (editingIndex === null) return;
 
     // Konvertiere MedicationDialog-Format zurück zu Medication-Format
-    const updatedMedication: Medication = {
+    // Erweitere Medication-Type um zusätzliche Felder
+    const updatedMedication: any = {
       _id: medicationData.medicationId || selectedMedication?._id || '',
       name: medicationData.name,
       dosage: medicationData.dosage,
@@ -154,7 +165,13 @@ const MedicationListInput: React.FC<MedicationListInputProps> = ({
       strength: medicationData.strength,
       strengthUnit: medicationData.strengthUnit || medicationData.dosageUnit,
       form: medicationData.form,
-      atcCode: medicationData.atcCode
+      atcCode: medicationData.atcCode,
+      // Zusätzliche Felder für Einnahmehinweise und Notizen
+      instructions: medicationData.instructions || '',
+      notes: medicationData.notes || '',
+      indication: medicationData.indication || '',
+      duration: medicationData.duration || '',
+      prescribedBy: medicationData.prescribedBy || ''
     };
 
     if (editingIndex >= value.length) {

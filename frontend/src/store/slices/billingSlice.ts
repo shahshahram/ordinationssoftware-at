@@ -82,7 +82,7 @@ export interface Invoice {
   taxRate: number;
   taxAmount: number;
   totalAmount: number;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+  status: 'draft' | 'pending' | 'sent' | 'paid' | 'overdue' | 'cancelled';
   paymentDate?: Date;
   paymentMethod?: 'cash' | 'transfer' | 'card' | 'bankomat' | 'creditcard' | 'mobile' | 'insurance';
   // RKSVO: Zahlungsart-Details für Barumsatz-Prüfung

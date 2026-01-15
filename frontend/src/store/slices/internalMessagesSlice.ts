@@ -96,7 +96,10 @@ export const fetchUnreadCount = createAsyncThunk(
       return (response.data as any).data?.count || 0;
     } catch (error: any) {
       // Stille Fehlerbehandlung - nicht kritisch wenn unreadCount nicht geladen werden kann
-      console.warn('Fehler beim Laden der ungelesenen Nachrichten:', error?.message || error);
+      // 401-Fehler werden still ignoriert (User nicht authentifiziert oder Token abgelaufen)
+      if (error?.response?.status !== 401) {
+        console.warn('Fehler beim Laden der ungelesenen Nachrichten:', error?.message || error);
+      }
       return rejectWithValue(0); // Fallback auf 0
     }
   }

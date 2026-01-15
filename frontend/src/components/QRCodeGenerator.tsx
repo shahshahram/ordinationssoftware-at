@@ -7,12 +7,18 @@ interface QRCodeGeneratorProps {
   data: string;
   size?: number;
   onRefresh?: () => void;
+  title?: string;
+  description?: string;
+  showUrl?: boolean;
 }
 
 const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({ 
   data, 
   size = 200, 
-  onRefresh 
+  onRefresh,
+  title = 'Selbst-Check-in Code',
+  description = 'Scannen Sie diesen Code mit dem Tablet für den Selbst-Check-in',
+  showUrl = true
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -42,7 +48,7 @@ const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}>
         <QrCode color="primary" sx={{ mr: 1 }} />
         <Typography variant="h6" fontWeight="bold">
-          Selbst-Check-in Code
+          {title}
         </Typography>
       </Box>
       
@@ -51,17 +57,19 @@ const QRCodeGenerator: React.FC<QRCodeGeneratorProps> = ({
       </Box>
       
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        Scannen Sie diesen Code mit dem Tablet für den Selbst-Check-in
+        {description}
       </Typography>
       
-      <Typography variant="caption" color="text.secondary" sx={{ 
-        display: 'block', 
-        wordBreak: 'break-all',
-        fontSize: '0.7rem',
-        mt: 1
-      }}>
-        URL: {data}
-      </Typography>
+      {showUrl && (
+        <Typography variant="caption" color="text.secondary" sx={{ 
+          display: 'block', 
+          wordBreak: 'break-all',
+          fontSize: '0.7rem',
+          mt: 1
+        }}>
+          URL: {data}
+        </Typography>
+      )}
       
       {onRefresh && (
         <Button

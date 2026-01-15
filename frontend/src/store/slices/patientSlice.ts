@@ -38,6 +38,8 @@ export interface Patient {
     severity: string;
     reaction?: string;
   }>;
+  hasAllergyPass?: boolean;
+  allergyPassDocument?: string;
   currentMedications?: Array<string | {
     name: string;
     dosage: string;

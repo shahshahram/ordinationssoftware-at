@@ -289,8 +289,8 @@ const PatientOrganizer: React.FC = () => {
     weeksSinceRecorded?: number;
   } | null>(null);
   
-  // State für Tabs - Standard ist Dekurs (Tab 1)
-  const [activeTab, setActiveTab] = useState(1);
+  // State für Tabs - Standard ist Medizinische Daten (Tab 2)
+  const [activeTab, setActiveTab] = useState(2);
   const [isNavigating, setIsNavigating] = useState(false); // Flag um Race Conditions zu vermeiden
   
   // State für Dekurs
@@ -451,10 +451,10 @@ const PatientOrganizer: React.FC = () => {
           });
         }
       } else {
-        // Wenn kein Tab-Parameter vorhanden, setze auf Dekurs (Tab 1)
+        // Wenn kein Tab-Parameter vorhanden, setze auf Medizinische Daten (Tab 2)
         setActiveTab((currentTab) => {
-          if (currentTab !== 1) {
-            return 1;
+          if (currentTab !== 2) {
+            return 2;
           }
           return currentTab;
         });
@@ -1343,6 +1343,9 @@ const PatientOrganizer: React.FC = () => {
         medicalHistory: patient.medicalHistory || [],
         vaccinations: patient.vaccinations || [],
         medicalNotes: patient.medicalNotes,
+        // Allergiepass
+        hasAllergyPass: patient.hasAllergyPass || false,
+        allergyPassDocument: patient.allergyPassDocument || '',
         // Schwangerschaft (nur bei Frauen)
         isPregnant: patient.gender === 'f' ? (patient.isPregnant || false) : false,
         pregnancyWeek: patient.gender === 'f' ? (patient.pregnancyWeek || null) : null
@@ -1447,6 +1450,8 @@ const PatientOrganizer: React.FC = () => {
       currentMedications: patient.currentMedications || [],
       preExistingConditions: patient.preExistingConditions || [],
       medicalHistory: patient.medicalHistory || [],
+      hasAllergyPass: patient.hasAllergyPass || false,
+      allergyPassDocument: patient.allergyPassDocument || '',
       vaccinations: (patient.vaccinations || []).map(vacc => ({
         ...vacc,
         date: formatDateForInput(vacc.date),
@@ -1786,7 +1791,7 @@ const PatientOrganizer: React.FC = () => {
           console.log('✅ Reloaded patient infections:', updatedPatient?.infections);
           // Aktualisiere den Patient im Redux Store
           dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
-          
+
           // Automatische Übernahme von Medikamenten aus medizinischen Daten in den Medikamenten-Manager
           if (updatedMedicalData.currentMedications && updatedMedicalData.currentMedications.length > 0) {
             try {
@@ -1823,6 +1828,22 @@ const PatientOrganizer: React.FC = () => {
                 
                 if (!medName) continue; // Überspringe leere Namen
                 
+                // Extrahiere zusätzliche Felder (Einnahmehinweise, Notizen, Indikation)
+                const medAny = med as any;
+                const medInstructions = medAny.instructions || '';
+                const medNotes = medAny.notes || '';
+                const medIndication = medAny.indication || '';
+                
+                // Kombiniere Notizen: Indikation + Einnahmehinweise + Notizen
+                let combinedNotes = 'Übernommen aus medizinischen Daten (Anamnese)';
+                const noteParts: string[] = [];
+                if (medIndication) noteParts.push(`Indikation: ${medIndication}`);
+                if (medInstructions) noteParts.push(`Einnahmehinweise: ${medInstructions}`);
+                if (medNotes) noteParts.push(`Notizen: ${medNotes}`);
+                if (noteParts.length > 0) {
+                  combinedNotes = `${combinedNotes}\n${noteParts.join('\n')}`;
+                }
+                
                 // Prüfe ob Medikament bereits existiert (gleicher Name, Dosierung, Häufigkeit und Quelle anamnestic)
                 const exists = existingMedications.some((m: any) => 
                   m.name === medName && 
@@ -1841,7 +1862,9 @@ const PatientOrganizer: React.FC = () => {
                     duration: medDuration,
                     startDate: medStartDate,
                     source: 'anamnestic',
-                    notes: 'Übernommen aus medizinischen Daten (Anamnese)'
+                    instructions: medInstructions,
+                    notes: combinedNotes,
+                    indication: medIndication
                   })).unwrap();
                 }
               }
@@ -3728,6 +3751,38 @@ const PatientOrganizer: React.FC = () => {
                         ))}
                       </Box>
                       <RecordedInfo fieldName="allergies" />
+                      
+                      {/* Allergiepass-Anzeige */}
+                      {patient.hasAllergyPass && (
+                        <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'success.main', borderRadius: 1, bgcolor: isDarkMode ? 'rgba(76, 175, 80, 0.1)' : 'rgba(76, 175, 80, 0.05)' }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                            <Description color="success" />
+                            <Typography variant="body2" fontWeight="bold">
+                              Allergiepass vorhanden
+                            </Typography>
+                          </Box>
+                          {patient.allergyPassDocument && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              startIcon={<Description />}
+                              onClick={() => {
+                                if (patient.allergyPassDocument) {
+                                  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+                                  // Der Pfad sollte bereits 'uploads/' enthalten, wenn nicht, füge es hinzu
+                                  const documentPath = patient.allergyPassDocument.startsWith('uploads/') 
+                                    ? patient.allergyPassDocument 
+                                    : `uploads/${patient.allergyPassDocument}`;
+                                  window.open(`${API_BASE_URL}/${documentPath}`, '_blank');
+                                }
+                              }}
+                              sx={{ mt: 1 }}
+                            >
+                              Allergiepass anzeigen
+                            </Button>
+                          )}
+                        </Box>
+                      )}
                     </Box>
                   )}
                   {patient.currentMedications && patient.currentMedications.length > 0 && (
@@ -4448,6 +4503,8 @@ const PatientOrganizer: React.FC = () => {
         onClose={handleCancelEdit}
         maxWidth="md"
         fullWidth
+        disableEnforceFocus
+        disableAutoFocus
       >
         <DialogTitle>
           Stammdaten bearbeiten
@@ -4757,6 +4814,8 @@ const PatientOrganizer: React.FC = () => {
         onClose={handleCancelMedicalEdit}
         maxWidth="md"
         fullWidth
+        disableEnforceFocus
+        disableAutoFocus
       >
         <DialogTitle>
           Medizinische Daten bearbeiten
@@ -4843,6 +4902,124 @@ const PatientOrganizer: React.FC = () => {
                 >
                   Hinzufügen
                 </Button>
+              </Box>
+              
+              {/* Allergiepass */}
+              <Box sx={{ mt: 3, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={medicalData.hasAllergyPass || false}
+                      onChange={(e) => handleMedicalDataChange('hasAllergyPass', e.target.checked)}
+                    />
+                  }
+                  label="Patient hat einen Allergiepass"
+                />
+                
+                {medicalData.hasAllergyPass && (
+                  <Box sx={{ mt: 2 }}>
+                    <input
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        
+                        try {
+                          setUploadingPhoto(true);
+                          const formData = new FormData();
+                          formData.append('allergyPass', file);
+                          
+                          const token = localStorage.getItem('token');
+                          const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+                          const response = await fetch(`${API_BASE_URL}/patients-extended/${patientId}/allergy-pass`, {
+                            method: 'POST',
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            },
+                            body: formData
+                          });
+                          
+                          const result = await response.json();
+                          
+                          if (result.success) {
+                            handleMedicalDataChange('allergyPassDocument', result.data.path || result.data.filename);
+                            handleMedicalDataChange('hasAllergyPass', true);
+                            setSnackbar({
+                              open: true,
+                              message: 'Allergiepass erfolgreich hochgeladen',
+                              severity: 'success'
+                            });
+                            // Patienten neu laden, um die Änderungen zu sehen
+                            if (patientId) {
+                              try {
+                                const patientResponse: any = await apiRequest.get(`/patients-extended/${patientId}`);
+                                if (patientResponse.success && patientResponse.data) {
+                                  const updatedPatient = patientResponse.data.data || patientResponse.data;
+                                  dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
+                                }
+                              } catch (reloadError) {
+                                console.warn('⚠️ Could not reload patient:', reloadError);
+                              }
+                            }
+                          } else {
+                            throw new Error(result.message || 'Fehler beim Hochladen');
+                          }
+                        } catch (error: any) {
+                          setSnackbar({
+                            open: true,
+                            message: error.message || 'Fehler beim Hochladen des Allergiepasses',
+                            severity: 'error'
+                          });
+                        } finally {
+                          setUploadingPhoto(false);
+                          if (e.target) {
+                            e.target.value = '';
+                          }
+                        }
+                      }}
+                      style={{ display: 'none' }}
+                      id="allergy-pass-upload"
+                    />
+                    <label htmlFor="allergy-pass-upload">
+                      <Button
+                        variant="outlined"
+                        component="span"
+                        startIcon={<Description />}
+                        disabled={uploadingPhoto}
+                        size="small"
+                        sx={{ mt: 1 }}
+                      >
+                        {uploadingPhoto ? 'Wird hochgeladen...' : medicalData.allergyPassDocument ? 'Allergiepass ersetzen' : 'Allergiepass hochladen'}
+                      </Button>
+                    </label>
+                    {medicalData.allergyPassDocument && (
+                      <Box sx={{ mt: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Chip
+                          label="Allergiepass vorhanden"
+                          color="success"
+                          size="small"
+                          icon={<Description />}
+                        />
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            if (medicalData.allergyPassDocument) {
+                              const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+                              // Der Pfad sollte bereits 'uploads/' enthalten, wenn nicht, füge es hinzu
+                              const documentPath = medicalData.allergyPassDocument.startsWith('uploads/') 
+                                ? medicalData.allergyPassDocument 
+                                : `uploads/${medicalData.allergyPassDocument}`;
+                              window.open(`${API_BASE_URL}/${documentPath}`, '_blank');
+                            }
+                          }}
+                        >
+                          Anzeigen
+                        </Button>
+                      </Box>
+                    )}
+                  </Box>
+                )}
               </Box>
             </Box>
 
@@ -6104,6 +6281,8 @@ const PatientOrganizer: React.FC = () => {
         }}
         maxWidth="sm"
         fullWidth
+        disableEnforceFocus
+        disableAutoFocus
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -6292,6 +6471,8 @@ const PatientOrganizer: React.FC = () => {
         }}
         maxWidth="lg"
         fullWidth
+        disableEnforceFocus
+        disableAutoFocus
       >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

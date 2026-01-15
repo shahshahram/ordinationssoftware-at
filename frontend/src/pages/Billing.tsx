@@ -93,21 +93,16 @@ const stripHtmlTags = (html: string): string => {
   return tmp.textContent || tmp.innerText || '';
 };
 
-// Hilfsfunktion: Konvertiert Service-Preis zu Euro
-// Prüft zuerst service.price (bereits in Euro), dann service.price_cents (in Cent), dann service.prices?.privat
+// Hilfsfunktion: Gibt Service-Preis zurück (ALLE PREISE SIND BEREITS IN EURO!)
+// KEINE KONVERTIERUNG MEHR NÖTIG - alle Preise sind bereits in Euro!
 const getServicePriceInEuro = (service: Service): number => {
   // Wenn service.price vorhanden ist, verwende es direkt (bereits in Euro)
   if (service.price !== undefined && service.price !== null) {
     return service.price;
   }
-  // Wenn service.price_cents vorhanden ist, umrechnen von Cent zu Euro
-  if (service.price_cents !== undefined && service.price_cents !== null) {
-    return service.price_cents / 100;
-  }
-  // Wenn service.prices?.privat vorhanden ist, prüfe ob es in Cent oder Euro ist
+  // Wenn service.prices?.privat vorhanden ist, verwende es direkt (bereits in Euro)
   if (service.prices?.privat !== undefined && service.prices?.privat !== null) {
-    // Wenn Wert > 1000, ist es wahrscheinlich in Cent (alte Daten)
-    return service.prices.privat > 1000 ? service.prices.privat / 100 : service.prices.privat;
+    return service.prices.privat; // KEINE Konvertierung mehr - bereits in Euro!
   }
   return 0;
 };
@@ -501,35 +496,86 @@ const Billing: React.FC = () => {
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/invoices/${invoice._id}/pdf`, {
         method: 'POST',
         headers: {
-          'x-auth-token': token,
-          'Content-Type': 'application/json'
+          'Authorization': `Bearer ${token}`
+          // Kein Content-Type für POST-Requests ohne Body
         }
       });
 
-      if (!response.ok) {
+      // Prüfe Content-Type BEVOR wir die Response lesen
+      const contentType = response.headers.get('content-type') || '';
+      console.log('Response Status:', response.status, 'Content-Type:', contentType);
+
+      // Wenn Content-Type JSON ist oder Status nicht OK, ist es ein Fehler
+      if (!response.ok || contentType.includes('application/json')) {
+        // Versuche die Antwort als Text zu lesen
         const errorText = await response.text();
-        console.error('PDF-Generierung Fehler:', errorText);
-        throw new Error('PDF-Generierung fehlgeschlagen');
+        console.error('PDF-Generierung Fehler:', response.status, errorText);
+        
+        // Versuche JSON-Fehler zu parsen
+        try {
+          const errorJson = JSON.parse(errorText);
+          throw new Error(errorJson.message || 'PDF-Generierung fehlgeschlagen');
+        } catch (parseError) {
+          throw new Error(`PDF-Generierung fehlgeschlagen: ${response.status} ${response.statusText}. ${errorText.substring(0, 200)}`);
+        }
+      }
+      
+      // Prüfe ob Content-Type PDF ist
+      if (!contentType.includes('application/pdf')) {
+        // Wenn kein PDF, versuche die Antwort als Text zu lesen
+        // Aber wir müssen die Response klonen, da wir sie bereits gelesen haben könnten
+        const clonedResponse = response.clone();
+        const text = await clonedResponse.text();
+        console.error('Unerwarteter Dateityp:', contentType, 'First 200 chars:', text.substring(0, 200));
+        
+        // Versuche JSON zu parsen
+        try {
+          const json = JSON.parse(text);
+          throw new Error(json.message || 'PDF-Generierung fehlgeschlagen');
+        } catch {
+          throw new Error('Unerwarteter Dateityp erhalten. Erwartet: application/pdf, erhalten: ' + contentType);
+        }
       }
 
-      // Prüfen ob Response ein PDF ist
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/pdf')) {
-        throw new Error('Unerwarteter Dateityp erhalten');
-      }
-
+      // Jetzt können wir sicher sein, dass es ein PDF ist
       const blob = await response.blob();
+      console.log('Blob size:', blob.size, 'Blob type:', blob.type);
       
       // Prüfen ob Blob gültig ist
       if (blob.size === 0) {
         throw new Error('PDF-Datei ist leer');
       }
 
+      // Prüfe ob Blob wirklich ein PDF ist (PDFs beginnen mit %PDF)
+      // Erstelle eine Kopie des Blobs für die Validierung, damit wir den Original-Blob nicht verbrauchen
+      const validationBlob = blob.slice(0, 4);
+      const arrayBuffer = await validationBlob.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+      // Konvertiere Uint8Array zu String ohne Spread-Operator
+      const pdfHeader = Array.from(uint8Array).map(byte => String.fromCharCode(byte)).join('');
+      console.log('PDF Header:', pdfHeader, 'Bytes:', Array.from(uint8Array));
+      
+      if (pdfHeader !== '%PDF') {
+        // Wenn es kein PDF ist, versuche es als Text zu lesen (könnte ein Fehler sein)
+        // Erstelle eine neue Kopie für Text-Validierung
+        const textBlob = blob.slice(0, Math.min(500, blob.size));
+        const fullText = await textBlob.text();
+        console.error('Blob ist kein gültiges PDF. Header:', pdfHeader, 'First 500 chars:', fullText);
+        
+        // Versuche JSON zu parsen
+        try {
+          const json = JSON.parse(fullText);
+          throw new Error(json.message || 'PDF-Generierung fehlgeschlagen: Server hat kein PDF zurückgegeben');
+        } catch {
+          throw new Error(`Heruntergeladene Datei ist kein gültiges PDF. Erwartet '%PDF', erhalten: '${pdfHeader}'`);
+        }
+      }
+
       // PDF-Download
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `Rechnung_${invoice.invoiceNumber}.pdf`;
+      link.download = `Rechnung_${invoice.invoiceNumber || invoice._id}.pdf`;
       link.style.display = 'none';
       document.body.appendChild(link);
       link.click();
@@ -545,11 +591,11 @@ const Billing: React.FC = () => {
         message: 'PDF erfolgreich heruntergeladen',
         severity: 'success'
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Druck-Fehler:', error);
       setSnackbar({
         open: true,
-        message: 'Fehler beim Generieren der PDF',
+        message: error.message || 'Fehler beim Generieren der PDF',
         severity: 'error'
       });
     }
@@ -710,7 +756,8 @@ const Billing: React.FC = () => {
           services: preparedServices,
           subtotal: calculatedSubtotal, // Verwende berechneten Wert
           taxAmount: calculatedTaxAmount, // Verwende berechneten Wert
-          taxRate: formData.taxRate || 0,
+          // taxRate wird vom Backend automatisch berechnet - nicht explizit senden, es sei denn, es wurde manuell geändert
+          taxRate: formData.taxRate !== undefined && formData.taxRate !== null ? formData.taxRate : undefined,
           totalAmount: calculatedTotal, // Verwende berechneten Wert
           status: formData.status || 'draft'
         };
@@ -726,7 +773,8 @@ const Billing: React.FC = () => {
           totalAmount: calculatedTotal, // Verwende berechneten Wert
           invoiceDate: formData.invoiceDate ? new Date(formData.invoiceDate) : formData.invoiceDate,
           dueDate: formData.dueDate ? new Date(formData.dueDate) : formData.dueDate,
-          status: formData.status || 'draft' // Stelle sicher, dass Status erhalten bleibt
+          status: formData.status || 'draft', // Stelle sicher, dass Status erhalten bleibt
+          paymentMethod: formData.paymentMethod || undefined // Stelle sicher, dass Zahlungsmethode gespeichert wird
         };
         
         await dispatch(updateInvoice({ 
@@ -736,7 +784,32 @@ const Billing: React.FC = () => {
         setSnackbar({ open: true, message: 'Rechnung erfolgreich aktualisiert', severity: 'success' });
       }
       setOpenDialog(false);
-      dispatch(fetchInvoices({}));
+      
+      // Lade Rechnungen mit den aktuellen Filtern neu
+      const params: any = {
+        limit: 1000,
+        page: 1
+      };
+      
+      // Wenn Status-Filter vorhanden, füge sie zu den Parametern hinzu
+      if (statusFilter.length > 0) {
+        params.status = statusFilter.join(',');
+      }
+      
+      // Wenn patientIdFromUrl vorhanden ist, füge Patient-Filter hinzu
+      if (patientIdFromUrl) {
+        params.patientId = patientIdFromUrl;
+      }
+      
+      // Datumsfilter hinzufügen
+      if (dateFilter.start) {
+        params.startDate = formatDateString(dateFilter.start) || '';
+      }
+      if (dateFilter.end) {
+        params.endDate = formatDateString(dateFilter.end) || '';
+      }
+      
+      dispatch(fetchInvoices(params));
     } catch (error: any) {
       console.error('Error saving invoice:', error);
       setSnackbar({ open: true, message: error?.message || 'Fehler beim Speichern der Rechnung', severity: 'error' });
@@ -761,10 +834,8 @@ const Billing: React.FC = () => {
         );
         
         if (calculation) {
-          // calculation.grossAmount sollte bereits in Euro sein, aber prüfe es
-          const grossAmountInEuro = calculation.grossAmount && calculation.grossAmount > 1000 
-            ? calculation.grossAmount / 100 
-            : calculation.grossAmount || getServicePriceInEuro(service);
+          // calculation.grossAmount ist bereits in Euro - KEINE KONVERTIERUNG MEHR!
+          const grossAmountInEuro = calculation.grossAmount || getServicePriceInEuro(service);
           const newService = {
             date: new Date(),
             serviceCode: service.code,
@@ -1148,6 +1219,7 @@ const Billing: React.FC = () => {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'draft': return 'Entwurf';
+      case 'pending': return 'Wartend';
       case 'sent': return 'Versendet';
       case 'paid': return 'Bezahlt';
       case 'overdue': return 'Überfällig';
@@ -1448,6 +1520,7 @@ const Billing: React.FC = () => {
                   }}
                 >
                   <SelectMenuItem value="draft">Entwurf</SelectMenuItem>
+                  <SelectMenuItem value="pending">Wartend</SelectMenuItem>
                   <SelectMenuItem value="sent">Versendet</SelectMenuItem>
                   <SelectMenuItem value="paid">Bezahlt</SelectMenuItem>
                   <SelectMenuItem value="overdue">Überfällig</SelectMenuItem>
@@ -2152,6 +2225,7 @@ const Billing: React.FC = () => {
                         disabled={dialogMode === 'view'}
                       >
                         <SelectMenuItem value="draft">Entwurf</SelectMenuItem>
+                        <SelectMenuItem value="pending">Wartend</SelectMenuItem>
                         <SelectMenuItem value="sent">Versendet</SelectMenuItem>
                         <SelectMenuItem value="paid">Bezahlt</SelectMenuItem>
                         <SelectMenuItem value="overdue">Überfällig</SelectMenuItem>
@@ -2450,10 +2524,10 @@ const Billing: React.FC = () => {
               <QRCodeGenerator 
                 data={qrCodeData} 
                 size={250}
+                title="RKSVO-Beleg QR-Code"
+                description="Dieser QR-Code ist für die RKSVO-compliant Belegung erforderlich. Scannen Sie ihn mit der BMF Belegcheck-App."
+                showUrl={false}
               />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-                Dieser QR-Code ist für die RKSVO-compliant Belegung erforderlich. Scannen Sie ihn mit der BMF Belegcheck-App.
-              </Typography>
             </Box>
           )}
           {loadingRKSVO && <CircularProgress />}
@@ -2737,6 +2811,7 @@ const Billing: React.FC = () => {
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li><Chip label="Entwurf" size="small" sx={{ mr: 1 }} /> Rechnung wird noch bearbeitet</li>
+                  <li><Chip label="Wartend" color="info" size="small" sx={{ mr: 1 }} /> Rechnung wartet auf Bearbeitung</li>
                   <li><Chip label="Gesendet" color="warning" size="small" sx={{ mr: 1 }} /> Rechnung wurde versendet</li>
                   <li><Chip label="Bezahlt" color="success" size="small" sx={{ mr: 1 }} /> Rechnung wurde bezahlt</li>
                   <li><Chip label="Überfällig" color="error" size="small" sx={{ mr: 1 }} /> Rechnung ist überfällig</li>

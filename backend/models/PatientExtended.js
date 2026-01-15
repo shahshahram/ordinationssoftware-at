@@ -201,6 +201,16 @@ const PatientExtendedSchema = new mongoose.Schema({
     }
   }],
 
+  // Allergiepass
+  hasAllergyPass: {
+    type: Boolean,
+    default: false
+  },
+  allergyPassDocument: {
+    type: String,
+    trim: true
+  },
+
   // Vorerkrankungen
   preExistingConditions: [{
     type: String,

@@ -104,7 +104,37 @@ const locationSchema = new mongoose.Schema({
     website: {
       type: String,
       trim: true
-    }
+    },
+    taxNumber: {
+      type: String,
+      trim: true
+    },
+    uidNumber: {
+      type: String,
+      trim: true
+    },
+    bankAccounts: [{
+      iban: {
+        type: String,
+        trim: true
+      },
+      bic: {
+        type: String,
+        trim: true
+      },
+      bankName: {
+        type: String,
+        trim: true
+      },
+      accountHolder: {
+        type: String,
+        trim: true
+      },
+      isDefault: {
+        type: Boolean,
+        default: false
+      }
+    }]
   },
   
   // Logo für Briefkopf

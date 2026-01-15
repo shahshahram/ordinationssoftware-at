@@ -18,18 +18,26 @@ class PDFGenerator {
   }
 
   async generatePDF(htmlContent, options = {}) {
+    console.log('🖨️ [PDFGenerator] Starte PDF-Generierung...');
+    console.log('🖨️ [PDFGenerator] HTML-Content Länge:', htmlContent ? htmlContent.length : 0);
+    
     await this.init();
+    console.log('✅ [PDFGenerator] Browser initialisiert');
     
     const page = await this.browser.newPage();
+    console.log('✅ [PDFGenerator] Neue Seite erstellt');
     
     try {
       // Set content
+      console.log('📄 [PDFGenerator] Setze HTML-Content...');
       await page.setContent(htmlContent, { 
         waitUntil: 'networkidle0',
         timeout: 30000 
       });
+      console.log('✅ [PDFGenerator] HTML-Content gesetzt');
 
       // Generate PDF
+      console.log('🖨️ [PDFGenerator] Generiere PDF...');
       const pdfBuffer = await page.pdf({
         format: 'A4',
         printBackground: true,
@@ -41,10 +49,82 @@ class PDFGenerator {
         },
         ...options
       });
+      
+      console.log('✅ [PDFGenerator] PDF generiert. Buffer-Typ:', typeof pdfBuffer, 'Ist Buffer:', Buffer.isBuffer(pdfBuffer), 'Ist Uint8Array:', pdfBuffer instanceof Uint8Array, 'Constructor:', pdfBuffer?.constructor?.name, 'Größe:', pdfBuffer ? pdfBuffer.length : 0);
 
-      return pdfBuffer;
+      if (!pdfBuffer) {
+        console.error('❌ [PDFGenerator] PDF-Buffer ist null oder undefined');
+        throw new Error('PDF-Buffer ist null oder undefined');
+      }
+      
+      // Puppeteer kann verschiedene Buffer-ähnliche Typen zurückgeben
+      // Konvertiere zu Node.js Buffer falls nötig
+      let finalBuffer;
+      if (Buffer.isBuffer(pdfBuffer)) {
+        // Bereits ein Node.js Buffer
+        finalBuffer = pdfBuffer;
+        console.log('✅ [PDFGenerator] PDF ist bereits ein Node.js Buffer');
+      } else if (pdfBuffer instanceof Uint8Array) {
+        // Uint8Array - konvertiere zu Buffer
+        console.log('📝 [PDFGenerator] Konvertiere Uint8Array zu Buffer...');
+        finalBuffer = Buffer.from(pdfBuffer);
+        console.log('✅ [PDFGenerator] Konvertierung erfolgreich. Buffer-Größe:', finalBuffer.length);
+      } else if (pdfBuffer.buffer && pdfBuffer.buffer instanceof ArrayBuffer) {
+        // TypedArray mit buffer property (z.B. Uint8Array in einem anderen Kontext)
+        console.log('📝 [PDFGenerator] Konvertiere TypedArray zu Buffer...');
+        finalBuffer = Buffer.from(pdfBuffer.buffer, pdfBuffer.byteOffset || 0, pdfBuffer.byteLength || pdfBuffer.length);
+        console.log('✅ [PDFGenerator] Konvertierung erfolgreich. Buffer-Größe:', finalBuffer.length);
+      } else if (pdfBuffer instanceof ArrayBuffer) {
+        // Direktes ArrayBuffer
+        console.log('📝 [PDFGenerator] Konvertiere ArrayBuffer zu Buffer...');
+        finalBuffer = Buffer.from(pdfBuffer);
+        console.log('✅ [PDFGenerator] Konvertierung erfolgreich. Buffer-Größe:', finalBuffer.length);
+      } else if (typeof pdfBuffer === 'object' && pdfBuffer.length !== undefined && typeof pdfBuffer.length === 'number') {
+        // Buffer-ähnliches Objekt (z.B. von Puppeteer in neueren Versionen)
+        console.log('📝 [PDFGenerator] Konvertiere buffer-ähnliches Objekt zu Buffer...');
+        try {
+          // Versuche verschiedene Konvertierungsmethoden
+          if (pdfBuffer.buffer) {
+            finalBuffer = Buffer.from(pdfBuffer.buffer, pdfBuffer.byteOffset || 0, pdfBuffer.byteLength || pdfBuffer.length);
+          } else {
+            // Fallback: Erstelle neuen Buffer und kopiere Daten
+            finalBuffer = Buffer.alloc(pdfBuffer.length);
+            for (let i = 0; i < pdfBuffer.length; i++) {
+              finalBuffer[i] = pdfBuffer[i];
+            }
+          }
+          console.log('✅ [PDFGenerator] Konvertierung erfolgreich. Buffer-Größe:', finalBuffer.length);
+        } catch (convError) {
+          console.error('❌ [PDFGenerator] Fehler bei Konvertierung:', convError);
+          throw new Error(`Konvertierung zu Buffer fehlgeschlagen: ${convError.message}`);
+        }
+      } else {
+        console.error('❌ [PDFGenerator] PDF-Buffer ist kein gültiger Typ. Typ:', typeof pdfBuffer, 'Constructor:', pdfBuffer?.constructor?.name, 'Has length:', pdfBuffer?.length !== undefined);
+        throw new Error(`PDF-Buffer ist kein gültiger Typ. Erwartet Buffer, Uint8Array oder ArrayBuffer, erhalten: ${typeof pdfBuffer} (${pdfBuffer?.constructor?.name || 'unknown'})`);
+      }
+      
+      if (finalBuffer.length === 0) {
+        console.error('❌ [PDFGenerator] PDF-Buffer ist leer');
+        throw new Error('PDF-Buffer ist leer');
+      }
+      
+      // Prüfe ob es wirklich ein PDF ist
+      const pdfHeader = finalBuffer.slice(0, 4).toString();
+      if (pdfHeader !== '%PDF') {
+        console.error('❌ [PDFGenerator] Buffer ist kein gültiges PDF. Header:', pdfHeader);
+        throw new Error(`Buffer ist kein gültiges PDF. Erwartet '%PDF', erhalten: '${pdfHeader}'`);
+      }
+      
+      console.log('✅ [PDFGenerator] PDF-Validierung erfolgreich. Header:', pdfHeader);
+
+      return finalBuffer;
+    } catch (error) {
+      console.error('❌ [PDFGenerator] Fehler bei PDF-Generierung:', error);
+      console.error('❌ [PDFGenerator] Fehler-Stack:', error.stack);
+      throw error;
     } finally {
       await page.close();
+      console.log('✅ [PDFGenerator] Seite geschlossen');
     }
   }
 

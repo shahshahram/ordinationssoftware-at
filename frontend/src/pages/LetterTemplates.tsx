@@ -159,10 +159,15 @@ const LetterTemplates: React.FC = () => {
   const [logoUploading, setLogoUploading] = useState(false);
 
   useEffect(() => {
+    // Prüfe, ob User authentifiziert ist, bevor API-Aufrufe gemacht werden
+    if (!user) {
+      return;
+    }
+    
     dispatch(fetchLocations());
     dispatch(fetchDocumentTemplates({}));
     dispatch(fetchMedicalSpecialties());
-  }, [dispatch]);
+  }, [dispatch, user]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -330,6 +335,7 @@ const LetterTemplates: React.FC = () => {
                   }
                 }}
                 label="Standort auswählen"
+                MenuProps={{ disableScrollLock: true }}
               >
                 {locations.map((location) => (
                   <MenuItem key={location._id} value={location._id}>
@@ -338,7 +344,7 @@ const LetterTemplates: React.FC = () => {
                 ))}
               </Select>
             </FormControl>
-
+            
             {selectedLocationForLetterhead ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                 {/* Logo Upload */}
@@ -495,6 +501,7 @@ const LetterTemplates: React.FC = () => {
                   setSelectedLocationForTemplates(location || null);
                 }}
                 label="Standort auswählen"
+                MenuProps={{ disableScrollLock: true }}
               >
                 {locations.map((location) => (
                   <MenuItem key={location._id} value={location._id}>

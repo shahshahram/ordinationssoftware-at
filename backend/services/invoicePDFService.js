@@ -1,5 +1,10 @@
 const pdfGenerator = require('../utils/pdfGenerator');
 const Invoice = require('../models/Invoice');
+const Location = require('../models/Location');
+const User = require('../models/User');
+const path = require('path');
+const fs = require('fs');
+const QRCode = require('qrcode');
 
 class InvoicePDFService {
   constructor() {
@@ -20,8 +25,24 @@ class InvoicePDFService {
         throw new Error('Rechnung nicht gefunden');
       }
 
+      // Location laden (über createdBy -> User -> locationId oder direkt über invoice.locationId)
+      let location = null;
+      if (invoice.locationId) {
+        location = await Location.findById(invoice.locationId);
+      } else if (invoice.createdBy) {
+        const user = await User.findById(invoice.createdBy).select('locationId');
+        if (user && user.locationId) {
+          location = await Location.findById(user.locationId);
+        }
+      }
+      
+      // Fallback: Erste aktive Location laden, falls keine gefunden wurde
+      if (!location) {
+        location = await Location.findOne({ is_active: true });
+      }
+
       // HTML-Template für Rechnung generieren
-      const htmlContent = this.generateInvoiceHTML(invoice);
+      const htmlContent = await this.generateInvoiceHTML(invoice, location);
       
       // PDF generieren
       const pdfBuffer = await this.pdfGenerator.generatePDF(htmlContent, {
@@ -35,10 +56,21 @@ class InvoicePDFService {
         },
         ...options
       });
+      
+      if (!pdfBuffer) {
+        throw new Error('PDF-Buffer ist null oder undefined');
+      }
+      
+      if (!Buffer.isBuffer(pdfBuffer)) {
+        throw new Error('PDF-Buffer ist kein Buffer');
+      }
+      
+      if (pdfBuffer.length === 0) {
+        throw new Error('PDF-Buffer ist leer');
+      }
 
       return pdfBuffer;
     } catch (error) {
-      console.error('PDF-Generierung fehlgeschlagen:', error);
       throw error;
     }
   }
@@ -46,11 +78,127 @@ class InvoicePDFService {
   /**
    * Generiert HTML-Template für Rechnung
    * @param {Object} invoice - Rechnungsobjekt
+   * @param {Object} location - Location-Objekt mit owner und logo
    * @returns {String} HTML-Content
    */
-  generateInvoiceHTML(invoice) {
-    const formatCurrency = (amount) => (amount / 100).toFixed(2).replace('.', ',');
+  async generateInvoiceHTML(invoice, location = null) {
+    // ALLE PREISE SIND BEREITS IN EURO - KEINE DIVISION DURCH 100 MEHR!
+    const formatCurrency = (amount) => {
+      if (!amount && amount !== 0) return '0,00';
+      // Betrag ist bereits in Euro - nur formatieren, nicht durch 100 teilen!
+      return Number(amount).toFixed(2).replace('.', ',');
+    };
     const formatDate = (date) => new Date(date).toLocaleDateString('de-DE');
+    
+    // Hilfsfunktion für Zahlungsart-Labels
+    const getPaymentMethodLabel = (method) => {
+      const labels = {
+        'cash': 'Bar',
+        'transfer': 'Überweisung',
+        'card': 'Karte',
+        'bankomat': 'Bankomat',
+        'creditcard': 'Kreditkarte',
+        'mobile': 'Mobiles Bezahlen',
+        'insurance': 'Versicherung'
+      };
+      return labels[method] || method;
+    };
+    
+    // Hilfsfunktion für Status-Übersetzung
+    const getStatusLabel = (status) => {
+      const labels = {
+        'paid': 'Bezahlt',
+        'sent': 'Gesendet',
+        'draft': 'Entwurf',
+        'pending': 'Wartend',
+        'overdue': 'Überfällig',
+        'cancelled': 'Storniert'
+      };
+      return labels[status] || status;
+    };
+    
+    // RKSVO QR-Code generieren (falls vorhanden) - muss vor dem return sein
+    let rksvoQRCodeBase64 = null;
+    if (invoice.rksvoData && invoice.rksvoData.qrCode) {
+      try {
+        // qrCode ist bereits ein Base64-String der QR-Code-Daten
+        // Wir müssen daraus ein QR-Code-Bild generieren
+        rksvoQRCodeBase64 = await QRCode.toDataURL(invoice.rksvoData.qrCode, {
+          errorCorrectionLevel: 'M',
+          type: 'image/png',
+          width: 200,
+          margin: 1
+        });
+      } catch (error) {
+        // QR-Code-Generierung fehlgeschlagen - wird nicht angezeigt
+      }
+    }
+    
+    // Owner-Daten aus Location extrahieren (falls vorhanden)
+    let ownerName = invoice.doctor.name;
+    let ownerTitle = invoice.doctor.title;
+    let ownerSpecialization = invoice.doctor.specialization;
+    let ownerAddress = invoice.doctor.address;
+    let ownerPhone = invoice.doctor.phone;
+    let ownerEmail = invoice.doctor.email;
+    let ownerTaxNumber = invoice.doctor.taxNumber;
+    let ownerChamberNumber = invoice.doctor.chamberNumber;
+    
+    if (location && location.owner) {
+      const owner = location.owner;
+      // Name nur aus firstName und lastName zusammenstellen (ohne Titel)
+      const ownerNameParts = [];
+      if (owner.firstName) ownerNameParts.push(owner.firstName);
+      if (owner.lastName) ownerNameParts.push(owner.lastName);
+      if (ownerNameParts.length > 0) {
+        ownerName = ownerNameParts.join(' ');
+      }
+      // Titel separat setzen (title oder academicTitle)
+      if (owner.title) {
+        ownerTitle = owner.title;
+      } else if (owner.academicTitle) {
+        ownerTitle = owner.academicTitle;
+      }
+      if (owner.specialty) ownerSpecialization = owner.specialty;
+      if (location.address_line1) {
+        ownerAddress = {
+          street: location.address_line1 + (location.address_line2 ? ', ' + location.address_line2 : ''),
+          city: location.city,
+          postalCode: location.postal_code,
+          country: location.state || 'Österreich'
+        };
+      }
+      if (owner.phone) ownerPhone = owner.phone;
+      if (owner.email) ownerEmail = owner.email;
+      // Steuernummer und UID-Nummer aus Location-Owner verwenden (falls vorhanden)
+      if (owner.taxNumber) ownerTaxNumber = owner.taxNumber;
+      if (owner.uidNumber) ownerTaxNumber = owner.uidNumber; // UID-Nummer hat Priorität
+    }
+    
+    // Bankverbindungen aus Location-Owner extrahieren
+    let defaultBankAccount = null;
+    if (location && location.owner && location.owner.bankAccounts && location.owner.bankAccounts.length > 0) {
+      // Suche nach Standard-Bankverbindung
+      defaultBankAccount = location.owner.bankAccounts.find(acc => acc.isDefault) || location.owner.bankAccounts[0];
+    }
+    
+    // Logo-URL erstellen
+    let logoUrl = null;
+    if (location && location.logo) {
+      const apiUrl = process.env.API_URL || 'http://localhost:5001';
+      if (location.logo.filename) {
+        logoUrl = `${apiUrl}/uploads/location-logos/${location.logo.filename}`;
+      } else if (location.logo.path) {
+        if (location.logo.path.startsWith('http')) {
+          logoUrl = location.logo.path;
+        } else if (location.logo.path.startsWith('/')) {
+          logoUrl = `${apiUrl}${location.logo.path}`;
+        } else {
+          const cleanPath = location.logo.path.replace(/^\.\//, '').replace(/^uploads\//, '');
+          logoUrl = `${apiUrl}/uploads/${cleanPath}`;
+        }
+      }
+    }
     
     return `
     <!DOCTYPE html>
@@ -76,43 +224,55 @@ class InvoicePDFService {
                 box-shadow: 0 0 10px rgba(0,0,0,0.1);
             }
             
+            /* Logo Styles */
+            .logo-container {
+                text-align: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 3px solid #2c5aa0;
+            }
+            .logo-container img {
+                max-height: 80px;
+                max-width: 300px;
+                object-fit: contain;
+            }
+            
             /* Header Styles */
             .header { 
                 display: flex; 
                 justify-content: space-between; 
                 align-items: flex-start; 
                 margin-bottom: 25px;
-                border-bottom: 3px solid #2c5aa0;
                 padding-bottom: 15px;
             }
-            .doctor-info { 
+            .owner-info { 
                 flex: 1;
                 padding-right: 20px;
             }
-            .doctor-info h1 { 
+            .owner-info h1 { 
                 color: #2c5aa0; 
                 font-size: 22px; 
                 margin-bottom: 8px;
                 font-weight: bold;
             }
-            .doctor-info .title { 
+            .owner-info .title { 
                 color: #34495e; 
                 font-size: 14px; 
                 font-weight: 600;
                 margin-bottom: 5px;
             }
-            .doctor-info .specialization { 
+            .owner-info .specialization { 
                 color: #7f8c8d; 
                 font-size: 12px; 
                 margin-bottom: 10px;
                 font-style: italic;
             }
-            .doctor-info .address { 
+            .owner-info .address { 
                 font-size: 11px; 
                 line-height: 1.3;
                 color: #34495e;
             }
-            .doctor-info .contact-info { 
+            .owner-info .contact-info { 
                 margin-top: 10px; 
                 font-size: 10px; 
                 color: #7f8c8d;
@@ -210,6 +370,8 @@ class InvoicePDFService {
                 padding: 15px; 
                 border-radius: 8px;
                 border: 1px solid #dee2e6;
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
             .totals-section h3 {
                 color: #2c5aa0;
@@ -269,6 +431,8 @@ class InvoicePDFService {
                 background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
                 border-radius: 8px; 
                 border-left: 4px solid #f39c12;
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
             .payment-info h3 { 
                 color: #d68910; 
@@ -287,6 +451,11 @@ class InvoicePDFService {
             .payment-info li {
                 margin-bottom: 3px;
                 color: #856404;
+                white-space: nowrap;
+            }
+            .payment-info p {
+                margin: 0;
+                white-space: nowrap;
             }
             
             /* Footer */
@@ -298,11 +467,30 @@ class InvoicePDFService {
                 font-size: 9px; 
                 color: #7f8c8d;
                 line-height: 1.3;
+                position: relative;
             }
             .footer .thank-you {
                 font-weight: bold;
                 color: #2c5aa0;
                 margin-bottom: 5px;
+            }
+            
+            /* RKSVO QR-Code */
+            .rksvo-qr-code {
+                position: absolute;
+                left: 0;
+                bottom: 0;
+                width: 60px;
+                height: 60px;
+                padding: 5px;
+                background-color: white;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+            }
+            .rksvo-qr-code img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
             }
             
             /* Billing Type Badge */
@@ -334,22 +522,29 @@ class InvoicePDFService {
     </head>
     <body>
         <div class="invoice-container">
+            <!-- Logo oben in der Mitte -->
+            ${logoUrl ? `
+            <div class="logo-container">
+                <img src="${logoUrl}" alt="Ordinationslogo" />
+            </div>
+            ` : ''}
+            
             <!-- Header -->
             <div class="header">
-                <div class="doctor-info">
-                    <h1>${invoice.doctor.name}</h1>
-                    ${invoice.doctor.title ? `<div class="title">${invoice.doctor.title}</div>` : ''}
-                    ${invoice.doctor.specialization ? `<div class="specialization">${invoice.doctor.specialization}</div>` : ''}
+                <div class="owner-info">
+                    <h1>${ownerName}</h1>
+                    ${ownerTitle ? `<div class="title">${ownerTitle}</div>` : ''}
+                    ${ownerSpecialization ? `<div class="specialization">${ownerSpecialization}</div>` : ''}
                     <div class="address">
-                        <div>${invoice.doctor.address.street}</div>
-                        <div>${invoice.doctor.address.postalCode} ${invoice.doctor.address.city}</div>
-                        <div>${invoice.doctor.address.country}</div>
+                        <div>${ownerAddress.street}</div>
+                        <div>${ownerAddress.postalCode} ${ownerAddress.city}</div>
+                        <div>${ownerAddress.country}</div>
                     </div>
                     <div class="contact-info">
-                        ${invoice.doctor.phone ? `<div>Tel: ${invoice.doctor.phone}</div>` : ''}
-                        ${invoice.doctor.email ? `<div>E-Mail: ${invoice.doctor.email}</div>` : ''}
-                        ${invoice.doctor.taxNumber ? `<div>UID: ${invoice.doctor.taxNumber}</div>` : ''}
-                        ${invoice.doctor.chamberNumber ? `<div>Ärztekammer: ${invoice.doctor.chamberNumber}</div>` : ''}
+                        ${ownerPhone ? `<div>Tel: ${ownerPhone}</div>` : ''}
+                        ${ownerEmail ? `<div>E-Mail: ${ownerEmail}</div>` : ''}
+                        ${ownerTaxNumber ? `<div>UID: ${ownerTaxNumber}</div>` : ''}
+                        ${ownerChamberNumber ? `<div>Ärztekammer: ${ownerChamberNumber}</div>` : ''}
                     </div>
                 </div>
                 <div class="invoice-info">
@@ -357,8 +552,8 @@ class InvoicePDFService {
                     <div class="invoice-details">
                         <div><strong>Rechnungsnummer:</strong> ${invoice.invoiceNumber}</div>
                         <div><strong>Rechnungsdatum:</strong> ${formatDate(invoice.invoiceDate)}</div>
-                        <div><strong>Fälligkeitsdatum:</strong> ${formatDate(invoice.dueDate)}</div>
-                        <div><strong>Status:</strong> ${invoice.status}</div>
+                        ${invoice.status !== 'paid' ? `<div><strong>Fälligkeitsdatum:</strong> ${formatDate(invoice.dueDate)}</div>` : ''}
+                        <div><strong>Status:</strong> ${getStatusLabel(invoice.status)}</div>
                         <div class="billing-type-badge billing-type-${invoice.billingType}">
                             ${invoice.billingType === 'kassenarzt' ? 'Kassenarzt' : 
                               invoice.billingType === 'wahlarzt' ? 'Wahlarzt' : 'Privat'}
@@ -417,10 +612,12 @@ class InvoicePDFService {
                         <td class="label">Netto-Betrag:</td>
                         <td class="amount">${formatCurrency(invoice.subtotal)} €</td>
                     </tr>
-                    <tr>
-                        <td class="label">USt (${invoice.taxRate}%):</td>
-                        <td class="amount">${formatCurrency(invoice.taxAmount)} €</td>
-                    </tr>
+                    ${invoice.taxRate > 0 ? `
+                        <tr>
+                            <td class="label">USt (${invoice.taxRate}%):</td>
+                            <td class="amount">${formatCurrency(invoice.taxAmount)} €</td>
+                        </tr>
+                    ` : ''}
                     ${invoice.services.some(s => s.copay > 0) ? `
                         <tr>
                             <td class="label">Selbstbehalt:</td>
@@ -428,9 +625,23 @@ class InvoicePDFService {
                         </tr>
                     ` : ''}
                     <tr class="total-row">
-                        <td class="label"><strong>GESAMTBETRAG:</strong></td>
+                        <td class="label"><strong>GESAMTBETRAG (Brutto):</strong></td>
                         <td class="amount"><strong>${formatCurrency(invoice.totalAmount)} €</strong></td>
                     </tr>
+                    ${invoice.taxRate > 0 ? `
+                        <tr style="border-top: 1px solid #e0e0e0; padding-top: 8px;">
+                            <td class="label" style="font-size: 0.9em; color: #666;">Zusammenfassung:</td>
+                            <td class="amount" style="font-size: 0.9em; color: #666;"></td>
+                        </tr>
+                        <tr>
+                            <td class="label" style="font-size: 0.9em;">Netto:</td>
+                            <td class="amount" style="font-size: 0.9em;">${formatCurrency(invoice.subtotal)} €</td>
+                        </tr>
+                        <tr>
+                            <td class="label" style="font-size: 0.9em;">Brutto (inkl. ${invoice.taxRate}% USt):</td>
+                            <td class="amount" style="font-size: 0.9em;">${formatCurrency(invoice.totalAmount)} €</td>
+                        </tr>
+                    ` : ''}
                 </table>
                 
                 <div class="tax-info">
@@ -445,27 +656,82 @@ class InvoicePDFService {
             <!-- Payment Information -->
             <div class="payment-info">
                 <h3>Zahlungsinformationen</h3>
-                ${invoice.billingType === 'kassenarzt' ? `
-                    <ul>
-                        <li>Diese Rechnung wird direkt mit der Österreichischen Gesundheitskasse (ÖGK) abgerechnet</li>
-                        <li>Selbstbehalt: ${formatCurrency(invoice.services.reduce((sum, s) => sum + (s.copay || 0), 0))} €</li>
-                        <li>Sie erhalten keine separate Rechnung für diese Leistungen</li>
-                    </ul>
-                ` : invoice.billingType === 'wahlarzt' ? `
-                    <ul>
-                        <li>Sie zahlen den Gesamtbetrag: ${formatCurrency(invoice.totalAmount)} €</li>
-                        <li>Erstattung durch Versicherung: ${formatCurrency(invoice.services.reduce((sum, s) => sum + (s.reimbursement || 0), 0))} €</li>
-                        <li>Reichen Sie diese Rechnung bei Ihrer Krankenversicherung zur Erstattung ein</li>
-                        <li>Zahlung bitte bis zum ${formatDate(invoice.dueDate)} auf unser Konto</li>
-                    </ul>
-                ` : `
-                    <ul>
-                        <li>Privatabrechnung - Zahlung direkt an die Ordination</li>
-                        <li>Gesamtbetrag: ${formatCurrency(invoice.totalAmount)} €</li>
-                        <li>Zahlung bitte bis zum ${formatDate(invoice.dueDate)} auf unser Konto</li>
-                        <li>Bei Fragen wenden Sie sich bitte an unsere Ordination</li>
-                    </ul>
-                `}
+                ${invoice.status === 'paid' ? `
+                    <div style="background-color: #e8f5e9; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #4caf50;">
+                        <div style="color: #2e7d32; font-size: 1.1em; font-weight: bold; margin-bottom: 8px;">✓ Rechnung beglichen</div>
+                        ${invoice.paymentDate ? `
+                            <div style="color: #2e7d32; margin-bottom: 4px;">Zahlung erhalten am: ${formatDate(invoice.paymentDate)}</div>
+                        ` : ''}
+                        ${invoice.paymentMethod ? `
+                            <div style="color: #2e7d32;">Zahlungsart: ${getPaymentMethodLabel(invoice.paymentMethod)}</div>
+                        ` : ''}
+                    </div>
+                ` : invoice.status === 'overdue' ? `
+                    <div style="background-color: #ffebee; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #f44336;">
+                        <strong style="color: #c62828; font-size: 1.1em;">⚠ Rechnung überfällig</strong>
+                        <p style="margin: 8px 0 0 0; color: #c62828;">Bitte begleichen Sie diese Rechnung umgehend.</p>
+                    </div>
+                ` : invoice.status === 'cancelled' ? `
+                    <div style="background-color: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #9e9e9e;">
+                        <strong style="color: #616161; font-size: 1.1em;">Rechnung storniert</strong>
+                    </div>
+                ` : ''}
+                ${invoice.status !== 'paid' && invoice.status !== 'cancelled' ? `
+                    ${invoice.billingType === 'kassenarzt' ? `
+                        <ul>
+                            <li>Diese Rechnung wird direkt mit der Österreichischen Gesundheitskasse (ÖGK) abgerechnet</li>
+                            ${invoice.services.some(s => s.copay > 0) ? `
+                                <li>Selbstbehalt: ${formatCurrency(invoice.services.reduce((sum, s) => sum + (s.copay || 0), 0))} €</li>
+                                <li>Bitte begleichen Sie den Selbstbehalt bis zum ${formatDate(invoice.dueDate)}</li>
+                            ` : '<li>Sie erhalten keine separate Rechnung für diese Leistungen</li>'}
+                        </ul>
+                    ` : invoice.billingType === 'wahlarzt' ? `
+                        <ul>
+                            <li>Sie zahlen den Gesamtbetrag (Brutto): ${formatCurrency(invoice.totalAmount)} €</li>
+                            ${invoice.taxRate > 0 ? `
+                                <li>Davon Netto: ${formatCurrency(invoice.subtotal)} €</li>
+                                <li>Davon USt (${invoice.taxRate}%): ${formatCurrency(invoice.taxAmount)} €</li>
+                            ` : ''}
+                            ${invoice.services.some(s => s.reimbursement > 0) ? `
+                                <li>Erstattung durch Versicherung: ${formatCurrency(invoice.services.reduce((sum, s) => sum + (s.reimbursement || 0), 0))} €</li>
+                                <li>Reichen Sie diese Rechnung bei Ihrer Krankenversicherung zur Erstattung ein</li>
+                            ` : ''}
+                            ${invoice.services.some(s => s.copay > 0) ? `
+                                <li>Selbstbehalt: ${formatCurrency(invoice.services.reduce((sum, s) => sum + (s.copay || 0), 0))} €</li>
+                            ` : ''}
+                            <li>Zahlung bitte bis zum ${formatDate(invoice.dueDate)} auf unser Konto</li>
+                            ${invoice.paymentMethod === 'transfer' && defaultBankAccount ? `
+                                <li style="margin-top: 12px; font-weight: bold;">Bitte überweisen Sie den Betrag an:</li>
+                                <li style="margin-left: 20px; margin-top: 4px;">
+                                    ${defaultBankAccount.accountHolder ? `<div><strong>Kontoinhaber:</strong> ${defaultBankAccount.accountHolder}</div>` : ''}
+                                    ${defaultBankAccount.iban ? `<div><strong>IBAN:</strong> ${defaultBankAccount.iban}</div>` : ''}
+                                    ${defaultBankAccount.bic ? `<div><strong>BIC:</strong> ${defaultBankAccount.bic}</div>` : ''}
+                                    ${defaultBankAccount.bankName ? `<div><strong>Bank:</strong> ${defaultBankAccount.bankName}</div>` : ''}
+                                </li>
+                            ` : ''}
+                        </ul>
+                    ` : `
+                        <ul>
+                            <li>Privatabrechnung - Zahlung direkt an die Ordination</li>
+                            <li>Gesamtbetrag (Brutto): ${formatCurrency(invoice.totalAmount)} €</li>
+                            ${invoice.taxRate > 0 ? `
+                                <li>Davon Netto: ${formatCurrency(invoice.subtotal)} €</li>
+                                <li>Davon USt (${invoice.taxRate}%): ${formatCurrency(invoice.taxAmount)} €</li>
+                            ` : ''}
+                            <li>Zahlung bitte bis zum ${formatDate(invoice.dueDate)} auf unser Konto</li>
+                            ${invoice.paymentMethod === 'transfer' && defaultBankAccount ? `
+                                <li style="margin-top: 12px; font-weight: bold;">Bitte überweisen Sie den Betrag an:</li>
+                                <li style="margin-left: 20px; margin-top: 4px;">
+                                    ${defaultBankAccount.accountHolder ? `<div><strong>Kontoinhaber:</strong> ${defaultBankAccount.accountHolder}</div>` : ''}
+                                    ${defaultBankAccount.iban ? `<div><strong>IBAN:</strong> ${defaultBankAccount.iban}</div>` : ''}
+                                    ${defaultBankAccount.bic ? `<div><strong>BIC:</strong> ${defaultBankAccount.bic}</div>` : ''}
+                                    ${defaultBankAccount.bankName ? `<div><strong>Bank:</strong> ${defaultBankAccount.bankName}</div>` : ''}
+                                </li>
+                            ` : ''}
+                            <li>Bei Fragen wenden Sie sich bitte an unsere Ordination</li>
+                        </ul>
+                    `}
+                ` : ''}
             </div>
 
             <!-- Legal Information -->
@@ -477,6 +743,11 @@ class InvoicePDFService {
 
             <!-- Footer -->
             <div class="footer">
+                ${rksvoQRCodeBase64 ? `
+                <div class="rksvo-qr-code">
+                    <img src="${rksvoQRCodeBase64}" alt="RKSVO-Beleg QR-Code" />
+                </div>
+                ` : ''}
                 <div class="thank-you">Vielen Dank für Ihr Vertrauen!</div>
                 <div>Bei Fragen wenden Sie sich bitte an unsere Ordination.</div>
                 <div>Rechnung erstellt am ${formatDate(new Date())} um ${new Date().toLocaleTimeString('de-DE')}</div>

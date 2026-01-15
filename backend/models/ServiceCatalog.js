@@ -354,7 +354,12 @@ const ServiceCatalogSchema = new mongoose.Schema({
   
   // Wahlarzt-Abrechnung - alle Preise in Euro
   wahlarzt: {
-    price: { type: Number, min: 0 }, // Preis in Euro
+    price: { type: Number, min: 0 }, // Preis in Euro (Netto oder Brutto, je nach priceType)
+    priceType: { 
+      type: String, 
+      enum: ['netto', 'brutto'], 
+      default: 'netto' // Standard: Netto-Preis
+    },
     reimbursementRate: { type: Number, default: 0.80, min: 0, max: 1 },
     maxReimbursement: { type: Number, min: 0 }, // Erstattung in Euro
     requiresPreApproval: { type: Boolean, default: false }
@@ -362,7 +367,12 @@ const ServiceCatalogSchema = new mongoose.Schema({
   
   // Privatärztliche Abrechnung - Preis in Euro
   private: {
-    price: { type: Number, min: 0 }, // Preis in Euro
+    price: { type: Number, min: 0 }, // Preis in Euro (Netto oder Brutto, je nach priceType)
+    priceType: { 
+      type: String, 
+      enum: ['netto', 'brutto'], 
+      default: 'netto' // Standard: Netto-Preis
+    },
     noInsurance: { type: Boolean, default: true }
   },
   
@@ -397,6 +407,14 @@ const ServiceCatalogSchema = new mongoose.Schema({
       default: 0,
       min: 0
     }
+  },
+  
+  // Umsatzsteuer (USt) - optional, falls nicht gesetzt wird automatische Logik verwendet
+  taxRate: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: null // null = automatische Logik verwenden (Kassenarzt: 0%, Wahlarzt/Privat: 20%)
   },
   
   // Zusätzliche Informationen

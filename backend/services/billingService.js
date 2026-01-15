@@ -48,6 +48,34 @@ class BillingService {
   }
 
   /**
+   * Berechnet die Umsatzsteuer für einen Service basierend auf ServiceCatalog und billingType
+   * @param {String} serviceCode - Service-Code
+   * @param {String} billingType - 'kassenarzt', 'wahlarzt' oder 'privat'
+   * @returns {Promise<Number>} taxRate in Prozent (0-100)
+   */
+  async calculateTaxRateForService(serviceCode, billingType) {
+    if (!serviceCode) {
+      return billingType === 'kassenarzt' ? 0 : 20;
+    }
+
+    try {
+      const serviceCatalogEntry = await ServiceCatalog.findOne({ code: serviceCode })
+        .select('taxRate')
+        .lean();
+
+      // Wenn explizite taxRate vorhanden, verwende diese
+      if (serviceCatalogEntry && serviceCatalogEntry.taxRate !== null && serviceCatalogEntry.taxRate !== undefined) {
+        return serviceCatalogEntry.taxRate;
+      }
+    } catch (error) {
+      console.warn(`⚠️ Fehler beim Laden der taxRate für Service ${serviceCode}:`, error.message);
+    }
+
+    // Standard-Logik: Kassenarzt = 0%, Wahlarzt/Privat = 20%
+    return billingType === 'kassenarzt' ? 0 : 20;
+  }
+
+  /**
    * One-Click-Abrechnung - Hauptfunktion
    * @param {string} performanceId - ID der Leistung
    * @param {object} user - Benutzer-Objekt
@@ -911,9 +939,9 @@ class BillingService {
         totalPrice: performance.totalPrice
       }],
       subtotal: performance.totalPrice,
-      taxRate: 0, // 0% für medizinische Leistungen in Österreich
-      taxAmount: 0,
-      totalAmount: performance.totalPrice,
+      taxRate: await this.calculateTaxRateForService(performance.serviceCode, billingType),
+      taxAmount: performance.totalPrice * (await this.calculateTaxRateForService(performance.serviceCode, billingType)) / 100,
+      totalAmount: performance.totalPrice + (performance.totalPrice * (await this.calculateTaxRateForService(performance.serviceCode, billingType)) / 100),
       status: 'sent', // Rechnung wird direkt als "gesendet" markiert
       createdBy: doctor.id // Arzt als Ersteller
     };

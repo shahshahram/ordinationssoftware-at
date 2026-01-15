@@ -82,7 +82,7 @@ const InvoiceSchema = new mongoose.Schema({
   // Zahlungsstatus
   status: { 
     type: String, 
-    enum: ['draft', 'sent', 'paid', 'overdue', 'cancelled'], 
+    enum: ['draft', 'pending', 'sent', 'paid', 'overdue', 'cancelled'], 
     default: 'draft' 
   },
   paymentDate: { type: Date },
@@ -181,10 +181,20 @@ InvoiceSchema.pre('save', async function(next) {
 });
 
 // Virtual für Gesamtbetrag berechnen
+// WICHTIG: Dieser Hook wird nur ausgeführt, wenn subtotal, taxAmount oder totalAmount NICHT bereits gesetzt sind
+// Dies verhindert, dass korrekt berechnete Werte (z.B. bei Brutto-Preisen) überschrieben werden
 InvoiceSchema.pre('save', function(next) {
-  this.subtotal = this.services.reduce((sum, service) => sum + service.totalPrice, 0);
-  this.taxAmount = this.subtotal * (this.taxRate / 100);
-  this.totalAmount = this.subtotal + this.taxAmount;
+  // Nur berechnen, wenn Werte nicht bereits explizit gesetzt wurden
+  // Dies ist wichtig, da die Berechnung in billing.js bereits korrekt durchgeführt wird
+  // und die priceType (Netto/Brutto) berücksichtigt
+  if (this.subtotal === undefined || this.subtotal === null ||
+      this.taxAmount === undefined || this.taxAmount === null ||
+      this.totalAmount === undefined || this.totalAmount === null) {
+    // Fallback-Berechnung nur wenn Werte nicht gesetzt sind
+    this.subtotal = this.services.reduce((sum, service) => sum + (service.totalPrice || 0), 0);
+    this.taxAmount = this.subtotal * ((this.taxRate || 0) / 100);
+    this.totalAmount = this.subtotal + this.taxAmount;
+  }
   next();
 });
 

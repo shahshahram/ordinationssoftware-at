@@ -196,6 +196,38 @@ const photoUpload = multer({
   }
 });
 
+// Multer-Konfiguration für Allergiepass-Dokumente
+const documentStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const { id } = req.params;
+    const uploadPath = path.join(__dirname, '..', 'uploads', 'patient-documents', id);
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `allergy-pass-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const documentUpload = multer({ 
+  storage: documentStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB Limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = /jpeg|jpg|png|gif|webp|pdf/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+    
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('Nur Bilddateien (JPEG, PNG, GIF, WebP) und PDFs sind erlaubt!'));
+    }
+  }
+});
+
 // @route   GET /api/patients-extended/hints
 // @desc    Get patients with hints
 // @access  Private
@@ -1992,6 +2024,90 @@ router.delete('/:id/photos/:photoId', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Löschen des Fotos',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/patients-extended/:id/allergy-pass
+// @desc    Allergiepass-Dokument für Patienten hochladen
+// @access  Private
+router.post('/:id/allergy-pass', auth, documentUpload.single('allergyPass'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Datei hochgeladen'
+      });
+    }
+
+    const patient = await PatientExtended.findById(id);
+    if (!patient) {
+      // Lösche hochgeladene Datei wenn Patient nicht gefunden
+      if (req.file.path) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (unlinkError) {
+          console.error('Error deleting file:', unlinkError);
+        }
+      }
+      return res.status(404).json({
+        success: false,
+        message: 'Patient nicht gefunden'
+      });
+    }
+
+    // Lösche altes Dokument falls vorhanden
+    if (patient.allergyPassDocument) {
+      // Entferne 'uploads/' Präfix falls vorhanden, da wir den absoluten Pfad benötigen
+      const documentPath = patient.allergyPassDocument.startsWith('uploads/') 
+        ? patient.allergyPassDocument.replace('uploads/', '') 
+        : patient.allergyPassDocument;
+      const oldFilePath = path.join(__dirname, '..', 'uploads', documentPath);
+      if (fs.existsSync(oldFilePath)) {
+        try {
+          fs.unlinkSync(oldFilePath);
+        } catch (unlinkError) {
+          console.error('Error deleting old allergy pass document:', unlinkError);
+        }
+      }
+    }
+
+    // Speichere relativen Pfad (mit /uploads/ Präfix)
+    const uploadsDir = path.join(__dirname, '..', 'uploads');
+    const relativePath = req.file.path.replace(uploadsDir + path.sep, '').replace(/\\/g, '/');
+    // Stelle sicher, dass der Pfad mit 'uploads/' beginnt
+    const documentPath = relativePath.startsWith('uploads/') ? relativePath : `uploads/${relativePath}`;
+
+    // Aktualisiere Patient
+    patient.hasAllergyPass = true;
+    patient.allergyPassDocument = documentPath;
+    await patient.save();
+
+    res.json({
+      success: true,
+      message: 'Allergiepass erfolgreich hochgeladen',
+      data: {
+        path: documentPath,
+        filename: req.file.filename,
+        originalName: req.file.originalname
+      }
+    });
+  } catch (error) {
+    // Lösche hochgeladene Datei bei Fehler
+    if (req.file && req.file.path) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (unlinkError) {
+        console.error('Error deleting file:', unlinkError);
+      }
+    }
+    console.error('Error uploading allergy pass:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Hochladen des Allergiepasses',
       error: error.message
     });
   }

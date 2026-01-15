@@ -21,6 +21,85 @@ const ReceiptChain = require('../models/ReceiptChain');
 const ogkXMLGenerator = require('../utils/ogk-xml-generator');
 const router = express.Router();
 
+/**
+ * Berechnet die Umsatzsteuer für eine Rechnung basierend auf ServiceCatalog und billingType
+ * @param {Array} services - Array von Service-Objekten mit serviceCode
+ * @param {String} billingType - 'kassenarzt', 'wahlarzt' oder 'privat'
+ * @returns {Number} taxRate in Prozent (0-100)
+ */
+async function calculateTaxRate(services, billingType) {
+  console.log(`📊 [calculateTaxRate] Starte Berechnung für billingType: ${billingType}, Services: ${services?.length || 0}`);
+  
+  // Wenn keine Services vorhanden, verwende Standard-Logik
+  if (!services || services.length === 0) {
+    const defaultRate = billingType === 'kassenarzt' ? 0 : 20;
+    console.log(`📊 [calculateTaxRate] Keine Services, verwende Standard: ${defaultRate}%`);
+    return defaultRate;
+  }
+
+  // Lade ServiceCatalog-Einträge für alle Service-Codes
+  const serviceCodes = services
+    .map(s => s.serviceCode)
+    .filter(code => code && code.trim() !== '');
+  
+  console.log(`📊 [calculateTaxRate] Service-Codes: ${serviceCodes.join(', ')}`);
+  
+  if (serviceCodes.length === 0) {
+    const defaultRate = billingType === 'kassenarzt' ? 0 : 20;
+    console.log(`📊 [calculateTaxRate] Keine gültigen Service-Codes, verwende Standard: ${defaultRate}%`);
+    return defaultRate;
+  }
+
+  const serviceCatalogEntries = await ServiceCatalog.find({
+    code: { $in: serviceCodes }
+  }).select('code taxRate').lean();
+
+  console.log(`📊 [calculateTaxRate] Gefundene ServiceCatalog-Einträge: ${serviceCatalogEntries.length}`);
+  serviceCatalogEntries.forEach(entry => {
+    console.log(`📊 [calculateTaxRate] Service ${entry.code}: taxRate = ${entry.taxRate}`);
+  });
+
+  // Erstelle Map für schnellen Zugriff
+  const serviceCatalogMap = new Map();
+  serviceCatalogEntries.forEach(entry => {
+    serviceCatalogMap.set(entry.code, entry.taxRate);
+  });
+
+  // Prüfe, ob alle Services eine explizite taxRate haben
+  let hasExplicitTaxRate = false;
+  let explicitTaxRate = null;
+
+  for (const service of services) {
+    if (!service.serviceCode) continue;
+    
+    const catalogEntry = serviceCatalogMap.get(service.serviceCode);
+    console.log(`📊 [calculateTaxRate] Service ${service.serviceCode}: catalogEntry.taxRate = ${catalogEntry}`);
+    
+    if (catalogEntry !== null && catalogEntry !== undefined) {
+      hasExplicitTaxRate = true;
+      // Wenn unterschiedliche taxRates vorhanden, verwende die erste gefundene
+      if (explicitTaxRate === null) {
+        explicitTaxRate = catalogEntry;
+        console.log(`📊 [calculateTaxRate] Explizite taxRate gefunden: ${explicitTaxRate}%`);
+      } else if (explicitTaxRate !== catalogEntry) {
+        // Wenn unterschiedliche taxRates, verwende die erste (könnte auch gemittelt werden)
+        console.warn(`⚠️ Unterschiedliche taxRates in Services gefunden: ${explicitTaxRate}% und ${catalogEntry}%. Verwende ${explicitTaxRate}%`);
+      }
+    }
+  }
+
+  // Wenn explizite taxRate vorhanden, verwende diese
+  if (hasExplicitTaxRate && explicitTaxRate !== null) {
+    console.log(`📊 [calculateTaxRate] Verwende explizite taxRate: ${explicitTaxRate}%`);
+    return explicitTaxRate;
+  }
+
+  // Standard-Logik: Kassenarzt = 0%, Wahlarzt/Privat = 20%
+  const defaultRate = billingType === 'kassenarzt' ? 0 : 20;
+  console.log(`📊 [calculateTaxRate] Keine explizite taxRate, verwende Standard-Logik: ${defaultRate}% (billingType: ${billingType})`);
+  return defaultRate;
+}
+
 // @route   GET /api/billing/invoices
 // @desc    Get all invoices
 // @access  Private
@@ -70,7 +149,7 @@ router.get('/invoices', auth, async (req, res) => {
     const invoices = await Invoice.find(filter)
       .populate('patient.id', 'firstName lastName')
       .populate('createdBy', 'firstName lastName')
-      .sort({ invoiceDate: -1 })
+      .sort({ createdAt: -1, _id: -1 }) // Sortiere nach Erstellungsdatum und Uhrzeit (neueste zuerst), _id als Tie-Breaker
       .limit(limit * 1)
       .skip((page - 1) * limit);
 
@@ -163,10 +242,111 @@ router.post('/invoices', auth, [
       req.body.services = validServices;
     }
 
+    // Berechne taxRate automatisch basierend auf ServiceCatalog und billingType
+    let calculatedTaxRate = 0;
+    if (req.body.services && req.body.services.length > 0 && req.body.billingType) {
+      calculatedTaxRate = await calculateTaxRate(req.body.services, req.body.billingType);
+    } else if (req.body.billingType) {
+      // Fallback: Standard-Logik wenn keine Services vorhanden
+      calculatedTaxRate = req.body.billingType === 'kassenarzt' ? 0 : 20;
+    }
+
+    // WICHTIG: Ignoriere req.body.taxRate wenn es 0 ist und nicht explizit gesetzt wurde
+    // Das Frontend sendet oft taxRate: 0 als Standardwert, was die berechnete taxRate überschreiben würde
+    const finalTaxRate = (req.body.taxRate !== undefined && req.body.taxRate !== null && req.body.taxRate !== 0) 
+      ? req.body.taxRate 
+      : calculatedTaxRate;
+
+    console.log(`💰 [Invoice Creation] taxRate: Frontend=${req.body.taxRate}, Berechnet=${calculatedTaxRate}, Final=${finalTaxRate}`);
+
     const invoiceData = {
       ...req.body,
+      taxRate: finalTaxRate, // Verwende berechnete taxRate, es sei denn, Frontend hat explizit einen Wert > 0 gesetzt
       createdBy: req.user.id
     };
+
+    // Berechne taxAmount und totalAmount neu basierend auf taxRate
+    // WICHTIG: Prüfe, ob Preise bereits Brutto sind (aus ServiceCatalog)
+    if (invoiceData.services && invoiceData.services.length > 0) {
+      // Lade ServiceCatalog-Einträge, um priceType zu prüfen
+      const serviceCodes = invoiceData.services
+        .map(s => s.serviceCode)
+        .filter(code => code && code.trim() !== '');
+      
+      const serviceCatalogEntries = await ServiceCatalog.find({
+        code: { $in: serviceCodes }
+      }).select('code wahlarzt private taxRate').lean();
+      
+      const serviceCatalogMap = new Map();
+      serviceCatalogEntries.forEach(entry => {
+        serviceCatalogMap.set(entry.code, entry);
+      });
+      
+      let totalSubtotal = 0;
+      let totalTaxAmount = 0;
+      let totalTotalAmount = 0;
+      
+      for (const service of invoiceData.services) {
+        if (!service.serviceCode) {
+          // Fallback: Wenn kein ServiceCode, behandle als Netto
+          const servicePrice = service.totalPrice || 0;
+          const taxRate = invoiceData.taxRate || 0;
+          totalSubtotal += servicePrice;
+          totalTaxAmount += servicePrice * taxRate / 100;
+          totalTotalAmount += servicePrice * (1 + taxRate / 100);
+          continue;
+        }
+        
+        const catalogEntry = serviceCatalogMap.get(service.serviceCode);
+        const servicePrice = service.totalPrice || 0;
+        const taxRate = invoiceData.taxRate || 0;
+        
+        console.log(`💰 [Invoice Creation] Service ${service.serviceCode}: servicePrice=${servicePrice}, taxRate=${taxRate}, billingType=${invoiceData.billingType}`);
+        if (catalogEntry) {
+          console.log(`💰 [Invoice Creation] ServiceCatalog gefunden: wahlarzt.priceType=${catalogEntry.wahlarzt?.priceType}, private.priceType=${catalogEntry.private?.priceType}`);
+        } else {
+          console.log(`💰 [Invoice Creation] ServiceCatalog NICHT gefunden für Code: ${service.serviceCode}`);
+        }
+        
+        // Prüfe, ob Preis bereits Brutto ist
+        let isBrutto = false;
+        if (catalogEntry) {
+          if (invoiceData.billingType === 'wahlarzt' && catalogEntry.wahlarzt?.priceType === 'brutto') {
+            isBrutto = true;
+            console.log(`💰 [Invoice Creation] Preis ist BRUTTO (wahlarzt)`);
+          } else if (invoiceData.billingType === 'privat' && catalogEntry.private?.priceType === 'brutto') {
+            isBrutto = true;
+            console.log(`💰 [Invoice Creation] Preis ist BRUTTO (privat)`);
+          } else {
+            console.log(`💰 [Invoice Creation] Preis ist NETTO (priceType nicht brutto oder nicht gefunden)`);
+          }
+        } else {
+          console.log(`💰 [Invoice Creation] Kein ServiceCatalog-Eintrag gefunden, behandle als NETTO`);
+        }
+        
+        if (isBrutto && taxRate > 0) {
+          // Preis ist bereits Brutto → berechne Netto
+          const nettoPrice = servicePrice / (1 + taxRate / 100);
+          const taxAmount = servicePrice - nettoPrice;
+          console.log(`💰 [Invoice Creation] Brutto-Preis erkannt: ${servicePrice} → Netto: ${nettoPrice.toFixed(2)}, USt: ${taxAmount.toFixed(2)}`);
+          totalSubtotal += nettoPrice;
+          totalTaxAmount += taxAmount;
+          totalTotalAmount += servicePrice; // Brutto bleibt Brutto
+        } else {
+          // Preis ist Netto → berechne Brutto
+          console.log(`💰 [Invoice Creation] Netto-Preis: ${servicePrice} → Brutto: ${(servicePrice * (1 + taxRate / 100)).toFixed(2)}`);
+          totalSubtotal += servicePrice;
+          totalTaxAmount += servicePrice * taxRate / 100;
+          totalTotalAmount += servicePrice * (1 + taxRate / 100);
+        }
+      }
+      
+      invoiceData.subtotal = totalSubtotal;
+      invoiceData.taxAmount = totalTaxAmount;
+      invoiceData.totalAmount = totalTotalAmount;
+      
+      console.log(`💰 [Invoice Creation] Preisberechnung: subtotal=${invoiceData.subtotal.toFixed(2)}, taxAmount=${invoiceData.taxAmount.toFixed(2)}, totalAmount=${invoiceData.totalAmount.toFixed(2)}`);
+    }
 
     console.log('Creating invoice with data:', JSON.stringify(invoiceData, null, 2));
     
@@ -391,10 +571,92 @@ router.put('/invoices/:id', auth, async (req, res) => {
     }
 
     // Berechne subtotal und totalAmount neu, falls services vorhanden
+    // WICHTIG: Prüfe, ob Preise bereits Brutto sind (aus ServiceCatalog)
     if (updateData.services && Array.isArray(updateData.services)) {
-      updateData.subtotal = updateData.services.reduce((sum, s) => sum + (s.totalPrice || 0), 0);
-      updateData.taxAmount = updateData.subtotal * (updateData.taxRate || 0) / 100;
-      updateData.totalAmount = updateData.subtotal + updateData.taxAmount;
+      // Berechne taxRate automatisch, falls nicht explizit gesetzt
+      if (updateData.taxRate === undefined || updateData.taxRate === null) {
+        const calculatedTaxRate = await calculateTaxRate(updateData.services, updateData.billingType || oldInvoice.billingType);
+        updateData.taxRate = calculatedTaxRate;
+      }
+      
+      // Lade ServiceCatalog-Einträge, um priceType zu prüfen
+      const serviceCodes = updateData.services
+        .map(s => s.serviceCode)
+        .filter(code => code && code.trim() !== '');
+      
+      const serviceCatalogEntries = await ServiceCatalog.find({
+        code: { $in: serviceCodes }
+      }).select('code wahlarzt private taxRate').lean();
+      
+      const serviceCatalogMap = new Map();
+      serviceCatalogEntries.forEach(entry => {
+        serviceCatalogMap.set(entry.code, entry);
+      });
+      
+      let totalSubtotal = 0;
+      let totalTaxAmount = 0;
+      let totalTotalAmount = 0;
+      const taxRate = updateData.taxRate || 0;
+      const billingType = updateData.billingType || oldInvoice.billingType;
+      
+      for (const service of updateData.services) {
+        if (!service.serviceCode) {
+          // Fallback: Wenn kein ServiceCode, behandle als Netto
+          const servicePrice = service.totalPrice || 0;
+          totalSubtotal += servicePrice;
+          totalTaxAmount += servicePrice * taxRate / 100;
+          totalTotalAmount += servicePrice * (1 + taxRate / 100);
+          continue;
+        }
+        
+        const catalogEntry = serviceCatalogMap.get(service.serviceCode);
+        const servicePrice = service.totalPrice || 0;
+        
+        console.log(`💰 [Invoice Update] Service ${service.serviceCode}: servicePrice=${servicePrice}, taxRate=${taxRate}, billingType=${billingType}`);
+        if (catalogEntry) {
+          console.log(`💰 [Invoice Update] ServiceCatalog gefunden: wahlarzt.priceType=${catalogEntry.wahlarzt?.priceType}, private.priceType=${catalogEntry.private?.priceType}`);
+        } else {
+          console.log(`💰 [Invoice Update] ServiceCatalog NICHT gefunden für Code: ${service.serviceCode}`);
+        }
+        
+        // Prüfe, ob Preis bereits Brutto ist
+        let isBrutto = false;
+        if (catalogEntry) {
+          if (billingType === 'wahlarzt' && catalogEntry.wahlarzt?.priceType === 'brutto') {
+            isBrutto = true;
+            console.log(`💰 [Invoice Update] Preis ist BRUTTO (wahlarzt)`);
+          } else if (billingType === 'privat' && catalogEntry.private?.priceType === 'brutto') {
+            isBrutto = true;
+            console.log(`💰 [Invoice Update] Preis ist BRUTTO (privat)`);
+          } else {
+            console.log(`💰 [Invoice Update] Preis ist NETTO (priceType nicht brutto oder nicht gefunden)`);
+          }
+        } else {
+          console.log(`💰 [Invoice Update] Kein ServiceCatalog-Eintrag gefunden, behandle als NETTO`);
+        }
+        
+        if (isBrutto && taxRate > 0) {
+          // Preis ist bereits Brutto → berechne Netto
+          const nettoPrice = servicePrice / (1 + taxRate / 100);
+          const taxAmount = servicePrice - nettoPrice;
+          console.log(`💰 [Invoice Update] Brutto-Preis erkannt: ${servicePrice} → Netto: ${nettoPrice.toFixed(2)}, USt: ${taxAmount.toFixed(2)}`);
+          totalSubtotal += nettoPrice;
+          totalTaxAmount += taxAmount;
+          totalTotalAmount += servicePrice; // Brutto bleibt Brutto
+        } else {
+          // Preis ist Netto → berechne Brutto
+          console.log(`💰 [Invoice Update] Netto-Preis: ${servicePrice} → Brutto: ${(servicePrice * (1 + taxRate / 100)).toFixed(2)}`);
+          totalSubtotal += servicePrice;
+          totalTaxAmount += servicePrice * taxRate / 100;
+          totalTotalAmount += servicePrice * (1 + taxRate / 100);
+        }
+      }
+      
+      updateData.subtotal = totalSubtotal;
+      updateData.taxAmount = totalTaxAmount;
+      updateData.totalAmount = totalTotalAmount;
+      
+      console.log(`💰 [Invoice Update] Preisberechnung: subtotal=${updateData.subtotal.toFixed(2)}, taxAmount=${updateData.taxAmount.toFixed(2)}, totalAmount=${updateData.totalAmount.toFixed(2)}`);
     }
 
     // Konvertiere Datum-Felder zu Date-Objekten
@@ -574,17 +836,18 @@ router.get('/services', auth, async (req, res) => {
     }
 
     const services = await ServiceCatalog.find(filter)
-      .select('code name description category prices quick_select color_hex specialty billingType ogk wahlarzt private copay price_cents')
+      .select('code name description category prices quick_select color_hex specialty billingType ogk wahlarzt private copay price taxRate')
       .sort({ name: 1 })
       .lean();
 
     // Transform services to include prices object
+    // ALLE PREISE SIND BEREITS IN EURO - KEINE KONVERTIERUNG MEHR!
     const transformedServices = services.map(service => ({
       ...service,
       prices: service.prices || {
         kassenarzt: service.ogk?.khoPrice || service.ogk?.ebmPrice || 0, // Unterstützt beide Felder
         wahlarzt: service.wahlarzt?.price || 0,
-        privat: service.private?.price || service.price_cents || 0
+        privat: service.private?.price || service.price || 0 // Alle Preise sind bereits in Euro!
       }
     }));
 
@@ -1066,22 +1329,73 @@ router.post('/export-ogk-xml', auth, async (req, res) => {
 // @access  Private
 router.post('/invoices/:id/pdf', auth, async (req, res) => {
   try {
+    console.log(`📄 PDF-Generierung gestartet für Rechnung: ${req.params.id}`);
+    
     const invoicePDFService = require('../services/invoicePDFService');
     const pdfBuffer = await invoicePDFService.generateInvoicePDF(req.params.id);
+    
+    console.log(`✅ PDF-Buffer generiert. Größe: ${pdfBuffer ? pdfBuffer.length : 0} bytes`);
+    
+    // Prüfe ob PDF-Buffer gültig ist
+    if (!pdfBuffer) {
+      console.error('❌ PDF-Buffer ist null oder undefined');
+      return res.status(500).set('Content-Type', 'application/json').json({
+        success: false,
+        message: 'PDF-Generierung fehlgeschlagen: PDF-Buffer ist null'
+      });
+    }
+    
+    if (!Buffer.isBuffer(pdfBuffer)) {
+      console.error('❌ PDF-Buffer ist kein Buffer. Typ:', typeof pdfBuffer, 'Wert:', pdfBuffer);
+      return res.status(500).set('Content-Type', 'application/json').json({
+        success: false,
+        message: 'PDF-Generierung fehlgeschlagen: PDF-Buffer ist kein Buffer'
+      });
+    }
+    
+    if (pdfBuffer.length === 0) {
+      console.error('❌ PDF-Buffer ist leer');
+      return res.status(500).set('Content-Type', 'application/json').json({
+        success: false,
+        message: 'PDF-Generierung fehlgeschlagen: Leerer PDF-Buffer'
+      });
+    }
+    
+    // Prüfe ob es wirklich ein PDF ist (PDFs beginnen mit %PDF)
+    const pdfHeader = pdfBuffer.slice(0, 4).toString();
+    console.log(`📋 PDF-Header: "${pdfHeader}"`);
+    
+    if (pdfHeader !== '%PDF') {
+      console.error('❌ Generierter Buffer ist kein gültiges PDF. Header:', pdfHeader, 'Erste 100 Bytes:', pdfBuffer.slice(0, 100).toString());
+      return res.status(500).set('Content-Type', 'application/json').json({
+        success: false,
+        message: `PDF-Generierung fehlgeschlagen: Ungültiges PDF-Format. Erwartet '%PDF', erhalten '${pdfHeader}'`
+      });
+    }
+    
+    console.log(`✅ PDF ist gültig. Sende PDF mit ${pdfBuffer.length} bytes`);
     
     res.set({
       'Content-Type': 'application/pdf',
       'Content-Disposition': `attachment; filename="Rechnung_${req.params.id}.pdf"`,
-      'Content-Length': pdfBuffer.length
+      'Content-Length': pdfBuffer.length.toString()
     });
     
     res.send(pdfBuffer);
   } catch (error) {
-    console.error('PDF-Generierung fehlgeschlagen:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Fehler beim Generieren der PDF'
-    });
+    console.error('❌ PDF-Generierung fehlgeschlagen:', error);
+    console.error('❌ Fehler-Stack:', error.stack);
+    // Stelle sicher, dass wir JSON senden, nicht PDF
+    // Setze Content-Type explizit auf JSON
+    if (!res.headersSent) {
+      res.status(500).set('Content-Type', 'application/json').json({
+        success: false,
+        message: error.message || 'Fehler beim Generieren der PDF',
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
+    } else {
+      console.error('⚠️ Response-Header wurden bereits gesendet, kann keinen Fehler senden');
+    }
   }
 });
 

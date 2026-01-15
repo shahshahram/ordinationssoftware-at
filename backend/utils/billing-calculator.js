@@ -1,12 +1,65 @@
 // Berechnungsutilities für Österreichische Abrechnungen
 
-// Helper-Funktion: Konvertiert Preis zu Euro (automatische Erkennung)
-// Wenn Wert > 1000, wird angenommen, dass es in Cent ist
+// Helper-Funktion: Gibt Preis direkt zurück (alle Preise sind bereits in Euro)
+// KEINE Konvertierung mehr nötig - alle Preise sind bereits in Euro!
 const toEuro = (value) => {
   if (!value && value !== 0) return 0;
-  // Wenn Wert > 1000, ist es wahrscheinlich in Cent (alte Daten)
-  return value > 1000 ? value / 100 : value;
+  // Alle Preise sind bereits in Euro - keine Konvertierung mehr!
+  return value;
 };
+
+/**
+ * Berechnet Netto-Preis aus Brutto-Preis
+ * @param {Number} bruttoPrice - Brutto-Preis in Euro
+ * @param {Number} taxRate - Umsatzsteuer in Prozent (z.B. 20 für 20%)
+ * @returns {Number} Netto-Preis in Euro
+ */
+function calculateNettoFromBrutto(bruttoPrice, taxRate) {
+  if (!bruttoPrice || bruttoPrice === 0) return 0;
+  if (!taxRate || taxRate === 0) return bruttoPrice;
+  return bruttoPrice / (1 + taxRate / 100);
+}
+
+/**
+ * Berechnet Brutto-Preis aus Netto-Preis
+ * @param {Number} nettoPrice - Netto-Preis in Euro
+ * @param {Number} taxRate - Umsatzsteuer in Prozent (z.B. 20 für 20%)
+ * @returns {Number} Brutto-Preis in Euro
+ */
+function calculateBruttoFromNetto(nettoPrice, taxRate) {
+  if (!nettoPrice || nettoPrice === 0) return 0;
+  if (!taxRate || taxRate === 0) return nettoPrice;
+  return nettoPrice * (1 + taxRate / 100);
+}
+
+/**
+ * Gibt den korrekten Preis zurück (Netto oder Brutto) basierend auf priceType
+ * @param {Object} priceData - { price: Number, priceType: 'netto'|'brutto' }
+ * @param {Number} taxRate - Umsatzsteuer in Prozent
+ * @param {String} returnType - 'netto' oder 'brutto' (was zurückgegeben werden soll)
+ * @returns {Number} Preis in Euro
+ */
+function getPriceByType(priceData, taxRate, returnType = 'netto') {
+  if (!priceData || !priceData.price || priceData.price === 0) return 0;
+  if (!taxRate || taxRate === 0) return priceData.price; // Keine USt = Netto = Brutto
+  
+  const inputPrice = priceData.price;
+  const inputType = priceData.priceType || 'netto';
+  
+  // Wenn Input-Typ und gewünschter Typ gleich sind, direkt zurückgeben
+  if (inputType === returnType) {
+    return inputPrice;
+  }
+  
+  // Umrechnen
+  if (inputType === 'brutto' && returnType === 'netto') {
+    return calculateNettoFromBrutto(inputPrice, taxRate);
+  } else if (inputType === 'netto' && returnType === 'brutto') {
+    return calculateBruttoFromNetto(inputPrice, taxRate);
+  }
+  
+  return inputPrice;
+}
 
 const SELBSTBEHALT_RATES = {
   STANDARD: { rate: 0.10, max: 28.50 }, // 10%, max 28,50€ (jetzt in Euro)
@@ -242,10 +295,27 @@ function calculateBilling(patient, service, billingType) {
       if (!coverage.canBillAsWahlarzt) {
         result.warnings.push('Patient hat keine Versicherung oder Service ist nicht als Wahlarzt abrechenbar');
       }
-      // Preise sind jetzt in Euro (oder in Cent für Backward Compatibility)
-      const wahlarztPrice = toEuro(service.wahlarzt?.price || 0);
-      const privatePrice = toEuro(service.private?.price || 0);
-      result.grossAmount = wahlarztPrice || privatePrice || 0;
+      // Preise sind jetzt in Euro - berücksichtige Netto/Brutto
+      const wahlarztTaxRate = service.taxRate !== null && service.taxRate !== undefined ? service.taxRate : 20;
+      let wahlarztPrice = 0;
+      if (service.wahlarzt?.price) {
+        // Umrechnen zu Brutto (grossAmount ist immer Brutto)
+        wahlarztPrice = getPriceByType(
+          { price: service.wahlarzt.price, priceType: service.wahlarzt.priceType || 'netto' },
+          wahlarztTaxRate,
+          'brutto'
+        );
+      }
+      if (!wahlarztPrice && service.private?.price) {
+        // Fallback auf private Preis
+        const privateTaxRate = service.taxRate !== null && service.taxRate !== undefined ? service.taxRate : 20;
+        wahlarztPrice = getPriceByType(
+          { price: service.private.price, priceType: service.private.priceType || 'netto' },
+          privateTaxRate,
+          'brutto'
+        );
+      }
+      result.grossAmount = wahlarztPrice || 0;
       result.goaeCode = service.wahlarzt?.goaeCode || null;
       result.goaeMultiplier = service.wahlarzt?.goaeMultiplier || 1.0;
       result.copay = calculateCopay(service, patient, result.grossAmount, 'wahlarzt');
@@ -311,7 +381,21 @@ function calculateBilling(patient, service, billingType) {
       break;
       
     case 'privat':
-      result.grossAmount = service.private?.price || 0;
+      if (!coverage.canBillAsPrivate) {
+        result.warnings.push('Service ist nicht für Privatabrechnung verfügbar');
+      }
+      // Preise sind jetzt in Euro - berücksichtige Netto/Brutto
+      const privatTaxRate = service.taxRate !== null && service.taxRate !== undefined ? service.taxRate : 20;
+      let privatPrice = 0;
+      if (service.private?.price) {
+        // Umrechnen zu Brutto (grossAmount ist immer Brutto)
+        privatPrice = getPriceByType(
+          { price: service.private.price, priceType: service.private.priceType || 'netto' },
+          privatTaxRate,
+          'brutto'
+        );
+      }
+      result.grossAmount = privatPrice || 0;
       result.copay = 0;
       result.patientAmount = result.grossAmount;
       result.insuranceAmount = 0;
@@ -414,6 +498,9 @@ async function calculateRefund(services, patient) {
 }
 
 module.exports = {
+  calculateNettoFromBrutto,
+  calculateBruttoFromNetto,
+  getPriceByType,
   calculateCopay,
   checkInsuranceCoverage,
   calculateBilling,
