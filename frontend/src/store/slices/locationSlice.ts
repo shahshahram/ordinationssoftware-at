@@ -95,6 +95,7 @@ export interface Location {
   email?: string;
   color_hex: string;
   is_active: boolean;
+  invoiceDesign?: 'standard' | 'minimal';
   practiceType?: 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt';
   specialties?: string[]; // Medizinische Fachrichtungen
   billing?: LocationBillingConfig;

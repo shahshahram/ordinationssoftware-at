@@ -111,7 +111,11 @@ const Settings: React.FC = () => {
   const [helpDialogWAHonlineOpen, setHelpDialogWAHonlineOpen] = useState(false);
   const [helpDialogEmailOpen, setHelpDialogEmailOpen] = useState(false);
   const [helpDialogSmsOpen, setHelpDialogSmsOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [helpTabBilling, setHelpTabBilling] = useState(0);
+  const [helpTabELDA, setHelpTabELDA] = useState(0);
+  const [helpTabWAHonline, setHelpTabWAHonline] = useState(0);
+  const [helpTabEmail, setHelpTabEmail] = useState(0);
+  const [helpTabSms, setHelpTabSms] = useState(0);
 
   // Lade aktuelle Einstellungen
   useEffect(() => {
@@ -1339,8 +1343,8 @@ const Settings: React.FC = () => {
           maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
         }}>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabBilling} 
+            onChange={(_, v) => setHelpTabBilling(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -1352,7 +1356,7 @@ const Settings: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabBilling === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1380,7 +1384,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabBilling === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1414,7 +1418,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabBilling === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1471,7 +1475,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabBilling === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1496,7 +1500,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTabBilling === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1554,8 +1558,8 @@ const Settings: React.FC = () => {
           maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
         }}>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabELDA} 
+            onChange={(_, v) => setHelpTabELDA(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -1568,7 +1572,7 @@ const Settings: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabELDA === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1594,7 +1598,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabELDA === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1620,7 +1624,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabELDA === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1646,7 +1650,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabELDA === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1692,7 +1696,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTabELDA === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1742,7 +1746,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 5 && (
+          {helpTabELDA === 5 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1801,8 +1805,8 @@ const Settings: React.FC = () => {
           maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
         }}>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabWAHonline} 
+            onChange={(_, v) => setHelpTabWAHonline(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -1814,7 +1818,7 @@ const Settings: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabWAHonline === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1839,7 +1843,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabWAHonline === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1864,7 +1868,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabWAHonline === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1889,7 +1893,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabWAHonline === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1915,7 +1919,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTabWAHonline === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -1973,8 +1977,8 @@ const Settings: React.FC = () => {
           maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
         }}>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabEmail} 
+            onChange={(_, v) => setHelpTabEmail(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -1989,7 +1993,7 @@ const Settings: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabEmail === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2029,7 +2033,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabEmail === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2093,7 +2097,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabEmail === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2148,7 +2152,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabEmail === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2204,7 +2208,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTabEmail === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2259,7 +2263,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 5 && (
+          {helpTabEmail === 5 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2315,7 +2319,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 6 && (
+          {helpTabEmail === 6 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2352,7 +2356,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 7 && (
+          {helpTabEmail === 7 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2421,8 +2425,8 @@ const Settings: React.FC = () => {
           maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
         }}>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabSms} 
+            onChange={(_, v) => setHelpTabSms(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -2435,7 +2439,7 @@ const Settings: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabSms === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2460,7 +2464,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabSms === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2509,7 +2513,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabSms === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2559,7 +2563,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabSms === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2605,7 +2609,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTabSms === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2642,7 +2646,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 5 && (
+          {helpTabSms === 5 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">

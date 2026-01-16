@@ -76,6 +76,7 @@ import {
   Block,
   ExpandMore,
   PhotoCamera,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import AdditionalInsuranceForm from '../components/Billing/AdditionalInsuranceForm';
 import ECardValidation from '../components/ECardValidation';
@@ -116,6 +117,8 @@ const Patients: React.FC = () => {
   const [phoneError, setPhoneError] = useState<string | null>(null);
   const [emergencyPhoneError, setEmergencyPhoneError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [formData, setFormData] = useState<Partial<Patient>>({
     firstName: '',
     lastName: '',
@@ -1527,13 +1530,24 @@ const Patients: React.FC = () => {
           >
             Patientenverwaltung
           </Typography>
-          <Typography 
-            variant="body1" 
-            color="text.secondary"
-            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
-          >
-            {filteredAndSortedPatients.length} von {patients?.length || 0} Patienten
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography 
+              variant="body1" 
+              color="text.secondary"
+              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+            >
+              {filteredAndSortedPatients.length} von {patients?.length || 0} Patienten
+            </Typography>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
         <Box 
           display="flex" 
@@ -2362,6 +2376,306 @@ const Patients: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Patientenverwaltung"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Patient erstellen" />
+            <Tab label="Patient bearbeiten" />
+            <Tab label="Suche & Filter" />
+            <Tab label="Ansichten" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Patientenverwaltung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Patientenverwaltung ist das zentrale Tool für die Verwaltung aller Patienten. 
+                  Hier können Sie Patienten erstellen, bearbeiten, suchen und filtern.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👤 <strong>Patienten erstellen:</strong> Neue Patienten anlegen</li>
+                  <li>✏️ <strong>Patienten bearbeiten:</strong> Bestehende Patientendaten ändern</li>
+                  <li>🔍 <strong>Suche:</strong> Patienten nach Name, SVNR, Telefon, E-Mail suchen</li>
+                  <li>🔎 <strong>Filter:</strong> Nach verschiedenen Kriterien filtern</li>
+                  <li>📋 <strong>Ansichten:</strong> Karten- oder Listenansicht</li>
+                  <li>📊 <strong>Sortierung:</strong> Nach Name, letztem Besuch, Geburtstag, Status</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Schnellzugriff
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📞 <strong>Telefon:</strong> Direkter Anruf über Telefon-Icon</li>
+                  <li>📧 <strong>E-Mail:</strong> Direkte E-Mail über E-Mail-Icon</li>
+                  <li>👁️ <strong>Anzeigen:</strong> Patientenakte öffnen</li>
+                  <li>✏️ <strong>Bearbeiten:</strong> Patientendaten bearbeiten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neuen Patienten erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie einen neuen Patienten:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neuer Patient"</li>
+                  <li>Geben Sie die Grunddaten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Vorname:</strong> Vorname des Patienten</li>
+                      <li><strong>Nachname:</strong> Nachname des Patienten</li>
+                      <li><strong>Geburtsdatum:</strong> Geburtsdatum</li>
+                      <li><strong>Geschlecht:</strong> Männlich, Weiblich, Divers</li>
+                      <li><strong>SVNR:</strong> Sozialversicherungsnummer (optional)</li>
+                    </Box>
+                  </li>
+                  <li>Geben Sie Kontaktdaten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Telefon:</strong> Telefonnummer</li>
+                      <li><strong>E-Mail:</strong> E-Mail-Adresse</li>
+                      <li><strong>Adresse:</strong> Straße, PLZ, Stadt, Land</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                  <li>Der Patient wird erstellt und in der Liste angezeigt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Erforderliche Felder
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Vorname:</strong> Muss angegeben werden</li>
+                  <li><strong>Nachname:</strong> Muss angegeben werden</li>
+                  <li><strong>Geburtsdatum:</strong> Muss angegeben werden</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Patient bearbeiten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So bearbeiten Sie einen bestehenden Patienten:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Bearbeiten-Icon bei einem Patienten</li>
+                  <li>Der Bearbeitungsdialog öffnet sich</li>
+                  <li>Ändern Sie die gewünschten Daten</li>
+                  <li>Klicken Sie auf "Aktualisieren"</li>
+                  <li>Die Änderungen werden gespeichert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Bearbeitbare Bereiche
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Grunddaten (Name, Geburtsdatum, Geschlecht, SVNR)</li>
+                  <li>✅ Kontaktdaten (Telefon, E-Mail, Adresse)</li>
+                  <li>✅ Zusatzversicherungen</li>
+                  <li>✅ Notfallkontakt</li>
+                  <li>✅ Medizinische Daten</li>
+                  <li>✅ Online-Buchung Einstellungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Suche & Filter
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Patientenverwaltung bietet umfangreiche Such- und Filterfunktionen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Suche
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔍 <strong>Suchfeld:</strong> Suche nach Name, SVNR, Telefon, E-Mail</li>
+                  <li>⚡ <strong>Echtzeit-Suche:</strong> Ergebnisse werden während der Eingabe gefiltert</li>
+                  <li>📝 <strong>Mehrere Begriffe:</strong> Mehrere Suchbegriffe werden kombiniert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Filter
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🎂 <strong>Heute Geburtstag:</strong> Patienten mit Geburtstag heute</li>
+                  <li>💰 <strong>Unverrechnete:</strong> Patienten mit unverrechneten Leistungen</li>
+                  <li>🆕 <strong>Neue Patienten:</strong> Kürzlich erstellte Patienten</li>
+                  <li>✅ <strong>Aktive:</strong> Aktive Patienten</li>
+                  <li>📅 <strong>Termin-Heute:</strong> Patienten mit Termin heute</li>
+                  <li>📅 <strong>Termin-Morgen:</strong> Patienten mit Termin morgen</li>
+                  <li>🚫 <strong>Online-Buchung blockiert:</strong> Patienten mit blockierter Online-Buchung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Sortierung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📝 <strong>Nach Name:</strong> Alphabetisch sortiert</li>
+                  <li>📅 <strong>Nach letztem Besuch:</strong> Neueste zuerst oder älteste zuerst</li>
+                  <li>🎂 <strong>Nach Geburtstag:</strong> Nächste Geburtstage zuerst</li>
+                  <li>📊 <strong>Nach Status:</strong> Status-basiert sortiert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Ansichten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Patientenverwaltung bietet zwei Ansichten: Karten- und Listenansicht.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Kartenansicht
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🃏 <strong>Layout:</strong> Patienten als Karten dargestellt</li>
+                  <li>👤 <strong>Avatar:</strong> Profilfoto oder Initialen</li>
+                  <li>📋 <strong>Informationen:</strong> Name, Alter, Kontaktdaten</li>
+                  <li>⚡ <strong>Schnellzugriff:</strong> Telefon, E-Mail, Anzeigen, Bearbeiten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Listenansicht
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 <strong>Layout:</strong> Patienten als kompakte Liste</li>
+                  <li>📊 <strong>Übersicht:</strong> Mehr Patienten auf einmal sichtbar</li>
+                  <li>🔍 <strong>Einfache Navigation:</strong> Schnelles Scrollen</li>
+                  <li>⚡ <strong>Schnellzugriff:</strong> Telefon, E-Mail, Anzeigen, Bearbeiten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Ansicht wechseln
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Ansicht-Icon (Karten oder Liste)</li>
+                  <li>Die Ansicht wechselt sofort</li>
+                  <li>Ihre Präferenz wird gespeichert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Datenerfassung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erfassen Sie vollständige Patientendaten</li>
+                  <li>✅ Verwenden Sie korrekte SVNR (falls vorhanden)</li>
+                  <li>✅ Aktualisieren Sie Kontaktdaten regelmäßig</li>
+                  <li>✅ Dokumentieren Sie wichtige Informationen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Organisation
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Nutzen Sie Filter für spezifische Patienten</li>
+                  <li>✅ Verwenden Sie die Suche für schnellen Zugriff</li>
+                  <li>✅ Wählen Sie die passende Ansicht für Ihre Arbeit</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

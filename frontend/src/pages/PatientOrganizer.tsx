@@ -80,7 +80,8 @@ import {
   Block,
   History,
   ArrowBack,
-  List as ListIcon
+  List as ListIcon,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -126,6 +127,7 @@ import api from '../utils/api';
 import { Specialization } from '../types/ambulanzbefund';
 import PerformanceForm from '../components/PerformanceForm';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 // TabPanel Komponente
 interface TabPanelProps {
@@ -468,6 +470,8 @@ const PatientOrganizer: React.FC = () => {
   // State für Template-Dialog
   const [templateMenuAnchor, setTemplateMenuAnchor] = useState<null | HTMLElement>(null);
   const [isCreatingDocument, setIsCreatingDocument] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   
   // State für Standalone-Dokumente
   const [standaloneDocumentDialogOpen, setStandaloneDocumentDialogOpen] = useState(false);
@@ -3047,6 +3051,15 @@ const PatientOrganizer: React.FC = () => {
                   size="large"
                 >
                   <MenuIcon />
+                </IconButton>
+              </Tooltip>
+              <Tooltip title="Hilfe & Leitfaden">
+                <IconButton
+                  onClick={() => setHelpDialogOpen(true)}
+                  sx={{ color: 'inherit', mt: 1 }}
+                  size="large"
+                >
+                  <HelpOutlineIcon />
                 </IconButton>
               </Tooltip>
             </Box>
@@ -6745,6 +6758,324 @@ const PatientOrganizer: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setMedicationManagerDialogOpen(false)}>
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Patienten-Organizer"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Medizinische Daten" />
+            <Tab label="EPA / Timeline" />
+            <Tab label="Notizen" />
+            <Tab label="Dokumente" />
+            <Tab label="Fotos" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Patienten-Organizer
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Der Patienten-Organizer ist das zentrale Tool für die Verwaltung aller Patientendaten. 
+                  Hier können Sie medizinische Daten erfassen, Notizen erstellen, Dokumente verwalten 
+                  und die vollständige Patientenakte einsehen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 <strong>Medizinische Daten:</strong> Vitalwerte, Allergien, Medikamente, Diagnosen</li>
+                  <li>📝 <strong>Notizen:</strong> Medizinische und allgemeine Notizen erstellen und verwalten</li>
+                  <li>📄 <strong>Dokumente:</strong> Patientenbriefe, Arztbriefe, Befunde verwalten</li>
+                  <li>📸 <strong>Fotos:</strong> Patientenfotos und medizinische Bilder verwalten</li>
+                  <li>📊 <strong>EPA / Timeline:</strong> Chronologische Übersicht aller Patienteneinträge</li>
+                  <li>💊 <strong>Medikamente:</strong> Aktuelle und vergangene Medikation verwalten</li>
+                  <li>🔬 <strong>Labor:</strong> Laborergebnisse anzeigen und verwalten</li>
+                  <li>🖼️ <strong>DICOM:</strong> Bildgebende Verfahren verwalten</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Tabs im Patienten-Organizer
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Medizinische Daten:</strong> Vitalwerte, Allergien, Medikamente, Diagnosen, Schwangerschaft</li>
+                  <li><strong>EPA / Timeline:</strong> Chronologische Übersicht aller Einträge</li>
+                  <li><strong>Notizen:</strong> Medizinische und allgemeine Notizen</li>
+                  <li><strong>Dokumente:</strong> Alle Patientendokumente</li>
+                  <li><strong>Fotos:</strong> Patientenfotos und medizinische Bilder</li>
+                  <li><strong>Labor:</strong> Laborergebnisse</li>
+                  <li><strong>DICOM:</strong> Bildgebende Verfahren</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Medizinische Daten erfassen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Im Tab "Medizinische Daten" können Sie alle wichtigen medizinischen Informationen 
+                  des Patienten erfassen und verwalten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Bereiche
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Vitalwerte:</strong> Größe, Gewicht, BMI, Blutdruck, Puls, Temperatur</li>
+                  <li>⚠️ <strong>Allergien:</strong> Allergien dokumentieren, Allergiepass hochladen</li>
+                  <li>💊 <strong>Medikamente:</strong> Aktuelle Medikation, Dosierung, Einnahmehinweise</li>
+                  <li>🏥 <strong>Diagnosen:</strong> ICD-10 Diagnosen zuweisen und verwalten</li>
+                  <li>🤰 <strong>Schwangerschaft:</strong> Schwangerschaftsdaten erfassen (bei weiblichen Patienten)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Bearbeitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Bearbeiten-Icon bei einem Bereich</li>
+                  <li>Geben Sie die Daten ein</li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                  <li>Die Daten werden gespeichert und in der Timeline angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  EPA / Timeline
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die EPA (Elektronische Patientenakte) / Timeline zeigt alle Einträge des Patienten 
+                  in chronologischer Reihenfolge an.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Angezeigte Einträge
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📝 Notizen (medizinisch und allgemein)</li>
+                  <li>💊 Medikamentenänderungen</li>
+                  <li>📊 Vitalwerte-Erfassungen</li>
+                  <li>🏥 Diagnosen</li>
+                  <li>📄 Dokumente</li>
+                  <li>📸 Fotos</li>
+                  <li>🔬 Laborergebnisse</li>
+                  <li>🖼️ DICOM-Studien</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Chronologische Sortierung (neueste zuerst)</li>
+                  <li>✅ Filter nach Eintragstyp</li>
+                  <li>✅ Detailansicht für jeden Eintrag</li>
+                  <li>✅ Bearbeitung und Löschung möglich</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Notizen erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Notizen ermöglichen es, wichtige Informationen über den Patienten zu dokumentieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Notiztypen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🏥 <strong>Medizinische Notiz:</strong> Für medizinische Informationen</li>
+                  <li>📋 <strong>Allgemeine Notiz:</strong> Für allgemeine Informationen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Erstellen einer Notiz
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Quick-action → Notizen"</li>
+                  <li>Wählen Sie den Notiztyp</li>
+                  <li>Geben Sie den Inhalt ein</li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                  <li>Die Notiz wird erstellt und in der Timeline angezeigt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Bearbeitungshistorie
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Alle Änderungen werden in der Bearbeitungshistorie gespeichert</li>
+                  <li>✅ Vorher/Nachher-Vergleich verfügbar</li>
+                  <li>✅ Erstellungs- und Bearbeitungsdatum wird angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Dokumente verwalten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Im Tab "Dokumente" können Sie alle Patientendokumente verwalten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Dokumenttypen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📧 <strong>Patientenbrief:</strong> Briefe an den Patienten</li>
+                  <li>📄 <strong>Arztbrief:</strong> Briefe an andere Ärzte</li>
+                  <li>📋 <strong>Befunde:</strong> Medizinische Befunde</li>
+                  <li>📝 <strong>Standalone-Dokumente:</strong> Andere Dokumente</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Dokument erstellen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Quick-action → Dokumente"</li>
+                  <li>Wählen Sie den Dokumenttyp</li>
+                  <li>Wählen Sie eine Vorlage (optional)</li>
+                  <li>Erstellen Sie das Dokument</li>
+                  <li>Das Dokument wird gespeichert und angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Fotos verwalten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Im Tab "Fotos" können Sie Patientenfotos und medizinische Bilder verwalten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📸 <strong>Foto hochladen:</strong> Neue Fotos hinzufügen</li>
+                  <li>🖼️ <strong>Galerie:</strong> Alle Fotos in chronologischer Reihenfolge (neueste zuerst)</li>
+                  <li>🗑️ <strong>Löschen:</strong> Fotos entfernen</li>
+                  <li>👤 <strong>Profilfoto:</strong> Ein Foto als Profilfoto setzen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Sortierung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Fotos werden chronologisch sortiert (neueste zuerst)</li>
+                  <li>✅ Datum und Uhrzeit werden angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 6 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Datenerfassung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erfassen Sie alle relevanten medizinischen Daten</li>
+                  <li>✅ Dokumentieren Sie Änderungen in Notizen</li>
+                  <li>✅ Verwenden Sie aussagekräftige Notizen</li>
+                  <li>✅ Speichern Sie wichtige Dokumente</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Organisation
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Nutzen Sie die Timeline für eine Übersicht</li>
+                  <li>✅ Verwenden Sie Filter für spezifische Einträge</li>
+                  <li>✅ Halten Sie Fotos aktuell</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
             Schließen
           </Button>
         </DialogActions>

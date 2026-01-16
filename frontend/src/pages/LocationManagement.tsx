@@ -46,6 +46,7 @@ import {
   Description as DescriptionIcon,
   BookOnline,
   HelpOutline as HelpOutlineIcon,
+  Article,
 } from '@mui/icons-material';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -138,7 +139,11 @@ const LocationManagement: React.FC = () => {
   const [helpDialogWeeklyScheduleOpen, setHelpDialogWeeklyScheduleOpen] = useState(false);
   const [helpDialogClosuresOpen, setHelpDialogClosuresOpen] = useState(false);
   const [helpDialogAssignmentsOpen, setHelpDialogAssignmentsOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [helpTabLocations, setHelpTabLocations] = useState(0);
+  const [helpTabHours, setHelpTabHours] = useState(0);
+  const [helpTabWeeklySchedule, setHelpTabWeeklySchedule] = useState(0);
+  const [helpTabClosures, setHelpTabClosures] = useState(0);
+  const [helpTabAssignments, setHelpTabAssignments] = useState(0);
 
   // Form states
   const [locationForm, setLocationForm] = useState({
@@ -154,6 +159,7 @@ const LocationManagement: React.FC = () => {
     email: '',
     color_hex: '#2563EB',
     is_active: true,
+    invoiceDesign: 'standard' as 'standard' | 'minimal',
     practiceType: 'gemischt' as 'kassenpraxis' | 'wahlarzt' | 'privat' | 'gemischt',
     specialties: [] as string[], // Medizinische Fachrichtungen
     owner: {
@@ -384,6 +390,7 @@ const LocationManagement: React.FC = () => {
           patientUploadMaxSize: xdsRegistry.patientUploadMaxSize || 10485760,
           patientUploadAllowedTypes: xdsRegistry.patientUploadAllowedTypes || ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
         },
+        invoiceDesign: location.invoiceDesign || 'standard',
         owner: location.owner ? {
           title: location.owner.title || '',
           firstName: location.owner.firstName || '',
@@ -471,6 +478,7 @@ const LocationManagement: React.FC = () => {
           patientUploadMaxSize: 10485760,
           patientUploadAllowedTypes: ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']
         },
+        invoiceDesign: 'standard' as 'standard' | 'minimal',
         owner: {
           title: '',
           firstName: '',
@@ -2158,6 +2166,47 @@ const LocationManagement: React.FC = () => {
               </AccordionDetails>
             </Accordion>
             
+            {/* PDF-Design-Einstellung */}
+            <Accordion sx={{ mt: 2 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Article />
+                  <Typography variant="h6">PDF-Design für Rechnungen</Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    Wählen Sie das Standard-Design für generierte Rechnungs-PDFs. Diese Einstellung kann pro Rechnung überschrieben werden.
+                  </Typography>
+                  
+                  <FormControl fullWidth>
+                    <InputLabel>PDF-Design</InputLabel>
+                    <Select
+                      value={locationForm.invoiceDesign}
+                      onChange={(e) => setLocationForm({
+                        ...locationForm,
+                        invoiceDesign: e.target.value as 'standard' | 'minimal'
+                      })}
+                      label="PDF-Design"
+                    >
+                      <MenuItem value="standard">Standard (mit Farben, Rahmen, Boxen)</MenuItem>
+                      <MenuItem value="minimal">Minimal (Schwarz-Weiß, ohne Rahmen)</MenuItem>
+                    </Select>
+                  </FormControl>
+                  
+                  <Alert severity="info" sx={{ mt: 1 }}>
+                    <Typography variant="body2">
+                      <strong>Standard:</strong> Farbiges Design mit Rahmen, Boxen und Gradienten
+                    </Typography>
+                    <Typography variant="body2" sx={{ mt: 1 }}>
+                      <strong>Minimal:</strong> Einfaches Schwarz-Weiß-Design ohne Rahmen und Boxen
+                    </Typography>
+                  </Alert>
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+            
             {/* Medizinische Fachrichtungen */}
             <Autocomplete
               multiple
@@ -3023,8 +3072,8 @@ const LocationManagement: React.FC = () => {
         />
         <DialogContent>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabLocations} 
+            onChange={(_, v) => setHelpTabLocations(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -3036,7 +3085,7 @@ const LocationManagement: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabLocations === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3077,7 +3126,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabLocations === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3123,7 +3172,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabLocations === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3162,7 +3211,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabLocations === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3211,7 +3260,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTabLocations === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3267,8 +3316,8 @@ const LocationManagement: React.FC = () => {
         />
         <DialogContent>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabHours} 
+            onChange={(_, v) => setHelpTabHours(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -3280,7 +3329,7 @@ const LocationManagement: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabHours === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3306,7 +3355,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabHours === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3338,7 +3387,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabHours === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3374,7 +3423,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabHours === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3398,7 +3447,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTabHours === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3442,8 +3491,8 @@ const LocationManagement: React.FC = () => {
         />
         <DialogContent>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabWeeklySchedule} 
+            onChange={(_, v) => setHelpTabWeeklySchedule(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -3454,7 +3503,7 @@ const LocationManagement: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabWeeklySchedule === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3480,7 +3529,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabWeeklySchedule === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3512,7 +3561,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabWeeklySchedule === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3539,7 +3588,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabWeeklySchedule === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3583,8 +3632,8 @@ const LocationManagement: React.FC = () => {
         />
         <DialogContent>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabClosures} 
+            onChange={(_, v) => setHelpTabClosures(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -3595,7 +3644,7 @@ const LocationManagement: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabClosures === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3620,7 +3669,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabClosures === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3652,7 +3701,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabClosures === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3676,7 +3725,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabClosures === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3720,8 +3769,8 @@ const LocationManagement: React.FC = () => {
         />
         <DialogContent>
           <Tabs 
-            value={helpTab} 
-            onChange={(_, v) => setHelpTab(v)} 
+            value={helpTabAssignments} 
+            onChange={(_, v) => setHelpTabAssignments(v)} 
             sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
             variant="scrollable"
             scrollButtons="auto"
@@ -3732,7 +3781,7 @@ const LocationManagement: React.FC = () => {
             <Tab label="Best Practices" />
           </Tabs>
 
-          {helpTab === 0 && (
+          {helpTabAssignments === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3756,7 +3805,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 1 && (
+          {helpTabAssignments === 1 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3788,7 +3837,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 2 && (
+          {helpTabAssignments === 2 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3856,7 +3905,7 @@ const LocationManagement: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTabAssignments === 3 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">

@@ -1331,8 +1331,11 @@ router.post('/invoices/:id/pdf', auth, async (req, res) => {
   try {
     console.log(`📄 PDF-Generierung gestartet für Rechnung: ${req.params.id}`);
     
+    // Design-Parameter aus Query-String oder Body lesen
+    const designType = req.query.design || req.body.design || null;
+    
     const invoicePDFService = require('../services/invoicePDFService');
-    const pdfBuffer = await invoicePDFService.generateInvoicePDF(req.params.id);
+    const pdfBuffer = await invoicePDFService.generateInvoicePDF(req.params.id, { design: designType });
     
     console.log(`✅ PDF-Buffer generiert. Größe: ${pdfBuffer ? pdfBuffer.length : 0} bytes`);
     

@@ -41,8 +41,11 @@ class InvoicePDFService {
         location = await Location.findOne({ is_active: true });
       }
 
+      // Design-Typ bestimmen: aus options, dann location, dann Standard
+      const designType = options.design || (location && location.invoiceDesign) || 'standard';
+      
       // HTML-Template für Rechnung generieren
-      const htmlContent = await this.generateInvoiceHTML(invoice, location);
+      const htmlContent = await this.generateInvoiceHTML(invoice, location, designType);
       
       // PDF generieren
       const pdfBuffer = await this.pdfGenerator.generatePDF(htmlContent, {
@@ -81,7 +84,7 @@ class InvoicePDFService {
    * @param {Object} location - Location-Objekt mit owner und logo
    * @returns {String} HTML-Content
    */
-  async generateInvoiceHTML(invoice, location = null) {
+  async generateInvoiceHTML(invoice, location = null, designType = 'standard') {
     // ALLE PREISE SIND BEREITS IN EURO - KEINE DIVISION DURCH 100 MEHR!
     const formatCurrency = (amount) => {
       if (!amount && amount !== 0) return '0,00';
@@ -115,6 +118,58 @@ class InvoicePDFService {
         'cancelled': 'Storniert'
       };
       return labels[status] || status;
+    };
+    
+    // Hilfsfunktion für Payment-Info-Styles basierend auf Design
+    const getPaymentInfoStyles = (status, designType) => {
+      if (designType === 'minimal') {
+        // Minimal-Design: Schwarz-Weiß
+        if (status === 'paid') {
+          return {
+            container: 'background-color: #ffffff; padding: 12px; margin-bottom: 12px; border: 1px solid #000000;',
+            text: 'color: #000000;',
+            title: 'color: #000000; font-size: 1.1em; font-weight: bold; margin-bottom: 8px;'
+          };
+        } else if (status === 'overdue') {
+          return {
+            container: 'background-color: #ffffff; padding: 12px; margin-bottom: 12px; border: 1px solid #000000;',
+            text: 'color: #000000;',
+            title: 'color: #000000; font-size: 1.1em;'
+          };
+        } else if (status === 'cancelled') {
+          return {
+            container: 'background-color: #ffffff; padding: 12px; margin-bottom: 12px; border: 1px solid #000000;',
+            text: 'color: #000000;',
+            title: 'color: #000000; font-size: 1.1em;'
+          };
+        }
+      } else {
+        // Standard-Design: Mit Farben
+        if (status === 'paid') {
+          return {
+            container: 'background-color: #e8f5e9; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #4caf50;',
+            text: 'color: #2e7d32;',
+            title: 'color: #2e7d32; font-size: 1.1em; font-weight: bold; margin-bottom: 8px;'
+          };
+        } else if (status === 'overdue') {
+          return {
+            container: 'background-color: #ffebee; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #f44336;',
+            text: 'color: #c62828;',
+            title: 'color: #c62828; font-size: 1.1em;'
+          };
+        } else if (status === 'cancelled') {
+          return {
+            container: 'background-color: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #9e9e9e;',
+            text: 'color: #616161;',
+            title: 'color: #616161; font-size: 1.1em;'
+          };
+        }
+      }
+      return {
+        container: '',
+        text: '',
+        title: ''
+      };
     };
     
     // RKSVO QR-Code generieren (falls vorhanden) - muss vor dem return sein
@@ -200,14 +255,298 @@ class InvoicePDFService {
       }
     }
     
-    return `
-    <!DOCTYPE html>
-    <html lang="de">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Rechnung ${invoice.invoiceNumber}</title>
-        <style>
+    // CSS basierend auf Design-Typ generieren
+    const getCSS = (designType) => {
+      if (designType === 'minimal') {
+        // Minimal-Design: Schwarz-Weiß, keine Rahmen, keine Boxen
+        return `
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { 
+                font-family: 'Arial', 'Helvetica', sans-serif; 
+                line-height: 1.4; 
+                color: #000000; 
+                font-size: 11px;
+                background-color: #ffffff;
+            }
+            .invoice-container { 
+                max-width: 210mm; 
+                margin: 0 auto; 
+                padding: 15mm;
+                background-color: white;
+            }
+            
+            /* Logo Styles */
+            .logo-container {
+                text-align: center;
+                margin-bottom: 20px;
+                padding-bottom: 15px;
+                border-bottom: 1px solid #000000;
+            }
+            .logo-container img {
+                max-height: 80px;
+                max-width: 300px;
+                object-fit: contain;
+            }
+            
+            /* Header Styles */
+            .header { 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: flex-start; 
+                margin-bottom: 25px;
+                padding-bottom: 15px;
+                border-bottom: 1px solid #000000;
+            }
+            .owner-info { 
+                flex: 1;
+                padding-right: 20px;
+            }
+            .owner-info h1 { 
+                color: #000000; 
+                font-size: 22px; 
+                margin-bottom: 8px;
+                font-weight: bold;
+            }
+            .owner-info .title { 
+                color: #000000; 
+                font-size: 14px; 
+                font-weight: 600;
+                margin-bottom: 5px;
+            }
+            .owner-info .specialization { 
+                color: #000000; 
+                font-size: 12px; 
+                margin-bottom: 10px;
+            }
+            .owner-info .address { 
+                font-size: 11px; 
+                line-height: 1.3;
+                color: #000000;
+            }
+            .owner-info .contact-info { 
+                margin-top: 10px; 
+                font-size: 10px; 
+                color: #000000;
+            }
+            
+            .invoice-info { 
+                text-align: right; 
+                padding: 15px; 
+                min-width: 200px;
+            }
+            .invoice-info h2 { 
+                color: #000000; 
+                font-size: 20px; 
+                margin-bottom: 12px;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+            }
+            .invoice-info .invoice-details {
+                font-size: 10px;
+                line-height: 1.4;
+            }
+            .invoice-info .invoice-details strong {
+                color: #000000;
+            }
+            
+            /* Patient Section */
+            .patient-section { 
+                margin-bottom: 25px; 
+                padding: 15px; 
+                border-bottom: 1px solid #000000;
+            }
+            .patient-section h3 { 
+                color: #000000; 
+                margin-bottom: 10px; 
+                font-size: 14px;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+            .patient-info {
+                font-size: 11px;
+                line-height: 1.4;
+            }
+            
+            /* Services Table */
+            .services-section {
+                margin-bottom: 20px;
+            }
+            .services-section h3 {
+                color: #000000;
+                font-size: 14px;
+                margin-bottom: 10px;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+            .services-table { 
+                width: 100%; 
+                border-collapse: collapse; 
+                margin-bottom: 15px;
+                font-size: 10px;
+            }
+            .services-table th, .services-table td { 
+                border: 1px solid #000000; 
+                padding: 8px 6px; 
+                text-align: left;
+                vertical-align: top;
+            }
+            .services-table th { 
+                background-color: #000000;
+                color: #ffffff; 
+                font-weight: bold;
+                font-size: 10px;
+                text-transform: uppercase;
+            }
+            .services-table tr:nth-child(even) { 
+                background-color: #ffffff;
+            }
+            
+            /* Totals Section */
+            .totals-section { 
+                margin-top: 20px; 
+                padding: 15px; 
+                border-top: 1px solid #000000;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .totals-section h3 {
+                color: #000000;
+                font-size: 14px;
+                margin-bottom: 10px;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+            .totals-table { 
+                width: 100%; 
+                max-width: 350px; 
+                margin-left: auto;
+                font-size: 11px;
+            }
+            .totals-table td { 
+                padding: 6px 10px; 
+                border-bottom: 1px solid #000000;
+            }
+            .totals-table .label {
+                font-weight: 600;
+                color: #000000;
+            }
+            .totals-table .amount {
+                text-align: right;
+                font-weight: 500;
+            }
+            .total-row { 
+                font-weight: bold; 
+                font-size: 13px; 
+                background-color: #000000;
+                color: #ffffff;
+            }
+            .total-row .label {
+                color: #ffffff;
+            }
+            .total-row .amount {
+                color: #ffffff;
+            }
+            
+            /* Tax Information */
+            .tax-info {
+                margin-top: 10px;
+                padding: 8px;
+                font-size: 9px;
+                color: #000000;
+            }
+            
+            /* Payment Information */
+            .payment-info { 
+                margin-top: 25px; 
+                padding: 15px; 
+                border-top: 1px solid #000000;
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            .payment-info h3 { 
+                color: #000000; 
+                margin-bottom: 10px;
+                font-size: 13px;
+                font-weight: bold;
+                text-transform: uppercase;
+            }
+            .payment-info ul {
+                margin: 0;
+                padding-left: 15px;
+                font-size: 10px;
+                line-height: 1.4;
+            }
+            .payment-info li {
+                margin-bottom: 3px;
+                color: #000000;
+                white-space: nowrap;
+            }
+            .payment-info p {
+                margin: 0;
+                white-space: nowrap;
+            }
+            
+            /* Footer */
+            .footer { 
+                margin-top: 30px; 
+                padding-top: 15px; 
+                border-top: 1px solid #000000; 
+                text-align: center; 
+                font-size: 9px; 
+                color: #000000;
+                line-height: 1.3;
+                position: relative;
+            }
+            .footer .thank-you {
+                font-weight: bold;
+                color: #000000;
+                margin-bottom: 5px;
+            }
+            
+            /* RKSVO QR-Code */
+            .rksvo-qr-code {
+                position: absolute;
+                left: 0;
+                bottom: 0;
+                width: 60px;
+                height: 60px;
+                padding: 5px;
+                background-color: white;
+                border: 1px solid #000000;
+            }
+            .rksvo-qr-code img {
+                width: 100%;
+                height: 100%;
+                object-fit: contain;
+            }
+            
+            /* Billing Type Badge */
+            .billing-type-badge {
+                display: inline-block;
+                padding: 4px 8px;
+                font-size: 9px;
+                font-weight: bold;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                margin-top: 5px;
+                border: 1px solid #000000;
+                background-color: #ffffff;
+                color: #000000;
+            }
+            
+            /* Legal Information */
+            .legal-info {
+                margin-top: 20px;
+                padding: 10px;
+                font-size: 8px;
+                color: #000000;
+                line-height: 1.3;
+            }
+        `;
+      } else {
+        // Standard-Design: Mit Farben, Rahmen, Boxen (aktuelles Design)
+        return `
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
                 font-family: 'Arial', 'Helvetica', sans-serif; 
@@ -518,6 +857,20 @@ class InvoicePDFService {
                 color: #6c757d;
                 line-height: 1.3;
             }
+        `;
+      }
+    };
+    
+    return `
+    <!DOCTYPE html>
+    <html lang="de">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Rechnung ${invoice.invoiceNumber}</title>
+        <style>
+            ${getCSS(designType)}
+            ${getCSS(designType)}
         </style>
     </head>
     <body>
@@ -656,26 +1009,39 @@ class InvoicePDFService {
             <!-- Payment Information -->
             <div class="payment-info">
                 <h3>Zahlungsinformationen</h3>
-                ${invoice.status === 'paid' ? `
-                    <div style="background-color: #e8f5e9; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #4caf50;">
-                        <div style="color: #2e7d32; font-size: 1.1em; font-weight: bold; margin-bottom: 8px;">✓ Rechnung beglichen</div>
+                ${(() => {
+                  const paidStyles = getPaymentInfoStyles('paid', designType);
+                  const overdueStyles = getPaymentInfoStyles('overdue', designType);
+                  const cancelledStyles = getPaymentInfoStyles('cancelled', designType);
+                  
+                  if (invoice.status === 'paid') {
+                    return `
+                    <div style="${paidStyles.container}">
+                        <div style="${paidStyles.title}">✓ Rechnung beglichen</div>
                         ${invoice.paymentDate ? `
-                            <div style="color: #2e7d32; margin-bottom: 4px;">Zahlung erhalten am: ${formatDate(invoice.paymentDate)}</div>
+                            <div style="${paidStyles.text} margin-bottom: 4px;">Zahlung erhalten am: ${formatDate(invoice.paymentDate)}</div>
                         ` : ''}
                         ${invoice.paymentMethod ? `
-                            <div style="color: #2e7d32;">Zahlungsart: ${getPaymentMethodLabel(invoice.paymentMethod)}</div>
+                            <div style="${paidStyles.text}">Zahlungsart: ${getPaymentMethodLabel(invoice.paymentMethod)}</div>
                         ` : ''}
                     </div>
-                ` : invoice.status === 'overdue' ? `
-                    <div style="background-color: #ffebee; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #f44336;">
-                        <strong style="color: #c62828; font-size: 1.1em;">⚠ Rechnung überfällig</strong>
-                        <p style="margin: 8px 0 0 0; color: #c62828;">Bitte begleichen Sie diese Rechnung umgehend.</p>
+                `;
+                  } else if (invoice.status === 'overdue') {
+                    return `
+                    <div style="${overdueStyles.container}">
+                        <strong style="${overdueStyles.title}">⚠ Rechnung überfällig</strong>
+                        <p style="margin: 8px 0 0 0; ${overdueStyles.text}">Bitte begleichen Sie diese Rechnung umgehend.</p>
                     </div>
-                ` : invoice.status === 'cancelled' ? `
-                    <div style="background-color: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 12px; border-left: 4px solid #9e9e9e;">
-                        <strong style="color: #616161; font-size: 1.1em;">Rechnung storniert</strong>
+                `;
+                  } else if (invoice.status === 'cancelled') {
+                    return `
+                    <div style="${cancelledStyles.container}">
+                        <strong style="${cancelledStyles.title}">Rechnung storniert</strong>
                     </div>
-                ` : ''}
+                `;
+                  }
+                  return '';
+                })()}
                 ${invoice.status !== 'paid' && invoice.status !== 'cancelled' ? `
                     ${invoice.billingType === 'kassenarzt' ? `
                         <ul>

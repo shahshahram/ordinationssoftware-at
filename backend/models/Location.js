@@ -233,6 +233,13 @@ const locationSchema = new mongoose.Schema({
     index: true
   },
   
+  // PDF-Design-Präferenz
+  invoiceDesign: {
+    type: String,
+    enum: ['standard', 'minimal'],
+    default: 'standard'
+  },
+  
   // Abrechnungs-Konfiguration
   billing: {
     // Standard-Abrechnungstyp für diesen Standort
