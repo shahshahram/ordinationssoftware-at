@@ -72,6 +72,8 @@ const WaitingList: React.FC = () => {
   const [selectedEntry, setSelectedEntry] = useState<WaitingListEntry | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   
   const [formData, setFormData] = useState({
     patient: '',

@@ -6,6 +6,7 @@ import {
   Paper,
   Tabs,
   Tab,
+  Button,
   Table,
   TableBody,
   TableCell,
@@ -23,20 +24,25 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Collapse
+  Collapse,
+  Dialog,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CheckCircle,
   Error as ErrorIcon,
   ExpandMore,
   ExpandLess,
-  Refresh
+  Refresh,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { format, formatDistanceToNow } from 'date-fns';
 import { de } from 'date-fns/locale';
 import UpdateMonitoring from '../components/UpdateMonitoring';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface UpdateHistoryEntry {
   id: string;
@@ -75,6 +81,8 @@ const UpdateMonitoringPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [actionFilter, setActionFilter] = useState<string>('all');
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   const loadHistory = async () => {
     setLoading(true);
@@ -145,9 +153,20 @@ const UpdateMonitoringPage: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" gutterBottom>
-          Update-Monitoring
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+          <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+            Update-Monitoring
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Typography variant="body1" color="text.secondary" paragraph>
           Überwachung und Verwaltung aller automatischen Update-Services für Kataloge und Downloads.
           Hier können Sie den Status aller Update-Prozesse einsehen und manuelle Updates auslösen.
@@ -387,6 +406,139 @@ const UpdateMonitoringPage: React.FC = () => {
           )}
         </Box>
       </Paper>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Update-Monitoring"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Update-Status" />
+            <Tab label="Update-Historie" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Update-Monitoring
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Das Update-Monitoring ermöglicht es, automatische Update-Services für Kataloge 
+                  und Downloads zu überwachen und zu verwalten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Status überwachen:</strong> Status aller Update-Services anzeigen</li>
+                  <li>🔄 <strong>Updates auslösen:</strong> Manuelle Updates starten</li>
+                  <li>📋 <strong>Historie:</strong> Update-Historie einsehen</li>
+                  <li>⚙️ <strong>Konfiguration:</strong> Update-Einstellungen verwalten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Update-Status
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Update-Status zeigt den aktuellen Zustand aller Update-Services:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Status-Anzeigen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Erfolgreich:</strong> Update erfolgreich abgeschlossen</li>
+                  <li>❌ <strong>Fehler:</strong> Update fehlgeschlagen</li>
+                  <li>⏳ <strong>Laufend:</strong> Update wird gerade ausgeführt</li>
+                  <li>⏸️ <strong>Pausiert:</strong> Update ist pausiert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Update-Historie
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Update-Historie zeigt alle durchgeführten Updates:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 <strong>Zeitstempel:</strong> Wann wurde das Update durchgeführt</li>
+                  <li>📝 <strong>Aktion:</strong> Welche Aktion wurde ausgeführt</li>
+                  <li>📊 <strong>Details:</strong> Detaillierte Informationen zum Update</li>
+                  <li>👤 <strong>Benutzer:</strong> Wer hat das Update ausgelöst</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Update-Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Prüfen Sie den Status regelmäßig</li>
+                  <li>✅ Überwachen Sie fehlgeschlagene Updates</li>
+                  <li>✅ Dokumentieren Sie manuelle Updates</li>
+                  <li>✅ Planen Sie Updates außerhalb der Geschäftszeiten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

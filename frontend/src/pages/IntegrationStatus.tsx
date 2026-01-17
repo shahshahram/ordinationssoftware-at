@@ -44,11 +44,13 @@ import {
   Settings,
   Edit,
   Save,
-  Cancel
+  Cancel,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface IntegrationStatus {
   id: string;
@@ -76,6 +78,8 @@ const IntegrationStatus: React.FC = () => {
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
   const [configTab, setConfigTab] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadAllStatuses();
@@ -522,13 +526,19 @@ const IntegrationStatus: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Box>
-          <Typography variant="h4" gutterBottom>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
             Integrations-Status
           </Typography>
-          <Typography variant="subtitle1" color="text.secondary">
-            Übersicht aller Schnittstellen und deren Status
-          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
         </Box>
         <Tooltip title="Alle Status aktualisieren">
           <IconButton onClick={loadAllStatuses} disabled={loading}>
@@ -536,6 +546,9 @@ const IntegrationStatus: React.FC = () => {
           </IconButton>
         </Tooltip>
       </Box>
+      <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>
+        Übersicht aller Schnittstellen und deren Status
+      </Typography>
 
       {/* Zusammenfassung */}
       <Card sx={{ mb: 3 }}>
@@ -719,7 +732,7 @@ const IntegrationStatus: React.FC = () => {
 
               {configTab === 1 && selectedIntegration && (
                 <Stack spacing={2}>
-                  {selectedIntegration.id === 'elga' && (
+                  {selectedIntegration?.id === 'elga' && (
                     <>
                       <TextField
                         label="Umgebung"
@@ -786,7 +799,7 @@ const IntegrationStatus: React.FC = () => {
                       />
                     </>
                   )}
-                  {selectedIntegration.id === 'gina' && (
+                  {selectedIntegration?.id === 'gina' && (
                     <>
                       <TextField
                         label="Base URL"
@@ -814,7 +827,7 @@ const IntegrationStatus: React.FC = () => {
                       </TextField>
                     </>
                   )}
-                  {selectedIntegration.id === 'kdok' && (
+                  {selectedIntegration?.id === 'kdok' && (
                     <>
                       <TextField
                         label="Base URL"
@@ -858,7 +871,7 @@ const IntegrationStatus: React.FC = () => {
                       />
                     </>
                   )}
-                  {selectedIntegration.id === 'ogk' && (
+                  {selectedIntegration?.id === 'ogk' && (
                     <>
                       <FormControlLabel
                         control={
@@ -878,7 +891,7 @@ const IntegrationStatus: React.FC = () => {
                       />
                     </>
                   )}
-                  {selectedIntegration.id === 'gina-box' && (
+                  {selectedIntegration?.id === 'gina-box' && (
                     <>
                       <TextField
                         label="Base URL"
@@ -904,7 +917,7 @@ const IntegrationStatus: React.FC = () => {
                       />
                     </>
                   )}
-                  {selectedIntegration.id === 'ecard' && (
+                  {selectedIntegration?.id === 'ecard' && (
                     <>
                       <FormControlLabel
                         control={
@@ -932,7 +945,7 @@ const IntegrationStatus: React.FC = () => {
                       />
                     </>
                   )}
-                  {selectedIntegration.id === 'auto-reimbursement' && (
+                  {selectedIntegration?.id === 'auto-reimbursement' && (
                     <>
                       <FormControlLabel
                         control={
@@ -1009,6 +1022,139 @@ const IntegrationStatus: React.FC = () => {
             disabled={configSaving || !selectedIntegration?.configEndpoint}
           >
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Integrations-Status"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Integrationen" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Integrations-Status
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Integrations-Status-Übersicht zeigt den Status aller Schnittstellen auf einen Blick.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Status:</strong> Status aller Integrationen anzeigen</li>
+                  <li>⚙️ <strong>Konfiguration:</strong> Integrationen konfigurieren</li>
+                  <li>🔄 <strong>Aktualisieren:</strong> Status aktualisieren</li>
+                  <li>📋 <strong>Details:</strong> Detaillierte Informationen anzeigen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Integrationen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Verfügbare Integrationen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Integrationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🏥 <strong>ÖGK:</strong> Österreichische Gesundheitskasse</li>
+                  <li>📋 <strong>ELGA:</strong> Elektronische Gesundheitsakte</li>
+                  <li>☁️ <strong>GINA:</strong> Gesundheits-Informations-Netz-Adapter</li>
+                  <li>📦 <strong>GINA-Box:</strong> GINA-Box Integration</li>
+                  <li>💳 <strong>e-card:</strong> e-card System</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Integrationen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Integration auswählen</li>
+                  <li>Auf "Konfigurieren" klicken</li>
+                  <li>Einstellungen vornehmen</li>
+                  <li>Änderungen speichern</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Integrationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Prüfen Sie regelmäßig den Status</li>
+                  <li>✅ Konfigurieren Sie Integrationen korrekt</li>
+                  <li>✅ Dokumentieren Sie Änderungen</li>
+                  <li>✅ Testen Sie Integrationen nach Konfiguration</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

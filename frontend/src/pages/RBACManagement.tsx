@@ -41,6 +41,7 @@ import {
   Switch,
   FormControlLabel
 } from '@mui/material';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 import {
   Security,
   Person,
@@ -61,7 +62,8 @@ import {
   Print,
   Download,
   Upload,
-  Restore
+  Restore,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import { ROLES, ACTIONS, RESOURCES } from '../utils/rbac';
 import { useRBAC } from '../hooks/useRBAC';
@@ -300,6 +302,9 @@ const RBACManagement: React.FC = () => {
   });
   
   // ACL management
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
+
   const [aclSettings, setAclSettings] = useState({
     allowedRoles: [] as string[],
     allowedUsers: [] as string[],
@@ -684,10 +689,21 @@ const RBACManagement: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        <Security sx={{ mr: 2, verticalAlign: 'middle' }} />
-        RBAC Management
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+          <Security sx={{ mr: 2, verticalAlign: 'middle' }} />
+          RBAC Management
+        </Typography>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+            size="small"
+          >
+            <HelpOutlineIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
       
       <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 3 }}>
         Rollen, Berechtigungen und Zugriffskontrolle verwalten
@@ -1454,6 +1470,138 @@ const RBACManagement: React.FC = () => {
             variant="contained"
           >
             Speichern
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: RBAC-Verwaltung"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Rollen verwalten" />
+            <Tab label="Berechtigungen" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  RBAC-Verwaltung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die RBAC-Verwaltung ermöglicht es, Rollen, Berechtigungen und Zugriffe zu verwalten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👥 <strong>Rollen:</strong> Rollen erstellen und verwalten</li>
+                  <li>🔐 <strong>Berechtigungen:</strong> Berechtigungen zuweisen</li>
+                  <li>👤 <strong>Benutzer:</strong> Benutzer-Rollen zuweisen</li>
+                  <li>📋 <strong>Audit:</strong> Zugriffe protokollieren</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Rollen verwalten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So verwalten Sie Rollen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>➕ <strong>Erstellen:</strong> Neue Rolle erstellen</li>
+                  <li>✏️ <strong>Bearbeiten:</strong> Rolle bearbeiten</li>
+                  <li>🗑️ <strong>Löschen:</strong> Rolle entfernen</li>
+                  <li>📋 <strong>Zuweisen:</strong> Rolle zu Benutzern zuweisen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Berechtigungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So verwalten Sie Berechtigungen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Berechtigungstypen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👁️ <strong>Lesen:</strong> Daten anzeigen</li>
+                  <li>➕ <strong>Erstellen:</strong> Neue Daten erstellen</li>
+                  <li>✏️ <strong>Bearbeiten:</strong> Daten bearbeiten</li>
+                  <li>🗑️ <strong>Löschen:</strong> Daten entfernen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  RBAC-Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie das Prinzip der geringsten Berechtigung</li>
+                  <li>✅ Prüfen Sie Berechtigungen regelmäßig</li>
+                  <li>✅ Dokumentieren Sie Rollen-Änderungen</li>
+                  <li>✅ Verwenden Sie Audit-Logs für Nachverfolgung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

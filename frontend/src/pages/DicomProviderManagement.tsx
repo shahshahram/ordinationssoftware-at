@@ -28,6 +28,9 @@ import {
   Divider,
   Stack,
   Grid,
+  Tooltip,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -38,9 +41,11 @@ import {
   VpnKey as VpnKeyIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface DicomProvider {
   _id: string;
@@ -119,6 +124,8 @@ const DicomProviderManagement: React.FC = () => {
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<DicomProvider | null>(null);
   const [newApiKey, setNewApiKey] = useState<string>('');
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [formData, setFormData] = useState<{
     name: string;
     code: string;
@@ -443,7 +450,18 @@ const DicomProviderManagement: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">DICOM-Provider-Verwaltung</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">DICOM-Provider-Verwaltung</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box>
           <Button
             startIcon={<RefreshIcon />}
@@ -1035,6 +1053,146 @@ const DicomProviderManagement: React.FC = () => {
           <Button onClick={() => setApiKeyDialogOpen(false)}>Schließen</Button>
           <Button onClick={handleRegenerateApiKey} variant="contained">
             Neu generieren
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: DICOM-Provider-Verwaltung"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Provider erstellen" />
+            <Tab label="Integration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  DICOM-Provider-Verwaltung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die DICOM-Provider-Verwaltung ermöglicht es, DICOM-Anbieter zu verwalten, 
+                  zu konfigurieren und zu integrieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>➕ <strong>Provider erstellen:</strong> Neue DICOM-Provider anlegen</li>
+                  <li>✏️ <strong>Provider bearbeiten:</strong> Bestehende Provider ändern</li>
+                  <li>🔗 <strong>Integration:</strong> REST, DICOMweb, C-STORE</li>
+                  <li>🔐 <strong>API-Keys:</strong> API-Schlüssel verwalten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neuen Provider erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie einen neuen DICOM-Provider:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neuer Provider"</li>
+                  <li>Geben Sie die Provider-Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Name:</strong> Provider-Name</li>
+                      <li><strong>Code:</strong> Provider-Code</li>
+                      <li><strong>Typ:</strong> Provider-Typ (Radiologie, Bildgebung, etc.)</li>
+                      <li><strong>Protokoll:</strong> REST, DICOMweb oder C-STORE</li>
+                    </Box>
+                  </li>
+                  <li>Konfigurieren Sie die Integration</li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Integration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  DICOM-Provider können über verschiedene Protokolle integriert werden:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Protokolle
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🌐 <strong>REST:</strong> REST Webhook für eingehende Dateien</li>
+                  <li>📡 <strong>DICOMweb:</strong> QIDO/WADO/STOW für PACS/RIS</li>
+                  <li>💾 <strong>C-STORE:</strong> Direkte DICOM-Verbindung</li>
+                  <li>🔐 <strong>Authentifizierung:</strong> API-Keys, OAuth2, Basic Auth</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Provider-Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Halten Sie Provider-Daten aktuell</li>
+                  <li>✅ Verwenden Sie sichere Authentifizierung</li>
+                  <li>✅ Testen Sie Integrationen regelmäßig</li>
+                  <li>✅ Dokumentieren Sie API-Konfigurationen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

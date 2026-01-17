@@ -116,6 +116,8 @@ const Settings: React.FC = () => {
   const [helpTabWAHonline, setHelpTabWAHonline] = useState(0);
   const [helpTabEmail, setHelpTabEmail] = useState(0);
   const [helpTabSms, setHelpTabSms] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Lade aktuelle Einstellungen
   useEffect(() => {
@@ -455,13 +457,24 @@ const Settings: React.FC = () => {
       mt: marginTopValue !== '0px' ? marginTopValue : 0,
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
-      <Typography 
-        variant="h4" 
-        gutterBottom
-        sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}
-      >
-        Einstellungen
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography 
+          variant="h4" 
+          gutterBottom
+          sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, mb: 0 }}
+        >
+          Einstellungen
+        </Typography>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+            size="small"
+          >
+            <HelpOutline />
+          </IconButton>
+        </Tooltip>
+      </Box>
       <Typography 
         variant="subtitle1" 
         color="text.secondary" 
@@ -2679,6 +2692,164 @@ const Settings: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHelpDialogSmsOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Allgemeiner Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Einstellungen"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Abrechnung" />
+            <Tab label="Integrationen" />
+            <Tab label="Kommunikation" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Einstellungen
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Einstellungsseite ermöglicht es, System- und Benutzereinstellungen zu konfigurieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptbereiche
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>💰 <strong>Abrechnung:</strong> Abrechnungseinstellungen konfigurieren</li>
+                  <li>🔗 <strong>Integrationen:</strong> ELDA, WAHonline und andere Integrationen einrichten</li>
+                  <li>📧 <strong>E-Mail:</strong> E-Mail-Einstellungen konfigurieren</li>
+                  <li>📱 <strong>SMS:</strong> SMS-Einstellungen konfigurieren</li>
+                  <li>🔄 <strong>Updates:</strong> Update-Monitoring verwalten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Abrechnungseinstellungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie die Abrechnung:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Automatische Abrechnung:</strong> Aktivieren/Deaktivieren</li>
+                  <li>⏰ <strong>Arbeitsstunden:</strong> Arbeitsstunden pro Tag konfigurieren</li>
+                  <li>📋 <strong>Einstellungen speichern:</strong> Änderungen speichern</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Integrationen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Verfügbare Integrationen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Integrationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 <strong>ELDA:</strong> Elektronische Abrechnung</li>
+                  <li>🌐 <strong>WAHonline:</strong> WAHonline Integration</li>
+                  <li>📧 <strong>E-Mail:</strong> E-Mail-Versand konfigurieren</li>
+                  <li>📱 <strong>SMS:</strong> SMS-Versand konfigurieren</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Kommunikation
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie E-Mail und SMS:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  E-Mail & SMS
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📧 <strong>E-Mail:</strong> SMTP-Einstellungen konfigurieren</li>
+                  <li>📱 <strong>SMS:</strong> SMS-Provider konfigurieren</li>
+                  <li>✅ <strong>Testen:</strong> E-Mail und SMS testen</li>
+                  <li>💾 <strong>Speichern:</strong> Einstellungen speichern</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Einstellungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Prüfen Sie Einstellungen regelmäßig</li>
+                  <li>✅ Testen Sie Integrationen nach Konfiguration</li>
+                  <li>✅ Dokumentieren Sie Änderungen</li>
+                  <li>✅ Sichern Sie wichtige Einstellungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
             Schließen
           </Button>
         </DialogActions>

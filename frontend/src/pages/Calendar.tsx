@@ -13,6 +13,9 @@ import {
   CircularProgress,
   Alert,
   useTheme,
+  Tooltip,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   ArrowBackIos as ArrowBackIosIcon,
@@ -22,6 +25,7 @@ import {
   ViewDay as ViewDayIcon,
   CalendarViewMonth as ViewMonthIcon,
   Event as EventIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -87,6 +91,8 @@ interface NewEventState {
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const [timeBlocks, setTimeBlocks] = useState<any[]>([]);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Load TimeBlocks
   const loadTimeBlocks = async () => {
@@ -964,7 +970,18 @@ interface NewEventState {
       mt: marginTopValue !== '0px' ? marginTopValue : 0,
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
-      <Typography variant="h4" gutterBottom>Terminkalender</Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>Terminkalender</Typography>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+            size="small"
+          >
+            <HelpOutlineIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
@@ -1149,6 +1166,198 @@ interface NewEventState {
           {tooltip.text}
         </Box>
       )}
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Terminkalender"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Ansichten" />
+            <Tab label="Termin erstellen" />
+            <Tab label="Navigation" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Terminkalender
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Der Terminkalender bietet eine visuelle Übersicht über alle Termine in verschiedenen 
+                  Ansichten (Tag, Woche, Monat).
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 <strong>Kalenderansichten:</strong> Tag, Woche, Monat</li>
+                  <li>➕ <strong>Termin erstellen:</strong> Neue Termine direkt im Kalender anlegen</li>
+                  <li>✏️ <strong>Termin bearbeiten:</strong> Bestehende Termine ändern</li>
+                  <li>🗑️ <strong>Termin löschen:</strong> Termine entfernen</li>
+                  <li>👤 <strong>Mitarbeiter:</strong> Termine nach Mitarbeitern filtern</li>
+                  <li>🏥 <strong>Räume:</strong> Termine nach Räumen anzeigen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Kalenderansichten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Kalender bietet drei verschiedene Ansichten:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Tagesansicht
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 Zeigt alle Termine eines Tages</li>
+                  <li>⏰ Stundenweise Darstellung</li>
+                  <li>✅ Ideal für detaillierte Tagesplanung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Wochenansicht
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 Zeigt alle Termine einer Woche</li>
+                  <li>📊 Übersichtliche Wochenplanung</li>
+                  <li>✅ Standardansicht</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Monatsansicht
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 Zeigt alle Termine eines Monats</li>
+                  <li>📊 Monatliche Übersicht</li>
+                  <li>✅ Ideal für langfristige Planung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Termin erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie einen neuen Termin im Kalender:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf einen freien Zeitbereich im Kalender</li>
+                  <li>Der Termin-Dialog öffnet sich</li>
+                  <li>Geben Sie die Termindetails ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Titel:</strong> Terminbezeichnung</li>
+                      <li><strong>Startzeit:</strong> Beginn des Termins</li>
+                      <li><strong>Endzeit:</strong> Ende des Termins</li>
+                      <li><strong>Mitarbeiter:</strong> Zugewiesener Mitarbeiter</li>
+                      <li><strong>Raum:</strong> Zugewiesener Raum</li>
+                      <li><strong>Typ:</strong> Termintyp (z.B. Konsultation)</li>
+                      <li><strong>Status:</strong> Terminstatus</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Erstellen"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Navigation
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So navigieren Sie im Kalender:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Navigation
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>⬅️ <strong>Zurück:</strong> Vorherige Periode (Tag/Woche/Monat)</li>
+                  <li>➡️ <strong>Vor:</strong> Nächste Periode (Tag/Woche/Monat)</li>
+                  <li>📅 <strong>Heute:</strong> Zurück zum aktuellen Tag</li>
+                  <li>🔄 <strong>Ansicht wechseln:</strong> Zwischen Tag, Woche und Monat wechseln</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Terminplanung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Nutzen Sie die passende Ansicht für Ihre Planung</li>
+                  <li>✅ Berücksichtigen Sie Pufferzeiten</li>
+                  <li>✅ Überprüfen Sie Raum- und Mitarbeiterverfügbarkeit</li>
+                  <li>✅ Aktualisieren Sie Termine regelmäßig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

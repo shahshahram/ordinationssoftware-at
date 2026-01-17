@@ -25,6 +25,11 @@ import {
   Stack,
   Grid,
   Autocomplete,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
@@ -34,9 +39,11 @@ import {
   Science as ScienceIcon,
   Edit as EditIcon,
   Search as SearchIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -83,6 +90,8 @@ const LaborTestPage: React.FC = () => {
   const [providers, setProviders] = useState<LaborProvider[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [testResults, setTestResults] = useState<{
     receive?: { success: boolean; message: string; details?: any };
     manual?: { success: boolean; message: string; details?: any };
@@ -483,7 +492,18 @@ const LaborTestPage: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Labor Teststrecke</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">Labor Teststrecke</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Button
           startIcon={<RefreshIcon />}
           onClick={fetchProviders}
@@ -908,6 +928,140 @@ const LaborTestPage: React.FC = () => {
           </Table>
         </TableContainer>
       </Card>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Labor Test"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Sendetest" />
+            <Tab label="Empfangstest" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Labor Test
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Diese Seite ermöglicht es, die Labor-Integration zu testen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📤 <strong>Sendetest:</strong> Laboranfragen senden</li>
+                  <li>📥 <strong>Empfangstest:</strong> Laborergebnisse empfangen</li>
+                  <li>✏️ <strong>Manuelle Eingabe:</strong> Ergebnisse manuell eingeben</li>
+                  <li>📋 <strong>Provider:</strong> Labor-Provider verwalten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Sendetest
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Sendetest durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Provider auswählen</li>
+                  <li>Patient auswählen</li>
+                  <li>Anfrage-Daten eingeben</li>
+                  <li>Auf "Anfrage senden" klicken</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Empfangstest
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Empfangstest durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Provider auswählen</li>
+                  <li>Format wählen (FHIR/HL7)</li>
+                  <li>Test-Daten eingeben</li>
+                  <li>Auf "Ergebnis simulieren" klicken</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Labor Test
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Testen Sie mit echten Patientendaten</li>
+                  <li>✅ Prüfen Sie Provider-Konfiguration</li>
+                  <li>✅ Dokumentieren Sie Ergebnisse</li>
+                  <li>✅ Testen Sie verschiedene Formate</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

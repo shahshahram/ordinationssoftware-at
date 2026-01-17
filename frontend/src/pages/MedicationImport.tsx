@@ -9,10 +9,18 @@ import {
   Snackbar,
   CircularProgress,
   LinearProgress,
-  Chip
+  Chip,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogActions,
+  Tabs,
+  Tab,
 } from '@mui/material';
-import { CloudUpload as CloudUploadIcon, CheckCircle as CheckCircleIcon } from '@mui/icons-material';
+import { CloudUpload as CloudUploadIcon, CheckCircle as CheckCircleIcon, HelpOutline as HelpOutlineIcon } from '@mui/icons-material';
 import axios from 'axios';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 const MedicationImport: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -24,6 +32,8 @@ const MedicationImport: React.FC = () => {
     message: '',
     severity: 'info'
   });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -87,9 +97,20 @@ const MedicationImport: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom>
-        Medikamentenkatalog Import
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 0 }}>
+          Medikamentenkatalog Import
+        </Typography>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+            size="small"
+          >
+            <HelpOutlineIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Card sx={{ mt: 3 }}>
         <CardContent>
@@ -194,6 +215,139 @@ const MedicationImport: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Medikamentenkatalog Import"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Datei importieren" />
+            <Tab label="Dateiformat" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Medikamentenkatalog Import
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Der Medikamentenkatalog Import ermöglicht es, Medikamente aus CSV-Dateien zu importieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📤 <strong>Datei hochladen:</strong> CSV-Datei mit Medikamenten hochladen</li>
+                  <li>📊 <strong>Import:</strong> Medikamente in den Katalog importieren</li>
+                  <li>✅ <strong>Validierung:</strong> Daten werden vor dem Import geprüft</li>
+                  <li>📋 <strong>Ergebnis:</strong> Import-Ergebnis anzeigen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Datei importieren
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So importieren Sie eine Medikamenten-Datei:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Datei auswählen"</li>
+                  <li>Wählen Sie eine CSV-Datei aus</li>
+                  <li>Klicken Sie auf "Importieren"</li>
+                  <li>Warten Sie auf den Import-Vorgang</li>
+                  <li>Prüfen Sie das Import-Ergebnis</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Dateiformat
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die CSV-Datei muss folgendes Format haben:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Erforderliche Spalten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📝 <strong>Name:</strong> Medikamentenname</li>
+                  <li>🔢 <strong>Code:</strong> Medikamentencode</li>
+                  <li>💊 <strong>Dosierung:</strong> Dosierungsinformationen</li>
+                  <li>📋 <strong>Kategorie:</strong> Medikamentenkategorie</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Import-Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Prüfen Sie die Datei vor dem Import</li>
+                  <li>✅ Verwenden Sie das korrekte Dateiformat</li>
+                  <li>✅ Sichern Sie Daten vor dem Import</li>
+                  <li>✅ Dokumentieren Sie Import-Änderungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

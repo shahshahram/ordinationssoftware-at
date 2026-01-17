@@ -23,6 +23,13 @@ import {
   Alert,
   Stack,
   Autocomplete,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogActions,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Search,
@@ -30,6 +37,7 @@ import {
   CalendarToday,
   Person,
   AccessTime,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -38,6 +46,7 @@ import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface AvailableSlot {
   start: string;
@@ -75,6 +84,8 @@ const Availability: React.FC = () => {
   const [staffList, setStaffList] = useState<any[]>([]);
   const [serviceList, setServiceList] = useState<any[]>([]);
   const { enqueueSnackbar } = useSnackbar();
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadStaffList();
@@ -316,9 +327,20 @@ const Availability: React.FC = () => {
       mt: marginTopValue !== '0px' ? marginTopValue : 0,
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
-      <Typography variant="h4" gutterBottom>
-        Verfügbarkeiten
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+          Verfügbarkeiten
+        </Typography>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+            size="small"
+          >
+            <HelpOutlineIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
       <Typography variant="subtitle1" color="text.secondary" gutterBottom sx={{ mb: 3 }}>
         Verfügbare Termine und Auslastung prüfen
       </Typography>
@@ -504,6 +526,139 @@ const Availability: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Verfügbarkeiten"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Verfügbarkeit prüfen" />
+            <Tab label="Auslastung" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Verfügbarkeiten
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Verfügbarkeiten-Funktion ermöglicht es, verfügbare Termine und die Auslastung 
+                  von Mitarbeitern zu prüfen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📅 <strong>Verfügbare Termine:</strong> Verfügbare Termine anzeigen</li>
+                  <li>👤 <strong>Mitarbeiter:</strong> Verfügbarkeit nach Mitarbeiter filtern</li>
+                  <li>📊 <strong>Auslastung:</strong> Auslastung der Mitarbeiter anzeigen</li>
+                  <li>🔍 <strong>Suche:</strong> Nach verschiedenen Kriterien suchen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Verfügbarkeit prüfen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So prüfen Sie die Verfügbarkeit:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Mitarbeiter aus</li>
+                  <li>Wählen Sie optional eine Leistung aus</li>
+                  <li>Geben Sie einen Zeitraum ein</li>
+                  <li>Klicken Sie auf "Verfügbarkeit prüfen"</li>
+                  <li>Die verfügbaren Termine werden angezeigt</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Auslastung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Die Auslastung zeigt die Belegung der Termine:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Informationen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Gesamt:</strong> Gesamtzahl der verfügbaren Termine</li>
+                  <li>✅ <strong>Gebucht:</strong> Anzahl der gebuchten Termine</li>
+                  <li>📈 <strong>Auslastung:</strong> Prozentuale Auslastung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbarkeitsprüfung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Prüfen Sie die Verfügbarkeit regelmäßig</li>
+                  <li>✅ Berücksichtigen Sie die Auslastung</li>
+                  <li>✅ Planen Sie Termine im Voraus</li>
+                  <li>✅ Aktualisieren Sie die Verfügbarkeit regelmäßig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

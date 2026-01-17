@@ -47,6 +47,7 @@ import {
   Refresh as RefreshIcon,
   LocationOn as LocationOnIcon,
   CalendarToday as CalendarTodayIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -135,6 +136,8 @@ const StaffManagement: React.FC = () => {
   }>({ open: false, message: '', severity: 'info' });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [weeklyScheduleOpen, setWeeklyScheduleOpen] = useState(false);
   const [selectedStaffForSchedule, setSelectedStaffForSchedule] = useState<any>(null);
   const [scheduleOverviewOpen, setScheduleOverviewOpen] = useState(false);

@@ -51,13 +51,15 @@ import {
   CloudDownload,
   CloudUpload,
   Schedule,
-  History
+  History,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import api from '../utils/api';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface Tariff {
   _id: string;
@@ -103,6 +105,8 @@ const TariffManagement: React.FC = () => {
   const [selectedFormat, setSelectedFormat] = useState<'csv' | 'xml'>('csv'); // CSV als Standard, da ÖGK-URLs oft PDF statt XML zurückgeben
   const [selectedTariffType, setSelectedTariffType] = useState<'ebm' | 'kho' | 'goae' | 'all'>('all');
   const [updateInfo, setUpdateInfo] = useState<any>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     console.log(`[TariffManagement] activeTab geändert zu: ${activeTab}`);
@@ -267,7 +271,18 @@ const TariffManagement: React.FC = () => {
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Tarifverwaltung</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">Tarifverwaltung</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button
             variant="outlined"
@@ -600,6 +615,137 @@ const TariffManagement: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setImportDialogOpen(false)}>Schließen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Tarifverwaltung"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Tarife verwalten" />
+            <Tab label="Import & Export" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Tarifverwaltung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Tarifverwaltung ermöglicht es, Tarife zu verwalten, zu importieren und zu exportieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📋 <strong>Tarife verwalten:</strong> GOÄ, KHO, EBM Tarife verwalten</li>
+                  <li>📥 <strong>Import:</strong> Tarife aus Dateien importieren</li>
+                  <li>📤 <strong>Export:</strong> Tarife exportieren</li>
+                  <li>🔄 <strong>Updates:</strong> Tarife aktualisieren</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Tarife verwalten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So verwalten Sie Tarife:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie den Tariftyp (GOÄ, KHO, EBM)</li>
+                  <li>Durchsuchen Sie die Tarifliste</li>
+                  <li>Bearbeiten Sie Tarife nach Bedarf</li>
+                  <li>Speichern Sie Änderungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Import & Export
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So importieren und exportieren Sie Tarife:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Formate
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📄 <strong>CSV:</strong> Komma-separierte Werte</li>
+                  <li>📋 <strong>JSON:</strong> JavaScript Object Notation</li>
+                  <li>📑 <strong>PDF:</strong> Portable Document Format</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Tarifverwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Halten Sie Tarife aktuell</li>
+                  <li>✅ Prüfen Sie Importe vor dem Speichern</li>
+                  <li>✅ Dokumentieren Sie Änderungen</li>
+                  <li>✅ Sichern Sie Tarifdaten regelmäßig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

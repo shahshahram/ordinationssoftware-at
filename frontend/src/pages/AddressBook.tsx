@@ -75,6 +75,7 @@ import {
   ViewList,
   Category,
   Link as LinkIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';

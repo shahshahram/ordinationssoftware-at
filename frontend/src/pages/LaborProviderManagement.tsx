@@ -27,6 +27,9 @@ import {
   CircularProgress,
   Divider,
   Stack,
+  Tooltip,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -35,9 +38,11 @@ import {
   Refresh as RefreshIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface LaborProvider {
   _id: string;
@@ -108,6 +113,8 @@ const LaborProviderManagement: React.FC = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<LaborProvider | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [formData, setFormData] = useState<{
     name: string;
     code: string;
@@ -336,7 +343,18 @@ const LaborProviderManagement: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Labor-Provider-Verwaltung</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">Labor-Provider-Verwaltung</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box>
           <Button
             startIcon={<RefreshIcon />}
@@ -740,6 +758,146 @@ const LaborProviderManagement: React.FC = () => {
           <Button onClick={() => setDeleteDialogOpen(false)}>Abbrechen</Button>
           <Button onClick={handleDelete} color="error" variant="contained">
             Löschen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Labor-Provider-Verwaltung"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Provider erstellen" />
+            <Tab label="Provider bearbeiten" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Labor-Provider-Verwaltung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Labor-Provider-Verwaltung ermöglicht es, Laboranbieter zu verwalten, 
+                  zu erstellen und zu bearbeiten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>➕ <strong>Provider erstellen:</strong> Neue Labor-Provider anlegen</li>
+                  <li>✏️ <strong>Provider bearbeiten:</strong> Bestehende Provider ändern</li>
+                  <li>🗑️ <strong>Provider löschen:</strong> Provider entfernen</li>
+                  <li>📋 <strong>Kontaktdaten:</strong> Kontaktdaten verwalten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neuen Provider erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie einen neuen Labor-Provider:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neuer Provider"</li>
+                  <li>Geben Sie die Provider-Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Name:</strong> Provider-Name</li>
+                      <li><strong>Code:</strong> Provider-Code</li>
+                      <li><strong>Beschreibung:</strong> Kurzbeschreibung</li>
+                      <li><strong>Kontaktdaten:</strong> Adresse, Telefon, E-Mail</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Provider bearbeiten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So bearbeiten Sie einen bestehenden Provider:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Provider aus der Liste</li>
+                  <li>Klicken Sie auf das Bearbeiten-Icon</li>
+                  <li>Ändern Sie die gewünschten Daten</li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                  <li>Die Änderungen werden gespeichert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Provider-Verwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Halten Sie Provider-Daten aktuell</li>
+                  <li>✅ Verwenden Sie aussagekräftige Codes</li>
+                  <li>✅ Dokumentieren Sie Provider-Informationen</li>
+                  <li>✅ Strukturieren Sie Provider klar</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
           </Button>
         </DialogActions>
       </Dialog>

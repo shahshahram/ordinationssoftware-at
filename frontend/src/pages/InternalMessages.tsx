@@ -133,6 +133,8 @@ const InternalMessages: React.FC = () => {
     message: '',
     severity: 'success'
   });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   const [composeData, setComposeData] = useState<CreateMessageData>({
     recipientId: '',

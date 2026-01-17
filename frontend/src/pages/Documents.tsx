@@ -84,6 +84,7 @@ import {
   PendingActions,
   Timeline as TimelineIcon,
   Close,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 
 const Documents: React.FC = () => {
@@ -115,6 +116,8 @@ const Documents: React.FC = () => {
   const [standaloneDialogOpen, setStandaloneDialogOpen] = useState(false);
   const [standaloneDialogDocument, setStandaloneDialogDocument] = useState<Document | null>(null);
   const [standaloneDialogPatient, setStandaloneDialogPatient] = useState<Patient | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [formData, setFormData] = useState<Partial<Document>>({
     title: '',
     type: 'rezept',
@@ -515,9 +518,20 @@ const Documents: React.FC = () => {
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Dokumentenverwaltung
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" component="h1">
+            Dokumentenverwaltung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box display="flex" gap={1} alignItems="center">
           <Tooltip title="Patienten-Timeline anzeigen">
             <IconButton

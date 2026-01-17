@@ -40,6 +40,7 @@ import {
   QuestionAnswer,
   Category,
   MedicalServices,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import CalendarMonthView from '../components/CalendarMonthView';
 import CalendarWeekView from '../components/CalendarWeekView';
@@ -55,6 +56,7 @@ import api from '../utils/api';
 import { useAppDispatch } from '../store/hooks';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface Category {
   _id?: string | null;

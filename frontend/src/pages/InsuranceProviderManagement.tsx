@@ -52,9 +52,11 @@ import {
   Description as DescriptionIcon,
   Api as ApiIcon,
   Science as TestTubeIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface InsuranceProvider {
   _id: string;
@@ -180,6 +182,8 @@ const InsuranceProviderManagement: React.FC = () => {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [activeTab, setActiveTab] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [formData, setFormData] = useState<Partial<InsuranceProvider>>({
     name: '',
     code: '',
@@ -822,6 +826,15 @@ const InsuranceProviderManagement: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <HealthAndSafetyIcon sx={{ fontSize: 40, color: 'primary.main' }} />
           <Typography variant="h4">Versicherungsverwaltung</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
@@ -1285,6 +1298,146 @@ const InsuranceProviderManagement: React.FC = () => {
               Testen
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Versicherungsverwaltung"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Versicherung erstellen" />
+            <Tab label="Integration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Versicherungsverwaltung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Versicherungsverwaltung ermöglicht es, Versicherungsanbieter zu verwalten, 
+                  zu konfigurieren und zu integrieren.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>➕ <strong>Versicherung erstellen:</strong> Neue Versicherungen anlegen</li>
+                  <li>✏️ <strong>Versicherung bearbeiten:</strong> Bestehende Versicherungen ändern</li>
+                  <li>🔗 <strong>Integration:</strong> REST API und E-Mail Integration</li>
+                  <li>⚙️ <strong>Konfiguration:</strong> Versicherungsspezifische Einstellungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neue Versicherung erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie eine neue Versicherung:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neue Versicherung"</li>
+                  <li>Geben Sie die Versicherungs-Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>Name:</strong> Versicherungsname</li>
+                      <li><strong>Code:</strong> Versicherungscode</li>
+                      <li><strong>Kontaktdaten:</strong> Adresse, Telefon, E-Mail</li>
+                      <li><strong>Integration:</strong> REST API oder E-Mail</li>
+                    </Box>
+                  </li>
+                  <li>Konfigurieren Sie die Integration</li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Integration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Versicherungen können über REST API oder E-Mail integriert werden:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Integrationsarten
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🌐 <strong>REST API:</strong> Automatische Integration über API</li>
+                  <li>📧 <strong>E-Mail:</strong> Integration über E-Mail-Versand</li>
+                  <li>🔐 <strong>Authentifizierung:</strong> API-Schlüssel und Zertifikate</li>
+                  <li>📋 <strong>Templates:</strong> E-Mail-Vorlagen konfigurieren</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Versicherungsverwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Halten Sie Versicherungsdaten aktuell</li>
+                  <li>✅ Testen Sie Integrationen regelmäßig</li>
+                  <li>✅ Dokumentieren Sie API-Konfigurationen</li>
+                  <li>✅ Verwenden Sie sichere Authentifizierung</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

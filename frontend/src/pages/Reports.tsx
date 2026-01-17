@@ -9,7 +9,8 @@ import {
 import {
   Add, Edit, Delete, PlayArrow, Download, Assessment, FilterList,
   Visibility, VisibilityOff, Search, Category as CategoryIcon, ExpandMore,
-  AddCircle, RemoveCircle, Settings, TableChart, BarChart
+  AddCircle, RemoveCircle, Settings, TableChart, BarChart,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -81,6 +82,8 @@ const Reports: React.FC = () => {
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
   const { enqueueSnackbar } = useSnackbar();
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   // Report Builder State
   const [builderTab, setBuilderTab] = useState(0);
@@ -445,9 +448,20 @@ const Reports: React.FC = () => {
     }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Berichte
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+            <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+              Berichte
+            </Typography>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Typography variant="subtitle1" color="text.secondary">
             Erstellen und verwalten Sie verschiedene Auswertungen über das System
           </Typography>
@@ -625,9 +639,11 @@ const Reports: React.FC = () => {
         <Dialog open={!!executionResult} onClose={() => setExecutionResult(null)} maxWidth="lg" fullWidth>
           <DialogTitle>
             Report-Ergebnis: {selectedReport?.name}
-            <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
-              {executionResult.result.totalRecords} Datensätze in {executionResult.result.executionTime}ms
-            </Typography>
+            {executionResult?.result && (
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
+                {executionResult.result.totalRecords} Datensätze in {executionResult.result.executionTime}ms
+              </Typography>
+            )}
           </DialogTitle>
           <DialogContent>
             <TableContainer component={Paper} sx={{ maxHeight: 400 }}>
@@ -642,7 +658,7 @@ const Reports: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {executionResult.result.data.slice(0, 100).map((row: any, index: number) => (
+                  {executionResult?.result?.data?.slice(0, 100).map((row: any, index: number) => (
                     <TableRow key={index}>
                       {selectedReport?.config?.columns
                         ?.filter((col: any) => col.visible !== false)
@@ -654,7 +670,7 @@ const Reports: React.FC = () => {
                 </TableBody>
               </Table>
             </TableContainer>
-            {executionResult.result.data.length > 100 && (
+            {executionResult?.result?.data && executionResult.result.data.length > 100 && (
               <Alert severity="info" sx={{ mt: 2 }}>
                 Es werden nur die ersten 100 Datensätze angezeigt. Gesamt: {executionResult.result.totalRecords}
               </Alert>

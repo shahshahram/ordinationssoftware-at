@@ -19,6 +19,11 @@ import {
   Select,
   MenuItem,
   Autocomplete,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -28,9 +33,11 @@ import {
   Build as BuildIcon,
   CloudUpload as CloudUploadIcon,
   Settings as SettingsIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -84,6 +91,8 @@ const ELDATestPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [eldaStatus, setEldaStatus] = useState<ELDAStatus | null>(null);
   const [availableMethods, setAvailableMethods] = useState<ELDAMethod[]>([]);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [testResults, setTestResults] = useState<{
     connection?: { success: boolean; message: string; method?: string; details?: any };
     send?: { success: boolean; message: string; details?: any };
@@ -261,7 +270,18 @@ const ELDATestPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
         <BuildIcon sx={{ fontSize: 32 }} />
-        <Typography variant="h4">ELDA Teststrecke</Typography>
+        <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">ELDA Teststrecke</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* Status-Card */}
@@ -535,6 +555,138 @@ const ELDATestPage: React.FC = () => {
           </Card>
         </TabPanel>
       </Paper>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: ELDA Test"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Verbindungstest" />
+            <Tab label="Sendetest" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  ELDA Test
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Diese Seite ermöglicht es, die ELDA-Integration zu testen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔌 <strong>Verbindungstest:</strong> ELDA-Verbindung testen</li>
+                  <li>📤 <strong>Sendetest:</strong> Daten an ELDA senden</li>
+                  <li>📋 <strong>Status:</strong> ELDA-Status prüfen</li>
+                  <li>⚙️ <strong>Konfiguration:</strong> ELDA-Einstellungen prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Verbindungstest
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Verbindungstest durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Übertragungsmethode wählen (FTPS/Webservice/Auto)</li>
+                  <li>Auf "Verbindung testen" klicken</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Sendetest
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Sendetest durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Datensatztyp wählen</li>
+                  <li>Übertragungsmethode wählen</li>
+                  <li>Payload anpassen (optional)</li>
+                  <li>Auf "Test senden" klicken</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  ELDA Test
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Testen Sie zuerst die Verbindung</li>
+                  <li>✅ Prüfen Sie die Konfiguration</li>
+                  <li>✅ Dokumentieren Sie Ergebnisse</li>
+                  <li>✅ Testen Sie verschiedene Methoden</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

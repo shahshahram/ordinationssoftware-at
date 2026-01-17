@@ -24,6 +24,11 @@ import {
   Divider,
   Stack,
   Grid,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CloudUpload as CloudUploadIcon,
@@ -31,10 +36,12 @@ import {
   Refresh as RefreshIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import DicomRetrieveDialog from '../components/DicomRetrieveDialog';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -78,6 +85,8 @@ const DicomTestPage: React.FC = () => {
   const [providers, setProviders] = useState<DicomProvider[]>([]);
   const [loading, setLoading] = useState(false);
   const [retrieveDialogOpen, setRetrieveDialogOpen] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [testResults, setTestResults] = useState<{
     upload?: { success: boolean; message: string; details?: any };
     retrieve?: { success: boolean; message: string; details?: any };
@@ -171,7 +180,18 @@ const DicomTestPage: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">DICOM Teststrecke</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">DICOM Teststrecke</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Button
           startIcon={<RefreshIcon />}
           onClick={fetchProviders}
@@ -393,6 +413,140 @@ const DicomTestPage: React.FC = () => {
           });
         }}
       />
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: DICOM Test"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Upload-Test" />
+            <Tab label="Retrieve-Test" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  DICOM Test
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Diese Seite ermöglicht es, die DICOM-Integration zu testen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>☁️ <strong>Upload:</strong> DICOM-Dateien hochladen</li>
+                  <li>⬇️ <strong>Retrieve:</strong> DICOM-Dateien abrufen</li>
+                  <li>📋 <strong>Provider:</strong> DICOM-Provider verwalten</li>
+                  <li>🔄 <strong>Testen:</strong> Integration testen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Upload-Test
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Upload-Test durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Provider auswählen</li>
+                  <li>Provider Code eingeben</li>
+                  <li>DICOM-Datei auswählen</li>
+                  <li>Auf "Upload testen" klicken</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Retrieve-Test
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Retrieve-Test durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Provider auswählen</li>
+                  <li>Auf "Retrieve öffnen" klicken</li>
+                  <li>Suchparameter eingeben</li>
+                  <li>DICOM-Dateien abrufen</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  DICOM Test
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Testen Sie mit echten DICOM-Dateien</li>
+                  <li>✅ Prüfen Sie Provider-Konfiguration</li>
+                  <li>✅ Dokumentieren Sie Ergebnisse</li>
+                  <li>✅ Testen Sie verschiedene Provider</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

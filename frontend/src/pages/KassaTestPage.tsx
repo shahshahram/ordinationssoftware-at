@@ -25,6 +25,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -34,9 +39,11 @@ import {
   Send as SendIcon,
   List as ListIcon,
   Build as BuildIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -75,6 +82,8 @@ const KassaTestPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [performances, setPerformances] = useState<Performance[]>([]);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [testResults, setTestResults] = useState<{
     connection?: { success: boolean; message: string; details?: any };
     send?: { success: boolean; message: string; details?: any };
@@ -325,10 +334,21 @@ const KassaTestPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
         <BuildIcon sx={{ fontSize: 40, color: 'primary.main' }} />
-        <Box>
-          <Typography variant="h4" fontWeight="bold">
-            Kassa-Schnittstelle Teststrecke
-          </Typography>
+        <Box sx={{ flex: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h4" fontWeight="bold">
+              Kassa-Schnittstelle Teststrecke
+            </Typography>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Typography variant="body2" color="textSecondary">
             Testen Sie die Integration mit der Kassenabrechnungs-API
           </Typography>
@@ -711,6 +731,139 @@ const KassaTestPage: React.FC = () => {
           </Stack>
         </TabPanel>
       </Card>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Kassa-Schnittstelle Test"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Test durchführen" />
+            <Tab label="Ergebnisse" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Kassa-Schnittstelle Test
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Diese Seite ermöglicht es, die Integration mit der Kassenabrechnungs-API zu testen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🧪 <strong>Testen:</strong> Kassenabrechnungen testen</li>
+                  <li>📋 <strong>Ergebnisse:</strong> Test-Ergebnisse anzeigen</li>
+                  <li>🔄 <strong>Aktualisieren:</strong> Status aktualisieren</li>
+                  <li>📊 <strong>Details:</strong> Detaillierte Informationen anzeigen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Test durchführen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Test durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Patient auswählen</li>
+                  <li>Leistungen auswählen</li>
+                  <li>Tariftyp wählen</li>
+                  <li>Test senden</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Ergebnisse
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So interpretieren Sie die Ergebnisse:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Status-Indikatoren
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Erfolg:</strong> Test erfolgreich</li>
+                  <li>❌ <strong>Fehler:</strong> Test fehlgeschlagen</li>
+                  <li>⚠️ <strong>Warnung:</strong> Test mit Warnungen</li>
+                  <li>ℹ️ <strong>Info:</strong> Zusätzliche Informationen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Testen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Testen Sie mit echten Daten</li>
+                  <li>✅ Prüfen Sie alle Fehlermeldungen</li>
+                  <li>✅ Dokumentieren Sie Ergebnisse</li>
+                  <li>✅ Testen Sie verschiedene Szenarien</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

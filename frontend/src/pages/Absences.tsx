@@ -42,6 +42,7 @@ import {
   Pending,
   Visibility,
   Refresh,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -88,6 +89,8 @@ const Absences: React.FC = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadAbsences();
@@ -228,7 +231,18 @@ const Absences: React.FC = () => {
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
       <Box sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4">Abwesenheitsverwaltung</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h4">Abwesenheitsverwaltung</Typography>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Button variant="contained" startIcon={<Add />} onClick={handleAdd}>
             Neue Abwesenheit
           </Button>

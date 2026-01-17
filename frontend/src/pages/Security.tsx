@@ -48,10 +48,12 @@ import {
   Info,
   Refresh,
   History,
-  Shield
+  Shield,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import axios from 'axios';
 import { useAppSelector } from '../store/hooks';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface SecurityStatus {
   twoFactorEnabled: boolean;
@@ -104,6 +106,8 @@ const Security: React.FC = () => {
     newPassword: '',
     confirmPassword: ''
   });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     fetchSecurityData();
@@ -257,10 +261,21 @@ const Security: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <SecurityIcon color="primary" />
-        Sicherheitscenter
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h4" component="h1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 0 }}>
+          <SecurityIcon color="primary" />
+          Sicherheitscenter
+        </Typography>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+            size="small"
+          >
+            <HelpOutlineIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
         <Tabs value={activeTab} onChange={(e, newValue) => setActiveTab(newValue)}>
@@ -609,6 +624,138 @@ const Security: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Sicherheitseinstellungen"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Passwort ändern" />
+            <Tab label="2FA einrichten" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Sicherheitseinstellungen
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Sicherheitseinstellungen ermöglichen es, Ihr Konto zu schützen und zu verwalten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔐 <strong>Passwort:</strong> Passwort ändern</li>
+                  <li>🔑 <strong>2FA:</strong> Zwei-Faktor-Authentifizierung einrichten</li>
+                  <li>📋 <strong>Audit-Log:</strong> Zugriffe protokollieren</li>
+                  <li>🛡️ <strong>Sicherheitsstatus:</strong> Sicherheitsstatus prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Passwort ändern
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So ändern Sie Ihr Passwort:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktuelles Passwort eingeben</li>
+                  <li>Neues Passwort wählen</li>
+                  <li>Passwort bestätigen</li>
+                  <li>Änderung speichern</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  2FA einrichten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So richten Sie die Zwei-Faktor-Authentifizierung ein:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📱 <strong>QR-Code:</strong> QR-Code scannen</li>
+                  <li>🔑 <strong>Backup-Codes:</strong> Backup-Codes speichern</li>
+                  <li>✅ <strong>Aktivieren:</strong> 2FA aktivieren</li>
+                  <li>❌ <strong>Deaktivieren:</strong> 2FA deaktivieren</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Sicherheit
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie starke Passwörter</li>
+                  <li>✅ Aktivieren Sie 2FA</li>
+                  <li>✅ Prüfen Sie regelmäßig Audit-Logs</li>
+                  <li>✅ Speichern Sie Backup-Codes sicher</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

@@ -35,6 +35,9 @@ import {
   Switch,
   FormControlLabel,
   Grid,
+  Tooltip,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
@@ -54,6 +57,7 @@ import {
   Assistant,
   Lock,
   LockOpen,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 
 interface User {
@@ -100,6 +104,8 @@ const Users: React.FC = () => {
     message: '', 
     severity: 'success' as 'success' | 'error' | 'warning' | 'info' 
   });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTabUsers, setHelpTabUsers] = useState(0);
 
   const [formData, setFormData] = useState<Partial<User>>({
     email: '',
@@ -463,9 +469,20 @@ const Users: React.FC = () => {
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4" component="h1">
-          Benutzerverwaltung
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" component="h1">
+            Benutzerverwaltung
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Button
           variant="contained"
           startIcon={<Add />}
@@ -868,6 +885,175 @@ const Users: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Benutzerverwaltung"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTabUsers} 
+            onChange={(_, v) => setHelpTabUsers(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Benutzer erstellen" />
+            <Tab label="Benutzer bearbeiten" />
+            <Tab label="Rollen & Berechtigungen" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTabUsers === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Benutzerverwaltung
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Die Benutzerverwaltung ermöglicht es, Benutzer zu erstellen, zu bearbeiten und zu verwalten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>➕ <strong>Benutzer erstellen:</strong> Neue Benutzer anlegen</li>
+                  <li>✏️ <strong>Benutzer bearbeiten:</strong> Bestehende Benutzer ändern</li>
+                  <li>🗑️ <strong>Benutzer löschen:</strong> Benutzer entfernen</li>
+                  <li>👤 <strong>Rollen verwalten:</strong> Benutzerrollen zuweisen</li>
+                  <li>🔐 <strong>Berechtigungen:</strong> Zugriffsrechte verwalten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabUsers === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Neuen Benutzer erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So erstellen Sie einen neuen Benutzer:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Neuer Benutzer"</li>
+                  <li>Geben Sie die Benutzer-Daten ein:
+                    <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                      <li><strong>E-Mail:</strong> E-Mail-Adresse</li>
+                      <li><strong>Passwort:</strong> Passwort festlegen</li>
+                      <li><strong>Vorname & Nachname:</strong> Name des Benutzers</li>
+                      <li><strong>Rolle:</strong> Benutzerrolle auswählen</li>
+                      <li><strong>Status:</strong> Aktiv/Inaktiv</li>
+                    </Box>
+                  </li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabUsers === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Benutzer bearbeiten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So bearbeiten Sie einen bestehenden Benutzer:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt Anleitung
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wählen Sie einen Benutzer aus der Liste</li>
+                  <li>Klicken Sie auf das Bearbeiten-Icon</li>
+                  <li>Ändern Sie die gewünschten Daten</li>
+                  <li>Klicken Sie auf "Speichern"</li>
+                  <li>Die Änderungen werden gespeichert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabUsers === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Rollen & Berechtigungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Verfügbare Benutzerrollen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Rollen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👑 <strong>Super Admin:</strong> Vollzugriff auf alle Funktionen</li>
+                  <li>🛡️ <strong>Admin:</strong> Administrativer Zugriff</li>
+                  <li>👨‍⚕️ <strong>Arzt:</strong> Ärztliche Funktionen</li>
+                  <li>👩‍💼 <strong>Assistent:</strong> Unterstützende Funktionen</li>
+                  <li>📋 <strong>Rezeption:</strong> Empfangs- und Terminverwaltung</li>
+                  <li>💰 <strong>Billing:</strong> Abrechnungsfunktionen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabUsers === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Benutzerverwaltung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Verwenden Sie starke Passwörter</li>
+                  <li>✅ Weisen Sie Rollen sorgfältig zu</li>
+                  <li>✅ Deaktivieren Sie nicht mehr benötigte Benutzer</li>
+                  <li>✅ Dokumentieren Sie Berechtigungsänderungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

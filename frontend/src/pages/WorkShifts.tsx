@@ -32,6 +32,8 @@ import {
   TablePagination,
   Switch,
   FormControlLabel,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add,
@@ -39,6 +41,7 @@ import {
   Delete,
   Visibility,
   Refresh,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
@@ -47,6 +50,7 @@ import { de } from 'date-fns/locale';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface WorkShift {
   _id: string;
@@ -80,6 +84,8 @@ const WorkShifts: React.FC = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadWorkShifts();
@@ -185,7 +191,18 @@ const WorkShifts: React.FC = () => {
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
       <Box sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4">Arbeitszeiten-Verwaltung</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant="h4">Arbeitszeiten-Verwaltung</Typography>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
           <Button variant="contained" startIcon={<Add />} onClick={handleAdd}>
             Neue Arbeitszeit
           </Button>
@@ -344,6 +361,174 @@ const WorkShifts: React.FC = () => {
             <Button onClick={() => setDialogOpen(false)}>Abbrechen</Button>
             <Button variant="contained" onClick={handleSave}>
               Speichern
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        {/* Hilfe & Leitfaden Dialog */}
+        <Dialog
+          open={helpDialogOpen}
+          onClose={() => setHelpDialogOpen(false)}
+          maxWidth="md"
+          fullWidth
+          PaperProps={{
+            sx: { minHeight: '600px' }
+          }}
+        >
+          <GradientDialogTitle 
+            title="Hilfe & Leitfaden: Arbeitszeiten-Verwaltung"
+            onClose={() => setHelpDialogOpen(false)}
+          />
+          <DialogContent>
+            <Tabs 
+              value={helpTab} 
+              onChange={(_, v) => setHelpTab(v)} 
+              sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+              variant="scrollable"
+              scrollButtons="auto"
+            >
+              <Tab label="Übersicht" />
+              <Tab label="Arbeitszeit erstellen" />
+              <Tab label="Arbeitszeit bearbeiten" />
+              <Tab label="Schichttypen" />
+              <Tab label="Best Practices" />
+            </Tabs>
+
+            {helpTab === 0 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box>
+                  <Typography variant="h6" gutterBottom color="primary">
+                    Arbeitszeiten-Verwaltung
+                  </Typography>
+                  <Typography variant="body1" paragraph>
+                    Die Arbeitszeiten-Verwaltung ermöglicht es, Arbeitszeiten von Mitarbeitern 
+                    zu verwalten, zu erstellen und zu bearbeiten.
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <Typography variant="h6" gutterBottom color="primary">
+                    Hauptfunktionen
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                    <li>➕ <strong>Arbeitszeit erstellen:</strong> Neue Arbeitszeiten anlegen</li>
+                    <li>✏️ <strong>Arbeitszeit bearbeiten:</strong> Bestehende Arbeitszeiten ändern</li>
+                    <li>🗑️ <strong>Arbeitszeit löschen:</strong> Arbeitszeiten entfernen</li>
+                    <li>👁️ <strong>Arbeitszeiten anzeigen:</strong> Arbeitszeiten durchsuchen</li>
+                    <li>📊 <strong>Schichttypen:</strong> Verschiedene Schichttypen verwalten</li>
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            {helpTab === 1 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box>
+                  <Typography variant="h6" gutterBottom color="primary">
+                    Neue Arbeitszeit erstellen
+                  </Typography>
+                  <Typography variant="body2" paragraph>
+                    So erstellen Sie eine neue Arbeitszeit:
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                    Schritt-für-Schritt Anleitung
+                  </Typography>
+                  <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                    <li>Klicken Sie auf "Neue Arbeitszeit"</li>
+                    <li>Geben Sie die Arbeitszeit-Daten ein:
+                      <Box component="ul" sx={{ pl: 3, mt: 1 }}>
+                        <li><strong>Mitarbeiter:</strong> Mitarbeiter auswählen</li>
+                        <li><strong>Von:</strong> Startzeit</li>
+                        <li><strong>Bis:</strong> Endzeit</li>
+                        <li><strong>Typ:</strong> Schichttyp auswählen</li>
+                        <li><strong>Aktiv:</strong> Arbeitszeit aktivieren/deaktivieren</li>
+                      </Box>
+                    </li>
+                    <li>Klicken Sie auf "Speichern"</li>
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            {helpTab === 2 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box>
+                  <Typography variant="h6" gutterBottom color="primary">
+                    Arbeitszeit bearbeiten
+                  </Typography>
+                  <Typography variant="body2" paragraph>
+                    So bearbeiten Sie eine bestehende Arbeitszeit:
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                    Schritt-für-Schritt Anleitung
+                  </Typography>
+                  <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                    <li>Wählen Sie eine Arbeitszeit aus der Liste</li>
+                    <li>Klicken Sie auf das Bearbeiten-Icon</li>
+                    <li>Ändern Sie die gewünschten Daten</li>
+                    <li>Klicken Sie auf "Speichern"</li>
+                    <li>Die Änderungen werden gespeichert</li>
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            {helpTab === 3 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box>
+                  <Typography variant="h6" gutterBottom color="primary">
+                    Schichttypen
+                  </Typography>
+                  <Typography variant="body2" paragraph>
+                    Arbeitszeiten können verschiedenen Schichttypen zugeordnet werden:
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                    Verfügbare Schichttypen
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                    <li>🕐 <strong>Regulär:</strong> Reguläre Arbeitszeit</li>
+                    <li>⏰ <strong>Überstunden:</strong> Überstunden</li>
+                    <li>📞 <strong>Bereitschaft:</strong> Bereitschaftsdienst</li>
+                    <li>🚨 <strong>Notfall:</strong> Notfallbereitschaft</li>
+                  </Box>
+                </Box>
+              </Box>
+            )}
+
+            {helpTab === 4 && (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                <Box>
+                  <Typography variant="h6" gutterBottom color="primary">
+                    Best Practices
+                  </Typography>
+                </Box>
+
+                <Box>
+                  <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                    Arbeitszeiten-Verwaltung
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                    <li>✅ Halten Sie Arbeitszeiten aktuell</li>
+                    <li>✅ Verwenden Sie die richtigen Schichttypen</li>
+                    <li>✅ Planen Sie Arbeitszeiten im Voraus</li>
+                    <li>✅ Dokumentieren Sie Änderungen</li>
+                  </Box>
+                </Box>
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+              Schließen
             </Button>
           </DialogActions>
         </Dialog>

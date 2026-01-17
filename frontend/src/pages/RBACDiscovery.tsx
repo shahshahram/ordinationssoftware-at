@@ -29,7 +29,9 @@ import {
   Divider,
   Switch,
   FormControlLabel,
-  Badge
+  Badge,
+  Tabs,
+  Tab
 } from '@mui/material';
 import {
   Refresh,
@@ -42,9 +44,11 @@ import {
   CheckCircle,
   Warning,
   Error,
-  Info
+  Info,
+  HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import api from '../utils/api';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface Module {
   _id: string;
@@ -89,6 +93,8 @@ const RBACDiscovery: React.FC = () => {
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadData();
@@ -193,9 +199,20 @@ const RBACDiscovery: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        🔍 RBAC Auto-Discovery
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+        <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+          🔍 RBAC Auto-Discovery
+        </Typography>
+        <Tooltip title="Hilfe & Leitfaden">
+          <IconButton
+            onClick={() => setHelpDialogOpen(true)}
+            color="primary"
+            size="small"
+          >
+            <HelpOutlineIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
       <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
         Automatische Erkennung und Integration neuer Module in das RBAC-System
       </Typography>
@@ -413,6 +430,138 @@ const RBACDiscovery: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDetailsOpen(false)}>
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: RBAC Discovery"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Discovery-Prozess" />
+            <Tab label="Module & Berechtigungen" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  RBAC Discovery
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  RBAC Discovery ermöglicht es, automatisch Module und Berechtigungen zu erkennen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🔍 <strong>Discovery:</strong> Module automatisch erkennen</li>
+                  <li>📋 <strong>Berechtigungen:</strong> Berechtigungen auflisten</li>
+                  <li>🔄 <strong>Synchronisation:</strong> Mit Backend synchronisieren</li>
+                  <li>📊 <strong>Status:</strong> Discovery-Status anzeigen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Discovery-Prozess
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So funktioniert der Discovery-Prozess:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Discovery-Service starten</li>
+                  <li>Module scannen</li>
+                  <li>Berechtigungen extrahieren</li>
+                  <li>Ergebnisse anzeigen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Module & Berechtigungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So verwalten Sie Module und Berechtigungen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Funktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📦 <strong>Module:</strong> Module anzeigen</li>
+                  <li>🔐 <strong>Berechtigungen:</strong> Berechtigungen auflisten</li>
+                  <li>🔄 <strong>Synchronisieren:</strong> Mit Backend synchronisieren</li>
+                  <li>📊 <strong>Status:</strong> Module-Status prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  RBAC Discovery
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Führen Sie Discovery regelmäßig durch</li>
+                  <li>✅ Prüfen Sie erkannte Module</li>
+                  <li>✅ Synchronisieren Sie mit Backend</li>
+                  <li>✅ Dokumentieren Sie Änderungen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
             Schließen
           </Button>
         </DialogActions>

@@ -14,7 +14,9 @@ import {
   Tooltip,
   Fab,
   useMediaQuery,
-  useTheme
+  useTheme,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Add,
@@ -44,6 +46,7 @@ import QRCodeGenerator from '../components/QRCodeGenerator';
 import TabletMode from '../components/TabletMode';
 import InternalMessagesDialog from '../components/InternalMessagesDialog';
 import { fetchUnreadCount, fetchMessages, markAsRead, InternalMessage } from '../store/slices/internalMessagesSlice';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import {
   People,
@@ -58,7 +61,8 @@ import {
   Assessment,
   Medication,
   LocalHospital,
-  Science
+  Science,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 
@@ -88,6 +92,8 @@ const Dashboard: React.FC = () => {
   const [newOnlineBookings, setNewOnlineBookings] = useState<any[]>([]);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
   const [loadingStats, setLoadingStats] = useState(false);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   
   // Refs um Widget-IDs zu speichern und Endlosschleifen zu vermeiden
   const importantPatientsWidgetIdRef = useRef<string | null>(null);
@@ -1451,9 +1457,20 @@ const Dashboard: React.FC = () => {
         gap={{ xs: 1, sm: 0 }}
         mb={{ xs: 2, sm: 3 }}
       >
-        <Typography variant="h4" sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
-          Dashboard
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4" sx={{ fontSize: { xs: '1.25rem', sm: '1.75rem', md: '2rem' } }}>
+            Dashboard
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         <Box 
           display="flex" 
           gap={{ xs: 0.5, sm: 1 }} 
@@ -1761,6 +1778,201 @@ const Dashboard: React.FC = () => {
           await dispatch(fetchUnreadCount());
         }}
       />
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Dashboard"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Widgets" />
+            <Tab label="Bearbeitungsmodus" />
+            <Tab label="Widget-Typen" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Dashboard
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Das Dashboard ist Ihre zentrale Übersicht und zeigt wichtige Informationen auf einen Blick. 
+                  Sie können es individuell mit verschiedenen Widgets anpassen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📊 <strong>Widgets:</strong> Individuelle Anpassung mit verschiedenen Widgets</li>
+                  <li>✏️ <strong>Bearbeitungsmodus:</strong> Widgets hinzufügen, entfernen und anordnen</li>
+                  <li>📱 <strong>Tablet-Modus:</strong> Optimierte Ansicht für Tablets</li>
+                  <li>📧 <strong>Interne Nachrichten:</strong> Wichtige Nachrichten anzeigen</li>
+                  <li>📈 <strong>Statistiken:</strong> Übersicht über wichtige Kennzahlen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Widgets verwalten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Widgets sind die Bausteine Ihres Dashboards. Sie können verschiedene Widgets hinzufügen, 
+                  entfernen und anordnen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Widget hinzufügen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren Sie den Bearbeitungsmodus</li>
+                  <li>Klicken Sie auf "Widget hinzufügen"</li>
+                  <li>Wählen Sie ein Widget aus der Liste</li>
+                  <li>Das Widget wird zum Dashboard hinzugefügt</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Widget entfernen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren Sie den Bearbeitungsmodus</li>
+                  <li>Klicken Sie auf das Löschen-Icon beim Widget</li>
+                  <li>Bestätigen Sie die Löschung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Widget anordnen
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren Sie den Bearbeitungsmodus</li>
+                  <li>Ziehen Sie Widgets per Drag & Drop an die gewünschte Position</li>
+                  <li>Die Anordnung wird automatisch gespeichert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Bearbeitungsmodus
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Der Bearbeitungsmodus ermöglicht es, Ihr Dashboard anzupassen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Bearbeitungsmodus aktivieren
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf das Bearbeiten-Icon (Stift-Symbol)</li>
+                  <li>Der Bearbeitungsmodus wird aktiviert</li>
+                  <li>Widgets können jetzt verschoben, hinzugefügt oder entfernt werden</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Änderungen speichern
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Speichern"</li>
+                  <li>Alle Änderungen werden gespeichert</li>
+                  <li>Der Bearbeitungsmodus wird beendet</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Verfügbare Widget-Typen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das Dashboard bietet verschiedene Widget-Typen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Widget-Typen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>👥 <strong>Wichtige Patienten:</strong> Patienten mit wichtigen Informationen</li>
+                  <li>🔬 <strong>Laborergebnisse:</strong> Neue Laborergebnisse</li>
+                  <li>🖼️ <strong>DICOM-Studien:</strong> Neue Bildgebungsstudien</li>
+                  <li>📅 <strong>Online-Buchungen:</strong> Neue Online-Terminbuchungen</li>
+                  <li>📊 <strong>Statistiken:</strong> Übersicht über wichtige Kennzahlen</li>
+                  <li>📧 <strong>Interne Nachrichten:</strong> Wichtige Nachrichten</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 4 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Dashboard-Organisation
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Platzieren Sie wichtige Widgets oben</li>
+                  <li>✅ Gruppieren Sie verwandte Widgets</li>
+                  <li>✅ Verwenden Sie nicht zu viele Widgets</li>
+                  <li>✅ Aktualisieren Sie regelmäßig</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

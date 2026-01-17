@@ -14,6 +14,11 @@ import {
   Stack,
   Grid,
   Autocomplete,
+  IconButton,
+  Tooltip,
+  Dialog,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -22,10 +27,12 @@ import {
   Send as SendIcon,
   Build as BuildIcon,
   Settings as SettingsIcon,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { useAppSelector } from '../store/hooks';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -78,6 +85,8 @@ const WAHonlineTestPage: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [wahonlineStatus, setWahonlineStatus] = useState<WAHonlineStatus | null>(null);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [testResults, setTestResults] = useState<{
     connection?: { success: boolean; message: string; details?: any };
     send?: { success: boolean; message: string; details?: any };
@@ -324,7 +333,18 @@ const WAHonlineTestPage: React.FC = () => {
     <Box sx={{ p: 3 }}>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
         <SettingsIcon sx={{ fontSize: 32 }} />
-        <Typography variant="h4">WAHonline Teststrecke</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Typography variant="h4">WAHonline Teststrecke</Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
       </Box>
 
       {/* Status-Card */}
@@ -572,6 +592,138 @@ const WAHonlineTestPage: React.FC = () => {
           )}
         </Card>
       </TabPanel>
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          sx: { minHeight: '600px' }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: WAHonline Test"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Sendetest" />
+            <Tab label="Ergebnisse" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  WAHonline Test
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Diese Seite ermöglicht es, die WAHonline-Integration zu testen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Hauptfunktionen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📤 <strong>Sendetest:</strong> Meldungen an WAHonline senden</li>
+                  <li>📋 <strong>Status:</strong> WAHonline-Status prüfen</li>
+                  <li>🔄 <strong>Aktualisieren:</strong> Status aktualisieren</li>
+                  <li>📊 <strong>Details:</strong> Detaillierte Informationen anzeigen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Sendetest
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So führen Sie einen Sendetest durch:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt-für-Schritt
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Patient auswählen</li>
+                  <li>Leistung auswählen</li>
+                  <li>Auf "Test senden" klicken</li>
+                  <li>Ergebnisse prüfen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Ergebnisse
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So interpretieren Sie die Ergebnisse:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Status-Indikatoren
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Erfolg:</strong> Test erfolgreich</li>
+                  <li>❌ <strong>Fehler:</strong> Test fehlgeschlagen</li>
+                  <li>⚠️ <strong>Warnung:</strong> Test mit Warnungen</li>
+                  <li>ℹ️ <strong>Info:</strong> Zusätzliche Informationen</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  WAHonline Test
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Testen Sie mit echten Daten</li>
+                  <li>✅ Prüfen Sie alle Fehlermeldungen</li>
+                  <li>✅ Dokumentieren Sie Ergebnisse</li>
+                  <li>✅ Testen Sie verschiedene Szenarien</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

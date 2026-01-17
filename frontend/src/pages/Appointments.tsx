@@ -33,6 +33,7 @@ import {
   Menu,
   useTheme,
   useMediaQuery,
+  Tooltip,
 } from '@mui/material';
 import {
   Add,
@@ -57,6 +58,7 @@ import {
   Search,
   Refresh,
   Star,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
@@ -317,6 +319,8 @@ const Appointments: React.FC = () => {
   const [filterOnline, setFilterOnline] = useState<string>('all'); // 'all', 'online', 'offline'
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
   const [waitingList, setWaitingList] = useState<WaitingList[]>([]);
   const [inTreatmentList, setInTreatmentList] = useState<WaitingList[]>([]);
   const [completedList, setCompletedList] = useState<WaitingList[]>([]);
@@ -2716,13 +2720,24 @@ const Appointments: React.FC = () => {
           >
             Terminverwaltung
           </Typography>
-          <Typography 
-            variant="subtitle1" 
-            color="text.secondary"
-            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
-          >
-            Verwalten Sie Ihre Termine und das Wartezimmer
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography 
+              variant="subtitle1" 
+              color="text.secondary"
+              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+            >
+              Verwalten Sie Ihre Termine und das Wartezimmer
+            </Typography>
+            <Tooltip title="Hilfe & Leitfaden">
+              <IconButton
+                onClick={() => setHelpDialogOpen(true)}
+                color="primary"
+                size="small"
+              >
+                <HelpOutlineIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: { xs: 1, sm: 2 }, flexDirection: { xs: 'column', sm: 'row' }, width: { xs: '100%', sm: 'auto' } }}>
           <Button

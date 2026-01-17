@@ -18,13 +18,16 @@ import {
   MenuItem,
   Chip,
   Stack,
-  Alert
+  Alert,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import {
   Description,
   LibraryBooks,
   History,
-  Add
+  Add,
+  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import TemplateLibrary from '../components/TemplateLibrary';
 import DocumentEditor from '../components/DocumentEditor';
@@ -75,6 +78,8 @@ const TemplateManagement: React.FC = () => {
     placeholders: [] as any[],
     tags: [] as string[]
   });
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -154,9 +159,20 @@ const TemplateManagement: React.FC = () => {
         mt: marginTopValue !== '0px' ? marginTopValue : 0,
         transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
       }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          Template Management
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 0 }}>
+            Template Management
+          </Typography>
+          <Tooltip title="Hilfe & Leitfaden">
+            <IconButton
+              onClick={() => setHelpDialogOpen(true)}
+              color="primary"
+              size="small"
+            >
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
 
         <Paper sx={{ width: '100%' }}>
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
