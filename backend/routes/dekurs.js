@@ -17,6 +17,21 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
+// Hilfsfunktion: Extrahiert patientId aus String oder Objekt
+const extractPatientId = (patientId) => {
+  if (!patientId) return null;
+  if (typeof patientId === 'string') {
+    // Prüfe ob es "[object Object]" ist
+    if (patientId === '[object Object]') return null;
+    return patientId;
+  }
+  if (typeof patientId === 'object') {
+    return patientId._id || patientId.id || null;
+  }
+  const str = String(patientId);
+  return str !== '[object Object]' ? str : null;
+};
+
 // Multer-Konfiguration für Foto-Uploads
 const photoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -726,7 +741,13 @@ router.get('/patient/:patientId', auth, async (req, res) => {
 // @access  Private
 router.get('/patient/:patientId', auth, async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const rawPatientId = req.params.patientId;
+    const patientId = extractPatientId(rawPatientId);
+    
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: 'Ungültige Patient-ID' });
+    }
+    
     const { 
       limit = 50, 
       skip = 0, 
@@ -795,7 +816,13 @@ router.get('/patient/:patientId', auth, async (req, res) => {
 // @access  Private
 router.get('/patient/:patientId/export', auth, async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const rawPatientId = req.params.patientId;
+    const patientId = extractPatientId(rawPatientId);
+    
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: 'Ungültige Patient-ID' });
+    }
+    
     const { startDate, endDate, finalizedOnly = true } = req.query;
 
     const patient = await PatientExtended.findById(patientId);

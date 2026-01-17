@@ -551,6 +551,20 @@ router.get('/recent', auth, async (req, res) => {
   }
 });
 
+// Hilfsfunktion: Extrahiert patientId aus String oder Objekt
+const extractPatientId = (patientId) => {
+  if (!patientId) return null;
+  if (typeof patientId === 'string') {
+    if (patientId === '[object Object]') return null;
+    return patientId;
+  }
+  if (typeof patientId === 'object') {
+    return patientId._id || patientId.id || null;
+  }
+  const str = String(patientId);
+  return str !== '[object Object]' ? str : null;
+};
+
 /**
  * @route   GET /api/dicom/patient/:patientId
  * @desc    Alle DICOM-Studien für einen Patienten abrufen
@@ -558,7 +572,12 @@ router.get('/recent', auth, async (req, res) => {
  */
 router.get('/patient/:patientId', auth, checkPermission('patients.read'), async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const rawPatientId = req.params.patientId;
+    const patientId = extractPatientId(rawPatientId);
+    
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: 'Ungültige Patient-ID' });
+    }
     
     const studies = await DicomStudy.find({ patientId })
       .populate('uploadedBy', 'firstName lastName')

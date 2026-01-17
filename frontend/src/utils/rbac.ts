@@ -2,7 +2,7 @@ import React from 'react';
 
 /**
  * Frontend RBAC (Role-Based Access Control) Utilities
- * Feingranulare Berechtigungsprüfung für österreichische Ordinationssoftware
+ * Feingranulare Berechtigungsprüfung für MyMediCloud MMC
  */
 
 // Rollen-Definitionen

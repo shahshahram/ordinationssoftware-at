@@ -7,8 +7,8 @@ import {
   deleteWaitingListEntry,
   WaitingListEntry,
 } from '../store/slices/waitingListSlice';
-import { fetchPatients, Patient } from '../store/slices/patientSlice';
-import { fetchLocations, Location } from '../store/slices/locationSlice';
+import { fetchPatients } from '../store/slices/patientSlice';
+import { fetchLocations } from '../store/slices/locationSlice';
 import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import {
   Box,
@@ -20,7 +20,6 @@ import {
   Chip,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   FormControl,
@@ -46,11 +45,6 @@ import {
   Edit,
   Delete,
   MoreVert,
-  Person,
-  LocalHospital,
-  MedicalServices,
-  Schedule,
-  AccessTime,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
@@ -60,7 +54,7 @@ import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 const WaitingList: React.FC = () => {
   const dispatch = useAppDispatch();
   const { marginTopValue } = useGlobalNavigationOffset();
-  const { entries, loading, error, count } = useAppSelector((state) => state.waitingList);
+  const { entries, loading, error } = useAppSelector((state) => state.waitingList);
   const { patients } = useAppSelector((state) => state.patients);
   const { locations } = useAppSelector((state) => state.locations);
   const { staffProfiles } = useAppSelector((state) => state.staff);
@@ -72,8 +66,6 @@ const WaitingList: React.FC = () => {
   const [selectedEntry, setSelectedEntry] = useState<WaitingListEntry | null>(null);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
   
   const [formData, setFormData] = useState({
     patient: '',

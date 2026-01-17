@@ -12,7 +12,6 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   
   return (
     <Box
-      component="main"
       sx={{
         flexGrow: 1,
         px: isInternalMessages ? 0 : { xs: 2, sm: 3 }, // Symmetrisches Padding links und rechts

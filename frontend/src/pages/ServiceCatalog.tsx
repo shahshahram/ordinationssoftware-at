@@ -3013,7 +3013,7 @@ const ServiceCatalog: React.FC = () => {
                 </Typography>
                 <Typography variant="body2" paragraph>
                   Der Leistungskatalog ist das zentrale Verwaltungstool für alle medizinischen Leistungen 
-                  und Services in der Ordinationssoftware. Hier können Sie Leistungen erstellen, bearbeiten, 
+                  und Services in MyMediCloud MMC. Hier können Sie Leistungen erstellen, bearbeiten, 
                   kategorisieren und konfigurieren.
                 </Typography>
               </Box>

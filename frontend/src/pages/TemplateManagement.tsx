@@ -8,7 +8,6 @@ import {
   Paper,
   Button,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -16,7 +15,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Chip,
   Stack,
   Alert,
   Tooltip,
@@ -353,6 +351,90 @@ const TemplateManagement: React.FC = () => {
           {error}
         </Alert>
       )}
+
+      {/* Hilfe & Leitfaden Dialog */}
+      <Dialog
+        open={helpDialogOpen}
+        onClose={() => setHelpDialogOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Template Management"
+          onClose={() => setHelpDialogOpen(false)}
+        />
+        <DialogContent>
+          <Tabs 
+            value={helpTab} 
+            onChange={(_, v) => setHelpTab(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Template erstellen" />
+            <Tab label="Platzhalter" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTab === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Übersicht
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Das Template Management ermöglicht es Ihnen, Dokumentenvorlagen zu erstellen, zu bearbeiten und zu verwalten.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Template erstellen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Erstellen Sie neue Dokumentenvorlagen für verschiedene Zwecke.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Platzhalter
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Verwenden Sie Platzhalter, um dynamische Inhalte in Ihre Templates einzufügen.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Best Practices für die Template-Erstellung und -Verwaltung.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

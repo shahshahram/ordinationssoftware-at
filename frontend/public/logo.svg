@@ -1,0 +1,21 @@
+<svg width="300" height="300" viewBox="0 0 500 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cloudGrad" x1="100" y1="100" x2="400" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2DD4BF"/> <stop offset="100%" stop-color="#0284C7"/> </linearGradient>
+  </defs>
+
+  <path d="M150 320C150 240 210 200 250 200C260 140 330 120 380 160C430 120 500 170 500 240C500 320 450 370 380 370H200C150 370 150 320 150 320Z" fill="url(#cloudGrad)"/>
+  
+  <path d="M210 370C180 340 180 260 210 230C240 200 320 200 350 230" stroke="white" stroke-width="12" stroke-linecap="round" fill="none"/>
+
+  <rect x="290" y="240" width="20" height="60" rx="4" fill="white"/>
+  <rect x="270" y="260" width="60" height="20" rx="4" fill="white"/>
+
+  <text x="250" y="440" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="800" font-size="48" fill="#334155">
+    MyMedi<tspan fill="#0EA5E9">Cloud</tspan>
+  </text>
+
+  <text x="250" y="475" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="400" font-size="18" fill="#64748b">
+    Smart. Secure. For Österreich.
+  </text>
+</svg>

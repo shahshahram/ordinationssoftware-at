@@ -31,27 +31,14 @@ import {
   MenuItem,
   Alert,
   LinearProgress,
-  CircularProgress,
-  Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  ListItemSecondaryAction
+  CircularProgress
 } from '@mui/material';
 import {
-  Download,
   Upload,
   Refresh,
   CheckCircle,
   Error,
-  Warning,
-  Info,
-  GetApp,
   CloudDownload,
-  CloudUpload,
-  Schedule,
-  History,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
@@ -113,6 +100,7 @@ const TariffManagement: React.FC = () => {
     loadTariffs();
     loadTariffInfo();
     checkForUpdates();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   const loadTariffs = async () => {
@@ -181,22 +169,6 @@ const TariffManagement: React.FC = () => {
     }
   };
 
-  const handleDownload = async (type: 'ebm' | 'kho' | 'goae' | 'all') => {
-    setDownloadProgress({ [type]: true });
-    try {
-      const endpoint = type === 'all' ? '/ogk-tariff-download/all' : `/ogk-tariff-download/${type}`;
-      const response = await api.post<any>(endpoint, { format: selectedFormat });
-      
-      if ((response.data as any)?.success) {
-        enqueueSnackbar(`${type.toUpperCase()}-Tarifdatenbank erfolgreich heruntergeladen`, { variant: 'success' });
-        loadTariffInfo();
-      }
-    } catch (error: any) {
-      enqueueSnackbar(error?.response?.data?.message || 'Fehler beim Herunterladen', { variant: 'error' });
-    } finally {
-      setDownloadProgress({ [type]: false });
-    }
-  };
 
   const handleDownloadAndImport = async () => {
     setDownloadProgress({ [selectedTariffType]: true });

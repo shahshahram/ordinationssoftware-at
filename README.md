@@ -1,4 +1,4 @@
-# Ordinationssoftware AT 🇦🇹
+# MyMediCloud MMC 🇦🇹
 
 Eine moderne, webbasierte Ordinationssoftware für niedergelassene Ärzt:innen in Österreich mit ELGA-Kompatibilität und umfassendem medizinischen Dokumentenmanagement.
 

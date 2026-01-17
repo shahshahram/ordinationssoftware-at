@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CssBaseline, Box } from '@mui/material';
+import { CssBaseline, Box, Typography } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
 import { useAppSelector, useAppDispatch } from './store/hooks';
 import { loadNavigationMode, setSidebarOpen } from './store/slices/navigationSlice';
@@ -13,6 +13,8 @@ import Header from './components/Layout/Header';
 import SidebarNavigation from './components/Layout/SidebarNavigation';
 import ProtectedRoute from './components/ProtectedRoute';
 import LocationProvider from './components/Location/LocationProvider';
+import ChatbotWidget from './components/Chatbot/ChatbotWidget';
+import GlobalSearch from './components/SmartSearch/GlobalSearch';
 
 // Pages
 import Dashboard from './pages/Dashboard';
@@ -101,12 +103,12 @@ const getTheme = (mode: 'light' | 'dark') => createTheme({
   palette: {
     mode,
     primary: {
-      main: '#1976d2',
-      light: '#42a5f5',
-      dark: '#1565c0',
+      main: '#0284C7', // Hauptfarbe aus Logo (Cyan-Blau)
+      light: '#2DD4BF', // Helle Farbe aus Logo (Türkis)
+      dark: '#0EA5E9', // Dunkle Farbe aus Logo (Helles Blau)
     },
     secondary: {
-      main: '#dc004e',
+      main: '#334155', // Textfarbe aus Logo (Dunkelgrau)
     },
     background: {
       default: mode === 'dark' ? '#121212' : '#f5f5f5',
@@ -232,6 +234,7 @@ const getTheme = (mode: 'light' | 'dark') => createTheme({
 const InnerAppContent: React.FC = () => {
   const dispatch = useAppDispatch();
   const location = useLocation();
+  const [searchOpen, setSearchOpen] = React.useState(false);
   const navigationMode = useAppSelector((state) => state.navigation.mode);
   const sidebarOpen = useAppSelector((state) => state.navigation.sidebarOpen);
   const [localSidebarOpen, setLocalSidebarOpen] = React.useState(false);
@@ -256,6 +259,22 @@ const InnerAppContent: React.FC = () => {
     dispatch(setSidebarOpen(newState));
   };
 
+  // Tastaturkürzel für globale Suche (Ctrl/Cmd + K)
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+      if (e.key === 'Escape' && searchOpen) {
+        setSearchOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [searchOpen]);
+
   return (
     <>
       <Routes>
@@ -275,9 +294,19 @@ const InnerAppContent: React.FC = () => {
               <LocationProvider>
                 <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
                   {/* Header außerhalb des main-Box, damit er immer volle Breite hat */}
-                  <Header onMenuClick={handleSidebarToggle} navigationOpen={localSidebarOpen} />
+                  <Header 
+                    onMenuClick={handleSidebarToggle} 
+                    navigationOpen={localSidebarOpen}
+                    onSearchClick={() => setSearchOpen(true)}
+                  />
                   
-                  <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+                  {/* Chatbot Widget - global verfügbar */}
+                  <ChatbotWidget />
+                  
+                  {/* Globale Suche */}
+                  <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+                  
+                  <Box sx={{ display: 'flex', flex: 1, overflow: 'hidden', position: 'relative' }}>
                     {/* Sidebar Navigation (nur wenn Sidebar-Modus aktiv) */}
                     {navigationMode === 'sidebar' && (
                       <SidebarNavigation open={localSidebarOpen} onClose={() => {
@@ -298,10 +327,12 @@ const InnerAppContent: React.FC = () => {
                         transition: 'margin 0.3s ease',
                         overflow: 'hidden',
                         minHeight: 0, // Wichtig für Flexbox overflow
+                        position: 'relative',
                       }}
                     >
-                      <Layout>
-                    <Routes>
+                      <Box sx={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column', minHeight: 0, pb: 4 }}>
+                        <Layout>
+                      <Routes>
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/internal-messages" element={<InternalMessages />} />
@@ -832,8 +863,41 @@ const InnerAppContent: React.FC = () => {
                           </ProtectedRoute>
                         } 
                       />
-                    </Routes>
-                  </Layout>
+                      </Routes>
+                        </Layout>
+                      </Box>
+                      
+                    </Box>
+                    
+                    {/* Footer mit Versionsnummer - immer am unteren linken Rand des Viewports */}
+                    <Box
+                      sx={{
+                        position: 'fixed',
+                        bottom: 0,
+                        left: 0,
+                        px: 2,
+                        py: 1,
+                        borderTop: 1,
+                        borderColor: 'divider',
+                        backgroundColor: 'background.paper',
+                        display: 'flex',
+                        justifyContent: 'flex-start',
+                        alignItems: 'center',
+                        zIndex: 1200,
+                        width: { 
+                          sm: navigationMode === 'sidebar' && localSidebarOpen ? 'calc(100% - 240px)' : '100%',
+                          xs: '100%'
+                        },
+                        ml: { 
+                          sm: navigationMode === 'sidebar' && localSidebarOpen ? '240px' : '0px',
+                          xs: 0 
+                        },
+                        transition: 'margin-left 0.3s ease, width 0.3s ease',
+                      }}
+                    >
+                      <Typography variant="caption" color="text.secondary">
+                        Version 1.0.0
+                      </Typography>
                     </Box>
                   </Box>
                 </Box>

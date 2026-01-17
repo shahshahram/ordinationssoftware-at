@@ -5,12 +5,31 @@ const { body, validationResult } = require('express-validator');
 const PatientNote = require('../models/PatientNote');
 const PatientExtended = require('../models/PatientExtended');
 
+// Hilfsfunktion: Extrahiert patientId aus String oder Objekt
+const extractPatientId = (patientId) => {
+  if (!patientId) return null;
+  if (typeof patientId === 'string') return patientId;
+  if (typeof patientId === 'object') {
+    return patientId._id || patientId.id || (patientId.toString && patientId.toString() !== '[object Object]' ? patientId.toString() : null);
+  }
+  return String(patientId);
+};
+
 // @route   GET /api/patient-notes/:patientId
 // @desc    Get all notes for a patient (chronological)
 // @access  Private
 router.get('/:patientId', auth, async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const rawPatientId = req.params.patientId;
+    const patientId = extractPatientId(rawPatientId);
+    
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültige Patient-ID'
+      });
+    }
+    
     const { noteType, chronological = 'true' } = req.query;
     
     // Prüfe ob Patient existiert

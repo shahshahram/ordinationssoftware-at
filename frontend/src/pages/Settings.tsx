@@ -368,7 +368,7 @@ const Settings: React.FC = () => {
           `So erstellen Sie ein App-Passwort:\n` +
           `1. Gehen Sie zu https://myaccount.google.com/apppasswords\n` +
           `2. Wählen Sie "Mail" und "Andere (benutzerdefiniert)"\n` +
-          `3. Geben Sie "Ordinationssoftware" ein\n` +
+          `3. Geben Sie "MyMediCloud MMC" ein\n` +
           `4. Kopieren Sie das 16-stellige Passwort\n` +
           `5. Verwenden Sie dieses Passwort in der E-Mail-Konfiguration`;
       }
@@ -2067,7 +2067,7 @@ const Settings: React.FC = () => {
                   <li>Aktivieren Sie "2-Schritt-Verifizierung" (falls noch nicht aktiviert)</li>
                   <li>Klicken Sie auf "App-Passwörter"</li>
                   <li>Wählen Sie "Mail" und "Andere (benutzerdefiniert)"</li>
-                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Geben Sie einen Namen ein (z.B. "MyMediCloud MMC")</li>
                   <li>Klicken Sie auf "Generieren"</li>
                   <li><strong>Wichtig:</strong> Kopieren Sie das App-Passwort (wird nur einmal angezeigt!)</li>
                 </Box>
@@ -2130,7 +2130,7 @@ const Settings: React.FC = () => {
                   <li>Melden Sie sich mit Ihrer Apple-ID an</li>
                   <li>Klicken Sie auf "App-spezifische Passwörter"</li>
                   <li>Klicken Sie auf "Passwort generieren"</li>
-                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Geben Sie einen Namen ein (z.B. "MyMediCloud MMC")</li>
                   <li>Klicken Sie auf "Erstellen"</li>
                   <li><strong>Wichtig:</strong> Kopieren Sie das Passwort (wird nur einmal angezeigt!)</li>
                 </Box>
@@ -2186,7 +2186,7 @@ const Settings: React.FC = () => {
                   <li>Aktivieren Sie "Zweistufige Überprüfung" (falls noch nicht aktiviert)</li>
                   <li>Klicken Sie auf "App-Passwörter"</li>
                   <li>Wählen Sie "Mail" und "Andere"</li>
-                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Geben Sie einen Namen ein (z.B. "MyMediCloud MMC")</li>
                   <li>Klicken Sie auf "Generieren"</li>
                   <li><strong>Wichtig:</strong> Kopieren Sie das App-Passwort</li>
                 </Box>
@@ -2241,7 +2241,7 @@ const Settings: React.FC = () => {
                   <li>Klicken Sie auf "Account-Sicherheit"</li>
                   <li>Aktivieren Sie "Zweistufige Überprüfung" (falls noch nicht aktiviert)</li>
                   <li>Klicken Sie auf "App-Passwörter generieren"</li>
-                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Geben Sie einen Namen ein (z.B. "MyMediCloud MMC")</li>
                   <li>Klicken Sie auf "Generieren"</li>
                   <li><strong>Wichtig:</strong> Kopieren Sie das App-Passwort</li>
                 </Box>
@@ -2506,7 +2506,7 @@ const Settings: React.FC = () => {
                 <Box component="ol" sx={{ pl: 3, mb: 2 }}>
                   <li>Im Dashboard: "API" → "API Keys"</li>
                   <li>Klicken Sie auf "Neuen API Key erstellen"</li>
-                  <li>Geben Sie einen Namen ein (z.B. "Ordinationssoftware")</li>
+                  <li>Geben Sie einen Namen ein (z.B. "MyMediCloud MMC")</li>
                   <li>Kopieren Sie den API Key</li>
                   <li><strong>Wichtig:</strong> API Key sicher speichern!</li>
                 </Box>

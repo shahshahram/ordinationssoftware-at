@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { eventBus, EVENTS } from '../utils/eventBus';
 import {
   Box,
@@ -14,10 +13,8 @@ import {
   Menu,
   MenuItem,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -82,8 +79,6 @@ interface User {
 }
 
 const Users: React.FC = () => {
-  const dispatch = useAppDispatch();
-  const { user: currentUser } = useAppSelector((state) => state.auth);
   const { marginTopValue } = useGlobalNavigationOffset();
   
   const [users, setUsers] = useState<User[]>([]);
@@ -125,6 +120,7 @@ const Users: React.FC = () => {
   // Load users
   useEffect(() => {
     loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page, rowsPerPage, searchTerm, roleFilter, statusFilter]);
 
   const loadUsers = async () => {

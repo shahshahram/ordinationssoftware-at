@@ -1459,12 +1459,31 @@ router.post('/validate', async (req, res) => {
 // PATIENT PHOTOS ROUTES
 // ============================================
 
+// Hilfsfunktion: Extrahiert patientId aus String oder Objekt
+const extractPatientId = (patientId) => {
+  if (!patientId) return null;
+  if (typeof patientId === 'string') {
+    if (patientId === '[object Object]') return null;
+    return patientId;
+  }
+  if (typeof patientId === 'object') {
+    return patientId._id || patientId.id || null;
+  }
+  const str = String(patientId);
+  return str !== '[object Object]' ? str : null;
+};
+
 // @route   GET /api/patients-extended/:id/photos
 // @desc    Alle Fotos eines Patienten abrufen
 // @access  Private
 router.get('/:id/photos', auth, async (req, res) => {
   try {
-    const { id } = req.params;
+    const rawId = req.params.id;
+    const id = extractPatientId(rawId);
+    
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Ungültige Patient-ID' });
+    }
     
     // Prüfe ob Patient existiert
     const patient = await PatientExtended.findById(id);

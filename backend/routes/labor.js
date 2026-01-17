@@ -101,13 +101,33 @@ router.post('/receive', async (req, res) => {
   }
 });
 
+// Hilfsfunktion: Extrahiert patientId aus String oder Objekt
+const extractPatientId = (patientId) => {
+  if (!patientId) return null;
+  if (typeof patientId === 'string') {
+    if (patientId === '[object Object]') return null;
+    return patientId;
+  }
+  if (typeof patientId === 'object') {
+    return patientId._id || patientId.id || null;
+  }
+  const str = String(patientId);
+  return str !== '[object Object]' ? str : null;
+};
+
 /**
  * GET /api/labor/patient/:patientId
  * Ruft alle Laborergebnisse für einen Patienten ab
  */
 router.get('/patient/:patientId', auth, checkPermission('patients.read'), async (req, res) => {
   try {
-    const { patientId } = req.params;
+    const rawPatientId = req.params.patientId;
+    const patientId = extractPatientId(rawPatientId);
+    
+    if (!patientId) {
+      return res.status(400).json({ success: false, message: 'Ungültige Patient-ID' });
+    }
+    
     const { startDate, endDate, category, limit = 50 } = req.query;
 
     const filter = { patientId };

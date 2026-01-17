@@ -715,7 +715,7 @@ const ELGA: React.FC = () => {
               <Alert severity="info" sx={{ mt: 2 }}>
                 <Typography variant="body2">
                   <strong>Hinweis:</strong> e-Rezepte werden automatisch in ELGA gespeichert, wenn Sie Rezepte 
-                  in der Ordinationssoftware erstellen (sofern ELGA-Integration aktiviert ist).
+                  in MyMediCloud MMC erstellen (sofern ELGA-Integration aktiviert ist).
                 </Typography>
               </Alert>
             </Box>
@@ -766,7 +766,7 @@ const ELGA: React.FC = () => {
                   Sie können Dokumente (z.B. Dekurs-Einträge) direkt zu ELGA hochladen:
                 </Typography>
                 <Box component="ol" sx={{ pl: 3, mb: 2 }}>
-                  <li>Erstellen Sie ein Dokument in der Ordinationssoftware</li>
+                  <li>Erstellen Sie ein Dokument in MyMediCloud MMC</li>
                   <li>Klicken Sie auf "Zu ELGA senden" (falls verfügbar)</li>
                   <li>Das Dokument wird automatisch in ELGA gespeichert</li>
                   <li>Der Patient kann das Dokument dann in seiner ELGA-Akte sehen</li>

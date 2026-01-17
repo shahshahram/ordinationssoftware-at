@@ -21,6 +21,7 @@ import {
   Select,
   FormControl,
   Chip,
+  Button,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -35,14 +36,16 @@ import {
   ViewList,
   Fullscreen,
   FullscreenExit,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 
 interface HeaderProps {
   onMenuClick: () => void;
   navigationOpen: boolean;
+  onSearchClick?: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
+const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen, onSearchClick }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
@@ -175,14 +178,60 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen }) => {
             <MenuIcon />
           </IconButton>
 
-        <Typography
-          variant="h6"
-          noWrap
-          component="div"
-          sx={{ flexGrow: 1, color: 'text.primary' }}
-        >
-          Ordinationssoftware AT
-        </Typography>
+        {/* Logo */}
+        <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, gap: 2 }}>
+          <a 
+            href="https://mymedicloud.at" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <img 
+              src="/logo-horizontal.svg" 
+              alt="MyMediCloud MMC" 
+              style={{ height: '40px', width: 'auto' }}
+            />
+          </a>
+          
+          {/* Globale Suche Button */}
+          {onSearchClick && (
+            <Button
+              variant="outlined"
+              startIcon={<SearchIcon />}
+              onClick={onSearchClick}
+              sx={{
+                display: { xs: 'none', sm: 'flex' },
+                minWidth: 200,
+                justifyContent: 'flex-start',
+                textTransform: 'none',
+                color: 'text.secondary',
+                borderColor: 'divider',
+                '&:hover': {
+                  borderColor: 'primary.main',
+                  backgroundColor: 'action.hover',
+                },
+              }}
+            >
+              <Box sx={{ flexGrow: 1, textAlign: 'left' }}>
+                Suchen...
+              </Box>
+              <Chip
+                label={navigator.platform.includes('Mac') ? '⌘K' : 'Ctrl+K'}
+                size="small"
+                sx={{
+                  height: 20,
+                  fontSize: '0.7rem',
+                  ml: 1,
+                }}
+              />
+            </Button>
+          )}
+        </Box>
 
         {/* Standort-Auswahl */}
         {currentLocation && availableLocations.length > 0 && (

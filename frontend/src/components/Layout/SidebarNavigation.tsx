@@ -83,9 +83,25 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ open, onClose }) 
           borderColor: 'divider',
         }}
       >
-        <Typography variant="h6" component="div" sx={{ fontWeight: 600, color: 'primary.main' }}>
-          Ordinationssoftware
-        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <a 
+            href="https://mymedicloud.at" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              display: 'flex', 
+              alignItems: 'center', 
+              textDecoration: 'none',
+              cursor: 'pointer'
+            }}
+          >
+            <img 
+              src="/logo-horizontal.svg" 
+              alt="MyMediCloud MMC" 
+              style={{ height: '32px', width: 'auto' }}
+            />
+          </a>
+        </Box>
         <IconButton onClick={onClose} size="small">
           <Close />
         </IconButton>

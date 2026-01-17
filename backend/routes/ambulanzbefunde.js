@@ -235,12 +235,31 @@ router.put('/templates/:id', auth, async (req, res) => {
  * @desc    Liste von Arbeitsbefunden abrufen
  * @access  Private
  */
+// Hilfsfunktion: Extrahiert patientId aus String oder Objekt
+const extractPatientId = (patientId) => {
+  if (!patientId) return null;
+  if (typeof patientId === 'string') {
+    if (patientId === '[object Object]') return null;
+    return patientId;
+  }
+  if (typeof patientId === 'object') {
+    return patientId._id || patientId.id || null;
+  }
+  const str = String(patientId);
+  return str !== '[object Object]' ? str : null;
+};
+
 router.get('/', auth, async (req, res) => {
   try {
     const filters = {};
     const { patientId, locationId, specialization, status, page = 1, limit = 20 } = req.query;
     
-    if (patientId) filters.patientId = patientId;
+    if (patientId) {
+      const extractedId = extractPatientId(patientId);
+      if (extractedId) {
+        filters.patientId = extractedId;
+      }
+    }
     if (locationId) filters.locationId = locationId;
     if (specialization) filters.specialization = specialization;
     if (status) filters.status = status;

@@ -5,6 +5,20 @@ const XdsRegistryService = require('./XdsRegistryService');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 
+// Hilfsfunktion: Extrahiert patientId aus String oder Objekt
+const extractPatientId = (patientId) => {
+  if (!patientId) return null;
+  if (typeof patientId === 'string') {
+    if (patientId === '[object Object]') return null;
+    return patientId;
+  }
+  if (typeof patientId === 'object') {
+    return patientId._id || patientId.id || null;
+  }
+  const str = String(patientId);
+  return str !== '[object Object]' ? str : null;
+};
+
 // JSON Schema Validator - Fallback wenn ajv nicht verfügbar
 let ajv = null;
 let addFormats = null;
@@ -38,6 +52,12 @@ class AmbulanzbefundService {
    */
   static async createAmbulanzbefund(patientId, locationId, userId, specialization, formData, formTemplateId = null, selectedSections = [], status = null) {
     try {
+      // Extrahiere patientId (falls als Objekt übergeben)
+      const extractedPatientId = extractPatientId(patientId);
+      if (!extractedPatientId) {
+        throw new Error('Ungültige Patient-ID');
+      }
+      
       // 1. Template laden
       let template;
       if (formTemplateId) {
@@ -66,20 +86,20 @@ class AmbulanzbefundService {
       let patientModel = 'PatientExtended'; // Standard
       const Patient = require('../models/Patient');
       const PatientExtended = require('../models/PatientExtended');
-      const patientInExtended = await PatientExtended.findById(patientId);
-      const patientInBasic = patientInExtended ? null : await Patient.findById(patientId);
+      const patientInExtended = await PatientExtended.findById(extractedPatientId);
+      const patientInBasic = patientInExtended ? null : await Patient.findById(extractedPatientId);
       
       if (patientInExtended) {
         patientModel = 'PatientExtended';
       } else if (patientInBasic) {
         patientModel = 'Patient';
       } else {
-        throw new Error(`Patient mit ID ${patientId} nicht gefunden (weder in Patient noch in PatientExtended)`);
+        throw new Error(`Patient mit ID ${extractedPatientId} nicht gefunden (weder in Patient noch in PatientExtended)`);
       }
       
       // 5. Arbeitsbefund erstellen
       const ambefund = await Ambulanzbefund.create({
-        patientId,
+        patientId: extractedPatientId,
         patientModel, // Setze patientModel für dynamische Referenz
         locationId,
         createdBy: userId,
@@ -730,6 +750,15 @@ class AmbulanzbefundService {
    */
   static async listAmbulanzbefunde(filters = {}, pagination = {}) {
     try {
+      // Extrahiere patientId aus filters (falls als Objekt übergeben)
+      const processedFilters = { ...filters };
+      if (processedFilters.patientId) {
+        processedFilters.patientId = extractPatientId(processedFilters.patientId);
+        if (!processedFilters.patientId) {
+          delete processedFilters.patientId; // Entferne ungültige patientId
+        }
+      }
+      
       const {
         page = 1,
         limit = 20,
@@ -737,7 +766,7 @@ class AmbulanzbefundService {
         sortOrder = -1
       } = pagination;
       
-      const query = Ambulanzbefund.find(filters)
+      const query = Ambulanzbefund.find(processedFilters)
         .populate('patientId', 'firstName lastName')
         .populate('locationId', 'name')
         .populate('createdBy', 'firstName lastName')
@@ -747,7 +776,7 @@ class AmbulanzbefundService {
       
       const [ambefunde, total] = await Promise.all([
         query.exec(),
-        Ambulanzbefund.countDocuments(filters)
+        Ambulanzbefund.countDocuments(processedFilters)
       ]);
       
       return {

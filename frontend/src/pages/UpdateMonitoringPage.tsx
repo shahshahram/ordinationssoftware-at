@@ -24,7 +24,6 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Collapse,
   Dialog,
   DialogContent,
   DialogActions,
@@ -116,6 +115,7 @@ const UpdateMonitoringPage: React.FC = () => {
     if (activeTab === 1) {
       loadHistory();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, page, actionFilter]);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {

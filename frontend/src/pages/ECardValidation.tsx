@@ -450,7 +450,7 @@ const ECardValidation: React.FC = () => {
                   <li>✅ Abruf der Versicherungsdaten</li>
                   <li>✅ Überprüfung des Ablaufdatums</li>
                   <li>✅ Abruf der ELGA-ID (falls Patient in ELGA registriert)</li>
-                  <li>✅ Aktualisierung der Patientendaten in der Ordinationssoftware</li>
+                  <li>✅ Aktualisierung der Patientendaten in MyMediCloud MMC</li>
                   <li>✅ Speicherung der Validierung in der Historie</li>
                 </Box>
               </Box>

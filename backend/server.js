@@ -308,6 +308,7 @@ function registerStaticRoutes(app) {
   app.use('/api/users', userRoutes);
   app.use('/api/backup', backupRoutes);
   app.use('/api/reports', reportRoutes);
+  app.use('/api/search', require('./routes/search'));
   app.use('/api/audit-logs', auditLogRoutes);
   app.use('/api/staff-profiles', staffProfileRoutes);
   app.use('/api/work-shifts', workShiftRoutes);
@@ -380,6 +381,7 @@ function registerStaticRoutes(app) {
   app.use('/api/tariffs', tariffsRoutes);
   app.use('/api/ogk-tariff-download', ogkTariffDownloadRoutes);
   app.use('/api/tariff-import', tariffImportRoutes);
+  app.use('/api/chatbot', require('./routes/chatbot'));
   
   // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)
   if (USE_MODULE_MANAGER) {

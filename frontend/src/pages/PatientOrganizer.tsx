@@ -98,6 +98,7 @@ import { fetchLocations, Location } from '../store/slices/locationSlice';
 import { apiRequest } from '../utils/api';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import PatientSidebar from '../components/PatientSidebar';
+import PatientTimeline from '../components/PatientTimeline';
 import DiagnosisManager from '../components/DiagnosisManager';
 import MedicationManager from '../components/MedicationManager';
 import MedicationListInput, { convertMedicationsArrayToPatientFormat } from '../components/MedicationListInput';
@@ -490,6 +491,7 @@ const PatientOrganizer: React.FC = () => {
   
   // State für Patient Sidebar
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [timelineFullscreen, setTimelineFullscreen] = useState(false);
   
   // State für Hinweis-Dialog
   const [hintDetailsDialogOpen, setHintDetailsDialogOpen] = useState(false);
@@ -2585,17 +2587,17 @@ const PatientOrganizer: React.FC = () => {
       mt: marginTopValue !== '0px' ? marginTopValue : 0,
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
-      {/* Floating Action Button für Sidebar */}
+      {/* Floating Action Button für Timeline Vollbild */}
       <Fab
         color="primary"
-        aria-label="Patienten-Workspace"
+        aria-label="Timeline Vollbild"
         sx={{
           position: 'fixed',
           bottom: 16,
           right: 16,
           zIndex: 1000
         }}
-        onClick={() => setSidebarOpen(true)}
+        onClick={() => setTimelineFullscreen(true)}
       >
         <Timeline />
       </Fab>
@@ -2610,6 +2612,69 @@ const PatientOrganizer: React.FC = () => {
           setSidebarOpen(false);
         }}
       />
+
+      {/* Timeline Vollbild Dialog */}
+      <Dialog
+        open={timelineFullscreen}
+        onClose={() => setTimelineFullscreen(false)}
+        maxWidth={false}
+        fullWidth
+        fullScreen
+        PaperProps={{
+          sx: {
+            m: 0,
+            height: '100vh',
+            maxHeight: '100vh',
+            borderRadius: 0,
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: 1,
+            borderColor: 'divider',
+            pb: 2,
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Timeline />
+            <Typography variant="h5">
+              Timeline - {patient?.firstName} {patient?.lastName}
+            </Typography>
+          </Box>
+          <IconButton
+            onClick={() => setTimelineFullscreen(false)}
+            sx={{ ml: 2 }}
+          >
+            <Close />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent
+          sx={{
+            p: 3,
+            overflow: 'auto',
+            height: 'calc(100vh - 80px)',
+          }}
+        >
+          {patient ? (
+            <PatientTimeline
+              patient={patient}
+              onNavigate={(path) => {
+                navigate(path);
+                setTimelineFullscreen(false);
+              }}
+              maxItems={undefined}
+            />
+          ) : (
+            <Alert severity="info">
+              Kein Patient ausgewählt
+            </Alert>
+          )}
+        </DialogContent>
+      </Dialog>
 
       <Box sx={{ p: { xs: 1, sm: 2 } }}>
         {/* Kompakter Header */}
