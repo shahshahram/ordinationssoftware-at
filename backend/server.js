@@ -83,6 +83,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const dekursRoutes = require('./routes/dekurs');
 const internalMessagesRoutes = require('./routes/internalMessages');
 const messageFoldersRoutes = require('./routes/messageFolders');
+const smartNotificationsRoutes = require('./routes/smartNotifications');
 const vitalSignsRoutes = require('./routes/vitalSigns');
 const medicalDataHistoryRoutes = require('./routes/medicalDataHistory');
 const patientDataHistoryRoutes = require('./routes/patientDataHistory');
@@ -118,6 +119,9 @@ const backupService = require('./utils/backupService');
 
 // RBAC Auto-Discovery Service
 const rbacAutoDiscovery = require('./services/rbacAutoDiscovery');
+
+// Smart Notification Service
+const smartNotificationService = require('./services/smartNotificationService');
 
 // Module Manager (optional)
 const USE_MODULE_MANAGER = process.env.USE_MODULE_MANAGER === 'true';
@@ -355,6 +359,8 @@ function registerStaticRoutes(app) {
   app.use('/api/dekurs-vorlagen', dekursVorlagenRoutes);
   app.use('/api/internal-messages', internalMessagesRoutes);
   app.use('/api/message-folders', messageFoldersRoutes);
+  app.use('/api/smart-notifications', smartNotificationsRoutes);
+  app.use('/api/smart-suggestions', require('./routes/smartSuggestions'));
   app.use('/api/vital-signs', vitalSignsRoutes);
   app.use('/api/medical-data-history', medicalDataHistoryRoutes);
   app.use('/api/patient-data-history', patientDataHistoryRoutes);
@@ -597,6 +603,14 @@ const server = app.listen(PORT, async () => {
     logger.info('✅ RBAC Auto-Discovery Service gestartet');
   } catch (error) {
     logger.error('❌ Fehler beim Starten des RBAC Auto-Discovery Services:', error);
+  }
+
+  // Starte Smart Notification Service
+  try {
+    smartNotificationService.start();
+    logger.info('✅ Smart Notification Service gestartet');
+  } catch (error) {
+    logger.error('❌ Fehler beim Starten des Smart Notification Services:', error);
   }
 });
 

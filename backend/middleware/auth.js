@@ -24,8 +24,7 @@ module.exports = async function(req, res, next) {
       const session = await Session.validateSession(token);
       if (!session) {
         // Session nicht gefunden, aber JWT ist gültig
-        // Erlaube Zugriff, aber logge Warnung (für Debugging)
-        console.warn(`Session nicht gefunden für Token, aber JWT ist gültig. User: ${decoded.userId || decoded.user?.id}`);
+        // Erlaube Zugriff, aber logge nur bei Debug-Level (nicht als Warnung)
         // Erstelle neue Session für bessere Nachverfolgbarkeit
         try {
           const ipAddress = req.ip || req.connection.remoteAddress || 'unknown';
@@ -37,9 +36,15 @@ module.exports = async function(req, res, next) {
             ipAddress,
             userAgent
           );
+          // Nur bei Debug-Level loggen (nicht als Warnung)
+          if (process.env.LOG_LEVEL === 'debug') {
+            console.debug(`Session neu erstellt für User: ${decoded.userId || decoded.user?.id}`);
+          }
         } catch (createError) {
           // Session-Erstellung fehlgeschlagen - nicht kritisch
-          console.debug('Session-Erstellung fehlgeschlagen:', createError.message);
+          if (process.env.LOG_LEVEL === 'debug') {
+            console.debug('Session-Erstellung fehlgeschlagen:', createError.message);
+          }
         }
       }
     } catch (sessionError) {

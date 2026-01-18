@@ -87,6 +87,18 @@ const UserSchema = new mongoose.Schema({
         showBreaks: { type: Boolean, default: true },
         viewMode: { type: String, enum: ['day', 'week', 'month'], default: 'week' },
         currentDate: { type: Date }
+      },
+      // Proaktive Benachrichtigungen - Einstellungen
+      notificationSettings: {
+        enabled: { type: Boolean, default: true }, // Master-Switch: Alle Benachrichtigungen ein/aus
+        // Einzelne Benachrichtigungstypen
+        upcomingAppointments: { type: Boolean, default: true }, // Anstehende Termine
+        missingVitalSigns: { type: Boolean, default: true }, // Fehlende Vitalwerte
+        criticalLabResults: { type: Boolean, default: true }, // Kritische Laborwerte
+        overdueTasks: { type: Boolean, default: true }, // Überfällige Aufgaben
+        medicationReminders: { type: Boolean, default: true }, // Medikamenten-Erinnerungen
+        followUpAppointments: { type: Boolean, default: true }, // Nachsorgetermine
+        incompletePatientData: { type: Boolean, default: false } // Unvollständige Patientendaten (default: false, da weniger wichtig)
       }
     },
     onlineBookingEnabled: { type: Boolean, default: false },

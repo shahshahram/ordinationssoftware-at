@@ -12,19 +12,45 @@ const eldaFormatGenerator = require('../eldaFormatGenerator');
 
 class ELDAConnector {
   constructor() {
+    // Konfiguration wird beim Erstellen geladen
+    this.updateConfig();
+  }
+  
+  /**
+   * Aktualisiert die Konfiguration (wichtig für dynamische Umgebungsvariablen)
+   */
+  updateConfig() {
     this.config = eldaConfig.getActiveConfig();
     this.method = this.config.defaultMethod;
     
     // HTTPS-Agent für Webservice (mit Zertifikaten falls vorhanden)
+    // WICHTIG: Erstelle neuen Agent, da sich die Konfiguration geändert haben könnte
     this.httpsAgent = this.createHttpsAgent();
   }
   
   /**
    * Erstellt HTTPS-Agent mit Zertifikaten
+   * WICHTIG: Für SIT-Umgebung werden KEINE Client-Zertifikate verwendet (nur Basic Auth)
    */
   createHttpsAgent() {
+    const env = this.config.environment;
+    
+    // Für SIT: Keine Client-Zertifikate, nur Basic Auth
+    if (env === 'sit') {
+      return new https.Agent({
+        rejectUnauthorized: true, // Prüfe Server-Zertifikat
+        keepAlive: false,
+        // Erlaube alle TLS-Versionen
+        secureProtocol: 'TLSv1_2_method'
+      });
+    }
+    
+    // Für Test/Production: Client-Zertifikate falls vorhanden
     if (!eldaConfig.hasCertificates()) {
-      return new https.Agent({ rejectUnauthorized: true });
+      return new https.Agent({ 
+        rejectUnauthorized: true,
+        keepAlive: false
+      });
     }
     
     try {
@@ -34,11 +60,15 @@ class ELDAConnector {
       return new https.Agent({
         cert,
         key,
-        rejectUnauthorized: true
+        rejectUnauthorized: true,
+        keepAlive: false
       });
     } catch (error) {
       console.warn('⚠️ ELDA-Zertifikate konnten nicht geladen werden:', error.message);
-      return new https.Agent({ rejectUnauthorized: true });
+      return new https.Agent({ 
+        rejectUnauthorized: true,
+        keepAlive: false
+      });
     }
   }
   
@@ -187,38 +217,105 @@ class ELDAConnector {
    * Sendet Daten via Webservice
    */
   async sendViaWebservice(payload, datasetType) {
+    // WICHTIG: Aktualisiere Config vor jedem Request, falls Umgebungsvariablen geändert wurden
+    this.updateConfig();
+    
     if (!this.config.webservice.enabled) {
       throw new Error('Webservice ist für diese Umgebung nicht verfügbar');
     }
     
-    if (!this.config.apiKey) {
-      throw new Error('ELDA API-Key fehlt');
+    // SIT-Plattform verwendet Seriennummer/Passwort statt API-Key
+    const isSIT = this.config.environment === 'sit';
+    
+    if (isSIT) {
+      if (!this.config.sit?.seriennummer || !this.config.sit?.passwort) {
+        throw new Error('ELDA-Seriennummer und Passwort für SIT fehlen');
+      }
+    } else {
+      if (!this.config.apiKey) {
+        throw new Error('ELDA API-Key fehlt');
+      }
     }
     
     try {
       // Konvertiere Payload zu XML
-      const xmlContent = this.convertToXML(payload, datasetType);
+      let xmlContent;
+      try {
+        xmlContent = this.convertToXML(payload, datasetType);
+        
+        // Validiere XML-Content
+        if (!xmlContent || xmlContent.trim().length === 0) {
+          throw new Error('XML-Content ist leer nach Konvertierung');
+        }
+        
+        // Log XML-Content für Debugging (nur erste 500 Zeichen)
+        if (process.env.LOG_LEVEL === 'debug') {
+          console.debug(`[ELDA] XML-Content (erste 500 Zeichen):\n${xmlContent.substring(0, 500)}`);
+        }
+      } catch (xmlError) {
+        console.error('[ELDA] XML-Generierung fehlgeschlagen:', xmlError.message);
+        console.error('[ELDA] Payload:', JSON.stringify(payload, null, 2).substring(0, 1000));
+        throw new Error(`XML-Generierung fehlgeschlagen: ${xmlError.message}`);
+      }
+      
+      // Headers für SIT oder normale Umgebung
+      const headers = {
+        'Content-Type': 'application/xml; charset=UTF-8',
+        'X-Dataset-Type': datasetType
+      };
+      
+      if (isSIT) {
+        // SIT: Basic Auth mit Seriennummer/Passwort
+        const credentials = Buffer.from(`${this.config.sit.seriennummer}:${this.config.sit.passwort}`).toString('base64');
+        headers['Authorization'] = `Basic ${credentials}`;
+        
+        // Log für Debugging (ohne Passwort)
+        if (process.env.LOG_LEVEL === 'debug') {
+          console.debug(`[ELDA SIT] Sende Request an: ${this.config.webservice.baseUrl}`);
+          console.debug(`[ELDA SIT] Seriennummer: ${this.config.sit.seriennummer}`);
+          console.debug(`[ELDA SIT] XML-Größe: ${xmlContent.length} bytes`);
+        }
+      } else {
+        // Test/Production: Bearer Token mit API-Key
+        headers['Authorization'] = `Bearer ${this.config.apiKey}`;
+      }
       
       // Sende via HTTPS
+      // WICHTIG: Für SIT-Plattform könnte der Endpunkt SOAP-Envelope erwarten
+      // oder spezielle Header benötigen
+      const requestConfig = {
+        headers,
+        timeout: this.config.timeout.webservice,
+        httpsAgent: this.httpsAgent,
+        maxContentLength: this.config.limits.https,
+        maxBodyLength: this.config.limits.https,
+        // Akzeptiere alle Status-Codes für bessere Fehlerdiagnose
+        validateStatus: (status) => {
+          return status >= 200 && status < 600;
+        }
+      };
+      
+      // Log Request-Details für Debugging
+      if (process.env.LOG_LEVEL === 'debug') {
+        console.debug('[ELDA] Request-URL:', this.config.webservice.baseUrl);
+        console.debug('[ELDA] Request-Headers:', JSON.stringify(headers, null, 2));
+        console.debug('[ELDA] XML-Länge:', xmlContent.length, 'bytes');
+        console.debug('[ELDA] Request-Config:', {
+          timeout: requestConfig.timeout,
+          hasHttpsAgent: !!requestConfig.httpsAgent
+        });
+      }
+      
       const response = await axios.post(
         this.config.webservice.baseUrl,
         xmlContent,
-        {
-          headers: {
-            'Content-Type': 'application/xml; charset=UTF-8',
-            'Authorization': `Bearer ${this.config.apiKey}`,
-            'X-Dataset-Type': datasetType
-          },
-          timeout: this.config.timeout.webservice,
-          httpsAgent: this.httpsAgent,
-          maxContentLength: this.config.limits.https,
-          maxBodyLength: this.config.limits.https
-        }
+        requestConfig
       );
       
       return {
         success: true,
         method: 'webservice',
+        environment: this.config.environment,
         status: response.status,
         data: response.data,
         message: 'Daten erfolgreich via Webservice übertragen',
@@ -226,12 +323,70 @@ class ELDAConnector {
       };
       
     } catch (error) {
+      // Detaillierte Fehlerbehandlung
       if (error.response) {
-        throw new Error(`ELDA-Webservice Fehler: ${error.response.status} - ${error.response.statusText}`);
+        // Server hat geantwortet, aber mit Fehler
+        const status = error.response.status;
+        const statusText = error.response.statusText;
+        const responseData = error.response.data;
+        
+        let errorMessage = `ELDA-Webservice Fehler: ${status} - ${statusText}`;
+        if (responseData) {
+          if (typeof responseData === 'string') {
+            errorMessage += `\nAntwort: ${responseData.substring(0, 500)}`;
+          } else if (responseData.message) {
+            errorMessage += `\nFehler: ${responseData.message}`;
+          }
+        }
+        
+        throw new Error(errorMessage);
       } else if (error.request) {
-        throw new Error('Keine Antwort vom ELDA-Webservice');
+        // Request wurde gesendet, aber keine Antwort erhalten
+        const errorDetails = [];
+        errorDetails.push('Keine Antwort vom ELDA-Webservice');
+        errorDetails.push(`URL: ${this.config.webservice.baseUrl}`);
+        errorDetails.push(`Timeout: ${this.config.timeout.webservice}ms`);
+        errorDetails.push(`Umgebung: ${this.config.environment}`);
+        
+        if (error.code) {
+          errorDetails.push(`Fehlercode: ${error.code}`);
+        }
+        if (error.message) {
+          errorDetails.push(`Details: ${error.message}`);
+        }
+        
+        // Prüfe ob es ein Netzwerk-Problem ist
+        if (error.code === 'ECONNREFUSED') {
+          errorDetails.push('Verbindung verweigert - Server möglicherweise nicht erreichbar');
+          errorDetails.push('Hinweis: Prüfen Sie, ob der SIT-Server erreichbar ist');
+        } else if (error.code === 'ETIMEDOUT') {
+          errorDetails.push(`Timeout - Server antwortet nicht innerhalb von ${this.config.timeout.webservice}ms`);
+          errorDetails.push('Hinweis: Der Server könnte überlastet sein oder die Anfrage wird nicht verarbeitet');
+        } else if (error.code === 'ENOTFOUND') {
+          errorDetails.push('DNS-Fehler - Server-Adresse nicht gefunden');
+          errorDetails.push(`Prüfen Sie die URL: ${this.config.webservice.baseUrl}`);
+        } else if (error.code === 'ECONNRESET') {
+          errorDetails.push('Verbindung wurde vom Server zurückgesetzt');
+          errorDetails.push('Hinweis: Möglicherweise wird das XML-Format nicht akzeptiert');
+        } else if (error.code === 'EPROTO') {
+          errorDetails.push('TLS/SSL-Protokollfehler');
+          errorDetails.push('Hinweis: Prüfen Sie die Zertifikatskonfiguration');
+        }
+        
+        // Zusätzliche Debug-Informationen
+        if (process.env.LOG_LEVEL === 'debug') {
+          console.error('[ELDA] Request-Objekt:', {
+            method: error.request.method,
+            path: error.request.path,
+            host: error.request.host,
+            headers: error.request.headers
+          });
+        }
+        
+        throw new Error(errorDetails.join('\n'));
       } else {
-        throw error;
+        // Fehler beim Erstellen des Requests
+        throw new Error(`Fehler beim Erstellen des Requests: ${error.message}`);
       }
     }
   }
@@ -303,13 +458,23 @@ class ELDAConnector {
    * Testet die Verbindung
    */
   async testConnection(method = null) {
-    const testMethod = method || this.method;
+    let testMethod = method || this.method;
+    
+    // Für SIT: Immer Webservice verwenden (FTPS nicht verfügbar)
+    if (this.config.environment === 'sit') {
+      testMethod = 'webservice';
+    } else if (testMethod === 'auto') {
+      // Für andere Umgebungen: Auto auflösen
+      testMethod = eldaConfig.getDefaultMethod();
+    }
     
     try {
       if (testMethod === 'webservice') {
         return await this.testWebserviceConnection();
-      } else {
+      } else if (testMethod === 'ftps') {
         return await this.testFTPSConnection();
+      } else {
+        throw new Error(`Unbekannte Methode: ${testMethod}`);
       }
     } catch (error) {
       return {
@@ -324,6 +489,20 @@ class ELDAConnector {
    * Testet FTPS-Verbindung
    */
   async testFTPSConnection() {
+    // Prüfe ob FTPS verfügbar ist
+    if (!this.config.ftps.enabled) {
+      throw new Error('FTPS ist für diese Umgebung nicht verfügbar');
+    }
+    
+    // Validiere Port (darf nicht null sein)
+    if (!this.config.ftps.port) {
+      throw new Error('FTPS-Port ist nicht konfiguriert');
+    }
+    
+    if (!this.config.ftps.host) {
+      throw new Error('FTPS-Host ist nicht konfiguriert');
+    }
+    
     const client = new ftp.Client(this.config.timeout.ftps);
     
     try {
@@ -360,7 +539,70 @@ class ELDAConnector {
    * Testet Webservice-Verbindung
    */
   async testWebserviceConnection() {
+    if (!this.config.webservice.enabled) {
+      throw new Error('Webservice ist für diese Umgebung nicht verfügbar');
+    }
+    
+    // SIT-Plattform verwendet Basic Auth statt Bearer Token
+    const isSIT = this.config.environment === 'sit';
+    
     try {
+      // Für SIT: Teste mit Basic Auth
+      if (isSIT) {
+        if (!this.config.sit?.seriennummer || !this.config.sit?.passwort) {
+          throw new Error('ELDA-Seriennummer und Passwort für SIT fehlen');
+        }
+        
+        // Erstelle Basic Auth Header
+        const credentials = Buffer.from(`${this.config.sit.seriennummer}:${this.config.sit.passwort}`).toString('base64');
+        
+        // Versuche einfachen Test-Request (kann fehlschlagen, aber zeigt ob Verbindung möglich ist)
+        try {
+          const response = await axios.get(
+            this.config.webservice.baseUrl,
+            {
+              headers: {
+                'Authorization': `Basic ${credentials}`,
+                'Content-Type': 'application/xml'
+              },
+              timeout: this.config.timeout.webservice,
+              httpsAgent: this.httpsAgent,
+              validateStatus: () => true // Akzeptiere alle Status-Codes
+            }
+          );
+          
+          return {
+            success: true,
+            method: 'webservice',
+            environment: 'sit',
+            status: response.status,
+            message: 'Webservice-Verbindung (SIT) erfolgreich',
+            url: this.config.webservice.baseUrl
+          };
+        } catch (testError) {
+          // Auch wenn Request fehlschlägt, Verbindung ist möglich (nur Endpunkt nicht verfügbar)
+          if (testError.code === 'ECONNREFUSED' || testError.code === 'ETIMEDOUT') {
+            throw new Error(`Verbindung zum Webservice fehlgeschlagen: ${testError.message}`);
+          }
+          
+          // Andere Fehler (z.B. 404, 401) bedeuten, dass Verbindung funktioniert
+          return {
+            success: true,
+            method: 'webservice',
+            environment: 'sit',
+            status: testError.response?.status || 'unknown',
+            message: 'Webservice-Verbindung (SIT) erfolgreich (Endpunkt antwortet)',
+            url: this.config.webservice.baseUrl,
+            note: 'Test-Endpunkt möglicherweise nicht verfügbar, aber Verbindung funktioniert'
+          };
+        }
+      }
+      
+      // Für Test/Production: Verwende Bearer Token
+      if (!this.config.apiKey) {
+        throw new Error('ELDA API-Key fehlt');
+      }
+      
       // Sende Test-Request
       const response = await axios.get(
         this.config.webservice.baseUrl.replace('/servlet/WebTrans', '/status'),

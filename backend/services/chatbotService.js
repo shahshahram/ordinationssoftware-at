@@ -1,5 +1,6 @@
 const axios = require('axios');
 const knowledgeBase = require('./chatbotKnowledgeBase');
+const smartSuggestionService = require('./smartSuggestionService');
 
 class ChatbotService {
   constructor() {
@@ -174,6 +175,54 @@ class ChatbotService {
   }
 
   /**
+   * Ruft proaktive Vorschläge für einen Patienten ab
+   */
+  async getProactiveSuggestions(patientId, userId = null) {
+    try {
+      if (!patientId) {
+        return null;
+      }
+      const suggestions = await smartSuggestionService.generateSuggestions(patientId, userId);
+      if (suggestions.success && suggestions.suggestions) {
+        // Formatiere Vorschläge für den Chatbot
+        return this.formatSuggestionsForChatbot(suggestions.suggestions);
+      }
+      return null;
+    } catch (error) {
+      console.error('Error getting proactive suggestions:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Formatiert Vorschläge für die Anzeige im Chatbot
+   */
+  formatSuggestionsForChatbot(suggestions) {
+    const formatted = [];
+    
+    // Priorisiere wichtige Vorschläge (urgent, high)
+    const importantSuggestions = [
+      ...suggestions.diagnoses.filter(s => s.priority === 'urgent' || s.priority === 'high'),
+      ...suggestions.medications.filter(s => s.priority === 'urgent' || s.priority === 'high'),
+      ...suggestions.appointments.filter(s => s.priority === 'urgent' || s.priority === 'high'),
+      ...suggestions.laboratory.filter(s => s.priority === 'urgent' || s.priority === 'high'),
+      ...suggestions.general.filter(s => s.priority === 'urgent' || s.priority === 'high'),
+    ].slice(0, 3); // Maximal 3 wichtige Vorschläge
+
+    if (importantSuggestions.length > 0) {
+      formatted.push('💡 **Wichtige Vorschläge für diesen Patienten:**\n');
+      importantSuggestions.forEach((suggestion, index) => {
+        formatted.push(`${index + 1}. **${suggestion.title}**\n   ${suggestion.description}`);
+        if (suggestion.action) {
+          formatted.push(`   → ${suggestion.action}`);
+        }
+      });
+    }
+
+    return formatted.length > 0 ? formatted.join('\n\n') : null;
+  }
+
+  /**
    * Hauptmethode: Erhält eine Antwort vom Chatbot
    */
   async getResponse(message, context = {}, history = []) {
@@ -183,11 +232,28 @@ class ChatbotService {
         return 'Bitte stellen Sie eine Frage.';
       }
 
+      // Proaktive Vorschläge abrufen, wenn ein Patient im Kontext ist
+      let proactiveSuggestions = null;
+      if (context.patientId) {
+        try {
+          proactiveSuggestions = await this.getProactiveSuggestions(context.patientId, context.userId);
+        } catch (error) {
+          console.error('Error fetching proactive suggestions:', error);
+          // Fehler ignorieren, Chatbot funktioniert auch ohne Vorschläge
+        }
+      }
+
       // OpenAI API aufrufen wenn verfügbar
       if (this.enabled) {
         try {
           // System-Prompt erstellen (mit Nachricht für bessere Relevanz)
-          const systemPrompt = this.createSystemPrompt(context, message);
+          let systemPrompt = this.createSystemPrompt(context, message);
+
+          // Füge proaktive Vorschläge zum System-Prompt hinzu
+          if (proactiveSuggestions) {
+            systemPrompt += '\n\n**Proaktive Vorschläge für den aktuellen Patienten:**\n' + proactiveSuggestions;
+            systemPrompt += '\n\nDu kannst diese Vorschläge in deine Antworten einbeziehen, wenn sie relevant sind.';
+          }
 
           // Nachrichten-Historie formatieren (nur die letzten 10 Nachrichten)
           const formattedHistory = history
@@ -204,16 +270,45 @@ class ChatbotService {
             { role: 'user', content: message },
           ];
 
-          return await this.callOpenAI(messages, systemPrompt);
+          let response = await this.callOpenAI(messages, systemPrompt);
+
+          // Wenn keine spezifische Frage gestellt wurde und Vorschläge verfügbar sind, füge sie hinzu
+          const lowerMessage = message.toLowerCase().trim();
+          const isGeneralQuestion = lowerMessage.length < 20 || 
+            lowerMessage.includes('hilfe') || 
+            lowerMessage.includes('was kann') || 
+            lowerMessage.includes('was gibt') ||
+            lowerMessage === 'hallo' ||
+            lowerMessage === 'hi';
+
+          if (isGeneralQuestion && proactiveSuggestions && !response.includes('Vorschläge')) {
+            response += '\n\n' + proactiveSuggestions;
+          }
+
+          return response;
         } catch (openaiError) {
           console.error('OpenAI API Error:', openaiError.message || openaiError);
           // Bei OpenAI-Fehler Fallback verwenden
-          return this.getFallbackResponse(message, context);
+          let fallbackResponse = this.getFallbackResponse(message, context);
+          
+          // Füge Vorschläge auch zum Fallback hinzu
+          if (proactiveSuggestions) {
+            fallbackResponse += '\n\n' + proactiveSuggestions;
+          }
+          
+          return fallbackResponse;
         }
       } else {
         // Fallback wenn OpenAI nicht konfiguriert ist
         console.log('OpenAI API Key nicht konfiguriert, verwende Fallback-Antworten');
-        return this.getFallbackResponse(message, context);
+        let fallbackResponse = this.getFallbackResponse(message, context);
+        
+        // Füge Vorschläge auch zum Fallback hinzu
+        if (proactiveSuggestions) {
+          fallbackResponse += '\n\n' + proactiveSuggestions;
+        }
+        
+        return fallbackResponse;
       }
     } catch (error) {
       console.error('Chatbot Service Error:', error.message || error);

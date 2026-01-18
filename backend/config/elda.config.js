@@ -47,6 +47,12 @@ const eldaConfig = {
   // API-Key für Webservice
   apiKey: process.env.ELDA_API_KEY || null,
   
+  // SIT-Plattform Credentials (geteilt mit WAHonline)
+  sit: {
+    seriennummer: process.env.ELDA_SIT_SERIENNUMMER || process.env.ELDA_SERIENNUMMER || null,
+    passwort: process.env.ELDA_SIT_PASSWORT || process.env.ELDA_PASSWORT || null
+  },
+  
   // FTPS-Zertifikate
   certificates: {
     certPath: process.env.ELDA_CERT_PATH || path.join(__dirname, '../certs/elda-client.crt'),
@@ -69,14 +75,15 @@ const eldaConfig = {
   // Timeout-Einstellungen
   timeout: {
     ftps: 60000, // 60 Sekunden
-    webservice: 30000 // 30 Sekunden
+    webservice: 60000 // 60 Sekunden (erhöht für SIT, da Server möglicherweise langsamer antwortet)
   },
   
   // Standard-Übertragungsmethode
   // 'ftps' = FTPS verwenden (aktuell)
   // 'webservice' = Webservice verwenden (ab 02.02.2026)
   // 'auto' = Automatisch wählen (Webservice wenn verfügbar, sonst FTPS)
-  defaultMethod: process.env.ELDA_DEFAULT_METHOD || 'ftps',
+  // Für SIT: Automatisch 'webservice' (FTPS nicht verfügbar)
+  defaultMethod: process.env.ELDA_DEFAULT_METHOD || (process.env.ELDA_ENVIRONMENT === 'sit' ? 'webservice' : 'ftps'),
   
   /**
    * Gibt die aktive Konfiguration zurück
@@ -89,6 +96,7 @@ const eldaConfig = {
       ftps: this.ftps[env],
       webservice: this.webservice[env],
       apiKey: this.apiKey,
+      sit: this.sit,
       certificates: this.certificates,
       credentials: this.credentials,
       limits: this.limits,
@@ -108,6 +116,11 @@ const eldaConfig = {
       const env = this.environment;
       const wsConfig = this.webservice[env];
       
+      // SIT: Immer Webservice (FTPS nicht verfügbar)
+      if (env === 'sit') {
+        return 'webservice';
+      }
+      
       // Prüfe ob Webservice aktiviert ist
       if (wsConfig.enabled) {
         // Prüfe ob Produktivumgebung und Datum erreicht
@@ -117,7 +130,7 @@ const eldaConfig = {
             return 'webservice';
           }
         } else {
-          // Test/SIT: Webservice ist bereits verfügbar
+          // Test: Webservice ist bereits verfügbar
           return 'webservice';
         }
       }
@@ -159,9 +172,26 @@ const eldaConfig = {
       errors.push('Ungültige Standard-Methode. Muss ftps, webservice oder auto sein.');
     }
     
+    // SIT-spezifische Validierung
+    if (this.environment === 'sit') {
+      // FTPS wird von SIT nicht unterstützt
+      if (this.defaultMethod === 'ftps') {
+        errors.push('FTPS wird von der SIT-Plattform nicht unterstützt. Bitte verwenden Sie "webservice" oder "auto".');
+      }
+      
+      // SIT benötigt Seriennummer und Passwort
+      if (!this.sit.seriennummer) {
+        errors.push('ELDA-Seriennummer für SIT fehlt (ELDA_SIT_SERIENNUMMER oder ELDA_SERIENNUMMER).');
+      }
+      
+      if (!this.sit.passwort) {
+        errors.push('ELDA-Passwort für SIT fehlt (ELDA_SIT_PASSWORT oder ELDA_PASSWORT).');
+      }
+    }
+    
     // Prüfe FTPS-Konfiguration wenn FTPS verwendet werden soll
     const method = config.defaultMethod;
-    if (method === 'ftps' || method === 'auto') {
+    if (method === 'ftps' || (method === 'auto' && this.environment !== 'sit')) {
       if (!config.ftps.enabled) {
         errors.push('FTPS ist für diese Umgebung nicht verfügbar.');
       }
@@ -181,8 +211,16 @@ const eldaConfig = {
         errors.push('Webservice ist für diese Umgebung nicht verfügbar.');
       }
       
-      if (!config.apiKey) {
-        errors.push('ELDA API-Key fehlt (ELDA_API_KEY).');
+      // Für SIT: Seriennummer und Passwort statt API-Key
+      if (this.environment === 'sit') {
+        if (!this.sit.seriennummer || !this.sit.passwort) {
+          errors.push('SIT-Plattform benötigt Seriennummer und Passwort (ELDA_SIT_SERIENNUMMER, ELDA_SIT_PASSWORT).');
+        }
+      } else {
+        // Für Test/Production: API-Key
+        if (!config.apiKey) {
+          errors.push('ELDA API-Key fehlt (ELDA_API_KEY).');
+        }
       }
     }
     

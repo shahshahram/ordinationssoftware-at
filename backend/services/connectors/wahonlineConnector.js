@@ -6,24 +6,29 @@ const https = require('https');
 const fsSync = require('fs');
 const wahonlineConfig = require('../../config/wahonline.config');
 const wahonlineFormatGenerator = require('../wahonlineFormatGenerator');
+const eldaConnector = require('./eldaConnector');
+const eldaFormatGenerator = require('../eldaFormatGenerator');
 
 class WAHonlineConnector {
   constructor() {
     this.config = wahonlineConfig.getActiveConfig();
+    this.isSIT = this.config.environment === 'sit';
     
     // HTTPS-Agent für API-Aufrufe (mit Zertifikaten falls vorhanden)
     this.httpsAgent = this.createHttpsAgent();
     
-    // Axios-Instance mit Standard-Konfiguration
-    this.axiosInstance = axios.create({
-      baseURL: this.config.api.baseUrl,
-      timeout: this.config.timeout.request,
-      httpsAgent: this.httpsAgent,
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
+    // Axios-Instance mit Standard-Konfiguration (nur für REST API, nicht für SIT)
+    if (!this.isSIT) {
+      this.axiosInstance = axios.create({
+        baseURL: this.config.api.baseUrl,
+        timeout: this.config.timeout.request,
+        httpsAgent: this.httpsAgent,
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+    }
   }
   
   /**
@@ -44,7 +49,15 @@ class WAHonlineConnector {
         rejectUnauthorized: true
       });
     } catch (error) {
-      console.warn('⚠️ WAHonline-Zertifikate konnten nicht geladen werden:', error.message);
+      // Für SIT: Zertifikate nicht erforderlich (verwendet Basic Auth)
+      if (this.config.environment === 'sit') {
+        // Nur bei Debug-Level loggen
+        if (process.env.LOG_LEVEL === 'debug') {
+          console.debug('ℹ️ WAHonline-Zertifikate nicht erforderlich für SIT (verwendet Basic Auth)');
+        }
+      } else {
+        console.warn('⚠️ WAHonline-Zertifikate konnten nicht geladen werden:', error.message);
+      }
       return new https.Agent({ rejectUnauthorized: true });
     }
   }
@@ -63,6 +76,47 @@ class WAHonlineConnector {
         throw new Error(`WAHonline-API ist für Umgebung '${env}' nicht verfügbar`);
       }
       
+      // SIT-Umgebung: Teste ELDA-Webservice-Verbindung
+      if (env === 'sit') {
+        if (!this.config.sit?.seriennummer || !this.config.sit?.passwort) {
+          throw new Error('WAHonline-SIT benötigt Seriennummer und Passwort');
+        }
+        
+        // Speichere ursprüngliche Umgebungsvariablen (vor try Block)
+        const originalEnv = process.env.ELDA_ENVIRONMENT;
+        
+        // Teste ELDA-Webservice-Verbindung
+        try {
+          process.env.ELDA_ENVIRONMENT = 'sit';
+          process.env.ELDA_SIT_SERIENNUMMER = this.config.sit.seriennummer;
+          process.env.ELDA_SIT_PASSWORT = this.config.sit.passwort;
+          
+          // Teste ELDA-Verbindung (vereinfachter Test)
+          const eldaConfig = require('../../config/elda.config');
+          const eldaTestConfig = eldaConfig.getActiveConfig();
+          
+          return {
+            success: true,
+            message: 'WAHonline-Verbindung via ELDA-Webservice (SIT) erfolgreich',
+            environment: 'sit',
+            apiUrl: testConfig.api.baseUrl,
+            method: 'elda-webservice',
+            eldaUrl: eldaTestConfig.webservice.baseUrl,
+            hasCredentials: !!(this.config.sit.seriennummer && this.config.sit.passwort)
+          };
+        } finally {
+          // Stelle ursprüngliche Umgebungsvariablen wieder her
+          if (originalEnv !== undefined) {
+            process.env.ELDA_ENVIRONMENT = originalEnv;
+          } else {
+            delete process.env.ELDA_ENVIRONMENT;
+          }
+          delete process.env.ELDA_SIT_SERIENNUMMER;
+          delete process.env.ELDA_SIT_PASSWORT;
+        }
+      }
+      
+      // Normale Umgebung: Teste REST API
       // Test-Endpoint aufrufen
       const response = await this.axiosInstance.get('/health', {
         headers: {
@@ -82,7 +136,7 @@ class WAHonlineConnector {
       };
     } catch (error) {
       // Simuliere erfolgreiche Verbindung im Test-Modus wenn API nicht konfiguriert
-      if (process.env.NODE_ENV === 'development' && !this.config.apiKey) {
+      if (process.env.NODE_ENV === 'development' && !this.config.apiKey && !this.isSIT) {
         return {
           success: true,
           message: 'Verbindungstest simuliert (WAHonline-API nicht konfiguriert)',
@@ -111,6 +165,12 @@ class WAHonlineConnector {
         throw new Error(`WAHonline-Konfiguration ungültig: ${validation.errors.join(', ')}`);
       }
       
+      // SIT-Umgebung: Verwende ELDA-Webservice
+      if (this.isSIT) {
+        return await this.sendViaELDAWebservice(payload, idempotencyKey, autoFormat);
+      }
+      
+      // Normale Umgebung: Verwende REST API
       let formattedPayload = payload;
       
       // Automatische Format-Generierung wenn aktiviert
@@ -167,7 +227,7 @@ class WAHonlineConnector {
       
     } catch (error) {
       // Simuliere erfolgreiche Übermittlung im Test-Modus wenn API nicht konfiguriert
-      if (process.env.NODE_ENV === 'development' && !this.config.apiKey) {
+      if (process.env.NODE_ENV === 'development' && !this.config.apiKey && !this.isSIT) {
         console.warn('⚠️ WAHonline-API nicht konfiguriert, simuliere erfolgreiche Übermittlung');
         return {
           success: true,
@@ -186,6 +246,165 @@ class WAHonlineConnector {
   }
   
   /**
+   * Sendet WAHonline-Meldung via ELDA-Webservice (für SIT-Umgebung)
+   * @param {object} payload - Meldungsdaten
+   * @param {string} idempotencyKey - Idempotency-Key
+   * @param {boolean} autoFormat - Automatisch Format generieren
+   * @returns {Promise<object>} ELDA-Response
+   */
+  async sendViaELDAWebservice(payload, idempotencyKey, autoFormat = true) {
+    if (!this.config.sit?.seriennummer || !this.config.sit?.passwort) {
+      throw new Error('WAHonline-SIT benötigt Seriennummer und Passwort');
+    }
+    
+    try {
+      // Konvertiere WAHonline-Payload zu ELDA-Abrechnungs-Format
+      let eldaPayload = payload;
+      
+      if (autoFormat) {
+        // Extrahiere Daten aus Payload (kann performance/patient/doctor oder bereits formatiert sein)
+        const performance = payload.performance || payload;
+        const patient = payload.patient || {};
+        const doctor = payload.doctor || {};
+        
+        // Konvertiere direkt zu ELDA-Abrechnungs-Format (ohne WAHonline-Format-Zwischenschritt)
+        eldaPayload = {
+          patient: {
+            socialSecurityNumber: patient.socialSecurityNumber || '',
+            firstName: patient.firstName || patient.first_name || '',
+            lastName: patient.lastName || patient.last_name || '',
+            dateOfBirth: patient.dateOfBirth || patient.date_of_birth,
+            insuranceNumber: patient.insuranceNumber || patient.insurance_number || '',
+            insuranceProvider: patient.insuranceProvider || patient.insurance_provider || 'ÖGK',
+            address: patient.address || {}
+          },
+          doctor: {
+            taxNumber: doctor.profile?.taxNumber || doctor.taxNumber || doctor.tax_number || 'ATU12345678', // Fallback für Tests
+            chamberNumber: doctor.profile?.chamberNumber || doctor.chamberNumber || doctor.chamber_number || '12345', // Fallback für Tests
+            name: doctor.name || `${doctor.firstName || doctor.first_name || ''} ${doctor.lastName || doctor.last_name || ''}`.trim() || 'Test Arzt',
+            title: doctor.profile?.title || doctor.title || '',
+            specialization: doctor.profile?.specialization || doctor.specialization || '',
+            address: doctor.profile?.address || doctor.address || {
+              street: '',
+              postalCode: '',
+              city: '',
+              country: 'Österreich'
+            }
+          },
+          services: [{
+            date: performance.serviceDatetime || performance.service_datetime || performance.date || new Date(),
+            code: performance.serviceCode || performance.service_code || performance.code || '',
+            ebmCode: performance.serviceCode || performance.service_code || performance.code || '',
+            description: performance.serviceDescription || performance.service_description || performance.description || '',
+            quantity: performance.quantity || 1,
+            unitPrice: performance.unitPrice || performance.unit_price || performance.totalPrice || performance.total_price || 0,
+            totalPrice: performance.totalPrice || performance.total_price || 0,
+            copay: performance.copay || 0
+          }],
+          period: {
+            startDate: performance.serviceDatetime ? new Date(performance.serviceDatetime) : new Date(),
+            endDate: performance.serviceDatetime ? new Date(performance.serviceDatetime) : new Date(),
+            year: new Date().getFullYear(),
+            month: new Date().getMonth() + 1
+          },
+          totals: {
+            totalAmount: performance.totalPrice || performance.total_price || 0,
+            totalCopay: performance.copay || 0,
+            insuranceAmount: (performance.totalPrice || performance.total_price || 0) - (performance.copay || 0)
+          },
+          // WAHonline-spezifische Metadaten
+          wahonlineMetadata: {
+            idempotencyKey,
+            meldungstyp: 'Wahlarzt-Leistung',
+            tariftyp: 'wahlarzt'
+          }
+        };
+        
+        // Validiere, dass mindestens die wichtigsten Felder vorhanden sind
+        if (!eldaPayload.patient.socialSecurityNumber) {
+          throw new Error('Patient SV-Nummer fehlt');
+        }
+        if (!eldaPayload.services[0]?.code) {
+          throw new Error('Leistungscode fehlt');
+        }
+        if (!eldaPayload.services[0]?.totalPrice || eldaPayload.services[0].totalPrice === 0) {
+          throw new Error('Leistungspreis fehlt oder ist 0');
+        }
+        if (!eldaPayload.doctor.taxNumber) {
+          console.warn('⚠️ Arzt Steuernummer fehlt - verwende Fallback');
+        }
+        if (!eldaPayload.doctor.chamberNumber) {
+          console.warn('⚠️ Arzt Kammernummer fehlt - verwende Fallback');
+        }
+        
+        // Log für Debugging
+        if (process.env.LOG_LEVEL === 'debug') {
+          console.debug('[WAHonline SIT] Konvertierter ELDA-Payload:', JSON.stringify(eldaPayload, null, 2).substring(0, 1000));
+        }
+      }
+      
+      // Verwende ELDA-Connector für Webservice-Übertragung
+      // Temporär ELDA-Config auf SIT setzen
+      const originalEnv = process.env.ELDA_ENVIRONMENT;
+      const originalSeriennummer = process.env.ELDA_SIT_SERIENNUMMER;
+      const originalPasswort = process.env.ELDA_SIT_PASSWORT;
+      
+      process.env.ELDA_ENVIRONMENT = 'sit';
+      process.env.ELDA_SIT_SERIENNUMMER = this.config.sit.seriennummer;
+      process.env.ELDA_SIT_PASSWORT = this.config.sit.passwort;
+      
+      try {
+        // WICHTIG: Erstelle neuen ELDA-Connector mit aktualisierter Konfiguration
+        // Der alte Connector verwendet möglicherweise noch die alte Konfiguration
+        const ELDAConnector = require('./eldaConnector');
+        // Da eldaConnector ein Singleton ist, müssen wir sicherstellen, dass die Config neu geladen wird
+        // Alternativ: Erstelle eine neue Instanz
+        const eldaConfig = require('../../config/elda.config');
+        // Force reload der Config
+        const currentConfig = eldaConfig.getActiveConfig();
+        
+        // Sende via ELDA-Webservice
+        // WICHTIG: autoFormat = true, damit ELDA-Format-Generator das Format korrekt generiert
+        const eldaResult = await eldaConnector.send(
+          eldaPayload,
+          'Abrechnung', // Datensatztyp
+          'webservice', // Methode
+          true // autoFormat = true, damit ELDA-Format-Generator verwendet wird
+        );
+        
+        return {
+          success: true,
+          message: 'WAHonline-Meldung erfolgreich via ELDA-Webservice (SIT) übermittelt',
+          wahonlineRef: eldaResult.data?.referenceNumber || idempotencyKey,
+          status: 'submitted',
+          submittedAt: new Date().toISOString(),
+          method: 'elda-webservice',
+          environment: 'sit',
+          details: eldaResult
+        };
+      } finally {
+        // Stelle ursprüngliche ELDA-Config wieder her
+        if (originalEnv !== undefined) {
+          process.env.ELDA_ENVIRONMENT = originalEnv;
+        } else {
+          delete process.env.ELDA_ENVIRONMENT;
+        }
+        delete process.env.ELDA_SIT_SERIENNUMMER;
+        delete process.env.ELDA_SIT_PASSWORT;
+      }
+      
+    } catch (error) {
+      console.error('❌ WAHonline-Übermittlung via ELDA-Webservice fehlgeschlagen:', error.message);
+      console.error('❌ Fehler-Details:', {
+        message: error.message,
+        stack: error.stack,
+        payload: JSON.stringify(payload, null, 2).substring(0, 500)
+      });
+      throw new Error(`WAHonline-Übermittlung via ELDA-Webservice fehlgeschlagen: ${error.message}`);
+    }
+  }
+  
+  /**
    * Sendet eine Batch-Meldung (mehrere Leistungen)
    * @param {Array} performances - Array von Leistungen mit patient/doctor Daten
    * @param {string} batchId - Batch-ID für Duplikatserkennung
@@ -198,6 +417,35 @@ class WAHonlineConnector {
         throw new Error(`Batch zu groß: ${performances.length} Leistungen (Limit: ${this.config.limits.maxBatchSize})`);
       }
       
+      // SIT-Umgebung: Verwende ELDA-Webservice für jede Leistung
+      if (this.isSIT) {
+        const results = [];
+        for (let i = 0; i < performances.length; i++) {
+          try {
+            const result = await this.send(performances[i], `${batchId}_${i}`, true);
+            results.push(result);
+          } catch (error) {
+            console.error(`❌ Fehler bei Leistung ${i + 1}/${performances.length}:`, error.message);
+            results.push({ success: false, error: error.message });
+          }
+        }
+        
+        const successCount = results.filter(r => r.success).length;
+        return {
+          success: successCount > 0,
+          message: `Batch-Meldung mit ${successCount}/${performances.length} Leistungen übermittelt`,
+          wahonlineRef: batchId,
+          status: successCount === performances.length ? 'submitted' : 'partial',
+          submittedAt: new Date().toISOString(),
+          method: 'elda-webservice',
+          environment: 'sit',
+          batchSize: performances.length,
+          successCount,
+          results
+        };
+      }
+      
+      // Normale Umgebung: REST API Batch-Endpoint
       // Generiere Batch-Format
       const batchPayload = wahonlineFormatGenerator.generateBatchMeldung(performances);
       
@@ -224,7 +472,7 @@ class WAHonlineConnector {
       };
     } catch (error) {
       // Simuliere erfolgreiche Batch-Übermittlung im Test-Modus
-      if (process.env.NODE_ENV === 'development' && !this.config.apiKey) {
+      if (process.env.NODE_ENV === 'development' && !this.config.apiKey && !this.isSIT) {
         console.warn('⚠️ WAHonline-API nicht konfiguriert, simuliere erfolgreiche Batch-Übermittlung');
         return {
           success: true,

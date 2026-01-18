@@ -6,7 +6,6 @@ import {
   CardContent,
   Grid,
   FormControlLabel,
-  Checkbox,
   Button,
   Alert,
   Divider,
@@ -22,7 +21,6 @@ import {
   InputAdornment,
   CircularProgress,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Tabs,
@@ -52,7 +50,6 @@ const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user } = useSelector((state: any) => state.auth);
   const { marginTopValue } = useGlobalNavigationOffset();
   const [loading, setLoading] = useState(false);
@@ -105,17 +102,31 @@ const Settings: React.FC = () => {
   const [testSmsLoading, setTestSmsLoading] = useState<boolean>(false);
   const [testSmsResult, setTestSmsResult] = useState<{ success: boolean; message: string } | null>(null);
   
+  // Proaktive Benachrichtigungen State
+  const [notificationSettings, setNotificationSettings] = useState({
+    enabled: true,
+    upcomingAppointments: true,
+    missingVitalSigns: true,
+    criticalLabResults: true,
+    overdueTasks: true,
+    medicationReminders: true,
+    followUpAppointments: true,
+    incompletePatientData: false
+  });
+
   // Hilfe-Dialog States
   const [helpDialogBillingOpen, setHelpDialogBillingOpen] = useState(false);
   const [helpDialogELDAOpen, setHelpDialogELDAOpen] = useState(false);
   const [helpDialogWAHonlineOpen, setHelpDialogWAHonlineOpen] = useState(false);
   const [helpDialogEmailOpen, setHelpDialogEmailOpen] = useState(false);
   const [helpDialogSmsOpen, setHelpDialogSmsOpen] = useState(false);
+  const [helpDialogNotificationsOpen, setHelpDialogNotificationsOpen] = useState(false);
   const [helpTabBilling, setHelpTabBilling] = useState(0);
   const [helpTabELDA, setHelpTabELDA] = useState(0);
   const [helpTabWAHonline, setHelpTabWAHonline] = useState(0);
   const [helpTabEmail, setHelpTabEmail] = useState(0);
   const [helpTabSms, setHelpTabSms] = useState(0);
+  const [helpTabNotifications, setHelpTabNotifications] = useState(0);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
 
@@ -135,6 +146,19 @@ const Settings: React.FC = () => {
     }
     if (user?.profile?.preferences?.wahonlineEnabled !== undefined) {
       setWahonlineEnabled(user.profile.preferences.wahonlineEnabled);
+    }
+    // Lade Benachrichtigungseinstellungen
+    if (user?.profile?.preferences?.notificationSettings) {
+      setNotificationSettings({
+        enabled: user.profile.preferences.notificationSettings.enabled !== false,
+        upcomingAppointments: user.profile.preferences.notificationSettings.upcomingAppointments !== false,
+        missingVitalSigns: user.profile.preferences.notificationSettings.missingVitalSigns !== false,
+        criticalLabResults: user.profile.preferences.notificationSettings.criticalLabResults !== false,
+        overdueTasks: user.profile.preferences.notificationSettings.overdueTasks !== false,
+        medicationReminders: user.profile.preferences.notificationSettings.medicationReminders !== false,
+        followUpAppointments: user.profile.preferences.notificationSettings.followUpAppointments !== false,
+        incompletePatientData: user.profile.preferences.notificationSettings.incompletePatientData === true
+      });
     }
     loadELDAStatus();
     loadWAHonlineStatus();
@@ -420,7 +444,8 @@ const Settings: React.FC = () => {
             eldaEnabled: eldaEnabled,
             eldaMethod: eldaMethod,
             eldaEnvironment: eldaEnvironment,
-            wahonlineEnabled: wahonlineEnabled
+            wahonlineEnabled: wahonlineEnabled,
+            notificationSettings: notificationSettings
           }
         }
       });
@@ -1321,6 +1346,224 @@ const Settings: React.FC = () => {
                   </Alert>
                 </Grid>
               </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Proaktive Benachrichtigungen */}
+        <Grid size={{ xs: 12 }}>
+          <Card>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <Typography variant="h6" gutterBottom>
+                  Proaktive Benachrichtigungen
+                </Typography>
+                <Tooltip title="Hilfe & Leitfaden">
+                  <IconButton
+                    onClick={() => setHelpDialogNotificationsOpen(true)}
+                    color="primary"
+                    size="small"
+                  >
+                    <HelpOutline />
+                  </IconButton>
+                </Tooltip>
+              </Box>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Konfigurieren Sie, welche proaktiven Benachrichtigungen Sie erhalten möchten.
+              </Typography>
+              <Divider sx={{ my: 2 }} />
+
+              {/* Master-Switch */}
+              <Box sx={{ mb: 3 }}>
+                <FormControlLabel
+                  control={
+                    <Switch
+                      checked={notificationSettings.enabled}
+                      onChange={(e) => setNotificationSettings(prev => ({ ...prev, enabled: e.target.checked }))}
+                      color="primary"
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body1" fontWeight="medium">
+                        Proaktive Benachrichtigungen aktivieren
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Wenn deaktiviert, erhalten Sie keine proaktiven Benachrichtigungen.
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </Box>
+
+              {notificationSettings.enabled && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle1" gutterBottom sx={{ mb: 2, fontWeight: 'bold' }}>
+                    Einzelne Benachrichtigungstypen
+                  </Typography>
+
+                  <Stack spacing={2}>
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationSettings.upcomingAppointments}
+                          onChange={(e) => setNotificationSettings(prev => ({ ...prev, upcomingAppointments: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="medium">
+                            Anstehende Termine
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Benachrichtigungen für Termine in den nächsten 24 Stunden
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationSettings.missingVitalSigns}
+                          onChange={(e) => setNotificationSettings(prev => ({ ...prev, missingVitalSigns: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="medium">
+                            Fehlende Vitalwerte
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Erinnerungen für Patienten ohne aktuelle Vitalwerte (seit &gt; 1 Jahr)
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationSettings.criticalLabResults}
+                          onChange={(e) => setNotificationSettings(prev => ({ ...prev, criticalLabResults: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="medium">
+                            Kritische Laborwerte
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Sofortige Benachrichtigungen bei kritischen Laborwerten
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationSettings.overdueTasks}
+                          onChange={(e) => setNotificationSettings(prev => ({ ...prev, overdueTasks: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="medium">
+                            Überfällige Aufgaben
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Benachrichtigungen für überfällige Aufgaben
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationSettings.medicationReminders}
+                          onChange={(e) => setNotificationSettings(prev => ({ ...prev, medicationReminders: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="medium">
+                            Medikamenten-Erinnerungen
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Erinnerungen zur Überprüfung langfristiger Medikationen
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationSettings.followUpAppointments}
+                          onChange={(e) => setNotificationSettings(prev => ({ ...prev, followUpAppointments: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="medium">
+                            Nachsorgetermine
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Empfehlungen für Nachsorgetermine bei aktiven Diagnosen
+                          </Typography>
+                        </Box>
+                      }
+                    />
+
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={notificationSettings.incompletePatientData}
+                          onChange={(e) => setNotificationSettings(prev => ({ ...prev, incompletePatientData: e.target.checked }))}
+                          color="primary"
+                        />
+                      }
+                      label={
+                        <Box>
+                          <Typography variant="body1" fontWeight="medium">
+                            Unvollständige Patientendaten
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            Hinweise auf fehlende wichtige Patientendaten
+                          </Typography>
+                        </Box>
+                      }
+                    />
+                  </Stack>
+
+                  <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveSettings}
+                      disabled={loading}
+                    >
+                      {loading ? 'Speichern...' : 'Benachrichtigungseinstellungen speichern'}
+                    </Button>
+                  </Box>
+                </>
+              )}
+
+              {!notificationSettings.enabled && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    Proaktive Benachrichtigungen sind derzeit deaktiviert. Aktivieren Sie die Funktion, um individuelle Benachrichtigungstypen zu konfigurieren.
+                  </Typography>
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -2850,6 +3093,241 @@ const Settings: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setHelpDialogOpen(false)} variant="contained">
+            Schließen
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Hilfe-Dialog für Proaktive Benachrichtigungen */}
+      <Dialog 
+        open={helpDialogNotificationsOpen} 
+        onClose={() => setHelpDialogNotificationsOpen(false)} 
+        maxWidth="md" 
+        fullWidth
+        fullScreen={isMobile}
+        PaperProps={{
+          sx: { 
+            minHeight: { xs: '100%', sm: '600px' },
+            borderRadius: { xs: 0, sm: 3 },
+            boxShadow: { xs: 'none', sm: '0 8px 32px rgba(0,0,0,0.12)' },
+            m: { xs: 0, sm: 2 },
+            height: { xs: '100%', sm: 'auto' },
+            maxHeight: { xs: '100%', sm: '90vh' }
+          }
+        }}
+      >
+        <GradientDialogTitle 
+          title="Hilfe & Leitfaden: Proaktive Benachrichtigungen" 
+          onClose={() => setHelpDialogNotificationsOpen(false)}
+        />
+        <DialogContent sx={{ 
+          p: { xs: 2, sm: 3 },
+          overflowY: 'auto',
+          maxHeight: { xs: 'calc(100vh - 120px)', sm: 'calc(90vh - 120px)' }
+        }}>
+          <Tabs 
+            value={helpTabNotifications} 
+            onChange={(_, v) => setHelpTabNotifications(v)} 
+            sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}
+            variant="scrollable"
+            scrollButtons="auto"
+          >
+            <Tab label="Übersicht" />
+            <Tab label="Benachrichtigungstypen" />
+            <Tab label="Konfiguration" />
+            <Tab label="Best Practices" />
+          </Tabs>
+
+          {helpTabNotifications === 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Proaktive Benachrichtigungen
+                </Typography>
+                <Typography variant="body1" paragraph>
+                  Das System sendet Ihnen automatisch intelligente, proaktive Benachrichtigungen basierend auf 
+                  Patientendaten, Terminen und Aufgaben. Sie können individuell festlegen, welche 
+                  Benachrichtigungen Sie erhalten möchten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Vorteile
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Proaktiv:</strong> Erhalten Sie wichtige Informationen automatisch</li>
+                  <li>✅ <strong>Intelligent:</strong> Benachrichtigungen basieren auf Kontext und Relevanz</li>
+                  <li>✅ <strong>Anpassbar:</strong> Jeder Benutzer kann seine Einstellungen individuell konfigurieren</li>
+                  <li>✅ <strong>Priorisiert:</strong> Wichtige Benachrichtigungen werden hervorgehoben</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabNotifications === 1 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Verfügbare Benachrichtigungstypen
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  📅 Anstehende Termine
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Sie erhalten Benachrichtigungen für Termine in den nächsten 24 Stunden. Die Priorität 
+                  hängt von der verbleibenden Zeit ab (urgent: &lt; 2h, high: &lt; 6h).
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  📊 Fehlende Vitalwerte
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Erinnerungen für Patienten, die seit über einem Jahr keine Vitalwerte mehr haben. 
+                  Hilft dabei, regelmäßige Kontrollen nicht zu vergessen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  🚨 Kritische Laborwerte
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Sofortige Benachrichtigungen (Priorität: urgent) bei kritischen Laborwerten, die 
+                  noch nicht behandelt wurden. Wichtig für die Patientensicherheit.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  ⚠️ Überfällige Aufgaben
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Benachrichtigungen für Aufgaben, die ihr Fälligkeitsdatum überschritten haben. 
+                  Priorität steigt mit der Anzahl der überfälligen Tage.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  💊 Medikamenten-Erinnerungen
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Erinnerungen zur Überprüfung langfristiger Medikationen (seit &gt; 1 Jahr verschrieben). 
+                  Hilft bei der regelmäßigen Medikamenten-Review.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  📅 Nachsorgetermine
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Empfehlungen für Nachsorgetermine bei Patienten mit aktiven Diagnosen, die seit 
+                  über 3 Monaten keinen Termin mehr hatten.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle1" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  📋 Unvollständige Patientendaten
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Hinweise auf fehlende wichtige Patientendaten (E-Mail, Telefon, Geburtsdatum, 
+                  Allergien, Vorerkrankungen). Standardmäßig deaktiviert.
+                </Typography>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabNotifications === 2 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konfiguration
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  So konfigurieren Sie Ihre Benachrichtigungseinstellungen:
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 1: Master-Switch
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Aktivieren oder deaktivieren Sie den Master-Switch "Proaktive Benachrichtigungen aktivieren"</li>
+                  <li>Wenn deaktiviert, erhalten Sie keine proaktiven Benachrichtigungen</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 2: Einzelne Typen konfigurieren
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wenn der Master-Switch aktiviert ist, können Sie einzelne Benachrichtigungstypen aktivieren/deaktivieren</li>
+                  <li>Jeder Typ kann unabhängig gesteuert werden</li>
+                  <li>Änderungen werden sofort gespeichert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Schritt 3: Speichern
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Klicken Sie auf "Benachrichtigungseinstellungen speichern"</li>
+                  <li>Die Einstellungen werden sofort wirksam</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabNotifications === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Best Practices
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Empfohlene Einstellungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Anstehende Termine:</strong> Immer aktiviert (wichtig für Terminplanung)</li>
+                  <li>✅ <strong>Kritische Laborwerte:</strong> Immer aktiviert (Patientensicherheit)</li>
+                  <li>✅ <strong>Überfällige Aufgaben:</strong> Immer aktiviert (Aufgabenmanagement)</li>
+                  <li>⚙️ <strong>Fehlende Vitalwerte:</strong> Nach Bedarf aktivieren</li>
+                  <li>⚙️ <strong>Medikamenten-Erinnerungen:</strong> Nach Bedarf aktivieren</li>
+                  <li>⚙️ <strong>Nachsorgetermine:</strong> Nach Bedarf aktivieren</li>
+                  <li>❌ <strong>Unvollständige Patientendaten:</strong> Standardmäßig deaktiviert (weniger wichtig)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Tipps
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>💡 Passen Sie die Einstellungen an Ihre Arbeitsweise an</li>
+                  <li>💡 Sie können jederzeit Einstellungen ändern</li>
+                  <li>💡 Wichtige Benachrichtigungen (urgent/high) sollten aktiviert bleiben</li>
+                  <li>💡 Weniger wichtige Benachrichtigungen können deaktiviert werden, um Benachrichtigungs-Overload zu vermeiden</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setHelpDialogNotificationsOpen(false)} variant="contained">
             Schließen
           </Button>
         </DialogActions>

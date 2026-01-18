@@ -28,8 +28,16 @@ const wahonlineConfig = {
     }
   },
   
-  // API-Key für Authentifizierung
+  // API-Key für Authentifizierung (nicht für SIT)
   apiKey: process.env.WAHONLINE_API_KEY || null,
+  
+  // SIT-Plattform Credentials (geteilt mit ELDA)
+  sit: {
+    seriennummer: process.env.WAHONLINE_SIT_SERIENNUMMER || process.env.ELDA_SIT_SERIENNUMMER || process.env.ELDA_SERIENNUMMER || null,
+    passwort: process.env.WAHONLINE_SIT_PASSWORT || process.env.ELDA_SIT_PASSWORT || process.env.ELDA_PASSWORT || null,
+    // SIT verwendet ELDA-Webservice statt REST API
+    useELDAWebservice: true
+  },
   
   // Zertifikate für Client-Authentifizierung
   certificates: {
@@ -72,6 +80,7 @@ const wahonlineConfig = {
       environment: env,
       api: this.api[env],
       apiKey: this.apiKey,
+      sit: this.sit,
       certificates: this.certificates,
       chamberNumber: this.chamberNumber,
       doctorNumber: this.doctorNumber,
@@ -111,24 +120,36 @@ const wahonlineConfig = {
       errors.push('WAHonline-API ist für diese Umgebung nicht verfügbar.');
     }
     
-    // Prüfe API-Key
-    if (!config.apiKey) {
-      errors.push('WAHonline API-Key fehlt (WAHONLINE_API_KEY).');
-    }
-    
-    // Prüfe Kammer-Nummer
-    if (!config.chamberNumber) {
-      errors.push('Kammer-Nummer fehlt (WAHONLINE_CHAMBER_NUMBER).');
-    }
-    
-    // Prüfe Arzt-Nummer
-    if (!config.doctorNumber) {
-      errors.push('Arzt-Nummer fehlt (WAHONLINE_DOCTOR_NUMBER).');
+    // SIT-spezifische Validierung
+    if (this.environment === 'sit') {
+      // SIT verwendet ELDA-Webservice, benötigt Seriennummer/Passwort
+      if (!this.sit.seriennummer || !this.sit.passwort) {
+        errors.push('WAHonline-SIT benötigt Seriennummer und Passwort (WAHONLINE_SIT_SERIENNUMMER, WAHONLINE_SIT_PASSWORT oder ELDA_SIT_*).');
+      }
+    } else {
+      // Test/Production: REST API mit API-Key, Kammer- und Arzt-Nummer
+      if (!config.apiKey) {
+        errors.push('WAHonline API-Key fehlt (WAHONLINE_API_KEY).');
+      }
+      
+      if (!config.chamberNumber) {
+        errors.push('Kammer-Nummer fehlt (WAHONLINE_CHAMBER_NUMBER).');
+      }
+      
+      if (!config.doctorNumber) {
+        errors.push('Arzt-Nummer fehlt (WAHONLINE_DOCTOR_NUMBER).');
+      }
     }
     
     // Prüfe Zertifikate (optional, aber empfohlen)
-    if (!this.hasCertificates()) {
+    // Für SIT: Zertifikate nicht erforderlich (verwendet Basic Auth)
+    if (!this.hasCertificates() && this.environment !== 'sit') {
       console.warn('⚠️ WAHonline-Zertifikate fehlen. Client-Authentifizierung wird möglicherweise nicht funktionieren.');
+    } else if (!this.hasCertificates() && this.environment === 'sit') {
+      // Für SIT: Zertifikate nicht erforderlich, nur bei Debug-Level loggen
+      if (process.env.LOG_LEVEL === 'debug') {
+        console.debug('ℹ️ WAHonline-Zertifikate nicht erforderlich für SIT (verwendet Basic Auth)');
+      }
     }
     
     return {

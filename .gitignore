@@ -49,3 +49,9 @@ backups/*.bundle
 # Ignoriere Backup-Dateien
 backend/backups/*.tar.gz
 *.tar.gz
+
+# SIT-Plattform Credentials (sensible Daten)
+docs/SIT_PLATTFORM_CREDENTIALS.md
+
+# SIT-Plattform PDFs (können sensible Informationen enthalten)
+docs/SIT_PLATTFORM_*.pdf

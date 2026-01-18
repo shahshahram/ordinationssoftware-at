@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Paper,
@@ -18,7 +18,7 @@ import {
   Minimize,
   Maximize,
 } from '@mui/icons-material';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import api from '../../utils/api';
 
 interface Message {
@@ -33,25 +33,208 @@ interface ChatbotWidgetProps {
   currentPage?: string;
 }
 
-const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ patientId, currentPage }) => {
+const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ patientId: propPatientId, currentPage }) => {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      text: 'Hallo! Ich bin Ihr KI-Assistent für MyMediCloud MMC. Wie kann ich Ihnen helfen?',
-      sender: 'assistant',
-      timestamp: new Date(),
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [initialMessageLoaded, setInitialMessageLoaded] = useState(false);
+  const suggestionsLoadedRef = useRef(false);
+  const previousPatientIdRef = useRef<string | null>(null);
+
+  const handleSetOpen = useCallback((newOpen: boolean) => {
+    setOpen(newOpen);
+  }, []);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
+  const params = useParams<{ id?: string }>();
+  
+  // Extrahiere patientId aus URL-Parametern oder Props
+  const patientId = useMemo(() => {
+    // Priorität 1: Aus Props
+    if (propPatientId) {
+      return propPatientId;
+    }
+    
+    // Priorität 2: Aus URL-Parametern (z.B. /patient-organizer/:id)
+    if (params.id) {
+      return params.id;
+    }
+    
+    // Priorität 3: Aus URL-Pfad extrahieren
+    // Unterstütze verschiedene Routen: /patient-organizer/:id, /patients/:id, etc.
+    const pathname = location.pathname;
+    
+    // Prüfe /patient-organizer/:id
+    if (pathname.includes('/patient-organizer/')) {
+      const extractedId = pathname.split('/patient-organizer/')[1]?.split('/')[0];
+      if (extractedId) {
+        return extractedId;
+      }
+    }
+    
+    // Prüfe /patients/:id
+    if (pathname.match(/^\/patients\/[a-f0-9]{24}$/i)) {
+      const extractedId = pathname.split('/patients/')[1]?.split('/')[0];
+      if (extractedId) {
+        return extractedId;
+      }
+    }
+    
+    // Priorität 4: Aus Query-Parametern
+    const searchParams = new URLSearchParams(location.search);
+    const queryPatientId = searchParams.get('patientId');
+    if (queryPatientId) {
+      return queryPatientId;
+    }
+    
+    return undefined;
+  }, [propPatientId, params.id, location.pathname, location.search]);
 
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const loadProactiveSuggestions = useCallback(async () => {
+    if (!patientId) {
+      return;
+    }
+
+    // Verhindere mehrfache Aufrufe
+    if (suggestionsLoadedRef.current) {
+      return;
+    }
+
+    suggestionsLoadedRef.current = true;
+    
+    try {
+      const response = await api.get<any>(`/smart-suggestions/patient/${patientId}`);
+      const apiResponse = response.data;
+      const suggestions = apiResponse?.suggestions;
+      
+      if (apiResponse?.success && suggestions && typeof suggestions === 'object' && !Array.isArray(suggestions)) {
+        const totalSuggestions = Object.values(suggestions).reduce((sum: number, arr: any) => {
+          if (Array.isArray(arr)) {
+            return sum + arr.length;
+          }
+          return sum;
+        }, 0);
+        
+        if (totalSuggestions > 0) {
+          // Formatiere Vorschläge für die Anzeige
+          // Zuerst versuche wichtige Vorschläge (urgent/high)
+          let importantSuggestions = [
+            ...(Array.isArray(suggestions.diagnoses) ? suggestions.diagnoses.filter((s: any) => s.priority === 'urgent' || s.priority === 'high') : []),
+            ...(Array.isArray(suggestions.medications) ? suggestions.medications.filter((s: any) => s.priority === 'urgent' || s.priority === 'high') : []),
+            ...(Array.isArray(suggestions.appointments) ? suggestions.appointments.filter((s: any) => s.priority === 'urgent' || s.priority === 'high') : []),
+            ...(Array.isArray(suggestions.laboratory) ? suggestions.laboratory.filter((s: any) => s.priority === 'urgent' || s.priority === 'high') : []),
+            ...(Array.isArray(suggestions.general) ? suggestions.general.filter((s: any) => s.priority === 'urgent' || s.priority === 'high') : []),
+          ];
+
+          // Wenn keine wichtigen Vorschläge, nimm alle Vorschläge
+          if (importantSuggestions.length === 0) {
+            importantSuggestions = [
+              ...(Array.isArray(suggestions.diagnoses) ? suggestions.diagnoses : []),
+              ...(Array.isArray(suggestions.medications) ? suggestions.medications : []),
+              ...(Array.isArray(suggestions.appointments) ? suggestions.appointments : []),
+              ...(Array.isArray(suggestions.laboratory) ? suggestions.laboratory : []),
+              ...(Array.isArray(suggestions.general) ? suggestions.general : []),
+            ];
+          }
+
+          // Sortiere nach Priorität und nehme die ersten 3
+          const sortedSuggestions = importantSuggestions
+            .sort((a: any, b: any) => {
+              const priorityOrder: { [key: string]: number } = { urgent: 3, high: 2, medium: 1, low: 0 };
+              return (priorityOrder[b.priority] || 0) - (priorityOrder[a.priority] || 0);
+            })
+            .slice(0, 3);
+
+          if (sortedSuggestions.length > 0) {
+            let suggestionsText = '💡 Vorschläge für diesen Patienten:\n\n';
+            sortedSuggestions.forEach((suggestion, index: number) => {
+              suggestionsText += `${index + 1}. ${suggestion.title}\n   ${suggestion.description}`;
+              if (suggestion.action) {
+                suggestionsText += `\n   → ${suggestion.action}`;
+              }
+              suggestionsText += '\n\n';
+            });
+
+            const suggestionsMessage: Message = {
+              id: Date.now().toString(),
+              text: suggestionsText.trim(),
+              sender: 'assistant',
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, suggestionsMessage]);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('[ChatbotWidget] loadProactiveSuggestions: Fehler:', error);
+      // Fehler ignorieren, Chatbot funktioniert auch ohne Vorschläge
+      suggestionsLoadedRef.current = false; // Erlaube erneuten Versuch bei Fehler
+    }
+  }, [patientId]);
+
+  // Reset Chatbot when patientId changes
+  useEffect(() => {
+    const currentPatientId = patientId ?? null;
+    const previousPatientId = previousPatientIdRef.current;
+    
+    if (previousPatientId !== null && previousPatientId !== currentPatientId) {
+      // Reset all state when patient changes
+      setMessages([]);
+      setInitialMessageLoaded(false);
+      suggestionsLoadedRef.current = false;
+      
+      // Schließe den Chatbot beim Patient-Wechsel
+      if (open) {
+        setOpen(false);
+      }
+    }
+    
+    // Update previous patientId
+    previousPatientIdRef.current = currentPatientId;
+  }, [patientId, open]);
+
+  // Lade initiale Nachricht mit proaktiven Vorschlägen, wenn ein Patient im Kontext ist
+  useEffect(() => {
+    if (open) {
+      // Wenn Chatbot geöffnet wird und noch keine initiale Nachricht geladen wurde
+      if (!initialMessageLoaded) {
+        // Wenn keine Nachrichten vorhanden sind, lade initiale Nachricht
+        if (messages.length === 0) {
+          const initialMessage: Message = {
+            id: '1',
+            text: 'Hallo! Ich bin Ihr KI-Assistent für MyMediCloud MMC. Wie kann ich Ihnen helfen?',
+            sender: 'assistant',
+            timestamp: new Date(),
+          };
+          setMessages([initialMessage]);
+        }
+        
+        setInitialMessageLoaded(true);
+      }
+
+      // Lade proaktive Vorschläge, wenn ein Patient im Kontext ist und noch nicht geladen
+      if (patientId && !suggestionsLoadedRef.current) {
+        // Warte kurz, damit die initiale Nachricht zuerst angezeigt wird
+        setTimeout(() => {
+          loadProactiveSuggestions();
+        }, 300);
+      }
+    } else {
+      // Chatbot wurde geschlossen
+      if (initialMessageLoaded) {
+        setInitialMessageLoaded(false);
+        suggestionsLoadedRef.current = false; // Reset für nächsten Öffnen
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, patientId, initialMessageLoaded, messages.length]);
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -142,6 +325,7 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ patientId, currentPage })
     }
   };
 
+
   return (
     <>
       {/* Floating Action Button */}
@@ -149,12 +333,23 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ patientId, currentPage })
         <Fab
           color="primary"
           aria-label="Chatbot"
-          onClick={() => setOpen(true)}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            handleSetOpen(true);
+          }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+          }}
           sx={{
             position: 'fixed',
             bottom: 80,
-            right: 16,
-            zIndex: 1000,
+            right: 80,
+            zIndex: 10000,
+            pointerEvents: 'auto',
           }}
         >
           <ChatIcon />
@@ -164,6 +359,7 @@ const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ patientId, currentPage })
       {/* Chat Window */}
       <Slide direction="up" in={open} mountOnEnter unmountOnExit>
         <Paper
+          data-chatbot-window="true"
           sx={{
             position: 'fixed',
             bottom: minimized ? 16 : 80,

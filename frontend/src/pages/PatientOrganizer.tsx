@@ -63,8 +63,6 @@ import {
   QrCode,
   PregnantWoman,
   Schedule,
-  AccessTime,
-  CheckCircle,
   Info,
   Cancel,
   CameraAlt,
@@ -76,10 +74,8 @@ import {
   BugReport,
   CloudDownload as CloudDownloadIcon,
   Search,
-  FilterList,
   Block,
   History,
-  ArrowBack,
   List as ListIcon,
   HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
@@ -87,7 +83,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, updatePatient, Patient } from '../store/slices/patientSlice';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
-import { differenceInWeeks, addWeeks, parseISO, format, formatDistanceToNow } from 'date-fns';
+import { differenceInWeeks, addWeeks, parseISO, format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
@@ -125,10 +121,10 @@ import { fetchDekursEntries } from '../store/slices/dekursSlice';
 import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
 import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, MonitorHeart, Receipt, Article } from '@mui/icons-material';
 import api from '../utils/api';
-import { Specialization } from '../types/ambulanzbefund';
 import PerformanceForm from '../components/PerformanceForm';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import SmartSuggestionsPanel from '../components/SmartSuggestions/SmartSuggestionsPanel';
 
 // TabPanel Komponente
 interface TabPanelProps {
@@ -164,7 +160,6 @@ const PatientOrganizer: React.FC = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { marginTopValue } = useGlobalNavigationOffset();
   const { patients, loading: patientsLoading } = useAppSelector((s: any) => s.patients);
   const { appointments, loading: appointmentsLoading } = useAppSelector((s: any) => s.appointments);
@@ -336,7 +331,8 @@ const PatientOrganizer: React.FC = () => {
     'dokumente': 7,
     'termine': 8,
     'fotos': 9,
-    'stammdaten': 10, // Wird als Button angezeigt, nicht als Tab (TabPanel index 10)
+    'vorschläge': 10, // Intelligente Vorschläge Tab
+    'stammdaten': 11, // Wird als Button angezeigt, nicht als Tab (TabPanel index 11)
     // Legacy-Mappings für Kompatibilität
     'laborwerte': 5, // Legacy - wird zu 'labor'
     'vitalparameter': 4 // Legacy - wird zu 'vitalwerte'
@@ -743,7 +739,8 @@ const PatientOrganizer: React.FC = () => {
       const foundPatient = all.find(p => (p._id || p.id) === patientId);
       if (!foundPatient) {
         // Patient nicht gefunden, lade Patienten neu (möglicherweise ist er auf einer anderen Seite)
-              dispatch(fetchPatients(1));
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        dispatch(fetchPatients(1));
       }
     }
   }, [dispatch, patients, patientId]);
@@ -1264,7 +1261,7 @@ const PatientOrganizer: React.FC = () => {
         throw new Error('Patient ID nicht gefunden');
       }
 
-      const updatedPatient = await dispatch(updatePatient({ id: patientId, patientData: editData })).unwrap();
+      await dispatch(updatePatient({ id: patientId, patientData: editData })).unwrap();
       
       setSnackbar({
         open: true,
@@ -1294,7 +1291,7 @@ const PatientOrganizer: React.FC = () => {
         throw new Error('Patient ID nicht gefunden');
       }
 
-      const updatedPatient = await dispatch(updatePatient({ id: patientId, patientData: { isTemporary: false } })).unwrap();
+      await dispatch(updatePatient({ id: patientId, patientData: { isTemporary: false } })).unwrap();
       
       setSnackbar({
         open: true,
@@ -1413,6 +1410,7 @@ const PatientOrganizer: React.FC = () => {
   };
 
   // Handler für Hinweis-Toggle
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleToggleHint = async () => {
     if (!patient) return;
     
@@ -2065,6 +2063,7 @@ const PatientOrganizer: React.FC = () => {
     }
   }, [medicalData.height, medicalData.weight]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const patientAppointments = React.useMemo(() => {
     const apps = appointments?.data || appointments || [];
     return (apps as Appointment[]).filter(a => {
@@ -2080,6 +2079,7 @@ const PatientOrganizer: React.FC = () => {
   }, [appointments, patientId]);
 
   // Trenne Ambulanzbefunde nach Status
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const inArbeitAmbulanzbefunde = React.useMemo(() => {
     return ambulanzbefunde.filter((amb: any) => 
       amb.status === 'draft' || amb.status === 'validated'
@@ -2179,6 +2179,7 @@ const PatientOrganizer: React.FC = () => {
       .slice(0, 8);
   }, [documents, patientId, xdsDocuments, freigegebeneAmbulanzbefunde, locations, isOwnOrganizationDocument]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const patientDx = React.useMemo(() => {
     const dx = patientDiagnoses?.data || patientDiagnoses || [];
     // WICHTIG: Filtere nach patientId, um nur Diagnosen des aktuellen Patienten anzuzeigen
@@ -2189,9 +2190,11 @@ const PatientOrganizer: React.FC = () => {
     return filtered.slice().sort((a,b)=>new Date(b.createdAt).getTime()-new Date(a.createdAt).getTime()).slice(0,8);
   }, [patientDiagnoses, patientId]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const isLoading = patientsLoading || appointmentsLoading || diagnosesLoading || documentsLoading;
 
   // Handler für Template-Menü
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleTemplateMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setTemplateMenuAnchor(event.currentTarget);
   };
@@ -2224,6 +2227,7 @@ const PatientOrganizer: React.FC = () => {
   };
 
   // Handler für manuellen Export eines Ambulanzbefunds
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleExportAmbulanzbefund = async (ambefundId: string, event?: React.MouseEvent) => {
     if (event) {
       event.stopPropagation(); // Verhindere dass der ListItemButton auch ausgelöst wird
@@ -2264,6 +2268,7 @@ const PatientOrganizer: React.FC = () => {
           // Aktualisiere auch XDS Dokumente
           if (locations && locations.length > 0) {
             const location = locations.find((loc: Location) => {
+              // eslint-disable-next-line @typescript-eslint/no-unused-vars
               const locId = loc._id?.toString() || (loc as any).id?.toString();
               // Finde die Location des exportierten Dokuments
               return true; // Lade für alle Locations
@@ -2378,6 +2383,7 @@ const PatientOrganizer: React.FC = () => {
   };
 
   // Handler für Patienten-/Arztbrief erstellen
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleCreateLetter = () => {
     if (!patient) return;
     setLetterDialogOpen(true);
@@ -2577,30 +2583,32 @@ const PatientOrganizer: React.FC = () => {
   };
 
   return (
-    <Box sx={{ 
-      position: 'relative', 
-      minHeight: '100vh',
-      contain: 'layout style paint',
-      willChange: 'auto',
-      transform: 'translateZ(0)',
-      overflowX: 'hidden',
-      mt: marginTopValue !== '0px' ? marginTopValue : 0,
-      transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
-    }}>
-      {/* Floating Action Button für Timeline Vollbild */}
+    <>
+      {/* Floating Action Button für Timeline Vollbild - außerhalb des Box-Containers für korrekte fixed-Positionierung */}
       <Fab
         color="primary"
         aria-label="Timeline Vollbild"
         sx={{
           position: 'fixed',
-          bottom: 16,
-          right: 16,
-          zIndex: 1000
+          bottom: 80,
+          left: 16,
+          zIndex: 9999
         }}
         onClick={() => setTimelineFullscreen(true)}
       >
         <Timeline />
       </Fab>
+      
+      <Box sx={{ 
+        position: 'relative', 
+        minHeight: '100vh',
+        contain: 'layout style paint',
+        willChange: 'auto',
+        transform: 'translateZ(0)',
+        overflowX: 'hidden',
+        mt: marginTopValue !== '0px' ? marginTopValue : 0,
+        transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
+      }}>
 
       {/* Patient Sidebar */}
       <PatientSidebar
@@ -3338,8 +3346,8 @@ const PatientOrganizer: React.FC = () => {
               size="small"
               startIcon={<AccountCircle />}
               onClick={() => {
-                setActiveTab(10);
-                handleTabNavigation(10, true);
+                setActiveTab(11);
+                handleTabNavigation(11, true);
               }}
               disabled={!patient}
               sx={{
@@ -3566,7 +3574,7 @@ const PatientOrganizer: React.FC = () => {
                 countNewEntries.photos > 0 ? (
                   <Badge badgeContent={countNewEntries.photos} color="error" sx={{ '& .MuiBadge-badge': { right: -8, top: 8 } }}>
                     Fotos
-                </Badge>
+                  </Badge>
                 ) : (
                   'Fotos'
                 )
@@ -3574,6 +3582,7 @@ const PatientOrganizer: React.FC = () => {
               icon={<PhotoCamera />} 
               iconPosition="start"
             />
+            <Tab label="Vorschläge" icon={<HelpOutlineIcon />} iconPosition="start" />
           </Tabs>
         </Paper>
 
@@ -4186,7 +4195,7 @@ const PatientOrganizer: React.FC = () => {
 
 
 
-        <TabPanel value={activeTab} index={10}>
+        <TabPanel value={activeTab} index={11}>
           {/* Stammdaten Tab - wird über Button aufgerufen */}
           <ErrorBoundary>
             {patient ? (
@@ -4419,6 +4428,26 @@ const PatientOrganizer: React.FC = () => {
             </Alert>
               </Paper>
           )}
+          </ErrorBoundary>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={10}>
+          {/* Intelligente Vorschläge Tab */}
+          <ErrorBoundary>
+            {patientId ? (
+              <SmartSuggestionsPanel 
+                patientId={patientId}
+                onSuggestionClick={(suggestion) => {
+                  console.log('Suggestion clicked:', suggestion);
+                }}
+              />
+            ) : (
+              <Paper sx={{ p: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Kein Patient ausgewählt
+                </Typography>
+              </Paper>
+            )}
           </ErrorBoundary>
         </TabPanel>
       </Box>
@@ -7145,7 +7174,8 @@ const PatientOrganizer: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+      </Box>
+    </>
   );
 };
 
