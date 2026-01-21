@@ -1,8 +1,23 @@
-# ELDA-Support Anfrage: SIT-Plattform ECONNRESET Problem
+# ELDA-Support Anfrage: SIT-Plattform "unbekannter Fehler" Problem
 
 ## Problembeschreibung
 
-Bei Verbindungsversuchen zur SIT-Plattform (`https://online-itu5test.elda.at/elda-online/servlet/WebTrans`) wird der Fehler `ECONNRESET` (Connection Reset) zurückgegeben.
+Bei Verbindungsversuchen zur SIT-Plattform (`https://online-itu5test.elda.at/elda-online/servlet/WebTrans`) antwortet der Server mit Status 200, aber die HTML-Antwort enthält die Fehlermeldung "unbekannter Fehler".
+
+**Status-Update**: 
+- ✅ Die Verbindung funktioniert (kein ECONNRESET mehr)
+- ✅ Die Authentifizierung funktioniert
+- ✅ Das XML-Format ist korrekt strukturiert (basierend auf WAH_14_Test_Input.xml)
+- ✅ Attribut-Reihenfolge im Root-Element korrigiert (entspricht exakt dem Beispiel)
+- ✅ `datenZahlungsempfaenger` ist als Pflichtfeld implementiert
+- ✅ `X-Dataset-Type` Header getestet (sowohl "WA" als auch "HO")
+- ❌ Der Server antwortet weiterhin mit "unbekannter Fehler" ohne weitere Details
+
+**Durchgeführte Korrekturen**:
+1. `datenZahlungsempfaenger` als Pflichtfeld hinzugefügt (war im Beispiel-XML immer vorhanden)
+2. Attribut-Reihenfolge im Root-Element korrigiert: `akz`, `xsi:schemaLocation`, `xmlns:n1`, `xmlns:xsi`
+3. `versicherungsnummerZahlungsempfaenger` wird immer ausgegeben (auch wenn leer)
+4. `X-Dataset-Type` Header getestet mit "WA" und "HO"
 
 ## Technische Details
 
@@ -16,12 +31,19 @@ Bei Verbindungsversuchen zur SIT-Plattform (`https://online-itu5test.elda.at/eld
 
 ### Fehlermeldung
 ```
-ECONNRESET: read ECONNRESET
-Verbindung wurde vom Server zurückgesetzt
+ELDA-Server-Fehler: unbekannter Fehler
+Status: 200 OK
+Response-Type: HTML
+Response-Body: <HTML><TITLE>ELDA Internet Informationssystem</TITLE><BODY><FONT FACE="Arial" size="4"><CENTER><P>&nbsp;<P>&nbsp;<P>unbekannter Fehler</CENTER></FONT></BODY></HTML>
 URL: https://online-itu5test.elda.at/elda-online/servlet/WebTrans
-Timeout: 60000ms
 Umgebung: sit
 ```
+
+**Bedeutung**: 
+- ✅ Verbindung funktioniert
+- ✅ Authentifizierung funktioniert
+- ✅ Server verarbeitet die Anfrage
+- ❌ XML-Format oder Daten werden nicht akzeptiert
 
 ### Request-Details
 - **HTTP-Methode**: POST
@@ -30,33 +52,73 @@ Umgebung: sit
 - **Header**: `X-Dataset-Type: Abrechnung`
 - **Timeout**: 60 Sekunden
 
-### XML-Format
-Das System generiert XML im folgenden Format:
+### XML-Format (WAHonline Honorarnotenmeldung)
+Das System generiert XML im folgenden Format (basierend auf WAH_14_Test_Input.xml):
+
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<ELDADataset xmlns="http://www.elda.at/schema/Abrechnung" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <Datensatztyp>Abrechnung</Datensatztyp>
-  <Version>1.0</Version>
-  <Seriennummer>ABR-[timestamp]-[random]</Seriennummer>
-  <Erstellungsdatum>[ISO-Datum]</Erstellungsdatum>
-  <Patient>
-    <Sozialversicherungsnummer>1133280290</Sozialversicherungsnummer>
-    <Vorname>Scarlett</Vorname>
-    <Nachname>ASWH-VS-MRSA-Erwachsene-B</Nachname>
-    <Geburtsdatum>1990-02-28</Geburtsdatum>
-    ...
-  </Patient>
-  <Arzt>
-    <Steuernummer>ATU12345678</Steuernummer>
-    <Kammernummer>14</Kammernummer>
-    ...
-  </Arzt>
-  <Leistungen>
-    ...
-  </Leistungen>
-  ...
-</ELDADataset>
+<n1:honorarnotenMeldung akz="a" xsi:schemaLocation="http://at.sozvers.stp.elda.wa WA_V7.xsd" xmlns:n1="http://at.sozvers.stp.elda.wa" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<patientenDaten>
+		<adresseDesPatienten>
+			<postleitzahl>4020</postleitzahl>
+			<strasseHausnummer>Duftschmidgasse 18</strasseHausnummer>
+			<ort>Linz</ort>
+		</adresseDesPatienten>
+		<leistungsDaten>
+			<datumLeistungserbringungVon>2026-01-21</datumLeistungserbringungVon>
+			<datumLeistungserbringungBis>2026-01-21</datumLeistungserbringungBis>
+			<bruttoBetragProPosition>35</bruttoBetragProPosition>
+			<leistungsart>111</leistungsart>
+			<positionsnummer>1010</positionsnummer>
+			<positionsnummerAnzahl>1</positionsnummerAnzahl>
+		</leistungsDaten>
+		<datenZahlungsempfaenger>
+			<internationalBankAccountNumber>AT999900000000999999</internationalBankAccountNumber>
+			<versicherungsnummerZahlungsempfaenger>1133280290</versicherungsnummerZahlungsempfaenger>
+		</datenZahlungsempfaenger>
+		<patientDaten>
+			<leistungsbestaetigungAnforderung>false</leistungsbestaetigungAnforderung>
+			<rechnungsbetragBezahlt>true</rechnungsbetragBezahlt>
+			<versicherungsnummerVersicherter>1133280290</versicherungsnummerVersicherter>
+			<versicherungsnummerPatienten>1133280290</versicherungsnummerPatienten>
+			<rechnungsbetrag>35</rechnungsbetrag>
+			<familiennamePatienten>ASWH-VS-MRSA-Erwachsene-B</familiennamePatienten>
+			<rechnungsnummer>2026/12345</rechnungsnummer>
+			<vornamePatienten>Scarlett</vornamePatienten>
+			<datumRechnung>2026-01-21</datumRechnung>
+		</patientDaten>
+	</patientenDaten>
+	<infoDaten>
+		<identifikationsSatz>
+			<bundeslandAbrechnungsstelle>4</bundeslandAbrechnungsstelle>
+			<listkennzeichen>HO</listkennzeichen>
+			<projektkennzeichen>WA</projektkennzeichen>
+			<zustaendigeAbrechnungsstelle>14</zustaendigeAbrechnungsstelle>
+			<versionDatenbestand>7</versionDatenbestand>
+			<referenznummer>800062/202612345</referenznummer>
+		</identifikationsSatz>
+		<vertragspartnerDaten>
+			<datumBehandlung>2026-01-21</datumBehandlung>
+			<datumUebermittlung>2026-01-21T14:40:29</datumUebermittlung>
+			<fachgebietLeistungserbringerBehandler>01</fachgebietLeistungserbringerBehandler>
+			<familiennameBehandler>Arzt</familiennameBehandler>
+			<vertragspartnernummerBehandler>100014</vertragspartnernummerBehandler>
+			<vornameBehandler>Test</vornameBehandler>
+			<ordiAdresseDesVertragspartners>
+				<postleitzahl>4020</postleitzahl>
+				<strasseHausnummer>Teststraße 1</strasseHausnummer>
+				<ort>Linz</ort>
+			</ordiAdresseDesVertragspartners>
+		</vertragspartnerDaten>
+	</infoDaten>
+</n1:honorarnotenMeldung>
 ```
+
+**Wichtig**: 
+- Root-Element: `<n1:honorarnotenMeldung>` (nicht `<ELDADataset>`)
+- Namespace: `http://at.sozvers.stp.elda.wa` (nicht `http://www.elda.at/schema/Abrechnung`)
+- Schema Location: `WA_V7.xsd`
+- Format basiert auf WAH_14_Test_Input.xml von ELDA
 
 ## Durchgeführte Maßnahmen
 
@@ -89,11 +151,27 @@ Das System generiert XML im folgenden Format:
 
 **Hintergrund**: Die Dokumentation erwähnt Basic Auth mit Seriennummer/Passwort, aber der Server setzt die Verbindung sofort zurück (`ECONNRESET`), was darauf hindeuten könnte, dass ein Client-Zertifikat erforderlich ist.
 
-### 2. XML-Format
-**Frage**: Ist das XML-Format korrekt, oder wird ein SOAP-Envelope erwartet?
+### 2. XML-Format (WICHTIG - Hauptproblem)
+**Status**: Das XML-Format wurde basierend auf WAH_14_Test_Input.xml korrigiert.
 
-**Aktuelles Format**: Direktes XML mit `<ELDADataset>` Root-Element
-**Frage**: Sollte es stattdessen ein SOAP-Envelope sein?
+**Aktuelles Format**: 
+- Root-Element: `<n1:honorarnotenMeldung>`
+- Namespace: `http://at.sozvers.stp.elda.wa`
+- Schema Location: `WA_V7.xsd`
+- Struktur entspricht dem Beispiel-XML
+
+**Problem**: Der Server antwortet weiterhin mit "unbekannter Fehler" ohne weitere Details.
+
+**Fragen**:
+1. Ist das XML-Format jetzt korrekt, oder gibt es noch Abweichungen?
+2. Welche Felder sind wirklich Pflichtfelder? (z.B. `datenZahlungsempfaenger`, `diagnosen`)
+3. Gibt es Validierungsregeln, die nicht erfüllt werden?
+4. Können Sie eine detailliertere Fehlermeldung bereitstellen?
+
+**Bitte bereitstellen**:
+- XML-Schema-Definition (XSD) für WAHonline Honorarnotenmeldungen (WA_V7.xsd)
+- Liste aller Pflichtfelder und Validierungsregeln
+- Detaillierte Fehlermeldungen (falls möglich)
 
 ### 3. Request-Header
 **Frage**: Gibt es spezifische Header, die gesendet werden müssen?
@@ -124,20 +202,25 @@ Das System generiert XML im folgenden Format:
 ## Test-Ergebnisse
 
 ### Test 1: Einfacher GET-Request (ohne Auth)
-- **Ergebnis**: ❌ ECONNRESET
-- **Bedeutung**: Server schließt Verbindung sofort
+- **Ergebnis**: ❌ ECONNRESET (veraltet)
+- **Status**: Problem behoben
 
 ### Test 2: GET-Request mit Basic Auth
-- **Ergebnis**: ❌ ECONNRESET
-- **Bedeutung**: Authentifizierung allein reicht nicht
+- **Ergebnis**: ❌ ECONNRESET (veraltet)
+- **Status**: Problem behoben
 
 ### Test 3: POST-Request mit minimalem XML
-- **Ergebnis**: ❌ ECONNRESET
-- **Bedeutung**: Auch einfaches XML wird nicht akzeptiert
+- **Ergebnis**: ❌ ECONNRESET (veraltet)
+- **Status**: Problem behoben
 
-### Test 4: POST-Request mit ELDA-Format XML
-- **Ergebnis**: ❌ ECONNRESET
-- **Bedeutung**: Vollständiges ELDA-Format wird nicht akzeptiert
+### Test 4: POST-Request mit WAHonline-Format XML
+- **Ergebnis**: ⚠️ Status 200, aber "unbekannter Fehler" in HTML-Antwort
+- **Bedeutung**: Verbindung funktioniert, Authentifizierung funktioniert, XML wird verarbeitet, aber Validierung schlägt fehl
+- **Aktueller Status**: 
+  - ✅ Verbindung funktioniert
+  - ✅ Authentifizierung funktioniert
+  - ✅ XML-Format korrekt strukturiert (basierend auf WAH_14_Test_Input.xml)
+  - ❌ Server-Validierung schlägt fehl (keine Details verfügbar)
 
 ## System-Informationen
 

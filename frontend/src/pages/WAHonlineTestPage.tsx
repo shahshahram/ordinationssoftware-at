@@ -107,19 +107,49 @@ const WAHonlineTestPage: React.FC = () => {
         serviceDescription: 'Ordinationskonsultation',
         serviceDatetime: new Date().toISOString(),
         totalPrice: 35.00,
+        unitPrice: 35.00,
+        quantity: 1,
         tariffType: 'wahl',
+        invoiceNumber: '2026/12345', // Rechnungsnummer
+        positionNumber: '1010', // Positionsnummer
+        paid: true, // Rechnungsbetrag bezahlt
+        confirmationRequired: false, // Leistungsbestätigung nicht erforderlich
       },
       patient: {
-        socialSecurityNumber: '1234567890',
-        firstName: 'Max',
-        lastName: 'Mustermann',
-        dateOfBirth: '1980-01-01',
+        socialSecurityNumber: '1133280290', // Scarlett ASWH-VS-MRSA-Erwachsene-B
+        firstName: 'Scarlett',
+        lastName: 'ASWH-VS-MRSA-Erwachsene-B',
+        dateOfBirth: '1990-02-28',
+        gender: 'weiblich',
+        address: {
+          street: 'Duftschmidgasse',
+          houseNumber: '18',
+          postalCode: '4020',
+          city: 'Linz',
+          country: 'Österreich'
+        },
+        // Bankdaten für datenZahlungsempfaenger (PFLICHT für WAHonline)
+        bankAccount: {
+          iban: 'AT999900000000999999', // Beispiel-IBAN (optional, aber empfohlen)
+          socialSecurityNumber: '1133280290' // SV-Nummer des Zahlungsempfängers (meist = Patient)
+        }
       },
       doctor: {
         profile: {
-          chamberNumber: '12345',
+          chamberNumber: '14', // Oberösterreich
           taxNumber: 'ATU12345678',
+          specialization: 'Allgemeinmedizin',
+          address: {
+            street: 'Teststraße',
+            houseNumber: '1',
+            postalCode: '4020',
+            city: 'Linz',
+            country: 'Österreich'
+          }
         },
+        name: 'Test Arzt',
+        firstName: 'Test',
+        lastName: 'Arzt',
       },
     }, null, 2),
   });

@@ -258,92 +258,35 @@ class WAHonlineConnector {
     }
     
     try {
-      // Konvertiere WAHonline-Payload zu ELDA-Abrechnungs-Format
-      let eldaPayload = payload;
+      let xmlContent;
       
       if (autoFormat) {
-        // Extrahiere Daten aus Payload (kann performance/patient/doctor oder bereits formatiert sein)
-        const performance = payload.performance || payload;
-        const patient = payload.patient || {};
-        const doctor = payload.doctor || {};
+        // Setze Konfiguration für Format-Generator (für Seriennummer)
+        wahonlineFormatGenerator.setConfig(this.config);
         
-        // Konvertiere direkt zu ELDA-Abrechnungs-Format (ohne WAHonline-Format-Zwischenschritt)
-        eldaPayload = {
-          patient: {
-            socialSecurityNumber: patient.socialSecurityNumber || '',
-            firstName: patient.firstName || patient.first_name || '',
-            lastName: patient.lastName || patient.last_name || '',
-            dateOfBirth: patient.dateOfBirth || patient.date_of_birth,
-            insuranceNumber: patient.insuranceNumber || patient.insurance_number || '',
-            insuranceProvider: patient.insuranceProvider || patient.insurance_provider || 'ÖGK',
-            address: patient.address || {}
-          },
-          doctor: {
-            taxNumber: doctor.profile?.taxNumber || doctor.taxNumber || doctor.tax_number || 'ATU12345678', // Fallback für Tests
-            chamberNumber: doctor.profile?.chamberNumber || doctor.chamberNumber || doctor.chamber_number || '12345', // Fallback für Tests
-            name: doctor.name || `${doctor.firstName || doctor.first_name || ''} ${doctor.lastName || doctor.last_name || ''}`.trim() || 'Test Arzt',
-            title: doctor.profile?.title || doctor.title || '',
-            specialization: doctor.profile?.specialization || doctor.specialization || '',
-            address: doctor.profile?.address || doctor.address || {
-              street: '',
-              postalCode: '',
-              city: '',
-              country: 'Österreich'
-            }
-          },
-          services: [{
-            date: performance.serviceDatetime || performance.service_datetime || performance.date || new Date(),
-            code: performance.serviceCode || performance.service_code || performance.code || '',
-            ebmCode: performance.serviceCode || performance.service_code || performance.code || '',
-            description: performance.serviceDescription || performance.service_description || performance.description || '',
-            quantity: performance.quantity || 1,
-            unitPrice: performance.unitPrice || performance.unit_price || performance.totalPrice || performance.total_price || 0,
-            totalPrice: performance.totalPrice || performance.total_price || 0,
-            copay: performance.copay || 0
-          }],
-          period: {
-            startDate: performance.serviceDatetime ? new Date(performance.serviceDatetime) : new Date(),
-            endDate: performance.serviceDatetime ? new Date(performance.serviceDatetime) : new Date(),
-            year: new Date().getFullYear(),
-            month: new Date().getMonth() + 1
-          },
-          totals: {
-            totalAmount: performance.totalPrice || performance.total_price || 0,
-            totalCopay: performance.copay || 0,
-            insuranceAmount: (performance.totalPrice || performance.total_price || 0) - (performance.copay || 0)
-          },
-          // WAHonline-spezifische Metadaten
-          wahonlineMetadata: {
-            idempotencyKey,
-            meldungstyp: 'Wahlarzt-Leistung',
-            tariftyp: 'wahlarzt'
-          }
-        };
+        // Generiere WAHonline-Datensatz im korrekten Format
+        const wahonlineDataset = wahonlineFormatGenerator.generateMeldung(payload);
         
-        // Validiere, dass mindestens die wichtigsten Felder vorhanden sind
-        if (!eldaPayload.patient.socialSecurityNumber) {
-          throw new Error('Patient SV-Nummer fehlt');
-        }
-        if (!eldaPayload.services[0]?.code) {
-          throw new Error('Leistungscode fehlt');
-        }
-        if (!eldaPayload.services[0]?.totalPrice || eldaPayload.services[0].totalPrice === 0) {
-          throw new Error('Leistungspreis fehlt oder ist 0');
-        }
-        if (!eldaPayload.doctor.taxNumber) {
-          console.warn('⚠️ Arzt Steuernummer fehlt - verwende Fallback');
-        }
-        if (!eldaPayload.doctor.chamberNumber) {
-          console.warn('⚠️ Arzt Kammernummer fehlt - verwende Fallback');
+        // Generiere XML aus Datensatz
+        xmlContent = wahonlineFormatGenerator.generateXML(wahonlineDataset);
+        
+        // Log für Debugging (immer, nicht nur bei debug)
+        console.warn('[WAHonline SIT] Generiertes XML (erste 3000 Zeichen):');
+        console.warn(xmlContent.substring(0, 3000));
+        if (xmlContent.length > 3000) {
+          console.warn('[WAHonline SIT] ... (weitere ' + (xmlContent.length - 3000) + ' Zeichen)');
         }
         
-        // Log für Debugging
         if (process.env.LOG_LEVEL === 'debug') {
-          console.debug('[WAHonline SIT] Konvertierter ELDA-Payload:', JSON.stringify(eldaPayload, null, 2).substring(0, 1000));
+          console.debug('[WAHonline SIT] Vollständiges XML:');
+          console.debug(xmlContent);
         }
+      } else {
+        // Wenn autoFormat = false, erwarte dass payload bereits XML ist
+        xmlContent = typeof payload === 'string' ? payload : JSON.stringify(payload);
       }
       
-      // Verwende ELDA-Connector für Webservice-Übertragung
+      // Sende XML direkt an ELDA-Webservice (nicht über ELDA-Connector!)
       // Temporär ELDA-Config auf SIT setzen
       const originalEnv = process.env.ELDA_ENVIRONMENT;
       const originalSeriennummer = process.env.ELDA_SIT_SERIENNUMMER;
@@ -354,28 +297,23 @@ class WAHonlineConnector {
       process.env.ELDA_SIT_PASSWORT = this.config.sit.passwort;
       
       try {
-        // WICHTIG: Erstelle neuen ELDA-Connector mit aktualisierter Konfiguration
-        // Der alte Connector verwendet möglicherweise noch die alte Konfiguration
-        const ELDAConnector = require('./eldaConnector');
-        // Da eldaConnector ein Singleton ist, müssen wir sicherstellen, dass die Config neu geladen wird
-        // Alternativ: Erstelle eine neue Instanz
+        // Verwende ELDA-Connector für Webservice-Übertragung, aber sende XML direkt
         const eldaConfig = require('../../config/elda.config');
-        // Force reload der Config
         const currentConfig = eldaConfig.getActiveConfig();
         
-        // Sende via ELDA-Webservice
-        // WICHTIG: autoFormat = true, damit ELDA-Format-Generator das Format korrekt generiert
-        const eldaResult = await eldaConnector.send(
-          eldaPayload,
-          'Abrechnung', // Datensatztyp
-          'webservice', // Methode
-          true // autoFormat = true, damit ELDA-Format-Generator verwendet wird
+        // Sende XML direkt via ELDA-Webservice
+        // WICHTIG: X-Dataset-Type sollte "WA" (projektkennzeichen) oder "HO" (listkennzeichen) sein
+        // Teste beide Varianten: Zuerst "WA", dann "HO" falls nötig
+        // Aktuell: "WA" (entspricht projektkennzeichen im XML)
+        const eldaResult = await eldaConnector.sendViaWebservice(
+          xmlContent, // XML-String direkt senden
+          'WA' // Dataset-Type für Header (entspricht projektkennzeichen im XML)
         );
         
         return {
           success: true,
           message: 'WAHonline-Meldung erfolgreich via ELDA-Webservice (SIT) übermittelt',
-          wahonlineRef: eldaResult.data?.referenceNumber || idempotencyKey,
+          wahonlineRef: idempotencyKey,
           status: 'submitted',
           submittedAt: new Date().toISOString(),
           method: 'elda-webservice',

@@ -238,10 +238,16 @@ class ELDAConnector {
     }
     
     try {
-      // Konvertiere Payload zu XML
+      // Konvertiere Payload zu XML (oder verwende direkt, wenn bereits XML)
       let xmlContent;
       try {
-        xmlContent = this.convertToXML(payload, datasetType);
+        // Prüfe ob Payload bereits XML-String ist
+        if (typeof payload === 'string' && payload.trim().startsWith('<?xml')) {
+          xmlContent = payload;
+        } else {
+          // Konvertiere Objekt zu XML
+          xmlContent = this.convertToXML(payload, datasetType);
+        }
         
         // Validiere XML-Content
         if (!xmlContent || xmlContent.trim().length === 0) {
@@ -254,7 +260,11 @@ class ELDAConnector {
         }
       } catch (xmlError) {
         console.error('[ELDA] XML-Generierung fehlgeschlagen:', xmlError.message);
-        console.error('[ELDA] Payload:', JSON.stringify(payload, null, 2).substring(0, 1000));
+        if (typeof payload === 'string') {
+          console.error('[ELDA] Payload (erste 500 Zeichen):', payload.substring(0, 500));
+        } else {
+          console.error('[ELDA] Payload:', JSON.stringify(payload, null, 2).substring(0, 1000));
+        }
         throw new Error(`XML-Generierung fehlgeschlagen: ${xmlError.message}`);
       }
       
@@ -312,12 +322,86 @@ class ELDAConnector {
         requestConfig
       );
       
+      // Prüfe ob die Antwort HTML ist (Fehlermeldung)
+      const responseData = response.data;
+      let isError = false;
+      let errorMessage = null;
+      let errorDetails = null;
+      
+      if (typeof responseData === 'string' && responseData.includes('<HTML>')) {
+        // HTML-Antwort bedeutet meistens einen Fehler
+        isError = true;
+        
+        // Extrahiere Fehlermeldung aus HTML (verschiedene Patterns)
+        let errorMatch = responseData.match(/<CENTER><P>&nbsp;<P>&nbsp;<P>(.*?)<\/CENTER>/i);
+        if (!errorMatch) {
+          errorMatch = responseData.match(/<FONT[^>]*>(.*?)<\/FONT>/i);
+        }
+        if (!errorMatch) {
+          errorMatch = responseData.match(/<BODY[^>]*>(.*?)<\/BODY>/is);
+        }
+        
+        if (errorMatch && errorMatch[1]) {
+          errorMessage = errorMatch[1]
+            .replace(/<[^>]+>/g, '') // Entferne HTML-Tags
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .trim();
+        }
+        
+        // Suche nach spezifischen Fehlermeldungen
+        if (!errorMessage || errorMessage === 'unbekannter Fehler') {
+          const specificErrors = [
+            /(?:Fehlercode|Error Code|Fehler-Code)[:\s]*(\d+)/i,
+            /(?:Fehlermeldung|Error Message)[:\s]*(.+?)(?:<|$)/i,
+            /(?:Beschreibung|Description)[:\s]*(.+?)(?:<|$)/i
+          ];
+          
+          for (const pattern of specificErrors) {
+            const match = responseData.match(pattern);
+            if (match && match[1]) {
+              errorDetails = match[1].trim();
+              break;
+            }
+          }
+        }
+        
+        // Log für Debugging (immer, nicht nur bei debug)
+        console.warn('[ELDA] ⚠️ Server antwortet mit HTML-Fehlermeldung');
+        console.warn('[ELDA] Extrahiert:', errorMessage || 'Keine Fehlermeldung gefunden');
+        if (errorDetails) {
+          console.warn('[ELDA] Details:', errorDetails);
+        }
+        
+        // Immer das XML loggen, wenn ein Fehler auftritt (für Diagnose)
+        console.warn('[ELDA] Gesendetes XML (erste 2000 Zeichen):');
+        console.warn(xmlContent.substring(0, 2000));
+        
+        // Logge vollständige HTML-Antwort für bessere Diagnose
+        console.warn('[ELDA] Vollständige HTML-Antwort vom Server:');
+        console.warn(responseData);
+        
+        if (process.env.LOG_LEVEL === 'debug') {
+          console.debug('[ELDA] Vollständiges XML:', xmlContent);
+        }
+      }
+      
+      if (isError) {
+        const fullErrorMessage = errorMessage 
+          ? `ELDA-Server-Fehler: ${errorMessage}${errorDetails ? ` (${errorDetails})` : ''}`
+          : 'ELDA-Server-Fehler: Unbekannter Fehler (HTML-Antwort erhalten)';
+        throw new Error(fullErrorMessage);
+      }
+      
       return {
         success: true,
         method: 'webservice',
         environment: this.config.environment,
         status: response.status,
-        data: response.data,
+        data: responseData,
         message: 'Daten erfolgreich via Webservice übertragen',
         timestamp: new Date().toISOString()
       };
