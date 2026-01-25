@@ -46,7 +46,15 @@ const TariffSchema = new mongoose.Schema({
     khoPrice: { type: Number, min: 0 }, // Preis in Euro (neues Feld)
     price: { type: Number, min: 0 }, // Preis in Cent (Legacy-Feld)
     points: { type: Number, min: 0 }, // Verrechnungseinheiten (Punkte)
+    pointValue: { type: Number, min: 0 }, // Punktwert in Euro (z.B. 0.53 für OÖ, 0.49 für Wien)
+    calculatedFromPoints: { type: Boolean, default: false }, // true = Preis wurde aus Punkten berechnet
     category: { type: String, trim: true }, // Kategorie
+    billingGroup: { 
+      type: String, 
+      trim: true,
+      enum: ['Ordination', 'Untersuchung', 'Behandlung', 'Sonderleistung', 'Grundleistung', 'Therapie', null],
+      default: null
+    }, // Abrechnungsgruppe (für RefundRate-Logik)
     requiresApproval: { type: Boolean, default: false },
     billingFrequency: { 
       type: String, 
@@ -57,12 +65,13 @@ const TariffSchema = new mongoose.Schema({
     limitation: {
       maxPerQuarter: { type: Number, min: 0 }, // Maximale Anzahl pro Quartal (z.B. 1)
       maxPerPatient: { type: Number, min: 0 }, // Maximale Anzahl pro Patient (z.B. 1)
+      maxPercentage: { type: Number, min: 0, max: 100 }, // NEU: Maximale Prozentzahl (z.B. 15 für 15% der Fälle)
       period: { 
         type: String, 
         enum: ['day', 'week', 'month', 'quarter', 'year'], 
         default: 'quarter' 
       }, // Zeitraum für Limitierung
-      description: { type: String, trim: true } // Beschreibung der Limitierung (z.B. "1 / Q")
+      description: { type: String, trim: true } // Beschreibung der Limitierung (z.B. "1 / Q" oder "max. 15%")
     },
     
     // Legacy-Feld für Backward Compatibility
@@ -161,7 +170,7 @@ TariffSchema.index({ 'goae.section': 1, 'goae.number': 1 });
 TariffSchema.index({ 'kho.khoCode': 1, 'kho.insuranceProvider': 1, 'kho.federalState': 1 });
 TariffSchema.index({ 'kho.ebmCode': 1 }); // Legacy-Index für Backward Compatibility
 
-// Pre-Hook: Migriere alte Felder
+// Pre-Hook: Migriere alte Felder und berechne Punktwert-Preise
 TariffSchema.pre('save', function(next) {
   if (this.kho) {
     // Migriere ebmCode zu khoCode (Backward Compatibility)
@@ -172,6 +181,12 @@ TariffSchema.pre('save', function(next) {
     if (this.kho.price !== undefined && this.kho.price !== null && (this.kho.khoPrice === undefined || this.kho.khoPrice === null)) {
       // Wenn price > 1000, ist es wahrscheinlich in Cent, sonst in Euro
       this.kho.khoPrice = this.kho.price > 1000 ? this.kho.price / 100 : this.kho.price;
+    }
+    
+    // Berechne khoPrice aus Punkten und Punktwert (wenn beide vorhanden)
+    if (this.kho.points && this.kho.pointValue && (!this.kho.khoPrice || this.kho.calculatedFromPoints)) {
+      this.kho.khoPrice = this.kho.points * this.kho.pointValue;
+      this.kho.calculatedFromPoints = true;
     }
   }
   next();

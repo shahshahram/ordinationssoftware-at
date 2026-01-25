@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const checkPermission = require('../middleware/checkPermission');
 const Tariff = require('../models/Tariff');
 const { body, validationResult } = require('express-validator');
 
@@ -260,6 +261,78 @@ router.delete('/:id', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Löschen des Tarifs',
+      error: error.message
+    });
+  }
+});
+
+// DELETE /api/tariffs/kho/clear - Alle KHO/ET/EBM-Tarife löschen (für neuen Import)
+// Unterstützt sowohl Query-Parameter als auch Body für Bestätigung
+router.delete('/kho/clear', auth, checkPermission('settings.write'), async (req, res) => {
+  try {
+    // Prüfe Bestätigung aus Query-Parameter oder Body
+    const confirm = req.query.confirm || req.body?.confirm;
+    
+    if (confirm !== 'DELETE_ALL_KHO_TARIFFS') {
+      return res.status(400).json({
+        success: false,
+        message: 'Bestätigung erforderlich. Bitte geben Sie "DELETE_ALL_KHO_TARIFFS" als Query-Parameter oder im Body ein.',
+        errors: [{ msg: 'Bestätigung erforderlich' }]
+      });
+    }
+
+    // Zähle zuerst, wie viele Tarife gelöscht werden
+    const countBefore = await Tariff.countDocuments({
+      tariffType: { $in: ['kho', 'et', 'ebm'] }
+    });
+
+    if (countBefore === 0) {
+      return res.json({
+        success: true,
+        message: 'Keine KHO-Tarife zum Löschen gefunden',
+        deleted: 0
+      });
+    }
+
+    // Lösche alle KHO/ET/EBM-Tarife (nicht GOÄ!)
+    const result = await Tariff.deleteMany({
+      tariffType: { $in: ['kho', 'et', 'ebm'] }
+    });
+
+    console.log(`[Tariffs] ${result.deletedCount} KHO-Tarife gelöscht von Benutzer ${req.user._id}`);
+
+    res.json({
+      success: true,
+      message: `${result.deletedCount} KHO-Tarife erfolgreich gelöscht`,
+      deleted: result.deletedCount,
+      countBefore: countBefore
+    });
+  } catch (error) {
+    console.error('Error clearing KHO tariffs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Löschen der KHO-Tarife',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/tariffs/kho/count - Anzahl der KHO-Tarife abrufen
+router.get('/kho/count', auth, async (req, res) => {
+  try {
+    const count = await Tariff.countDocuments({
+      tariffType: { $in: ['kho', 'et', 'ebm'] }
+    });
+
+    res.json({
+      success: true,
+      count: count
+    });
+  } catch (error) {
+    console.error('Error counting KHO tariffs:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Zählen der KHO-Tarife',
       error: error.message
     });
   }

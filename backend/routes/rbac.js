@@ -5,6 +5,12 @@ const RolePermission = require('../models/RolePermission');
 const { ROLES, ACTIONS, RESOURCES, authorize, clearPermissionCache } = require('../utils/rbac');
 const { rbacMiddleware } = require('../middleware/rbac');
 const auth = require('../middleware/auth');
+const { 
+  validateRolePermissions, 
+  validateCustomPermissions,
+  validatePermissionStrings,
+  normalizePermissionStrings
+} = require('../utils/permissionValidator');
 
 /**
  * RBAC Management API
@@ -119,18 +125,14 @@ router.put('/roles/:role/permissions', auth, rbacMiddleware.requireAdmin, async 
       });
     }
 
-    // Validiere Permissions-Format
-    const validPermissions = {};
-    for (const [resource, actions] of Object.entries(permissions)) {
-      if (Array.isArray(actions)) {
-        // Validiere Actions
-        const validActions = actions.filter(action => 
-          Object.values(ACTIONS).includes(action) || action === '*'
-        );
-        if (validActions.length > 0) {
-          validPermissions[resource] = validActions;
-        }
-      }
+    // Validiere Permissions-Format mit Validator
+    const validationResult = validateRolePermissions(permissions);
+    if (!validationResult.valid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültige Permissions',
+        errors: validationResult.errors
+      });
     }
 
     // Speichere angepasste Permissions
@@ -521,8 +523,20 @@ router.post('/users/:userId/permissions', auth, rbacMiddleware.requireAdmin, asy
       parsedActions = permission;
     }
 
-    // Validiere Actions
-    const validActions = parsedActions.filter(action => Object.values(ACTIONS).includes(action));
+    // Validiere Resource und Actions
+    const { validateResourceAction } = require('../utils/permissionValidator');
+    const resourceValidation = validateResourceAction(parsedResource, parsedActions[0]);
+    if (!resourceValidation.valid) {
+      return res.status(400).json({
+        success: false,
+        message: resourceValidation.error
+      });
+    }
+
+    // Validiere alle Actions
+    const validActions = parsedActions.filter(action => 
+      Object.values(ACTIONS).includes(action) || action === '*'
+    );
     if (validActions.length === 0) {
       return res.status(400).json({
         success: false,
@@ -686,23 +700,28 @@ router.post('/users/:userId/custom-permissions', auth, rbacMiddleware.requireAdm
       });
     }
 
-    // Validiere Actions
-    const validActions = actions.filter(action => Object.values(ACTIONS).includes(action));
-    if (validActions.length === 0) {
+    // Validiere Custom Permissions mit Validator
+    const customPermission = {
+      resource,
+      resourceId,
+      actions: Array.isArray(actions) ? actions : [actions],
+      conditions: conditions || {},
+      expiresAt: expiresAt ? new Date(expiresAt) : null
+    };
+
+    const validationResult = validateCustomPermissions([customPermission]);
+    if (!validationResult.valid) {
       return res.status(400).json({
         success: false,
-        message: 'Keine gültigen Actions angegeben'
+        message: 'Ungültige Custom Permission',
+        errors: validationResult.errors
       });
     }
 
     // Füge Custom Permission hinzu
     user.rbac.customPermissions.push({
-      resource,
-      resourceId,
-      actions: validActions,
-      conditions: conditions || {},
-      grantedBy: req.user.id,
-      expiresAt: expiresAt ? new Date(expiresAt) : null
+      ...customPermission,
+      grantedBy: req.user.id
     });
 
     // Logge Änderung

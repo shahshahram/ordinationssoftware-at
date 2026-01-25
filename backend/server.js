@@ -45,6 +45,7 @@ const workShiftRoutes = require('./routes/workShifts');
 const absenceRoutes = require('./routes/absences');
 const availabilityRoutes = require('./routes/availability');
 const serviceCatalogRoutes = require('./routes/serviceCatalog');
+const serviceCodeMappingRoutes = require('./routes/serviceCodeMapping');
 const serviceBookingRoutes = require('./routes/serviceBookings');
 const serviceCategoryRoutes = require('./routes/serviceCategories');
 const weeklyScheduleRoutes = require('./routes/weeklySchedules');
@@ -165,7 +166,8 @@ app.use(cors({
     : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://192.168.178.163:3000'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token']
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'Accept', 'X-Requested-With'],
+  exposedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Body parsing middleware
@@ -319,6 +321,7 @@ function registerStaticRoutes(app) {
   app.use('/api/absences', absenceRoutes);
   app.use('/api/availability', availabilityRoutes);
   app.use('/api/service-catalog', serviceCatalogRoutes);
+  app.use('/api/service-code-mapping', serviceCodeMappingRoutes);
   app.use('/api/service-bookings', serviceBookingRoutes);
   app.use('/api/service-categories', serviceCategoryRoutes);
   app.use('/api/update-monitoring', require('./routes/updateMonitoring'));

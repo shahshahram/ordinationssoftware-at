@@ -154,6 +154,7 @@ const LocationManagement: React.FC = () => {
     postal_code: '',
     city: '',
     state: '',
+    federalState: null as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null | undefined,
     timezone: 'Europe/Vienna',
     phone: '',
     email: '',
@@ -350,6 +351,7 @@ const LocationManagement: React.FC = () => {
         postal_code: location.postal_code,
         city: location.city,
         state: location.state || '',
+        federalState: (location as any).federalState || null,
         timezone: location.timezone,
         phone: location.phone || '',
         email: location.email || '',
@@ -438,6 +440,7 @@ const LocationManagement: React.FC = () => {
         postal_code: '',
         city: '',
         state: '',
+        federalState: null,
         timezone: 'Europe/Vienna',
         phone: '',
         email: '',
@@ -505,15 +508,21 @@ const LocationManagement: React.FC = () => {
 
   const handleLocationSubmit = async () => {
     try {
+      // Konvertiere leere Strings zu null für federalState
+      const locationDataToSend = {
+        ...locationForm,
+        federalState: locationForm.federalState || null
+      };
+      
       if (editingLocation) {
         // Debug: Zeige was gesendet wird
-        console.log('[Location Update] Sending data:', JSON.stringify(locationForm, null, 2));
-        await dispatch(updateLocation({ id: editingLocation._id, locationData: locationForm })).unwrap();
+        console.log('[Location Update] Sending data:', JSON.stringify(locationDataToSend, null, 2));
+        await dispatch(updateLocation({ id: editingLocation._id, locationData: locationDataToSend })).unwrap();
         // Lade Standorte neu, um aktualisierte Daten zu erhalten
         await dispatch(fetchLocations());
         // currentLocation wird automatisch im Redux-Slice aktualisiert, wenn es die aktuelle Location ist
       } else {
-        await dispatch(createLocation(locationForm)).unwrap();
+        await dispatch(createLocation(locationDataToSend)).unwrap();
       }
       handleLocationDialogClose();
     } catch (error) {
@@ -1835,10 +1844,37 @@ const LocationManagement: React.FC = () => {
               />
               <TextField
                 fullWidth
-                label="Bundesland"
+                label="Bundesland (Text)"
                 value={locationForm.state}
                 onChange={(e) => setLocationForm({ ...locationForm, state: e.target.value })}
+                helperText="Freies Textfeld für Bundesland"
               />
+              <FormControl fullWidth>
+                <InputLabel>Bundesland (für Abrechnung)</InputLabel>
+                <Select
+                  value={locationForm.federalState ?? ''}
+                  onChange={(e) => {
+                    const value = String(e.target.value);
+                    const federalStateValue: 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null = value === '' ? null : (value as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien');
+                    setLocationForm({ 
+                      ...locationForm, 
+                      federalState: federalStateValue
+                    });
+                  }}
+                  label="Bundesland (für Abrechnung)"
+                >
+                  <MenuItem value="">Keine Auswahl</MenuItem>
+                  <MenuItem value="burgenland">Burgenland</MenuItem>
+                  <MenuItem value="kaernten">Kärnten</MenuItem>
+                  <MenuItem value="niederoesterreich">Niederösterreich</MenuItem>
+                  <MenuItem value="oberoesterreich">Oberösterreich</MenuItem>
+                  <MenuItem value="salzburg">Salzburg</MenuItem>
+                  <MenuItem value="steiermark">Steiermark</MenuItem>
+                  <MenuItem value="tirol">Tirol</MenuItem>
+                  <MenuItem value="vorarlberg">Vorarlberg</MenuItem>
+                  <MenuItem value="wien">Wien</MenuItem>
+                </Select>
+              </FormControl>
             </Box>
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField

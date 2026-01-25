@@ -5,7 +5,33 @@ const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
 const csv = require('csv-parser');
+const { Transform, PassThrough } = require('stream');
 const Tariff = require('../models/Tariff');
+
+/**
+ * Punktwerte nach Bundesland (in Euro)
+ * Diese Werte werden für die Berechnung von khoPrice aus Punkten verwendet
+ */
+const POINT_VALUES_BY_STATE = {
+  'oberoesterreich': 0.53,  // OÖ
+  'wien': 0.49,              // Wien (ca. Wert, anpassen falls bekannt)
+  'niederoesterreich': 0.52, // NÖ (ca. Wert, anpassen falls bekannt)
+  'steiermark': 0.51,        // Steiermark (ca. Wert, anpassen falls bekannt)
+  'tirol': 0.50,             // Tirol (ca. Wert, anpassen falls bekannt)
+  'salzburg': 0.50,          // Salzburg (ca. Wert, anpassen falls bekannt)
+  'kaernten': 0.50,          // Kärnten (ca. Wert, anpassen falls bekannt)
+  'vorarlberg': 0.50,        // Vorarlberg (ca. Wert, anpassen falls bekannt)
+  'burgenland': 0.50         // Burgenland (ca. Wert, anpassen falls bekannt)
+};
+
+/**
+ * Ermittelt Punktwert für ein Bundesland
+ */
+function getPointValueForState(federalState) {
+  if (!federalState) return null;
+  const stateKey = federalState.toLowerCase();
+  return POINT_VALUES_BY_STATE[stateKey] || null;
+}
 
 class TariffImporter {
   /**
@@ -58,59 +84,323 @@ class TariffImporter {
 
   /**
    * Importiert KHO/ET-Tarife aus CSV
-   * Format: code,name,khoCode|ebmCode,price,category,requiresApproval,billingFrequency,specialty,insuranceProvider,federalState
+   * Format: pos_nr|code,name,khoCode|ebmCode,price|points,pointValue,category,billingGroup,requiresApproval,billingFrequency,specialty,insuranceProvider,federalState
+   * NEU: Unterstützt pos_nr → serviceCode Mapping und Punktwert-Berechnung nach Bundesland
    */
   async importKHOFromCSV(filePath, userId) {
     const tariffs = [];
+    let lineNumber = 0;
     
     return new Promise((resolve, reject) => {
-      const stream = fs.createReadStream(filePath)
-        .pipe(csv())
+      // Lese komplette Datei und bereinige sie
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      const allLines = fileContent.split(/\r?\n/);
+      
+      // Entferne leere Zeilen und Zeilen mit nur Trennzeichen
+      const cleanedLines = allLines.filter(line => {
+        const trimmed = line.trim();
+        return trimmed !== '' && !trimmed.match(/^[;,\s]+$/);
+      });
+      
+      if (cleanedLines.length === 0) {
+        reject(new Error('CSV-Datei ist leer oder enthält nur leere Zeilen'));
+        return;
+      }
+      
+      // Finde erste nicht-leere Zeile für Trennzeichen-Erkennung
+      const firstDataLine = cleanedLines[0] || '';
+      const hasComma = firstDataLine.includes(',');
+      const separator = hasComma ? ',' : ';';
+      
+      console.log(`[KHO Import] Erkanntes Trennzeichen: ${separator === ',' ? 'Komma (neues Format)' : 'Semikolon (altes Format)'}`);
+      
+      // Erste bereinigte Zeile ist Header
+      const headerLine = cleanedLines[0];
+      const headers = headerLine.split(separator).map(h => h.trim()).filter(h => h);
+      console.log(`[KHO Import] Header erkannt: ${headers.join(', ')}`);
+      
+      // Erstelle bereinigte Datei im Speicher
+      const cleanedContent = cleanedLines.join('\n');
+      const tempFilePath = filePath + '.cleaned';
+      fs.writeFileSync(tempFilePath, cleanedContent, 'utf8');
+      
+      const stream = fs.createReadStream(tempFilePath, { encoding: 'utf8' })
+        .pipe(csv({
+          separator: separator,
+          skipEmptyLines: true,
+          skipLinesWithError: true,
+          headers: headers // Explizite Header
+        }))
         .on('data', (row) => {
+          lineNumber++;
           try {
-            const khoCode = row.khoCode || row.ebmCode || row.code; // Unterstützt beide Felder
+            // Überspringe Header-Zeile (prüfe verschiedene mögliche Header-Namen)
+            const posNr = (row.pos_nr || row.POS_NR || row['pos_nr'] || '').toString().trim();
+            const nameValue = (row.name || row.NAME || row['name'] || '').toString().trim();
+            const pointsValue = (row.points || row.POINTS || row['points'] || '').toString().trim();
+            const pointValueValue = (row.pointValue || row.POINT_VALUE || row['pointValue'] || '').toString().trim();
+            const federalStateValue = (row.federalState || row.FEDERAL_STATE || row['federalState'] || '').toString().trim();
+            const billingGroupValue = (row.billingGroup || row.BILLING_GROUP || row['billingGroup'] || '').toString().trim();
             
-            if (!khoCode && !row.code) {
-              console.warn('[KHO Import] Zeile ohne Code übersprungen:', row);
-              return; // Überspringe Zeilen ohne Code
+            // Prüfe ob es die Header-Zeile ist (enthält Header-Namen als Werte)
+            // Prüfe auch case-insensitive
+            const isHeader = 
+              posNr.toLowerCase() === 'pos_nr' || 
+              nameValue.toLowerCase() === 'name' || 
+              pointsValue.toLowerCase() === 'points' || 
+              pointValueValue.toLowerCase() === 'pointvalue' || 
+              federalStateValue.toLowerCase() === 'federalstate' || 
+              billingGroupValue.toLowerCase() === 'billinggroup' ||
+              posNr === 'pos_nr' || nameValue === 'name' || pointsValue === 'points' || 
+              pointValueValue === 'pointValue' || federalStateValue === 'federalState' || 
+              billingGroupValue === 'billingGroup';
+            
+            if (isHeader) {
+              console.log(`[KHO Import] Header-Zeile übersprungen: ${posNr || nameValue}`);
+              return;
+            }
+            
+            // NEU: pos_nr → serviceCode Mapping (unterstützt verschiedene Schreibweisen)
+            let serviceCode = (row.pos_nr || row.POS_NR || row['pos_nr'] || row.code || row.CODE || posNr || '').trim();
+            
+            // Überspringe leere Zeilen
+            if (!serviceCode || serviceCode.trim() === '') {
+              return;
+            }
+            
+            // Prüfe ob serviceCode binäre Daten enthält (Encoding-Problem)
+            if (serviceCode && typeof serviceCode === 'string') {
+              // Entferne nicht-druckbare Zeichen am Anfang
+              serviceCode = serviceCode.replace(/^[\x00-\x1F\x7F-\x9F]+/, '').trim();
+              
+              // Prüfe ob es noch binäre Daten enthält
+              if (serviceCode.length > 0 && /[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/.test(serviceCode)) {
+                console.warn('[KHO Import] Zeile mit binären Daten übersprungen (Encoding-Problem):', serviceCode.substring(0, 50));
+                return;
+              }
+            }
+            
+            // Überspringe leere oder ungültige Zeilen
+            if (!serviceCode || serviceCode.trim() === '') {
+              return;
+            }
+            
+            const khoCode = row.khoCode || row.ebmCode || serviceCode;
+            
+            // Name/Bezeichnung (unterstützt verschiedene Schreibweisen)
+            const name = (row.name || row.NAME || row['name'] || row.bezeichnung || row.BEZEICHNUNG || row.description || 'Unbenannt').trim();
+            
+            // Bundesland ermitteln (neues Format hat explizites federalState)
+            // WICHTIG: Setze für alle auf 'oberoesterreich' (OOE)
+            let federalState = row.federalState || row.FEDERAL_STATE || row['federalState'] || row.state || null;
+            if (federalState && typeof federalState === 'string') {
+              const federalStateUpper = federalState.toUpperCase();
+              if (federalStateUpper === 'OOE' || federalStateUpper === 'OÖ' || federalStateUpper === 'OEOE' || 
+                  federalStateUpper === 'OBEROESTERREICH' || federalStateUpper === 'OBERÖSTERREICH') {
+                federalState = 'oberoesterreich';
+              } else {
+                federalState = federalState.toLowerCase().replace('ö', 'oe').replace('ä', 'ae').replace('ü', 'ue');
+              }
+            }
+            // WICHTIG: Setze für alle auf 'oberoesterreich' (wie angefordert)
+            const federalStateNormalized = 'oberoesterreich';
+            
+            // Punktwert ermitteln (neues Format hat explizites pointValue)
+            // WICHTIG: pointValue muss aus CSV gelesen werden, nicht aus Bundesland berechnet
+            let pointValue = null;
+            let pointValueRaw = row.pointValue || row.POINT_VALUE || row['pointValue'] || row.pointvalue || row.PointValue;
+            
+            // Debug für erste paar Zeilen
+            if (lineNumber <= 3) {
+              console.log(`[KHO Import] Zeile ${lineNumber}: ${serviceCode} - row.pointValue = '${pointValueRaw}' (${typeof pointValueRaw})`);
+            }
+            
+            // Entferne Leerzeichen und prüfe ob es "pointValue" (Header) ist
+            if (pointValueRaw !== undefined && pointValueRaw !== null) {
+              if (typeof pointValueRaw === 'string') {
+                pointValueRaw = pointValueRaw.trim();
+                // Prüfe ob es der Header-Name ist
+                if (pointValueRaw.toLowerCase() === 'pointvalue' || pointValueRaw === 'pointValue' || pointValueRaw === 'POINT_VALUE') {
+                  pointValueRaw = null; // Header-Zeile
+                }
+              }
+              
+              // Prüfe ob es eine gültige Zahl ist
+              if (pointValueRaw !== null && pointValueRaw !== '' && !isNaN(pointValueRaw)) {
+                pointValue = parseFloat(pointValueRaw);
+                // Validiere dass es eine gültige Zahl ist
+                if (isNaN(pointValue) || pointValue <= 0) {
+                  console.warn(`[KHO Import] Ungültiger pointValue für ${serviceCode}: ${pointValueRaw}, verwende Default`);
+                  pointValue = 0.53; // Fallback
+                } else {
+                  // Debug für erste paar Zeilen
+                  if (lineNumber <= 3) {
+                    console.log(`[KHO Import] Zeile ${lineNumber}: ${serviceCode} - pointValue erfolgreich gelesen: ${pointValue}`);
+                  }
+                }
+              } else {
+                // Wenn pointValue leer oder ungültig, verwende Default
+                pointValue = 0.53; // Fallback
+                if (lineNumber <= 5) {
+                  console.warn(`[KHO Import] Zeile ${lineNumber}: pointValue leer/ungültig für ${serviceCode} (raw: '${pointValueRaw}'), verwende 0.53`);
+                }
+              }
+            } else {
+              // Wenn pointValue nicht vorhanden, verwende Default
+              pointValue = 0.53; // Fallback
+              if (lineNumber <= 5) {
+                console.warn(`[KHO Import] Zeile ${lineNumber}: pointValue nicht vorhanden für ${serviceCode}, verwende 0.53`);
+              }
+            }
+            
+            // Points und Preis ermitteln (neues Format hat explizites points)
+            let points = null;
+            let khoPrice = null;
+            let calculatedFromPoints = false;
+            
+            // Points ermitteln (unterstützt verschiedene Schreibweisen)
+            const pointsRaw = row.points || row.POINTS || row['points'] || row.Points || null;
+            if (pointsRaw !== undefined && pointsRaw !== null && pointsRaw !== '' && !isNaN(pointsRaw)) {
+              const pointsValue = parseFloat(pointsRaw);
+              
+              // WICHTIG: basePrice (khoPrice) muss IMMER exakt points * pointValue sein
+              // Auch wenn pointValue = 1, verwenden wir die Formel für Konsistenz
+              if (pointValue !== null && pointValue > 0 && !isNaN(pointValue)) {
+                points = pointsValue;
+                // Exakte Berechnung: khoPrice = points * pointValue
+                khoPrice = Math.round((points * pointValue) * 100) / 100; // Auf 2 Dezimalstellen gerundet
+                calculatedFromPoints = true;
+                
+                // Debug-Log für erste paar Zeilen
+                if (lineNumber <= 5) {
+                  console.log(`[KHO Import] Zeile ${lineNumber}: ${serviceCode} - points=${points}, pointValue=${pointValue}, khoPrice=${khoPrice}`);
+                }
+              } else {
+                // Fallback: Wenn pointValue fehlt oder ungültig, verwende points als direkten Preis
+                khoPrice = pointsValue;
+                points = null;
+                calculatedFromPoints = false;
+                console.warn(`[KHO Import] pointValue ungültig für ${serviceCode}, verwende points als direkten Preis`);
+              }
+            }
+            
+            // Fallback: Altes Format (wert + einheit)
+            if (!khoPrice && row.wert) {
+              const wertNum = parseFloat(row.wert);
+              const einheit = (row.einheit || '').toUpperCase();
+              
+              if (einheit === 'EUR' || einheit === 'EURO' || einheit === '€') {
+                khoPrice = wertNum;
+              } else if (einheit === 'PUNKTE' || einheit === 'PUNKT' || !einheit) {
+                points = wertNum;
+                khoPrice = points * pointValue;
+                calculatedFromPoints = true;
+              }
+            }
+            
+            // Falls Preis explizit vorhanden (höchste Priorität)
+            if (row.price || row.khoPrice) {
+              khoPrice = parseFloat(row.price || row.khoPrice);
+              calculatedFromPoints = false;
+            }
+            
+            // billingGroup ermitteln (neues Format hat explizites billingGroup)
+            const billingGroup = (row.billingGroup || row.BILLING_GROUP || row['billingGroup'] || row.billing_group || row.BILLING_GROUP || null);
+            
+            // Kategorie (kann aus billingGroup abgeleitet werden)
+            const category = row.category || row.kategorie || row.KATEGORIE || billingGroup || '';
+            
+            // Fachgebiet (normalisieren)
+            const specialtyRaw = (row.specialty || row.fachgebiet || row.FACHGEBIET || 'allgemein').toLowerCase();
+            const specialtyMap = {
+              'allgemein': 'allgemein',
+              'fachärzte': 'allgemein',
+              'fachaerzte': 'allgemein',
+              'fachärzt': 'allgemein',
+              'fachaerzt': 'allgemein'
+            };
+            const specialty = specialtyMap[specialtyRaw] || 'allgemein';
+            
+            // Limitierung
+            const limitation = row.limitierung || row.LIMITIERUNG || row.limitation || '';
+            
+            // Validiere serviceCode nochmal (muss alphanumerisch sein, keine binären Daten)
+            const cleanServiceCode = serviceCode.trim();
+            if (!cleanServiceCode || cleanServiceCode.length === 0 || /[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/.test(cleanServiceCode)) {
+              console.warn('[KHO Import] Ungültiger serviceCode übersprungen:', cleanServiceCode.substring(0, 50));
+              return;
             }
             
             tariffs.push({
-              code: row.code || khoCode,
-              name: row.name || 'Unbenannt',
-              description: row.description || '',
-              tariffType: row.tariffType || 'kho',
+              code: cleanServiceCode,
+              name: (name || 'Unbenannt').trim(),
+              description: (row.description || row.DESCRIPTION || limitation || '').trim(),
+              tariffType: 'kho',
               kho: {
-                khoCode: khoCode, // Neues korrektes Feld
-                ebmCode: row.ebmCode || khoCode, // Legacy-Feld für Backward Compatibility
-                price: Math.round(parseFloat(row.price || row.khoPrice || 0) * 100), // In Cent, unterstützt beide Felder
-                category: row.category || '',
+                khoCode: khoCode.trim(),
+                ebmCode: (row.ebmCode || khoCode).trim(), // Legacy
+                khoPrice: khoPrice || 0, // Preis in Euro
+                price: khoPrice ? Math.round(khoPrice * 100) : null, // Legacy: In Cent
+                points: points,
+                pointValue: pointValue, // OÖ Punktwert (0.53)
+                calculatedFromPoints: calculatedFromPoints,
+                category: category.trim(),
+                billingGroup: billingGroup ? billingGroup.trim() : null,
                 requiresApproval: row.requiresApproval === 'true' || row.requiresApproval === true,
                 billingFrequency: row.billingFrequency || 'once',
-                insuranceProvider: row.insuranceProvider || 'all', // 'oegk', 'bvaeb', 'svs', etc.
-                federalState: row.federalState || null // Optional: Bundesland
+                insuranceProvider: 'oegk', // Explizit OEGK für österreichische CSV
+                federalState: federalStateNormalized // OÖ (oberoesterreich)
               },
-              specialty: row.specialty || 'allgemein',
+              specialty: specialty,
               validFrom: row.validFrom ? new Date(row.validFrom) : new Date(),
               validUntil: row.validUntil ? new Date(row.validUntil) : null,
               isActive: row.isActive !== 'false',
               createdBy: userId
             });
           } catch (rowError) {
-            console.error('[KHO Import] Fehler beim Verarbeiten einer Zeile:', rowError, row);
+            console.error(`[KHO Import] Fehler beim Verarbeiten von Zeile ${lineNumber}:`, rowError.message);
+            console.error('[KHO Import] Zeile:', JSON.stringify(row).substring(0, 200));
             // Überspringe fehlerhafte Zeilen, aber fahre fort
           }
         })
         .on('end', async () => {
           try {
-            console.log(`[KHO Import] ${tariffs.length} Tarife aus CSV gelesen`);
+            // Lösche temporäre bereinigte Datei
+            try {
+              if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+              }
+            } catch (unlinkError) {
+              console.warn('[KHO Import] Konnte temporäre Datei nicht löschen:', unlinkError.message);
+            }
+            
+            console.log(`[KHO Import] ${tariffs.length} Tarife aus CSV gelesen (${lineNumber} Zeilen verarbeitet)`);
             
             if (tariffs.length === 0) {
               reject(new Error('Keine Tarife in der CSV-Datei gefunden. Bitte prüfen Sie das Datei-Format.'));
               return;
             }
             
-            const results = await this.saveTariffs(tariffs);
+            // Validiere alle Tarife vor dem Speichern
+            const validTariffs = tariffs.filter(t => {
+              // Prüfe ob code gültig ist (keine binären Daten)
+              if (!t.code || typeof t.code !== 'string' || /[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F-\x9F]/.test(t.code)) {
+                console.warn(`[KHO Import] Tarif mit ungültigem Code übersprungen: ${t.code ? t.code.substring(0, 50) : 'null'}`);
+                return false;
+              }
+              return true;
+            });
+            
+            if (validTariffs.length < tariffs.length) {
+              console.warn(`[KHO Import] ${tariffs.length - validTariffs.length} Tarife mit ungültigen Daten wurden gefiltert`);
+            }
+            
+            if (validTariffs.length === 0) {
+              reject(new Error('Keine gültigen Tarife in der CSV-Datei gefunden. Möglicherweise Encoding-Problem.'));
+              return;
+            }
+            
+            const results = await this.saveTariffs(validTariffs);
             console.log(`[KHO Import] Speicherung abgeschlossen: ${results.created} erstellt, ${results.updated} aktualisiert, ${results.errors.length} Fehler`);
             
             resolve({
@@ -120,6 +410,14 @@ class TariffImporter {
               errors: results.errors
             });
           } catch (error) {
+            // Lösche temporäre bereinigte Datei auch bei Fehler
+            try {
+              if (fs.existsSync(tempFilePath)) {
+                fs.unlinkSync(tempFilePath);
+              }
+            } catch (unlinkError) {
+              // Ignoriere Fehler beim Löschen
+            }
             console.error('[KHO Import] Fehler beim Speichern der Tarife:', error);
             reject(error);
           }
@@ -132,19 +430,69 @@ class TariffImporter {
   }
 
   /**
-   * Importiert Tarife aus JSON
+   * Importiert Tarife aus JSON (tarife.json Format)
+   * Unterstützt das neue strukturierte Format mit serviceCode, billingGroup, pointValue, etc.
    */
   async importFromJSON(filePath, userId) {
     try {
       const data = await fsPromises.readFile(filePath, 'utf8');
       const tariffs = JSON.parse(data);
       
-      const formattedTariffs = tariffs.map(tariff => ({
-        ...tariff,
-        createdBy: userId,
-        validFrom: tariff.validFrom ? new Date(tariff.validFrom) : new Date(),
-        validUntil: tariff.validUntil ? new Date(tariff.validUntil) : null
-      }));
+      // Prüfe ob es das neue tarife.json Format ist (Array mit serviceCode, billingGroup, etc.)
+      const isNewFormat = Array.isArray(tariffs) && tariffs.length > 0 && tariffs[0].serviceCode;
+      
+      const formattedTariffs = tariffs.map(tariff => {
+        if (isNewFormat) {
+          // NEU: tarife.json Format konvertieren
+          const federalState = tariff.state ? this.normalizeFederalState(tariff.state) : null;
+          const pointValue = tariff.pointValue || (federalState ? getPointValueForState(federalState) : null);
+          
+          // Berechne khoPrice aus points * pointValue falls vorhanden
+          let khoPrice = tariff.basePrice;
+          let calculatedFromPoints = false;
+          if (tariff.calculatedFromPoints && tariff.pointValue && tariff.calculatedFromPoints) {
+            // Bereits berechnet, verwende basePrice
+            calculatedFromPoints = true;
+          } else if (tariff.calculatedFromPoints && pointValue) {
+            // Punkte vorhanden, berechne Preis
+            const points = tariff.calculatedFromPoints;
+            khoPrice = points * pointValue;
+            calculatedFromPoints = true;
+          }
+          
+          return {
+            code: tariff.serviceCode,
+            name: tariff.description || tariff.name || 'Unbenannt',
+            description: tariff.description || '',
+            tariffType: 'kho',
+            kho: {
+              khoCode: tariff.serviceCode,
+              khoPrice: khoPrice,
+              price: khoPrice ? Math.round(khoPrice * 100) : null, // Legacy: In Cent
+              points: tariff.calculatedFromPoints || null,
+              pointValue: pointValue,
+              calculatedFromPoints: calculatedFromPoints,
+              category: tariff.billingGroup || null,
+              billingGroup: tariff.billingGroup || null,
+              insuranceProvider: this.normalizeInsuranceProvider(tariff.provider || 'OEGK'),
+              federalState: federalState
+            },
+            specialty: 'allgemein',
+            validFrom: tariff.validFrom ? new Date(tariff.validFrom) : new Date(),
+            validUntil: tariff.validUntil ? new Date(tariff.validUntil) : null,
+            isActive: true,
+            createdBy: userId
+          };
+        } else {
+          // Altes Format (direktes Tariff-Objekt)
+          return {
+            ...tariff,
+            createdBy: userId,
+            validFrom: tariff.validFrom ? new Date(tariff.validFrom) : new Date(),
+            validUntil: tariff.validUntil ? new Date(tariff.validUntil) : null
+          };
+        }
+      });
       
       const results = await this.saveTariffs(formattedTariffs);
       
@@ -157,6 +505,129 @@ class TariffImporter {
     } catch (error) {
       throw new Error(`Fehler beim Importieren: ${error.message}`);
     }
+  }
+
+  /**
+   * Exportiert Tarife in tarife.json Format
+   */
+  async exportToJSON(filters = {}) {
+    try {
+      const query = { tariffType: { $in: ['kho', 'et', 'ebm'] }, isActive: true };
+      
+      // Filter anwenden
+      if (filters.federalState) {
+        query['kho.federalState'] = filters.federalState;
+      }
+      if (filters.insuranceProvider) {
+        query['kho.insuranceProvider'] = { $in: [filters.insuranceProvider, 'all'] };
+      }
+      
+      const tariffs = await Tariff.find(query).lean();
+      
+      // Konvertiere zu tarife.json Format
+      const exportData = tariffs.map(tariff => {
+        const federalState = tariff.kho?.federalState;
+        const stateCode = this.getStateCode(federalState);
+        
+        return {
+          serviceCode: tariff.kho?.khoCode || tariff.code,
+          description: tariff.name,
+          basePrice: tariff.kho?.khoPrice || 0,
+          currency: 'EUR',
+          state: stateCode,
+          provider: this.getProviderCode(tariff.kho?.insuranceProvider || 'all'),
+          billingGroup: tariff.kho?.billingGroup || null,
+          refundRate: tariff.kho?.billingGroup === 'Grundleistung' ? 1.0 : 0.8,
+          validFrom: tariff.validFrom ? tariff.validFrom.toISOString().split('T')[0] : null,
+          ...(tariff.kho?.points && tariff.kho?.pointValue ? {
+            calculatedFromPoints: tariff.kho.points,
+            pointValue: tariff.kho.pointValue
+          } : {}),
+          ...(tariff.kho?.calculatedFromPoints ? { calculatedFromPoints: true } : {})
+        };
+      });
+      
+      return JSON.stringify(exportData, null, 2);
+    } catch (error) {
+      throw new Error(`Fehler beim Exportieren: ${error.message}`);
+    }
+  }
+
+  /**
+   * Normalisiert Bundesland-String
+   */
+  normalizeFederalState(state) {
+    if (!state) return null;
+    const normalized = state.toLowerCase()
+      .replace('ö', 'oe')
+      .replace('ä', 'ae')
+      .replace('ü', 'ue')
+      .replace(' ', '');
+    
+    const stateMap = {
+      'ooe': 'oberoesterreich',
+      'oo': 'oberoesterreich',
+      'oberoesterreich': 'oberoesterreich',
+      'wien': 'wien',
+      'noe': 'niederoesterreich',
+      'no': 'niederoesterreich',
+      'niederoesterreich': 'niederoesterreich',
+      'stmk': 'steiermark',
+      'steiermark': 'steiermark',
+      'tirol': 'tirol',
+      'salzburg': 'salzburg',
+      'kaernten': 'kaernten',
+      'vorarlberg': 'vorarlberg',
+      'burgenland': 'burgenland'
+    };
+    
+    return stateMap[normalized] || normalized;
+  }
+
+  /**
+   * Konvertiert Bundesland zu State-Code (OOE, WIE, etc.)
+   */
+  getStateCode(federalState) {
+    if (!federalState) return null;
+    const stateMap = {
+      'oberoesterreich': 'OOE',
+      'wien': 'WIE',
+      'niederoesterreich': 'NOE',
+      'steiermark': 'STMK',
+      'tirol': 'TIR',
+      'salzburg': 'SAL',
+      'kaernten': 'KAE',
+      'vorarlberg': 'VOR',
+      'burgenland': 'BUR'
+    };
+    return stateMap[federalState] || federalState.toUpperCase();
+  }
+
+  /**
+   * Normalisiert Versicherungsträger
+   */
+  normalizeInsuranceProvider(provider) {
+    if (!provider) return 'all';
+    const normalized = provider.toLowerCase();
+    const providerMap = {
+      'oegk': 'oegk',
+      'ögk': 'oegk',
+      'bvaeb': 'bvaeb',
+      'svs': 'svs',
+      'kfa': 'kfa',
+      'pva': 'pva',
+      'vaeb': 'vaeb',
+      'auva': 'auva'
+    };
+    return providerMap[normalized] || 'all';
+  }
+
+  /**
+   * Konvertiert Versicherungsträger zu Provider-Code
+   */
+  getProviderCode(provider) {
+    if (!provider || provider === 'all') return 'OEGK';
+    return provider.toUpperCase();
   }
 
   /**

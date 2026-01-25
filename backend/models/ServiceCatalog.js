@@ -307,6 +307,14 @@ const ServiceCatalogSchema = new mongoose.Schema({
     khoGroup: { type: String, trim: true }, // z.B. "Konsultation", "Untersuchung", "Behandlung"
     khoSubGroup: { type: String, trim: true }, // z.B. "Erstkonsultation", "Folgekonsultation"
     points: { type: Number, min: 0 }, // Verrechnungseinheiten (Punkte)
+    pointValue: { type: Number, min: 0 }, // Punktwert in Euro (z.B. 0.53 für OÖ, 0.49 für Wien)
+    calculatedFromPoints: { type: Boolean, default: false }, // true = Preis wurde aus Punkten berechnet
+    billingGroup: { 
+      type: String, 
+      trim: true,
+      enum: ['Ordination', 'Untersuchung', 'Behandlung', 'Sonderleistung', 'Grundleistung', 'Therapie', null],
+      default: null
+    }, // Abrechnungsgruppe (für RefundRate-Logik: Grundleistung = 1.0, sonst = 0.8)
     
     // Legacy-Felder für Backward Compatibility (werden automatisch migriert)
     ebmCode: { type: String, trim: true }, // ⚠️ DEPRECATED: Verwende khoCode
@@ -320,12 +328,13 @@ const ServiceCatalogSchema = new mongoose.Schema({
     limitation: {
       maxPerQuarter: { type: Number, min: 0 }, // Maximale Anzahl pro Quartal (z.B. 1)
       maxPerPatient: { type: Number, min: 0 }, // Maximale Anzahl pro Patient (z.B. 1)
+      maxPercentage: { type: Number, min: 0, max: 100 }, // NEU: Maximale Prozentzahl (z.B. 15 für 15% der Fälle)
       period: { 
         type: String, 
         enum: ['day', 'week', 'month', 'quarter', 'year'], 
         default: 'quarter' 
       }, // Zeitraum für Limitierung
-      description: { type: String, trim: true } // Beschreibung der Limitierung (z.B. "1 / Q")
+      description: { type: String, trim: true } // Beschreibung der Limitierung (z.B. "1 / Q" oder "max. 15%")
     },
     
     // Bundesland-spezifische Tarife (optional, falls Honorarordnung nach Bundesland getrennt)
@@ -349,7 +358,56 @@ const ServiceCatalogSchema = new mongoose.Schema({
       code: { type: String, trim: true },
       description: { type: String, trim: true },
       price: { type: Number, min: 0 }
-    }]
+    }],
+    
+    // NEU: Ausschluss-Regeln (Conflict-Detection)
+    conflictRules: {
+      // Array von Service-Codes, die nicht gleichzeitig erlaubt sind
+      conflictsWith: [{ type: String, trim: true }],
+      // true = Konflikt nur am selben Tag
+      conflictsOnSameDay: { type: Boolean, default: true },
+      // Konflikt in Zeitraum (optional)
+      conflictsInSamePeriod: {
+        period: { 
+          type: String, 
+          enum: ['day', 'week', 'month', 'quarter'], 
+          default: 'day' 
+        },
+        conflictsWith: [{ type: String, trim: true }]
+      },
+      // true = Muss von anderem Arzt sein (optional)
+      requiresDifferentDoctor: { type: Boolean, default: false },
+      // true = Arzt kann Konflikt überschreiben (mit Begründung)
+      allowOverride: { type: Boolean, default: false },
+      // true = Überschreibung erfordert Begründung
+      overrideRequiresJustification: { type: Boolean, default: true }
+    },
+    
+    // NEU: Begründungspflicht-Regeln
+    justificationRules: {
+      // true = Begründung ist Pflicht
+      requiresJustification: { type: Boolean, default: false },
+      // Art der Begründung
+      justificationType: { 
+        type: String, 
+        enum: ['text', 'time', 'diagnosis', 'combination'], 
+        default: 'text' 
+      },
+      // Welche Felder sind Pflicht
+      justificationFields: {
+        text: { type: Boolean, default: false },        // Textfeld erforderlich
+        time: { type: Boolean, default: false },        // Uhrzeit erforderlich
+        diagnosis: { type: Boolean, default: false },    // Diagnose erforderlich
+        urgency: { type: Boolean, default: false },     // Dringlichkeit erforderlich
+        reason: { type: Boolean, default: false }       // Grund erforderlich
+      },
+      // Mindestlänge für Text (optional)
+      minLength: { type: Number, min: 0 },
+      // Maximallänge für Text (optional)
+      maxLength: { type: Number, min: 0 },
+      // Regex-Pattern für Validierung (optional)
+      validationPattern: { type: String, trim: true }
+    }
   },
   
   // Wahlarzt-Abrechnung - alle Preise in Euro

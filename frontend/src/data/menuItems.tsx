@@ -145,6 +145,7 @@ export const menuItems: MenuItem[] = [
         subItems: [
           { text: 'Leistungskatalog', icon: <MedicalServices />, path: '/service-catalog' },
           { text: 'Service-Kategorien', icon: <CategoryIcon />, path: '/service-categories' },
+          { text: 'Service-Code-Mapping', icon: <Storage />, path: '/service-code-mapping' },
           { text: 'Buchungen', icon: <BookOnline />, path: '/service-bookings' },
           { text: 'Ressourcen', icon: <Receipt />, path: '/resources' },
         ]

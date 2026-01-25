@@ -40,6 +40,8 @@ import {
   Error,
   CloudDownload,
   HelpOutline as HelpOutlineIcon,
+  Delete,
+  Warning,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import api from '../utils/api';
@@ -94,14 +96,67 @@ const TariffManagement: React.FC = () => {
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+  const [khoCount, setKhoCount] = useState<number | null>(null);
+  const [clearing, setClearing] = useState(false);
+
+  // Lade KHO-Count auch beim initialen Mount
+  useEffect(() => {
+    loadKhoCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     console.log(`[TariffManagement] activeTab geändert zu: ${activeTab}`);
     loadTariffs();
     loadTariffInfo();
     checkForUpdates();
+    loadKhoCount();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  const loadKhoCount = async () => {
+    try {
+      const response = await api.get<{ success: boolean; count: number }>('/tariffs/kho/count');
+      console.log('[KHO Count] API Response:', response.data);
+      if (response.data.success) {
+        setKhoCount(response.data.count);
+        console.log('[KHO Count] Set to:', response.data.count);
+      } else {
+        console.warn('[KHO Count] API returned success: false');
+        setKhoCount(0);
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der KHO-Tarif-Anzahl:', error);
+      setKhoCount(0); // Setze auf 0 bei Fehler, damit Button nicht erscheint
+    }
+  };
+
+  const handleClearKhoTariffs = async () => {
+    if (confirmText !== 'DELETE_ALL_KHO_TARIFFS') {
+      enqueueSnackbar('Bitte geben Sie die Bestätigung exakt ein', { variant: 'error' });
+      return;
+    }
+
+    setClearing(true);
+    try {
+      // Sende Bestätigung als Query-Parameter statt Body (um CORS-Probleme zu vermeiden)
+      const response = await api.delete<{ success: boolean; deleted: number; message: string }>(`/tariffs/kho/clear?confirm=${encodeURIComponent(confirmText)}`);
+
+      if (response.data.success) {
+        enqueueSnackbar(`${response.data.deleted} KHO-Tarife erfolgreich gelöscht`, { variant: 'success' });
+        setClearDialogOpen(false);
+        setConfirmText('');
+        loadTariffs();
+        loadKhoCount();
+      }
+    } catch (error: any) {
+      enqueueSnackbar(error?.response?.data?.message || 'Fehler beim Löschen der KHO-Tarife', { variant: 'error' });
+    } finally {
+      setClearing(false);
+    }
+  };
 
   const loadTariffs = async () => {
     setLoading(true);
@@ -263,6 +318,7 @@ const TariffManagement: React.FC = () => {
               loadTariffs();
               loadTariffInfo();
               checkForUpdates();
+              loadKhoCount();
             }}
           >
             Aktualisieren
@@ -281,6 +337,22 @@ const TariffManagement: React.FC = () => {
           >
             Datei importieren
           </Button>
+          {activeTab === 1 && (
+            <Button
+              variant="outlined"
+              color="error"
+              startIcon={<Delete />}
+              onClick={() => {
+                setClearDialogOpen(true);
+                setConfirmText('');
+                // Lade aktuelle Anzahl beim Öffnen des Dialogs
+                loadKhoCount();
+              }}
+              disabled={khoCount === null || khoCount === 0}
+            >
+              KHO-Tarife löschen {khoCount !== null ? `(${khoCount})` : ''}
+            </Button>
+          )}
         </Box>
       </Box>
 
@@ -587,6 +659,77 @@ const TariffManagement: React.FC = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setImportDialogOpen(false)}>Schließen</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* KHO-Tarife löschen Dialog */}
+      <Dialog
+        open={clearDialogOpen}
+        onClose={() => {
+          setClearDialogOpen(false);
+          setConfirmText('');
+        }}
+        maxWidth="sm"
+        fullWidth
+      >
+        <GradientDialogTitle
+          title="KHO-Tarife löschen"
+          onClose={() => {
+            setClearDialogOpen(false);
+            setConfirmText('');
+          }}
+        />
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            <Typography variant="body2" fontWeight="bold" gutterBottom>
+              Achtung: Diese Aktion kann nicht rückgängig gemacht werden!
+            </Typography>
+            <Typography variant="body2">
+              Alle KHO/ET/EBM-Tarife werden dauerhaft aus der Datenbank gelöscht.
+              {khoCount !== null && (
+                <> <strong>{khoCount} Tarife</strong> werden gelöscht.</>
+              )}
+            </Typography>
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              GOÄ-Tarife werden <strong>nicht</strong> gelöscht.
+            </Typography>
+          </Alert>
+          <Typography variant="body2" gutterBottom>
+            Um fortzufahren, geben Sie bitte folgendes Bestätigungswort ein:
+          </Typography>
+          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 'bold', mb: 2, color: 'error.main' }}>
+            DELETE_ALL_KHO_TARIFFS
+          </Typography>
+          <TextField
+            fullWidth
+            label="Bestätigung"
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder="DELETE_ALL_KHO_TARIFFS"
+            error={confirmText !== '' && confirmText !== 'DELETE_ALL_KHO_TARIFFS'}
+            helperText={confirmText !== '' && confirmText !== 'DELETE_ALL_KHO_TARIFFS' ? 'Bitte geben Sie das Bestätigungswort exakt ein' : ''}
+            disabled={clearing}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => {
+              setClearDialogOpen(false);
+              setConfirmText('');
+            }}
+            disabled={clearing}
+          >
+            Abbrechen
+          </Button>
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<Delete />}
+            onClick={handleClearKhoTariffs}
+            disabled={confirmText !== 'DELETE_ALL_KHO_TARIFFS' || clearing}
+          >
+            {clearing ? 'Löschen...' : 'Alle KHO-Tarife löschen'}
+          </Button>
         </DialogActions>
       </Dialog>
 

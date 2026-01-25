@@ -34,7 +34,15 @@ export interface InvoiceService {
   quantity: number;
   unitPrice: number;
   totalPrice: number;
-  category: string;
+  category?: string;
+  // NEU: Begründung für Konflikt-Überschreibung
+  justification?: string;
+  // Zusätzliche Notizen (kann auch als Begründung verwendet werden)
+  notes?: string;
+  // NEU: Begründungsfelder
+  serviceTime?: string;
+  urgency?: boolean;
+  urgencyLevel?: string;
 }
 
 export interface Invoice {

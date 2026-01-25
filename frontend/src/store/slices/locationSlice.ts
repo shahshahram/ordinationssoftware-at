@@ -90,6 +90,7 @@ export interface Location {
   postal_code: string;
   city: string;
   state?: string;
+  federalState?: 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null;
   timezone: string;
   phone?: string;
   email?: string;

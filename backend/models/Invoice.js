@@ -70,7 +70,11 @@ const InvoiceSchema = new mongoose.Schema({
     quantity: { type: Number, required: true, default: 1 },
     unitPrice: { type: Number, required: true },
     totalPrice: { type: Number, required: true },
-    category: { type: String } // Erlaubt alle Kategorien aus ServiceCatalog
+    category: { type: String }, // Erlaubt alle Kategorien aus ServiceCatalog
+    // NEU: Begründung für Konflikt-Überschreibung
+    justification: { type: String, trim: true },
+    // Zusätzliche Notizen (kann auch als Begründung verwendet werden)
+    notes: { type: String, trim: true }
   }],
   
   // Beträge

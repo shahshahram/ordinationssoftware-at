@@ -335,8 +335,8 @@ class ApiClient {
     return this.request<T>(endpoint, 'PUT', data, headers);
   }
 
-  async delete<T>(endpoint: string, headers?: Record<string, string>): Promise<ApiResponse<T>> {
-    return this.request<T>(endpoint, 'DELETE', undefined, headers);
+  async delete<T>(endpoint: string, data?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'DELETE', data, headers);
   }
 }
 
@@ -346,7 +346,7 @@ export const apiRequest = {
   get: <T>(endpoint: string, params?: Record<string, string | string[] | number | boolean>, headers?: Record<string, string>) => apiClient.get<T>(endpoint, params, headers),
   post: <T>(endpoint: string, data?: any, headers?: Record<string, string>) => apiClient.post<T>(endpoint, data, headers),
   put: <T>(endpoint: string, data?: any, headers?: Record<string, string>) => apiClient.put<T>(endpoint, data, headers),
-  delete: <T>(endpoint: string, headers?: Record<string, string>) => apiClient.delete<T>(endpoint, headers),
+  delete: <T>(endpoint: string, data?: any, headers?: Record<string, string>) => apiClient.delete<T>(endpoint, data, headers),
 };
 
 export default apiClient;

@@ -10,6 +10,7 @@ const InternalMessage = require('../models/InternalMessage');
 const eldaConnector = require('./connectors/eldaConnector');
 const eldaFormatGenerator = require('./eldaFormatGenerator');
 const wahonlineConnector = require('./connectors/wahonlineConnector');
+const serviceCodeMappingService = require('./serviceCodeMappingService');
 
 // invoiceService explizit laden (für Abwärtskompatibilität)
 // Diese Datei existiert und wird benötigt, auch wenn sie nicht direkt verwendet wird
@@ -1050,6 +1051,31 @@ class BillingService {
         return;
       }
 
+      // NEU: Konvertiere Service-Code für Versicherungsträger
+      const insuranceProviderCode = serviceCodeMappingService.mapInsuranceProviderToCode(
+        patient.insuranceProvider
+      );
+      
+      let serviceCode = performance.serviceCode;
+      let serviceName = performance.serviceDescription;
+      let servicePrice = performance.unitPrice;
+      
+      if (insuranceProviderCode) {
+        const mapping = await serviceCodeMappingService.findMapping(
+          performance.serviceCode,
+          insuranceProviderCode
+        );
+        
+        if (mapping) {
+          serviceCode = mapping.providerCode;
+          serviceName = mapping.providerName || serviceName;
+          // Verwende Provider-Preis, falls vorhanden
+          if (mapping.providerPrice !== undefined) {
+            servicePrice = mapping.providerPrice;
+          }
+        }
+      }
+
       // Erstelle ELDA-Abrechnungs-Datensatz
       const period = this.getBillingPeriod();
       const periodParts = period.split('-');
@@ -1076,12 +1102,12 @@ class BillingService {
         },
         services: [{
           date: performance.serviceDatetime || new Date(),
-          code: performance.serviceCode,
-          ebmCode: performance.serviceCode, // EBM-Code falls vorhanden
-          description: performance.serviceDescription,
+          code: serviceCode, // Konvertierter Code für Versicherungsträger
+          ebmCode: serviceCode, // EBM-Code (kann auch konvertiert sein)
+          description: serviceName, // Konvertierter Name
           quantity: performance.quantity || 1,
-          unitPrice: performance.unitPrice,
-          totalPrice: performance.totalPrice,
+          unitPrice: servicePrice, // Konvertierter Preis, falls vorhanden
+          totalPrice: servicePrice * (performance.quantity || 1), // Neu berechnet
           copay: job.payload.kassaData?.copayAmount || 0
         }],
         period: {
@@ -1164,10 +1190,39 @@ class BillingService {
         return;
       }
 
+      // NEU: Konvertiere Service-Code für Versicherungsträger (WAHonline verwendet meist ÖGK)
+      const insuranceProviderCode = serviceCodeMappingService.mapInsuranceProviderToCode(
+        patient.insuranceProvider
+      ) || 'oegk'; // Fallback auf ÖGK für WAHonline
+      
+      let serviceCode = performance.serviceCode;
+      let serviceName = performance.serviceDescription;
+      let servicePrice = performance.unitPrice;
+      
+      if (insuranceProviderCode) {
+        const mapping = await serviceCodeMappingService.findMapping(
+          performance.serviceCode,
+          insuranceProviderCode
+        );
+        
+        if (mapping) {
+          serviceCode = mapping.providerCode;
+          serviceName = mapping.providerName || serviceName;
+          // Verwende Provider-Preis, falls vorhanden
+          if (mapping.providerPrice !== undefined) {
+            servicePrice = mapping.providerPrice;
+          }
+        }
+      }
+
       // Erstelle WAHonline-Meldungs-Datensatz
       const wahonlineData = {
         performance: {
           ...performance.toObject(),
+          serviceCode: serviceCode, // Konvertierter Code
+          serviceDescription: serviceName, // Konvertierter Name
+          unitPrice: servicePrice, // Konvertierter Preis
+          totalPrice: servicePrice * (performance.quantity || 1), // Neu berechnet
           idempotencyKey: job.idempotencyKey
         },
         patient: patient.toObject(),

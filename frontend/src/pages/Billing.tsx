@@ -211,6 +211,8 @@ const Billing: React.FC = () => {
   const [showCalculation, setShowCalculation] = useState(false);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
+  // ServiceCatalog-Daten für justificationRules
+  const [serviceCatalogData, setServiceCatalogData] = useState<Record<string, any>>({});
 
   // Load data
   useEffect(() => {
@@ -721,7 +723,13 @@ const Billing: React.FC = () => {
             quantity: quantity,
             unitPrice: unitPrice,
             totalPrice: totalPrice, // Immer neu berechnen
-            category: service.category || ''
+            category: service.category || '',
+            // Begründungsfelder
+            justification: service.justification || undefined,
+            notes: service.notes || undefined,
+            serviceTime: service.serviceTime || undefined,
+            urgency: service.urgency || undefined,
+            urgencyLevel: service.urgencyLevel || undefined
           };
         });
       
@@ -823,6 +831,25 @@ const Billing: React.FC = () => {
     }));
   };
 
+  // Lade ServiceCatalog-Daten für einen Service-Code
+  const loadServiceCatalogData = async (serviceCode: string) => {
+    if (!serviceCode || serviceCatalogData[serviceCode]) {
+      return; // Bereits geladen oder kein Code
+    }
+    try {
+      const response: any = await api.get(`/service-catalog?code=${serviceCode}`);
+      if (response.data?.success && response.data?.data?.length > 0) {
+        const serviceData = response.data.data[0];
+        setServiceCatalogData(prev => ({
+          ...prev,
+          [serviceCode]: serviceData
+        }));
+      }
+    } catch (error) {
+      console.error('Fehler beim Laden der ServiceCatalog-Daten:', error);
+    }
+  };
+
   const handleServiceAdd = async (service: Service) => {
     // Wenn Patient und Abrechnungstyp vorhanden, automatische Berechnung durchführen
     if (formData.patient?.id && formData.billingType) {
@@ -854,6 +881,9 @@ const Billing: React.FC = () => {
             totalAmount: (prev.totalAmount || 0) + newService.totalPrice
           }));
           
+          // Lade ServiceCatalog-Daten für justificationRules
+          loadServiceCatalogData(service.code);
+          
           // Zeige Warnungen falls vorhanden
           if (calculation.warnings && calculation.warnings.length > 0) {
             setSnackbar({
@@ -879,6 +909,8 @@ const Billing: React.FC = () => {
             ...prev,
             services: [...(prev.services || []), newService]
           }));
+          // Lade ServiceCatalog-Daten für justificationRules
+          loadServiceCatalogData(service.code);
         }
       } catch (error) {
         // Fallback auf Standard-Preis bei Fehler
@@ -897,6 +929,8 @@ const Billing: React.FC = () => {
           ...prev,
           services: [...(prev.services || []), newService]
         }));
+        // Lade ServiceCatalog-Daten für justificationRules
+        loadServiceCatalogData(service.code);
       }
     } else {
       // Keine automatische Berechnung möglich, Standard-Preis verwenden
@@ -2112,94 +2146,190 @@ const Billing: React.FC = () => {
                           handleFormChange('services', updatedServices);
                         };
 
+                        const serviceCode = service.serviceCode;
+                        const catalogData = serviceCode ? serviceCatalogData[serviceCode] : null;
+                        const justificationRules = catalogData?.ogk?.justificationRules;
+                        const showJustification = justificationRules?.requiresJustification && dialogMode !== 'view';
+                        const fields = justificationRules?.justificationFields || {};
+
                         return (
-                          <TableRow key={index}>
-                            <TableCell>
-                              {dialogMode !== 'view' ? (
-                                <TextField
-                                  type="date"
-                                  size="small"
-                                  value={service.date ? new Date(service.date).toISOString().split('T')[0] : ''}
-                                  onChange={(e) => updateService('date', new Date(e.target.value))}
-                                  InputLabelProps={{ shrink: true }}
-                                  sx={{ width: 150 }}
-                                />
-                              ) : (
-                                new Date(service.date).toLocaleDateString('de-DE')
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {dialogMode !== 'view' ? (
-                                <TextField
-                                  size="small"
-                                  value={service.serviceCode || ''}
-                                  onChange={(e) => updateService('serviceCode', e.target.value)}
-                                  placeholder="Code"
-                                  sx={{ width: 100 }}
-                                />
-                              ) : (
-                                service.serviceCode
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {dialogMode !== 'view' ? (
-                                <TextField
-                                  size="small"
-                                  fullWidth
-                                  value={stripHtmlTags(service.description || '')}
-                                  onChange={(e) => updateService('description', e.target.value)}
-                                  placeholder="Beschreibung"
-                                />
-                              ) : (
-                                <span dangerouslySetInnerHTML={{ __html: service.description || '' }} />
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {dialogMode !== 'view' ? (
-                                <TextField
-                                  type="number"
-                                  size="small"
-                                  value={service.quantity || 1}
-                                  onChange={(e) => updateService('quantity', parseInt(e.target.value) || 1)}
-                                  inputProps={{ min: 1, step: 1 }}
-                                  sx={{ width: 80 }}
-                                />
-                              ) : (
-                                service.quantity
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {dialogMode !== 'view' ? (
-                                <TextField
-                                  type="number"
-                                  size="small"
-                                  value={service.unitPrice && service.unitPrice !== 0 ? service.unitPrice : ''}
-                                  onChange={(e) => updateService('unitPrice', parseFloat(e.target.value) || 0)}
-                                  inputProps={{ min: 0, step: 0.01 }}
-                                  InputProps={{
-                                    startAdornment: <InputAdornment position="start">€</InputAdornment>
-                                  }}
-                                  sx={{ width: 120 }}
-                                />
-                              ) : (
-                                `€${service.unitPrice.toFixed(2)}`
-                              )}
-                            </TableCell>
-                            <TableCell>€{service.totalPrice.toFixed(2)}</TableCell>
-                            {dialogMode !== 'view' && (
+                          <React.Fragment key={index}>
+                            <TableRow>
                               <TableCell>
-                                <IconButton
-                                  onClick={() => {
-                                    const newServices = formData.services?.filter((_, i) => i !== index);
-                                    handleFormChange('services', newServices);
-                                  }}
-                                  size="small"
-                                >
-                                  <Delete />
-                                </IconButton>
+                                {dialogMode !== 'view' ? (
+                                  <TextField
+                                    type="date"
+                                    size="small"
+                                    value={service.date ? new Date(service.date).toISOString().split('T')[0] : ''}
+                                    onChange={(e) => updateService('date', new Date(e.target.value))}
+                                    InputLabelProps={{ shrink: true }}
+                                    sx={{ width: 150 }}
+                                  />
+                                ) : (
+                                  new Date(service.date).toLocaleDateString('de-DE')
+                                )}
                               </TableCell>
+                              <TableCell>
+                                {dialogMode !== 'view' ? (
+                                  <TextField
+                                    size="small"
+                                    value={service.serviceCode || ''}
+                                    onChange={(e) => {
+                                      updateService('serviceCode', e.target.value);
+                                      // Lade ServiceCatalog-Daten wenn Code eingegeben wird
+                                      if (e.target.value) {
+                                        loadServiceCatalogData(e.target.value);
+                                      }
+                                    }}
+                                    placeholder="Code"
+                                    sx={{ width: 100 }}
+                                  />
+                                ) : (
+                                  service.serviceCode
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {dialogMode !== 'view' ? (
+                                  <TextField
+                                    size="small"
+                                    fullWidth
+                                    value={stripHtmlTags(service.description || '')}
+                                    onChange={(e) => updateService('description', e.target.value)}
+                                    placeholder="Beschreibung"
+                                  />
+                                ) : (
+                                  <span dangerouslySetInnerHTML={{ __html: service.description || '' }} />
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {dialogMode !== 'view' ? (
+                                  <TextField
+                                    type="number"
+                                    size="small"
+                                    value={service.quantity || 1}
+                                    onChange={(e) => updateService('quantity', parseInt(e.target.value) || 1)}
+                                    inputProps={{ min: 1, step: 1 }}
+                                    sx={{ width: 80 }}
+                                  />
+                                ) : (
+                                  service.quantity
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                {dialogMode !== 'view' ? (
+                                  <TextField
+                                    type="number"
+                                    size="small"
+                                    value={service.unitPrice && service.unitPrice !== 0 ? service.unitPrice : ''}
+                                    onChange={(e) => updateService('unitPrice', parseFloat(e.target.value) || 0)}
+                                    inputProps={{ min: 0, step: 0.01 }}
+                                    InputProps={{
+                                      startAdornment: <InputAdornment position="start">€</InputAdornment>
+                                    }}
+                                    sx={{ width: 120 }}
+                                  />
+                                ) : (
+                                  `€${service.unitPrice.toFixed(2)}`
+                                )}
+                              </TableCell>
+                              <TableCell>€{service.totalPrice.toFixed(2)}</TableCell>
+                              {dialogMode !== 'view' && (
+                                <TableCell>
+                                  <IconButton
+                                    onClick={() => {
+                                      const newServices = formData.services?.filter((_, i) => i !== index);
+                                      handleFormChange('services', newServices);
+                                    }}
+                                    size="small"
+                                  >
+                                    <Delete />
+                                  </IconButton>
+                                </TableCell>
+                              )}
+                            </TableRow>
+                            {/* Begründungsfelder basierend auf justificationRules */}
+                            {showJustification && (
+                              <TableRow>
+                                <TableCell colSpan={7} sx={{ pt: 0, pb: 2 }}>
+                                  <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}>
+                                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                                      Begründung erforderlich
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                                      {/* Textfeld für Begründung */}
+                                      {fields.text && (
+                                        <TextField
+                                          fullWidth
+                                          multiline
+                                          rows={3}
+                                          label="Begründung"
+                                          value={service.justification || service.notes || ''}
+                                          onChange={(e) => {
+                                            const value = e.target.value;
+                                            updateService('justification', value);
+                                            updateService('notes', value);
+                                          }}
+                                          required={fields.text}
+                                          helperText={
+                                            justificationRules?.minLength 
+                                              ? `Mindestens ${justificationRules.minLength} Zeichen erforderlich`
+                                              : undefined
+                                          }
+                                          error={
+                                            fields.text && 
+                                            (!service.justification && !service.notes) ||
+                                            (justificationRules?.minLength && 
+                                             (service.justification?.length || service.notes?.length || 0) < justificationRules.minLength)
+                                          }
+                                        />
+                                      )}
+                                      
+                                      {/* Uhrzeit-Feld */}
+                                      {fields.time && (
+                                        <TextField
+                                          type="time"
+                                          label="Uhrzeit"
+                                          value={(service as any).serviceTime || ''}
+                                          onChange={(e) => updateService('serviceTime', e.target.value)}
+                                          required={fields.time}
+                                          InputLabelProps={{ shrink: true }}
+                                          sx={{ width: '200px' }}
+                                        />
+                                      )}
+                                      
+                                      {/* Dringlichkeit */}
+                                      {fields.urgency && (
+                                        <FormControl sx={{ width: '200px' }}>
+                                          <InputLabel>Dringlichkeit</InputLabel>
+                                          <Select
+                                            value={(service as any).urgencyLevel || ''}
+                                            onChange={(e) => {
+                                              updateService('urgency', true);
+                                              updateService('urgencyLevel', e.target.value);
+                                            }}
+                                            required={fields.urgency}
+                                            label="Dringlichkeit"
+                                          >
+                                            <SelectMenuItem value="low">Niedrig</SelectMenuItem>
+                                            <SelectMenuItem value="medium">Mittel</SelectMenuItem>
+                                            <SelectMenuItem value="high">Hoch</SelectMenuItem>
+                                            <SelectMenuItem value="urgent">Dringend</SelectMenuItem>
+                                          </Select>
+                                        </FormControl>
+                                      )}
+                                      
+                                      {/* Hinweis für Diagnose */}
+                                      {fields.diagnosis && (
+                                        <Alert severity="info" sx={{ mt: 1 }}>
+                                          Eine Diagnose ist für diese Leistung erforderlich. Bitte fügen Sie eine Diagnose in der Rechnung hinzu.
+                                        </Alert>
+                                      )}
+                                    </Box>
+                                  </Box>
+                                </TableCell>
+                              </TableRow>
                             )}
-                          </TableRow>
+                          </React.Fragment>
                         );
                       })}
                     </TableBody>
@@ -2770,6 +2900,7 @@ const Billing: React.FC = () => {
           <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
             <Tab label="Übersicht" />
             <Tab label="Rechnung erstellen" />
+            <Tab label="Begründungsfelder" />
             <Tab label="Filter & Suche" />
             <Tab label="Status & Workflow" />
             <Tab label="Abrechnungstypen" />
@@ -2802,6 +2933,8 @@ const Billing: React.FC = () => {
                   <li>🔍 <strong>Suche & Filter:</strong> Nach Patient, Status, Datum filtern</li>
                   <li>📊 <strong>Statistiken:</strong> Übersicht für heute, Monat, Jahr</li>
                   <li>🔄 <strong>Turnusabrechnung:</strong> ÖGK-Abrechnung exportieren</li>
+                  <li>🆕 <strong>Begründungsfelder:</strong> Dynamische Pflichtfelder für Services mit Begründungspflicht</li>
+                  <li>🆕 <strong>Automatische Code-Konvertierung:</strong> Service-Codes werden automatisch für Versicherungsträger konvertiert</li>
                 </Box>
               </Box>
 
@@ -2902,6 +3035,127 @@ const Billing: React.FC = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
+                  Begründungsfelder
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Einige Leistungen erfordern zusätzliche Begründungen oder Informationen bei der Abrechnung. 
+                  Diese Felder erscheinen automatisch, wenn Sie einen Service mit Begründungspflicht hinzufügen.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Wie funktionieren Begründungsfelder?
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Begründungsfelder werden dynamisch angezeigt, basierend auf der Konfiguration im Leistungskatalog:
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Geben Sie einen Service-Code in die Rechnung ein</li>
+                  <li>Das System lädt automatisch die ServiceCatalog-Daten</li>
+                  <li>Wenn der Service <strong>Begründungspflicht</strong> hat, erscheinen die Felder unter der Service-Zeile</li>
+                  <li>Die Felder werden automatisch angezeigt, je nach Konfiguration</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Verfügbare Begründungsfelder
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Textfeld (Begründung):</strong>
+                    <ul>
+                      <li>Multiline-Textfeld für ausführliche Begründung</li>
+                      <li>Mindest-/Maximallänge kann konfiguriert sein</li>
+                      <li>Pflichtfeld, wenn aktiviert</li>
+                    </ul>
+                  </li>
+                  <li><strong>Uhrzeit:</strong>
+                    <ul>
+                      <li>Zeitfeld für die Uhrzeit der Leistung</li>
+                      <li>Format: HH:mm (z.B. 14:30)</li>
+                      <li>Pflichtfeld, wenn aktiviert</li>
+                    </ul>
+                  </li>
+                  <li><strong>Dringlichkeit:</strong>
+                    <ul>
+                      <li>Dropdown mit Stufen: Niedrig, Mittel, Hoch, Dringend</li>
+                      <li>Pflichtfeld, wenn aktiviert</li>
+                    </ul>
+                  </li>
+                  <li><strong>Diagnose:</strong>
+                    <ul>
+                      <li>Info-Hinweis: Diagnose muss in der Rechnung vorhanden sein</li>
+                      <li>Diagnose muss im Tab "Diagnosen" hinzugefügt werden</li>
+                    </ul>
+                  </li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Beispiel: Dringlichkeitsleistung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Wenn Sie eine Dringlichkeitsleistung hinzufügen:
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Service-Code eingeben (z.B. "DURG")</li>
+                  <li>Unter der Service-Zeile erscheinen automatisch:
+                    <ul>
+                      <li>Textfeld für Begründung (z.B. "Patient hatte starke Schmerzen")</li>
+                      <li>Uhrzeit-Feld (z.B. 18:30)</li>
+                      <li>Dringlichkeit-Dropdown (z.B. "Hoch")</li>
+                    </ul>
+                  </li>
+                  <li>Alle Felder ausfüllen</li>
+                  <li>Rechnung speichern</li>
+                </Box>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Hinweis:</strong> Die Begründungsfelder werden in der Rechnung gespeichert 
+                    und bei der Übermittlung an ELDA/WAHonline mitgesendet.
+                  </Typography>
+                </Alert>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Validierung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Pflichtfelder werden beim Speichern validiert</li>
+                  <li>Fehlende Begründung führt zu Fehlermeldung</li>
+                  <li>Zu kurze Begründung (unter Mindestlänge) führt zu Fehlermeldung</li>
+                  <li>Fehlerhafte Felder werden rot markiert</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konfiguration im Leistungskatalog
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Begründungsfelder werden im Leistungskatalog konfiguriert:
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Gehen Sie zu <strong>Einstellungen → Leistungen → Leistungskatalog</strong></li>
+                  <li>Wählen Sie den Service aus</li>
+                  <li>Tab <strong>"Preis & Abrechnung"</strong></li>
+                  <li>Scrollen Sie zu <strong>"Begründungspflicht-Regeln"</strong></li>
+                  <li>Aktivieren Sie "Begründungspflicht aktivieren"</li>
+                  <li>Wählen Sie die gewünschten Felder (Text, Uhrzeit, Dringlichkeit, Diagnose)</li>
+                  <li>Optional: Setzen Sie Mindest-/Maximallänge für Textfeld</li>
+                  <li>Speichern Sie den Service</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 3 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
                   Filter & Suche
                 </Typography>
                 <Typography variant="body2" paragraph>
@@ -2961,7 +3215,7 @@ const Billing: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 3 && (
+          {helpTab === 4 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3031,7 +3285,7 @@ const Billing: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 4 && (
+          {helpTab === 5 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3097,7 +3351,7 @@ const Billing: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 5 && (
+          {helpTab === 6 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3176,7 +3430,7 @@ const Billing: React.FC = () => {
             </Box>
           )}
 
-          {helpTab === 6 && (
+          {helpTab === 7 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3192,6 +3446,7 @@ const Billing: React.FC = () => {
                   <li>✅ <strong>Korrekter Abrechnungstyp:</strong> Wählen Sie den richtigen Typ (Privat/Kassenarzt/Wahlarzt)</li>
                   <li>✅ <strong>Vollständige Daten:</strong> Stellen Sie sicher, dass alle Patientendaten korrekt sind</li>
                   <li>✅ <strong>Leistungen prüfen:</strong> Überprüfen Sie Menge, Datum und Preise</li>
+                  <li>✅ <strong>Begründungsfelder:</strong> Füllen Sie alle erforderlichen Begründungsfelder aus (NEU)</li>
                   <li>✅ <strong>Berechnung prüfen:</strong> Nutzen Sie die Berechnungsvorschau</li>
                   <li>✅ <strong>Diagnosen:</strong> Fügen Sie ICD-10-Diagnosen hinzu (für Kassenarzt erforderlich)</li>
                 </Box>
@@ -3219,6 +3474,30 @@ const Billing: React.FC = () => {
                   <li>✅ <strong>Prüfen:</strong> Überprüfen Sie die Liste vor dem Export</li>
                   <li>✅ <strong>Zeitnah:</strong> Übermitteln Sie die Abrechnung zeitnah an die ÖGK</li>
                   <li>✅ <strong>Backup:</strong> Speichern Sie eine Kopie der XML-Datei</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Begründungsfelder (NEU)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Automatische Anzeige:</strong> Begründungsfelder erscheinen automatisch bei Services mit Begründungspflicht</li>
+                  <li>✅ <strong>Pflichtfelder ausfüllen:</strong> Alle erforderlichen Felder müssen ausgefüllt werden</li>
+                  <li>✅ <strong>Validierung beachten:</strong> Mindestlänge und andere Validierungen beachten</li>
+                  <li>✅ <strong>Konfiguration:</strong> Begründungspflicht im Leistungskatalog konfigurieren</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Service-Code-Mapping (NEU)
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ <strong>Mappings erstellen:</strong> Erstellen Sie Mappings für alle wichtigen Services</li>
+                  <li>✅ <strong>Automatische Konvertierung:</strong> Codes werden automatisch für Versicherungsträger konvertiert</li>
+                  <li>✅ <strong>Gültigkeitsdaten prüfen:</strong> Prüfen Sie regelmäßig die Gültigkeitsdaten</li>
+                  <li>✅ <strong>Testen:</strong> Testen Sie die Konvertierung in der Teststrecke</li>
                 </Box>
               </Box>
 

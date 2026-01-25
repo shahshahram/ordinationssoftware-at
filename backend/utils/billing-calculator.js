@@ -320,8 +320,19 @@ function calculateBilling(patient, service, billingType) {
       result.goaeMultiplier = service.wahlarzt?.goaeMultiplier || 1.0;
       result.copay = calculateCopay(service, patient, result.grossAmount, 'wahlarzt');
       
-      // Erstattungsbetrag berechnen - prüfe Zusatzversicherung
+      // Erstattungsbetrag berechnen - prüfe billingGroup und Zusatzversicherung
       let reimbursementRate = service.wahlarzt?.reimbursementRate || 0.80;
+      
+      // NEU: billingGroup-basierte RefundRate-Logik
+      // Grundleistung = 100% Erstattung, sonst 80%
+      const billingGroup = service.ogk?.billingGroup || service.billingGroup;
+      if (billingGroup === 'Grundleistung') {
+        reimbursementRate = 1.0; // 100% Erstattung für Grundleistungen
+      } else {
+        reimbursementRate = service.wahlarzt?.reimbursementRate || 0.80; // Standard: 80%
+      }
+      
+      // Zusatzversicherung hat Vorrang (falls vorhanden)
       if (coverage.hasPrivateDoctorInsurance && coverage.additionalInsurances.privateDoctorInsurance) {
         const privateIns = coverage.additionalInsurances.privateDoctorInsurance;
         reimbursementRate = privateIns.reimbursementRate / 100;
@@ -469,9 +480,16 @@ async function calculateRefund(services, patient) {
         continue;
       }
       
-      // Standard-Erstattung: 80% des Kassentarifs
+      // Standard-Erstattung: 80% des Kassentarifs (oder 100% bei Grundleistung)
       const kassenarztPrice = toEuro(serviceDoc.ogk?.khoPrice || serviceDoc.ogk?.ebmPrice || 0);
-      const refundRate = serviceDoc.wahlarzt?.reimbursementRate || 0.80; // 80% Erstattung
+      
+      // NEU: billingGroup-basierte RefundRate-Logik
+      let refundRate = serviceDoc.wahlarzt?.reimbursementRate || 0.80; // Standard: 80%
+      const billingGroup = serviceDoc.ogk?.billingGroup;
+      if (billingGroup === 'Grundleistung') {
+        refundRate = 1.0; // 100% Erstattung für Grundleistungen
+      }
+      
       const refund = kassenarztPrice * refundRate;
       
       serviceRefunds.push({

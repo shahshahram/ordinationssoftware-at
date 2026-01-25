@@ -109,11 +109,23 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
 
   // Check permission-based access (using new RBAC system)
   if (requiredPermissions.length > 0) {
-    // Convert old permission format to new RBAC format
+    // Convert old permission format to new RBAC format (with validation)
     const rbacPermissions = requiredPermissions.map(perm => {
       // Convert old format like "patients.read" to new format
       if (perm.includes('.')) {
         const [resource, action] = perm.split('.');
+        
+        // Warnung in Development, wenn Plural-Format verwendet wird
+        if (process.env.NODE_ENV === 'development') {
+          const pluralResources = ['patients', 'users', 'appointments', 'documents', 'services', 'locations', 'bookings'];
+          if (pluralResources.includes(resource)) {
+            console.warn(
+              `[ProtectedRoute] Veraltetes Plural-Format erkannt: "${perm}". ` +
+              `Bitte verwenden Sie Singular-Format (z.B. "patient.read" statt "patients.read")`
+            );
+          }
+        }
+        
         // Convert plural resources to singular for consistency with backend
         const resourceMapping: Record<string, string> = {
           'patients': 'patient',
@@ -128,13 +140,21 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
           'services': 'service',
           'templates': 'template',
           'audit_logs': 'audit_log',
-          'reports': 'reports',
-          'staff': 'staff',
+          'bookings': 'appointment', // bookings wird zu appointment
+          'reports': 'reports', // Bleibt Plural
+          'staff': 'staff', // Bleibt Singular
           'systems': 'system',
-          'settings': 'settings',
-          'security': 'security'
+          'settings': 'settings', // Bleibt Plural
+          'security': 'security' // Bleibt Singular
         };
         const normalizedResource = resourceMapping[resource] || resource;
+        
+        // Validiere, ob Resource und Action gültig sind
+        const validResources = ['patient', 'appointment', 'document', 'service', 'location', 'user', 'billing', 'role', 'template', 'staff', 'settings', 'security', 'reports', 'system', 'audit_log', 'diagnosis', 'prescription'];
+        if (!validResources.includes(normalizedResource)) {
+          console.error(`[ProtectedRoute] Ungültige Resource: "${normalizedResource}" in Permission "${perm}"`);
+        }
+        
         return { action, resource: normalizedResource };
       }
       return { action: perm, resource: 'system' };

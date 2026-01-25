@@ -2,6 +2,7 @@ const pdfGenerator = require('../utils/pdfGenerator');
 const Invoice = require('../models/Invoice');
 const Location = require('../models/Location');
 const User = require('../models/User');
+const ServiceCatalog = require('../models/ServiceCatalog');
 const path = require('path');
 const fs = require('fs');
 const QRCode = require('qrcode');
@@ -75,6 +76,82 @@ class InvoicePDFService {
       return pdfBuffer;
     } catch (error) {
       throw error;
+    }
+  }
+
+  /**
+   * Konvertiert Bundesland-Code zu Anzeigename
+   */
+  getStateName(federalState) {
+    if (!federalState) return '';
+    const stateMap = {
+      'oberoesterreich': 'OÖ',
+      'wien': 'Wien',
+      'niederoesterreich': 'NÖ',
+      'steiermark': 'Steiermark',
+      'tirol': 'Tirol',
+      'salzburg': 'Salzburg',
+      'kaernten': 'Kärnten',
+      'vorarlberg': 'Vorarlberg',
+      'burgenland': 'Burgenland'
+    };
+    return stateMap[federalState.toLowerCase()] || federalState;
+  }
+
+  /**
+   * Berechnet RefundRate basierend auf billingGroup
+   */
+  getRefundRate(billingGroup) {
+    if (billingGroup === 'Grundleistung') {
+      return 1.0; // 100% Erstattung
+    }
+    return 0.8; // 80% Erstattung (Standard)
+  }
+
+  /**
+   * Berechnet Erstattungsbetrag für einen Service
+   */
+  async calculateServiceRefund(service, invoice) {
+    try {
+      // Nur bei Wahlarzt oder Honorarnote
+      if (invoice.billingType !== 'wahlarzt' && !invoice.privateBilling?.honorNote) {
+        return null;
+      }
+
+      // Lade ServiceCatalog-Eintrag
+      if (!service.serviceCode) {
+        return null;
+      }
+
+      const serviceDoc = await ServiceCatalog.findOne({ code: service.serviceCode });
+      if (!serviceDoc || !serviceDoc.ogk) {
+        return null;
+      }
+
+      // Prüfe ob KHO-Preis vorhanden
+      const khoPrice = serviceDoc.ogk.khoPrice || serviceDoc.ogk.ebmPrice;
+      if (!khoPrice || khoPrice === 0) {
+        return null;
+      }
+
+      // Berechne RefundRate basierend auf billingGroup
+      const billingGroup = serviceDoc.ogk.billingGroup;
+      const refundRate = this.getRefundRate(billingGroup);
+      const refundAmount = khoPrice * refundRate;
+
+      // Bundesland-Name
+      const federalState = serviceDoc.ogk.federalState;
+      const stateName = this.getStateName(federalState);
+
+      return {
+        refundAmount: refundAmount,
+        refundRate: refundRate,
+        stateName: stateName,
+        billingGroup: billingGroup
+      };
+    } catch (error) {
+      console.error('[InvoicePDF] Fehler bei Erstattungsberechnung:', error);
+      return null;
     }
   }
 
@@ -186,6 +263,25 @@ class InvoicePDFService {
         });
       } catch (error) {
         // QR-Code-Generierung fehlgeschlagen - wird nicht angezeigt
+      }
+    }
+    
+    // NEU: Prüfe ob ÖGK-Services vorhanden sind (für Disclaimer)
+    const isWahlarztOrHonorNote = invoice.billingType === 'wahlarzt' || invoice.privateBilling?.honorNote;
+    let hasOGKServices = false;
+    if (isWahlarztOrHonorNote) {
+      for (const service of invoice.services) {
+        if (service.serviceCode) {
+          try {
+            const serviceDoc = await ServiceCatalog.findOne({ code: service.serviceCode });
+            if (serviceDoc && serviceDoc.ogk && (serviceDoc.ogk.khoPrice || serviceDoc.ogk.ebmPrice)) {
+              hasOGKServices = true;
+              break;
+            }
+          } catch (error) {
+            // Ignoriere Fehler
+          }
+        }
       }
     }
     
@@ -942,7 +1038,11 @@ class InvoicePDFService {
                         </tr>
                     </thead>
                     <tbody>
-                        ${invoice.services.map((service, index) => `
+                        ${(await Promise.all(invoice.services.map(async (service, index) => {
+                          // Berechne Erstattung für diesen Service
+                          const refundInfo = await this.calculateServiceRefund(service, invoice);
+                          
+                          return `
                             <tr>
                                 <td>${index + 1}</td>
                                 <td>${service.description}</td>
@@ -952,7 +1052,15 @@ class InvoicePDFService {
                                 <td style="text-align: right;">${formatCurrency(service.unitPrice)} €</td>
                                 <td style="text-align: right; font-weight: 600;">${formatCurrency(service.totalPrice)} €</td>
                             </tr>
-                        `).join('')}
+                            ${refundInfo ? `
+                            <tr style="background-color: #f5f5f5;">
+                                <td colspan="7" style="padding: 4px 8px; font-size: 9px; color: #666; font-style: italic;">
+                                    Voraussichtliche Kassen-Rückerstattung (${Math.round(refundInfo.refundRate * 100)}% des ÖGK-Tarifs${refundInfo.stateName ? ` von ${refundInfo.stateName}` : ''}): € ${formatCurrency(refundInfo.refundAmount)}
+                                </td>
+                            </tr>
+                            ` : ''}
+                          `;
+                        }))).join('')}
                     </tbody>
                 </table>
             </div>
@@ -1004,6 +1112,12 @@ class InvoicePDFService {
                         'Wahlarztleistungen unterliegen der Umsatzsteuer gemäß § 1 UStG.'
                     }
                 </div>
+                
+                ${hasOGKServices ? `
+                <div class="disclaimer-info" style="margin-top: 15px; padding: 10px; font-size: 8px; color: #666; line-height: 1.4; font-style: italic; border-top: 1px solid #e0e0e0;">
+                    <strong style="font-size: 8px;">*</strong> Hierbei handelt es sich um eine unverbindliche Berechnung auf Basis der aktuellen Honorarordnung. Die tatsächliche Erstattungshöhe obliegt dem Versicherungsträger.
+                </div>
+                ` : ''}
             </div>
 
             <!-- Payment Information -->

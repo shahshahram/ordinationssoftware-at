@@ -1064,7 +1064,13 @@ router.post('/', [
       });
     }
 
-    const location = new Location(req.body);
+    // Konvertiere leere Strings zu null für federalState
+    const locationData = { ...req.body };
+    if (locationData.federalState === '') {
+      locationData.federalState = null;
+    }
+    
+    const location = new Location(locationData);
     await location.save();
 
     // Audit-Log
@@ -1233,7 +1239,12 @@ router.put('/:id', [
     Object.keys(updateData).forEach(key => {
       if (key !== 'xdsRegistry' && key !== '_id' && key !== '__v' && key !== 'createdAt') {
         if (updateData[key] !== undefined) {
-          location[key] = updateData[key];
+          // Konvertiere leere Strings zu null für federalState
+          if (key === 'federalState' && updateData[key] === '') {
+            location[key] = null;
+          } else {
+            location[key] = updateData[key];
+          }
         }
       }
     });

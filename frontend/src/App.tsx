@@ -97,6 +97,7 @@ import KassaTestPage from './pages/KassaTestPage';
 import ELDATestPage from './pages/ELDATestPage';
 import WAHonlineTestPage from './pages/WAHonlineTestPage';
 import TariffManagement from './pages/TariffManagement';
+import ServiceCodeMappingManagement from './pages/ServiceCodeMappingManagement';
 
 // Theme-Funktion, die basierend auf dem Modus ein Theme erstellt
 const getTheme = (mode: 'light' | 'dark') => createTheme({
@@ -339,7 +340,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/patients" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <Patients />
                           </ProtectedRoute>
                         } 
@@ -347,7 +348,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/temporary-patients" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <TemporaryPatients />
                           </ProtectedRoute>
                         } 
@@ -355,7 +356,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/patients-hints" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <PatientsHints />
                           </ProtectedRoute>
                         } 
@@ -363,7 +364,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/address-book" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <AddressBook />
                           </ProtectedRoute>
                         }
@@ -371,7 +372,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/waiting-list" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <WaitingList />
                           </ProtectedRoute>
                         }
@@ -379,7 +380,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/appointments" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <Appointments />
                           </ProtectedRoute>
                         } 
@@ -387,7 +388,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/online-bookings" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <OnlineBookings />
                           </ProtectedRoute>
                         } 
@@ -395,7 +396,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/calendar" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <Calendar />
                           </ProtectedRoute>
                         } 
@@ -403,7 +404,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/demo-calendar" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <DemoCalendar />
                           </ProtectedRoute>
                         } 
@@ -411,7 +412,7 @@ const InnerAppContent: React.FC = () => {
                       {/* <Route 
                         path="/enhanced-calendar" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <EnhancedCalendar />
                           </ProtectedRoute>
                         } 
@@ -419,7 +420,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/service-demo-calendar" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <ServiceDemoCalendar />
                           </ProtectedRoute>
                         } 
@@ -437,7 +438,7 @@ const InnerAppContent: React.FC = () => {
             <Route
               path="/locations"
               element={
-                <ProtectedRoute requiredPermissions={['locations.read']}>
+                <ProtectedRoute requiredPermissions={['location.read']}>
                   <LocationManagement />
                 </ProtectedRoute>
               }
@@ -445,7 +446,7 @@ const InnerAppContent: React.FC = () => {
             <Route
               path="/location-dashboard"
               element={
-                <ProtectedRoute requiredPermissions={['locations.read']}>
+                <ProtectedRoute requiredPermissions={['location.read']}>
                   <LocationDashboard />
                 </ProtectedRoute>
               }
@@ -453,7 +454,7 @@ const InnerAppContent: React.FC = () => {
             <Route
               path="/location-calendar"
               element={
-                <ProtectedRoute requiredPermissions={['locations.read']}>
+                <ProtectedRoute requiredPermissions={['location.read']}>
                   <LocationCalendar />
                 </ProtectedRoute>
               }
@@ -469,7 +470,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/service-catalog" 
                         element={
-                          <ProtectedRoute requiredPermissions={['services.read']}>
+                          <ProtectedRoute requiredPermissions={['service.read']}>
                             <ServiceCatalog />
                           </ProtectedRoute>
                         } 
@@ -477,7 +478,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/service-bookings" 
                         element={
-                          <ProtectedRoute requiredPermissions={['bookings.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <ServiceBookings />
                           </ProtectedRoute>
                         } 
@@ -517,7 +518,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/documents" 
                         element={
-                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                          <ProtectedRoute requiredPermissions={['document.read']}>
                             <Documents />
                           </ProtectedRoute>
                         } 
@@ -525,7 +526,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/letter-templates" 
                         element={
-                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                          <ProtectedRoute requiredPermissions={['document.read']}>
                             <LetterTemplates />
                           </ProtectedRoute>
                         } 
@@ -533,7 +534,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/template-management" 
                         element={
-                          <ProtectedRoute requiredPermissions={['documents.write']}>
+                          <ProtectedRoute requiredPermissions={['document.write']}>
                             <TemplateManagement />
                           </ProtectedRoute>
                         } 
@@ -557,7 +558,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/ambulanzbefund/new/:patientId" 
                         element={
-                          <ProtectedRoute requiredPermissions={['documents.write']}>
+                          <ProtectedRoute requiredPermissions={['document.write']}>
                             <AmbulanzbefundEditor />
                           </ProtectedRoute>
                         } 
@@ -565,7 +566,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/ambulanzbefund/:ambefundId" 
                         element={
-                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                          <ProtectedRoute requiredPermissions={['document.read']}>
                             <AmbulanzbefundEditor />
                           </ProtectedRoute>
                         } 
@@ -573,7 +574,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/appointments/:id" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <AppointmentDetail />
                           </ProtectedRoute>
                         }
@@ -581,7 +582,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/documents/:id" 
                         element={
-                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                          <ProtectedRoute requiredPermissions={['document.read']}>
                             <DocumentDetail />
                           </ProtectedRoute>
                         }
@@ -589,7 +590,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/diagnoses/:id" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <DiagnosisDetail />
                           </ProtectedRoute>
                         }
@@ -606,7 +607,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/xds-documents" 
                         element={
-                          <ProtectedRoute requiredPermissions={['documents.read']}>
+                          <ProtectedRoute requiredPermissions={['document.read']}>
                             <XdsDocumentManagement />
                           </ProtectedRoute>
                         } 
@@ -614,7 +615,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/users" 
                         element={
-                          <ProtectedRoute requiredPermissions={['users.read']}>
+                          <ProtectedRoute requiredPermissions={['user.read']}>
                             <Users />
                           </ProtectedRoute>
                         } 
@@ -654,7 +655,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/patient-organizer/:id" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <PatientOrganizer />
                           </ProtectedRoute>
                         } 
@@ -722,7 +723,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/availability" 
                         element={
-                          <ProtectedRoute requiredPermissions={['appointments.read']}>
+                          <ProtectedRoute requiredPermissions={['appointment.read']}>
                             <Availability />
                           </ProtectedRoute>
                         } 
@@ -730,7 +731,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/service-categories" 
                         element={
-                          <ProtectedRoute requiredPermissions={['services.read']}>
+                          <ProtectedRoute requiredPermissions={['service.read']}>
                             <ServiceCategories />
                           </ProtectedRoute>
                         } 
@@ -738,15 +739,23 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/tariff-management" 
                         element={
-                          <ProtectedRoute requiredPermissions={['services.read']}>
+                          <ProtectedRoute requiredPermissions={['service.read']}>
                             <TariffManagement />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/service-code-mapping" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['service.read']}>
+                            <ServiceCodeMappingManagement />
                           </ProtectedRoute>
                         } 
                       />
                       <Route 
                         path="/ecard-validation" 
                         element={
-                          <ProtectedRoute requiredPermissions={['patients.read']}>
+                          <ProtectedRoute requiredPermissions={['patient.read']}>
                             <ECardValidation />
                           </ProtectedRoute>
                         } 

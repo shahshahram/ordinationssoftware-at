@@ -355,11 +355,14 @@ router.post('/invoices', auth, [
       try {
         const billingValidation = require('../utils/billing-validation');
         const invoiceDate = invoiceData.date ? new Date(invoiceData.date) : new Date();
+        const invoiceDiagnoses = invoiceData.diagnoses || [];
         
         const validationResult = await billingValidation.validateBillingServices(
           invoiceData.patient.id,
           invoiceData.services,
-          invoiceDate
+          invoiceDate,
+          null, // excludeInvoiceId
+          invoiceDiagnoses
         );
         
         if (!validationResult.isValid) {
@@ -708,12 +711,14 @@ router.put('/invoices/:id', auth, async (req, res) => {
       try {
         const billingValidation = require('../utils/billing-validation');
         const invoiceDate = updateData.date || updateData.invoiceDate ? new Date(updateData.date || updateData.invoiceDate) : new Date();
+        const invoiceDiagnoses = updateData.diagnoses || [];
         
         const validationResult = await billingValidation.validateBillingServices(
           updateData.patient.id,
           updateData.services,
           invoiceDate,
-          req.params.id // excludeInvoiceId für Updates
+          req.params.id, // excludeInvoiceId für Updates
+          invoiceDiagnoses
         );
         
         if (!validationResult.isValid) {

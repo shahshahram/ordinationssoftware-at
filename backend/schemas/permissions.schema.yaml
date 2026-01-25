@@ -1,0 +1,393 @@
+# Permission Schema Definition
+# Single Source of Truth für alle Permissions im System
+# Wird verwendet zur Code-Generierung für Frontend und Backend
+
+version: "1.0.0"
+lastUpdated: "2026-01-25"
+
+# Rollen-Definitionen
+roles:
+  super_admin:
+    level: 6
+    label: "Super Administrator"
+    description: "Vollzugriff auf alle Systemfunktionen und -einstellungen"
+    permissions:
+      "*": ["*"]  # Alle Permissions auf allen Resources
+
+  admin:
+    level: 5
+    label: "Administrator"
+    description: "Verwaltung der Ordination und Benutzer"
+    permissions:
+      patient: [create, read, update, delete]
+      appointment: [create, read, update, delete, book, cancel, reschedule]
+      document: [create, read, update, delete, generate, print, share, export]
+      diagnosis: [create, read, update, delete, diagnose]
+      prescription: [create, read, update, delete, prescribe]
+      billing: [create, read, update, delete, generate, print]
+      user: [create, read, update, delete, manage_users]
+      role: [read, manage_roles]
+      location: [create, read, update, delete]
+      service: [create, read, update, delete]
+      template: [create, read, update, delete]
+      staff: [create, read, update, delete, manage_staff]
+      audit_log: [read, audit]
+      system: [configure]
+      settings: [read, update, configure]
+      security: [read, update, configure]
+      reports: [read, generate, export]
+      audit: [read, audit]
+      xds_document: [create, read, update, delete, query, retrieve, deprecate, submit]
+      xds_submission_set: [create, read, update, delete]
+      xds_folder: [create, read, update, delete]
+      xds_association: [create, read, update, delete]
+
+  arzt:
+    level: 4
+    label: "Arzt"
+    description: "Medizinische Behandlung und Patientenverwaltung"
+    permissions:
+      patient: [create, read, update]
+      appointment: [create, read, update, book, cancel, reschedule]
+      document: [create, read, update, generate, print, share]
+      diagnosis: [create, read, update, delete, diagnose]
+      prescription: [create, read, update, delete, prescribe]
+      billing: [read, generate]
+      location: [read]
+      service: [read]
+      staff: [read]
+      template: [create, read, update]
+      reports: [read, generate]
+      settings: [read]
+      security: [read]
+      xds_document: [create, read, update, query, retrieve, deprecate]
+      xds_submission_set: [create, read, update]
+      xds_folder: [create, read, update]
+
+  assistent:
+    level: 3
+    label: "Medizinische Assistenz"
+    description: "Unterstützung bei der Patientenbetreuung"
+    permissions:
+      patient: [create, read, update]
+      appointment: [create, read, update, book, cancel, reschedule]
+      document: [create, read, update, generate, print]
+      diagnosis: [read]
+      prescription: [read]
+      billing: [read]
+      location: [read]
+      service: [read]
+      staff: [read]
+      template: [read]
+      reports: [read]
+      settings: [read]
+      security: [read]
+      xds_document: [read, query, retrieve]
+      xds_submission_set: [read]
+      xds_folder: [read]
+
+  rezeption:
+    level: 2
+    label: "Rezeption"
+    description: "Terminverwaltung und Patientenaufnahme"
+    permissions:
+      patient: [create, read, update]
+      appointment: [create, read, update, book, cancel, reschedule]
+      document: [read, print]
+      billing: [read, generate, print]
+      location: [read]
+      service: [read]
+      reports: [read]
+      settings: [read]
+      security: [read]
+
+  billing:
+    level: 2
+    label: "Abrechnung"
+    description: "Abrechnung und Finanzverwaltung"
+    permissions:
+      patient: [read]
+      appointment: [read]
+      document: [read, print]
+      billing: [create, read, update, delete, generate, print, export]
+      location: [read]
+      service: [read]
+      reports: [read, generate, export]
+      settings: [read]
+      security: [read]
+
+  patient:
+    level: 1
+    label: "Patient"
+    description: "Eigene Daten einsehen und Termine buchen"
+    permissions:
+      patient: [read]  # Nur eigene Daten
+      appointment: [read, book, cancel]  # Nur eigene Termine
+      document: [read]  # Nur eigene Dokumente
+      billing: [read]  # Nur eigene Rechnungen
+      reports: [read]  # Nur eigene Reports
+
+# Actions (Operationen)
+actions:
+  # CRUD Operations
+  create:
+    label: "Erstellen"
+    description: "Neue Ressource erstellen"
+  
+  read:
+    label: "Lesen"
+    description: "Ressource anzeigen/lesen"
+  
+  update:
+    label: "Aktualisieren"
+    description: "Ressource bearbeiten"
+  
+  delete:
+    label: "Löschen"
+    description: "Ressource entfernen"
+  
+  write:
+    label: "Schreiben"
+    description: "Alias für create + update"
+  
+  # Spezifische Actions
+  book:
+    label: "Buchen"
+    description: "Termin buchen"
+  
+  cancel:
+    label: "Stornieren"
+    description: "Termin/Reservierung stornieren"
+  
+  reschedule:
+    label: "Verschieben"
+    description: "Termin verschieben"
+  
+  generate:
+    label: "Generieren"
+    description: "Dokument/Report generieren"
+  
+  print:
+    label: "Drucken"
+    description: "Dokument drucken"
+  
+  share:
+    label: "Teilen"
+    description: "Dokument teilen"
+  
+  export:
+    label: "Exportieren"
+    description: "Daten exportieren"
+  
+  import:
+    label: "Importieren"
+    description: "Daten importieren"
+  
+  approve:
+    label: "Genehmigen"
+    description: "Aktion genehmigen"
+  
+  reject:
+    label: "Ablehnen"
+    description: "Aktion ablehnen"
+  
+  assign:
+    label: "Zuweisen"
+    description: "Ressource zuweisen"
+  
+  unassign:
+    label: "Entfernen"
+    description: "Zuweisung entfernen"
+  
+  # Administrative Actions
+  audit:
+    label: "Auditieren"
+    description: "Audit-Logs einsehen"
+  
+  configure:
+    label: "Konfigurieren"
+    description: "System konfigurieren"
+  
+  manage_users:
+    label: "Benutzer verwalten"
+    description: "Benutzer erstellen/bearbeiten"
+  
+  manage_roles:
+    label: "Rollen verwalten"
+    description: "Rollen verwalten"
+  
+  manage_permissions:
+    label: "Berechtigungen verwalten"
+    description: "Berechtigungen verwalten"
+  
+  manage_staff:
+    label: "Personal verwalten"
+    description: "Personal verwalten"
+  
+  # Medizinische Actions
+  diagnose:
+    label: "Diagnostizieren"
+    description: "Diagnose erstellen"
+  
+  prescribe:
+    label: "Verschreiben"
+    description: "Medikament verschreiben"
+  
+  treat:
+    label: "Behandeln"
+    description: "Patient behandeln"
+  
+  refer:
+    label: "Überweisen"
+    description: "Patient überweisen"
+  
+  discharge:
+    label: "Entlassen"
+    description: "Patient entlassen"
+  
+  # XDS/IHE Actions
+  query:
+    label: "Abfragen"
+    description: "XDS Query durchführen"
+  
+  retrieve:
+    label: "Abrufen"
+    description: "XDS Document abrufen"
+  
+  deprecate:
+    label: "Deprecate"
+    description: "XDS Document deprecate"
+  
+  submit:
+    label: "Einreichen"
+    description: "XDS Submission einreichen"
+
+# Resources (Ressourcen-Typen)
+resources:
+  patient:
+    label: "Patient"
+    description: "Patientendaten"
+    sensitive: true
+  
+  appointment:
+    label: "Termin"
+    description: "Terminverwaltung"
+    sensitive: false
+  
+  document:
+    label: "Dokument"
+    description: "Medizinische Dokumente"
+    sensitive: true
+  
+  diagnosis:
+    label: "Diagnose"
+    description: "Diagnosen"
+    sensitive: true
+  
+  prescription:
+    label: "Rezept"
+    description: "Verschreibungen"
+    sensitive: true
+  
+  billing:
+    label: "Abrechnung"
+    description: "Rechnungen und Abrechnungen"
+    sensitive: true
+  
+  user:
+    label: "Benutzer"
+    description: "System-Benutzer"
+    sensitive: true
+  
+  role:
+    label: "Rolle"
+    description: "RBAC-Rollen"
+    sensitive: false
+  
+  location:
+    label: "Standort"
+    description: "Ordinations-Standorte"
+    sensitive: false
+  
+  service:
+    label: "Leistung"
+    description: "Medizinische Leistungen"
+    sensitive: false
+  
+  template:
+    label: "Vorlage"
+    description: "Dokument-Vorlagen"
+    sensitive: false
+  
+  staff:
+    label: "Personal"
+    description: "Mitarbeiter"
+    sensitive: true
+  
+  audit_log:
+    label: "Audit-Log"
+    description: "Audit-Protokolle"
+    sensitive: true
+  
+  system:
+    label: "System"
+    description: "System-Konfiguration"
+    sensitive: true
+  
+  inventory:
+    label: "Inventar"
+    description: "Inventar-Verwaltung"
+    sensitive: false
+  
+  settings:
+    label: "Einstellungen"
+    description: "System-Einstellungen"
+    sensitive: false
+  
+  security:
+    label: "Sicherheit"
+    description: "Sicherheits-Einstellungen"
+    sensitive: true
+  
+  reports:
+    label: "Berichte"
+    description: "Reports und Statistiken"
+    sensitive: true
+  
+  audit:
+    label: "Audit"
+    description: "Audit-Funktionen"
+    sensitive: true
+  
+  # XDS/IHE Resources
+  xds_document:
+    label: "XDS Document"
+    description: "XDS Dokumente"
+    sensitive: true
+  
+  xds_submission_set:
+    label: "XDS Submission Set"
+    description: "XDS Submission Sets"
+    sensitive: true
+  
+  xds_folder:
+    label: "XDS Folder"
+    description: "XDS Folders"
+    sensitive: true
+  
+  xds_association:
+    label: "XDS Association"
+    description: "XDS Associations"
+    sensitive: true
+
+# Permission-Format
+format:
+  pattern: "resource.action"
+  example: "patient.read"
+  note: "Verwenden Sie Singular für Resources (patient, nicht patients)"
+
+# Validierung
+validation:
+  strict: true
+  allowWildcards: true
+  normalizePlural: true  # Automatische Konvertierung von Plural zu Singular

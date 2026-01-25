@@ -36,6 +36,13 @@ const locationSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Bundesland für Abrechnung (österreichische Bundesländer)
+  federalState: {
+    type: String,
+    enum: ['burgenland', 'kaernten', 'niederoesterreich', 'oberoesterreich', 'salzburg', 'steiermark', 'tirol', 'vorarlberg', 'wien'],
+    trim: true,
+    index: true
+  },
   timezone: {
     type: String,
     default: 'Europe/Vienna',

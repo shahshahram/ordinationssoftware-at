@@ -5,7 +5,8 @@ const router = express.Router();
 const auth = require('../middleware/auth');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs').promises;
+const fs = require('fs');
+const fsPromises = require('fs').promises;
 const tariffImporter = require('../utils/tariff-importer');
 
 // Multer-Konfiguration für File-Upload
@@ -99,11 +100,27 @@ router.post('/kho', [
       console.log(`[KHO Import] ${result.created} neue Tarife erstellt, ${result.updated} aktualisiert`);
     } else {
       // CSV-Import (bestehende Funktionalität)
+      console.log(`[KHO Import] Starte CSV-Import von: ${req.file.path}`);
+      console.log(`[KHO Import] Datei-Größe: ${req.file.size} bytes`);
+      console.log(`[KHO Import] Original-Name: ${req.file.originalname}`);
+      
+      // Prüfe Datei-Encoding (nur für Debugging)
+      try {
+        const fileContent = fs.readFileSync(req.file.path, 'utf8');
+        const firstLines = fileContent.split('\n').slice(0, 3);
+        console.log(`[KHO Import] Erste 3 Zeilen (erste 100 Zeichen pro Zeile):`);
+        firstLines.forEach((line, idx) => {
+          console.log(`  Zeile ${idx + 1}: ${line.substring(0, 100)}`);
+        });
+      } catch (readError) {
+        console.warn('[KHO Import] Konnte Datei nicht zum Prüfen lesen:', readError.message);
+      }
+      
       result = await tariffImporter.importKHOFromCSV(req.file.path, req.user._id);
     }
     
     // Lösche temporäre Datei
-    await fs.unlink(req.file.path);
+    await fsPromises.unlink(req.file.path);
     
     res.json({
       success: true,
@@ -114,22 +131,24 @@ router.post('/kho', [
     // Lösche temporäre Datei bei Fehler
     if (req.file) {
       try {
-        await fs.unlink(req.file.path);
+        await fsPromises.unlink(req.file.path);
       } catch (unlinkError) {
         console.error('Error deleting temp file:', unlinkError);
       }
     }
     
-    console.error('Error importing KHO tariffs:', error);
+    console.error('[KHO Import] Fehler beim Importieren:', error);
+    console.error('[KHO Import] Fehler-Stack:', error.stack);
     res.status(500).json({
       success: false,
       message: 'Fehler beim Importieren der KHO/ET-Tarife',
-      error: error.message
+      error: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
 
-// POST /api/tariff-import/json - Tarife aus JSON importieren
+// POST /api/tariff-import/json - Tarife aus JSON importieren (tarife.json Format)
 router.post('/json', [
   auth,
   upload.single('file')
@@ -149,7 +168,7 @@ router.post('/json', [
     
     res.json({
       success: true,
-      message: 'Tarife erfolgreich importiert',
+      message: 'Tarife erfolgreich importiert (tarife.json Format)',
       data: result
     });
   } catch (error) {
@@ -166,6 +185,30 @@ router.post('/json', [
     res.status(500).json({
       success: false,
       message: 'Fehler beim Importieren der Tarife',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/tariff-import/export-json - Tarife als tarife.json exportieren
+router.get('/export-json', auth, async (req, res) => {
+  try {
+    const { federalState, insuranceProvider } = req.query;
+    
+    const filters = {};
+    if (federalState) filters.federalState = federalState;
+    if (insuranceProvider) filters.insuranceProvider = insuranceProvider;
+    
+    const jsonData = await tariffImporter.exportToJSON(filters);
+    
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename="tarife.json"');
+    res.send(jsonData);
+  } catch (error) {
+    console.error('Error exporting tariffs to JSON:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Exportieren der Tarife',
       error: error.message
     });
   }

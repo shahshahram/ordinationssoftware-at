@@ -27,8 +27,6 @@ import {
   Paper,
   TableHead,
   TableRow,
-  TablePagination,
-  Snackbar,
   Alert,
   CircularProgress,
   Grid,
@@ -36,7 +34,6 @@ import {
   Autocomplete,
   Checkbox,
   ListItemText,
-  OutlinedInput,
   Tabs,
   Tab,
   Tooltip,
@@ -46,15 +43,12 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon,
-  People as PeopleIcon,
   FirstPage as FirstPageIcon,
   LastPage as LastPageIcon,
   NavigateBefore as NavigateBeforeIcon,
   NavigateNext as NavigateNextIcon,
   Settings as SettingsIcon,
   Info as InfoIcon,
-  Devices as DevicesIcon,
   Room as RoomIcon,
   AccessTime as AccessTimeIcon,
   AttachMoney as AttachMoneyIcon,
@@ -63,8 +57,6 @@ import {
   EventNote as EventNoteIcon,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
-import { useDispatch, useSelector } from 'react-redux';
-import { RootState } from '../store/store';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 import { Refresh } from '@mui/icons-material';
@@ -175,6 +167,10 @@ interface ServiceCatalog {
   max_age_years?: number;
   requires_consent: boolean;
   online_bookable: boolean;
+  is_online_booking_enabled?: boolean;
+  requires_confirmation?: boolean;
+  requires_scheduling_confirmation?: boolean;
+  max_waitlist?: number;
   price?: number; // Preis in Euro
   price_cents?: number; // Legacy: Für Backward Compatibility
   taxRate?: number | null; // Umsatzsteuer in Prozent (null = automatische Logik)
@@ -218,6 +214,33 @@ interface ServiceCatalog {
     ebmSubGroup?: string;
     requiresApproval?: boolean;
     billingFrequency?: 'once' | 'periodic';
+    // NEU: Ausschluss-Regeln (Conflict-Detection)
+    conflictRules?: {
+      conflictsWith?: string[];  // Array von Service-Codes, die nicht gleichzeitig erlaubt sind
+      conflictsOnSameDay?: boolean;  // true = Konflikt nur am selben Tag
+      conflictsInSamePeriod?: {
+        period?: 'day' | 'week' | 'month' | 'quarter';
+        conflictsWith?: string[];
+      };
+      requiresDifferentDoctor?: boolean;  // true = Muss von anderem Arzt sein
+      allowOverride?: boolean;  // true = Arzt kann Konflikt überschreiben (mit Begründung)
+      overrideRequiresJustification?: boolean;  // true = Überschreibung erfordert Begründung
+    };
+    // NEU: Begründungspflicht-Regeln
+    justificationRules?: {
+      requiresJustification?: boolean;  // true = Begründung ist Pflicht
+      justificationType?: 'text' | 'time' | 'diagnosis' | 'combination';  // Art der Begründung
+      justificationFields?: {
+        text?: boolean;        // Textfeld erforderlich
+        time?: boolean;        // Uhrzeit erforderlich
+        diagnosis?: boolean;    // Diagnose erforderlich
+        urgency?: boolean;     // Dringlichkeit erforderlich
+        reason?: boolean;      // Grund erforderlich
+      };
+      minLength?: number;      // Mindestlänge für Text
+      maxLength?: number;      // Maximallänge für Text
+      validationPattern?: string;  // Regex-Pattern für Validierung
+    };
   };
   wahlarzt?: {
     price?: number;
@@ -292,10 +315,9 @@ interface User {
   role: string;
 }
 
-const ServiceCatalog: React.FC = () => {
+const ServiceCatalogPage: React.FC = () => {
   const theme = useTheme();
-  const dispatch = useDispatch();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { enqueueSnackbar } = useSnackbar();
   const { marginTopValue } = useGlobalNavigationOffset();
   
   const [services, setServices] = useState<ServiceCatalog[]>([]);
@@ -318,12 +340,11 @@ const ServiceCatalog: React.FC = () => {
   const [filterCategory, setFilterCategory] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterSpecialty, setFilterSpecialty] = useState('');
-  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [activeTab, setActiveTab] = useState(0);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<Partial<ServiceCatalog>>({
     code: '',
     name: '',
     description: '',
@@ -332,12 +353,12 @@ const ServiceCatalog: React.FC = () => {
       specialty: 'allgemeinmedizin',
       required_role: '',
     visible_to_roles: [] as string[],
-    assigned_users: [] as string[],
+    assigned_users: [] as ServiceCatalog['assigned_users'],
     requires_user_selection: false,
-    assigned_devices: [] as string[],
+    assigned_devices: [] as ServiceCatalog['assigned_devices'],
     requires_device_selection: false,
     device_quantity_required: 1,
-    assigned_rooms: [] as string[],
+    assigned_rooms: [] as ServiceCatalog['assigned_rooms'],
     requires_room_selection: false,
     room_quantity_required: 1,
     base_duration_min: 30,
@@ -347,8 +368,8 @@ const ServiceCatalog: React.FC = () => {
     parallel_group: '',
     requires_room: false,
     required_device_type: '',
-    min_age_years: '',
-    max_age_years: '',
+    min_age_years: undefined as number | undefined,
+    max_age_years: undefined as number | undefined,
     requires_consent: false,
     online_bookable: true,
     is_online_booking_enabled: true,
@@ -379,7 +400,7 @@ const ServiceCatalog: React.FC = () => {
     is_active: true,
     color_hex: '#2563EB',
     quick_select: false,
-    location_id: '',
+      location_id: undefined as ServiceCatalog['location_id'],
     // Abrechnungsfelder
     billingType: 'both',
     ogk: {
@@ -396,8 +417,11 @@ const ServiceCatalog: React.FC = () => {
       ebmGroup: '',
       ebmSubGroup: '',
       requiresApproval: false,
-      billingFrequency: 'once' as 'once' | 'periodic'
-    },
+      billingFrequency: 'once' as 'once' | 'periodic',
+      // NEU: Conflict-Rules und Begründungspflicht-Regeln (optional)
+      conflictRules: undefined,
+      justificationRules: undefined
+    } as ServiceCatalog['ogk'],
     wahlarzt: {
       price: 0,
       priceType: 'netto' as 'netto' | 'brutto',
@@ -524,7 +548,7 @@ const ServiceCatalog: React.FC = () => {
       console.error('Error fetching services:', error);
       setServices([]);
       setTotalCount(0);
-      setSnackbar({ open: true, message: 'Fehler beim Laden der Leistungen', severity: 'error' });
+      enqueueSnackbar('Fehler beim Laden der Leistungen', { variant: 'error' });
     } finally {
       setLoading(false);
     }
@@ -722,8 +746,8 @@ const ServiceCatalog: React.FC = () => {
       parallel_group: '',
       requires_room: false,
       required_device_type: '',
-      min_age_years: '',
-      max_age_years: '',
+      min_age_years: undefined as number | undefined,
+      max_age_years: undefined as number | undefined,
       requires_consent: false,
       online_bookable: true,
       is_online_booking_enabled: true,
@@ -738,7 +762,7 @@ const ServiceCatalog: React.FC = () => {
       is_active: true,
       color_hex: '#2563EB',
       quick_select: false,
-      location_id: '',
+      location_id: undefined as ServiceCatalog['location_id'],
       // Abrechnungsfelder
       billingType: 'both',
       ogk: {
@@ -791,8 +815,19 @@ const ServiceCatalog: React.FC = () => {
     if (locations.length >= 1) {
       setSelectedDeviceLocation(locations[0]._id);
       setSelectedRoomLocation(locations[0]._id);
-      // Service-Standort automatisch vorbelegen
-      setFormData(prev => ({ ...prev, location_id: locations[0]._id }));
+      // Service-Standort automatisch vorbelegen und Bundesland übernehmen
+      const firstLocation = locations[0];
+      setFormData(prev => {
+        const updated = { ...prev, location_id: firstLocation };
+        // Bundesland automatisch aus Standort übernehmen, wenn vorhanden
+        if (firstLocation && (firstLocation as any).federalState) {
+          updated.ogk = {
+            ...updated.ogk,
+            federalState: (firstLocation as any).federalState
+          };
+        }
+        return updated;
+      });
     } else {
       setSelectedDeviceLocation('');
       setSelectedRoomLocation('');
@@ -818,21 +853,12 @@ const ServiceCatalog: React.FC = () => {
       specialty: (service as any).specialty || 'allgemeinmedizin',
       required_role: service.required_role || '',
       visible_to_roles: service.visible_to_roles || [],
-      assigned_users: service.assigned_users?.map(user => user._id) || [],
+      assigned_users: service.assigned_users || [],
       requires_user_selection: service.requires_user_selection || false,
-      assigned_devices: service.assigned_devices?.map(device => {
-        // Handle both populated devices (with _id property) and device IDs
-        if (typeof device === 'string') return device;
-        return device._id || device.toString();
-      }) || [],
+      assigned_devices: service.assigned_devices || [],
       requires_device_selection: service.requires_device_selection || false,
       device_quantity_required: service.device_quantity_required || 1,
-      assigned_rooms: service.assigned_rooms?.map(room => {
-        console.log('handleEdit - processing room:', room, 'type:', typeof room);
-        // Handle both populated rooms (with _id property) and room IDs
-        if (typeof room === 'string') return room;
-        return room._id || room.toString();
-      }) || [],
+      assigned_rooms: service.assigned_rooms || [],
       requires_room_selection: service.requires_room_selection || false,
       room_quantity_required: service.room_quantity_required || 1,
       base_duration_min: service.base_duration_min,
@@ -842,8 +868,8 @@ const ServiceCatalog: React.FC = () => {
       parallel_group: service.parallel_group || '',
       requires_room: service.requires_room,
       required_device_type: service.required_device_type || '',
-      min_age_years: service.min_age_years?.toString() || '',
-      max_age_years: service.max_age_years?.toString() || '',
+      min_age_years: service.min_age_years,
+      max_age_years: service.max_age_years,
       requires_consent: service.requires_consent,
       online_bookable: service.online_bookable,
       is_online_booking_enabled: (service as any).is_online_booking_enabled ?? service.online_bookable,
@@ -860,7 +886,7 @@ const ServiceCatalog: React.FC = () => {
       is_active: service.is_active,
       color_hex: service.color_hex || '#2563EB',
       quick_select: service.quick_select || false,
-      location_id: service.location_id?._id || '',
+      location_id: service.location_id,
       // Abrechnungsfelder
       billingType: service.billingType || 'both',
       ogk: {
@@ -885,7 +911,10 @@ const ServiceCatalog: React.FC = () => {
         ebmGroup: service.ogk?.khoGroup || service.ogk?.ebmGroup || '',
         ebmSubGroup: service.ogk?.khoSubGroup || service.ogk?.ebmSubGroup || '',
         requiresApproval: service.ogk?.requiresApproval || false,
-        billingFrequency: service.ogk?.billingFrequency || 'once'
+        billingFrequency: service.ogk?.billingFrequency || 'once',
+        // NEU: Conflict-Rules und Begründungspflicht-Regeln (optional)
+        ...(service.ogk?.conflictRules ? { conflictRules: service.ogk.conflictRules } : {}),
+        ...(service.ogk?.justificationRules ? { justificationRules: service.ogk.justificationRules } : {})
       },
       wahlarzt: {
         price: service.wahlarzt?.price !== undefined && service.wahlarzt?.price !== null ? service.wahlarzt.price : 0, // ALLE PREISE SIND BEREITS IN EURO!
@@ -921,10 +950,30 @@ const ServiceCatalog: React.FC = () => {
     if (locations.length === 1) {
       setSelectedDeviceLocation(locations[0]._id);
       setSelectedRoomLocation(locations[0]._id);
-      // Service-Standort automatisch vorbelegen wenn nicht bereits gesetzt
-      if (!service.location_id?._id) {
-        setFormData(prev => ({ ...prev, location_id: locations[0]._id }));
-      }
+        // Service-Standort automatisch vorbelegen wenn nicht bereits gesetzt
+        if (!service.location_id?._id) {
+          const firstLocation = locations[0];
+          setFormData(prev => {
+            const updated = { ...prev, location_id: firstLocation };
+            // Bundesland automatisch aus Standort übernehmen, wenn vorhanden
+            if (firstLocation && (firstLocation as any).federalState) {
+              updated.ogk = {
+                ...updated.ogk,
+                federalState: (firstLocation as any).federalState
+              };
+            }
+            return updated;
+          });
+        } else if (service.location_id && (service.location_id as any).federalState) {
+          // Bundesland aus bereits zugewiesenem Standort übernehmen
+          setFormData(prev => ({
+            ...prev,
+            ogk: {
+              ...prev.ogk,
+              federalState: (service.location_id as any).federalState
+            }
+          }));
+        }
     } else {
       // Wenn Service bereits Geräte hat, deren Standort für Geräte-Auswahl verwenden
       if (service.assigned_devices && service.assigned_devices.length > 0) {
@@ -951,8 +1000,8 @@ const ServiceCatalog: React.FC = () => {
       const payload: any = {
         ...formData,
         price_cents: formData.price_cents || undefined,
-        min_age_years: formData.min_age_years ? parseInt(formData.min_age_years) : undefined,
-        max_age_years: formData.max_age_years ? parseInt(formData.max_age_years) : undefined,
+        min_age_years: formData.min_age_years,
+        max_age_years: formData.max_age_years,
         visible_to_roles: formData.visible_to_roles
       };
 
@@ -976,11 +1025,7 @@ const ServiceCatalog: React.FC = () => {
           : await api.post<ServiceCatalog>('/service-catalog', payload);
 
       if (response.success) {
-        setSnackbar({ 
-          open: true, 
-          message: editingService ? 'Leistung erfolgreich aktualisiert' : 'Leistung erfolgreich erstellt', 
-          severity: 'success' 
-        });
+        enqueueSnackbar(editingService ? 'Leistung erfolgreich aktualisiert' : 'Leistung erfolgreich erstellt', { variant: 'success' });
         setDialogOpen(false);
         fetchServices();
       } else {
@@ -988,7 +1033,7 @@ const ServiceCatalog: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Error saving service:', error);
-      setSnackbar({ open: true, message: error.message, severity: 'error' });
+      enqueueSnackbar(error.message || 'Fehler beim Speichern', { variant: 'error' });
     }
   };
 
@@ -1001,28 +1046,18 @@ const ServiceCatalog: React.FC = () => {
       const response = await api.delete<{success: boolean}>(`/service-catalog/${serviceId}`);
 
       if (response.success) {
-        setSnackbar({ open: true, message: 'Leistung erfolgreich gelöscht', severity: 'success' });
+        enqueueSnackbar('Leistung erfolgreich gelöscht', { variant: 'success' });
         fetchServices();
       } else {
         throw new Error(response.message || 'Fehler beim Löschen');
       }
     } catch (error: any) {
       console.error('Error deleting service:', error);
-      setSnackbar({ open: true, message: error.message, severity: 'error' });
+      const errorMessage = error?.message || error?.toString() || 'Fehler beim Löschen';
+      enqueueSnackbar(errorMessage, { variant: 'error' });
     }
   };
 
-  const handleChangePage = (event: React.MouseEvent<HTMLButtonElement> | null, newPage: number) => {
-    console.log('📄 Page changed from', page, 'to', newPage);
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const newRowsPerPage = parseInt(event.target.value, 10);
-    console.log('📄 RowsPerPage changed from', rowsPerPage, 'to', newRowsPerPage);
-    setRowsPerPage(newRowsPerPage);
-    setPage(0);
-  };
 
   // Helper-Funktion: Konvertiert Wert zu Euro (automatische Erkennung)
   // Wenn Wert > 100000, wird angenommen, dass es in Cent ist (alte Daten)
@@ -1270,6 +1305,8 @@ const ServiceCatalog: React.FC = () => {
                 <TableRow 
                   key={service._id}
                   sx={{
+                    height: 'auto',
+                    minHeight: '80px',
                     '&:hover': {
                       backgroundColor: theme.palette.mode === 'dark' 
                         ? 'rgba(255, 255, 255, 0.05)' 
@@ -1283,21 +1320,60 @@ const ServiceCatalog: React.FC = () => {
                   }}
                 >
                   <TableCell>
-                    <Typography variant="body2" fontWeight="bold">
+                    <Typography variant="body2" fontWeight="bold" noWrap>
                       {service.code}
                     </Typography>
                   </TableCell>
-                  <TableCell>
-                    <Typography 
-                      variant="body2"
-                      dangerouslySetInnerHTML={{ __html: service.name }}
-                    />
-                    {service.description && (
+                  <TableCell sx={{ maxWidth: '250px', minWidth: '200px' }}>
+                    <Box sx={{ 
+                      maxHeight: '60px', 
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical'
+                    }}>
                       <Typography 
-                        variant="caption" 
-                        color="text.secondary"
-                        dangerouslySetInnerHTML={{ __html: service.description }}
+                        variant="body2"
+                        sx={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          display: '-webkit-box',
+                          WebkitLineClamp: 1,
+                          WebkitBoxOrient: 'vertical',
+                          '& *': {
+                            margin: 0,
+                            padding: 0,
+                            display: 'inline'
+                          }
+                        }}
+                        dangerouslySetInnerHTML={{ __html: service.name }}
                       />
+                    </Box>
+                    {service.description && (
+                      <Box sx={{ 
+                        maxHeight: '40px', 
+                        overflow: 'hidden',
+                        mt: 0.5
+                      }}>
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary"
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 1,
+                            WebkitBoxOrient: 'vertical',
+                            '& *': {
+                              margin: 0,
+                              padding: 0,
+                              display: 'inline'
+                            }
+                          }}
+                          dangerouslySetInnerHTML={{ __html: service.description }}
+                        />
+                      </Box>
                     )}
                   </TableCell>
                   <TableCell>
@@ -1305,25 +1381,40 @@ const ServiceCatalog: React.FC = () => {
                       <Chip label={service.category} size="small" />
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
+                  <TableCell sx={{ maxWidth: '200px' }}>
+                    <Typography 
+                      variant="body2" 
+                      noWrap
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
                       {service.location_id && typeof service.location_id === 'object' && service.location_id?.name 
                         ? service.location_id.name 
                         : 'Kein Standort zugewiesen'}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary"
+                      noWrap
+                      sx={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                      }}
+                    >
                       {service.location_id && typeof service.location_id === 'object' && service.location_id?.code 
                         ? service.location_id.code 
                         : ''}
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2">
+                    <Typography variant="body2" noWrap>
                       {formatDuration(service)}
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2">
+                    <Typography variant="body2" noWrap>
                       {formatPrice(service.price || service.price_cents || service.prices?.privat)}
                     </Typography>
                   </TableCell>
@@ -1337,12 +1428,16 @@ const ServiceCatalog: React.FC = () => {
                       />
                     )}
                   </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minHeight: '60px' }}>
+                  <TableCell sx={{ minWidth: '280px', maxWidth: '350px' }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: 0.5
+                    }}>
                       {/* Benutzer */}
                       {service.assigned_users && service.assigned_users.length > 0 ? (
                         <Box>
-                          <Typography variant="caption" fontWeight="bold" color="text.secondary">
+                          <Typography variant="caption" fontWeight="bold" color="text.secondary" noWrap>
                             Benutzer:
                           </Typography>
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.3 }}>
@@ -1353,7 +1448,14 @@ const ServiceCatalog: React.FC = () => {
                                 size="small"
                                 variant="outlined"
                                 sx={{ 
-                                  maxWidth: '100%',
+                                  maxWidth: '180px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  '& .MuiChip-label': {
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  },
                                   '&:hover': {
                                     transform: 'none'
                                   }
@@ -1379,7 +1481,7 @@ const ServiceCatalog: React.FC = () => {
                       {/* Geräte */}
                       {service.assigned_devices && service.assigned_devices.length > 0 ? (
                         <Box>
-                          <Typography variant="caption" fontWeight="bold" color="text.secondary">
+                          <Typography variant="caption" fontWeight="bold" color="text.secondary" noWrap>
                             Geräte:
                           </Typography>
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.3 }}>
@@ -1390,7 +1492,14 @@ const ServiceCatalog: React.FC = () => {
                                 size="small"
                                 variant="outlined"
                                 sx={{ 
-                                  maxWidth: '100%',
+                                  maxWidth: '180px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  '& .MuiChip-label': {
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  },
                                   '&:hover': {
                                     transform: 'none'
                                   }
@@ -1416,7 +1525,7 @@ const ServiceCatalog: React.FC = () => {
                       {/* Räume */}
                       {service.assigned_rooms && service.assigned_rooms.length > 0 ? (
                         <Box>
-                          <Typography variant="caption" fontWeight="bold" color="text.secondary">
+                          <Typography variant="caption" fontWeight="bold" color="text.secondary" noWrap>
                             Räume:
                           </Typography>
                           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.3 }}>
@@ -1427,7 +1536,14 @@ const ServiceCatalog: React.FC = () => {
                                 size="small"
                                 variant="outlined"
                                 sx={{ 
-                                  maxWidth: '100%',
+                                  maxWidth: '180px',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  '& .MuiChip-label': {
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap'
+                                  },
                                   '&:hover': {
                                     transform: 'none'
                                   }
@@ -1453,19 +1569,25 @@ const ServiceCatalog: React.FC = () => {
                       {(!service.assigned_users || service.assigned_users.length === 0) &&
                         (!service.assigned_devices || service.assigned_devices.length === 0) &&
                         (!service.assigned_rooms || service.assigned_rooms.length === 0) && (
-                          <Typography variant="caption" color="text.secondary">
+                          <Typography variant="caption" color="text.secondary" noWrap>
                             Keine
                           </Typography>
                         )}
                     </Box>
                   </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, alignItems: 'flex-start' }}>
+                  <TableCell sx={{ minWidth: '180px', maxWidth: '220px' }}>
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      gap: 0.3, 
+                      alignItems: 'flex-start'
+                    }}>
                       {/* Status */}
                       <Chip 
                         label={(service.is_active || service.isActive) ? 'Aktiv' : 'Inaktiv'} 
                         size="small" 
                         color={(service.is_active || service.isActive) ? 'success' : 'default'}
+                        sx={{ height: '24px' }}
                       />
                       {/* Medizinische Leistung */}
                       <Chip 
@@ -1473,6 +1595,7 @@ const ServiceCatalog: React.FC = () => {
                         size="small" 
                         color={service.isMedical ? 'error' : 'default'}
                         variant="outlined"
+                        sx={{ height: '24px' }}
                       />
                       {/* Schnellauswahl */}
                       {service.quick_select && (
@@ -1481,20 +1604,31 @@ const ServiceCatalog: React.FC = () => {
                           size="small" 
                           color="primary"
                           variant="filled"
+                          sx={{ height: '24px' }}
                         />
                       )}
                       {/* Farbe */}
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.2 }}>
                         <Box
                           sx={{
                             width: 16,
                             height: 16,
                             borderRadius: '50%',
                             backgroundColor: service.color_hex || '#2563EB',
-                            border: '1px solid #ccc'
+                            border: '1px solid #ccc',
+                            flexShrink: 0
                           }}
                         />
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary"
+                          noWrap
+                          sx={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            maxWidth: '150px'
+                          }}
+                        >
                           {service.color_hex || '#2563EB'}
                         </Typography>
                       </Box>
@@ -1663,7 +1797,7 @@ const ServiceCatalog: React.FC = () => {
                     Name *
                   </Typography>
                   <RichTextEditor
-                    value={formData.name}
+                    value={formData.name || ''}
                     onChange={(html) => setFormData({ ...formData, name: html })}
                     placeholder="Leistungsname eingeben..."
                     minHeight={80}
@@ -1739,7 +1873,7 @@ const ServiceCatalog: React.FC = () => {
                     Beschreibung
                   </Typography>
                   <RichTextEditor
-                    value={formData.description}
+                    value={formData.description || ''}
                     onChange={(html) => setFormData({ ...formData, description: html })}
                     placeholder="Beschreibung eingeben..."
                     minHeight={150}
@@ -1777,8 +1911,19 @@ const ServiceCatalog: React.FC = () => {
                 <FormControl fullWidth required>
                   <InputLabel>Standort *</InputLabel>
                   <Select
-                    value={formData.location_id}
-                    onChange={(e) => setFormData({ ...formData, location_id: e.target.value })}
+                    value={typeof formData.location_id === 'object' ? formData.location_id?._id || '' : formData.location_id || ''}
+                    onChange={(e) => {
+                      const location = locations.find(loc => loc._id === e.target.value);
+                      const updatedFormData = { ...formData, location_id: location || undefined };
+                      // Bundesland automatisch aus Standort übernehmen, wenn vorhanden
+                      if (location && (location as any).federalState) {
+                        updatedFormData.ogk = {
+                          ...updatedFormData.ogk,
+                          federalState: (location as any).federalState
+                        };
+                      }
+                      setFormData(updatedFormData);
+                    }}
                     label="Standort *"
                   >
                     {locations.map((location) => (
@@ -1793,7 +1938,7 @@ const ServiceCatalog: React.FC = () => {
                     Beschreibung
                   </Typography>
                   <RichTextEditor
-                    value={formData.description}
+                    value={formData.description || ''}
                     onChange={(html) => setFormData({ ...formData, description: html })}
                     placeholder="Beschreibung eingeben..."
                     minHeight={150}
@@ -1878,11 +2023,11 @@ const ServiceCatalog: React.FC = () => {
                   multiple
                   options={users}
                   getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.role})`}
-                  value={users.filter(user => formData.assigned_users.includes(user._id))}
+                  value={users.filter(user => formData.assigned_users?.some(au => (typeof au === 'string' ? au : au._id) === user._id)) || []}
                   onChange={(event, newValue) => {
                     setFormData({
                       ...formData,
-                      assigned_users: newValue.map(user => user._id)
+                      assigned_users: newValue
                     });
                   }}
                   renderInput={(params) => (
@@ -2072,6 +2217,266 @@ const ServiceCatalog: React.FC = () => {
                           <MenuItem value="periodic">Regelmäßig</MenuItem>
                         </Select>
                       </FormControl>
+                      
+                      {/* NEU: Conflict-Rules (Ausschluss-Regeln) */}
+                      <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant="h6" gutterBottom>
+                          Ausschluss-Regeln (Conflict-Detection)
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          Definieren Sie, welche Services nicht gleichzeitig mit diesem Service abgerechnet werden können.
+                        </Typography>
+                        
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={formData.ogk?.conflictRules?.allowOverride || false}
+                              onChange={(e) => setFormData({ 
+                                ...formData, 
+                                ogk: { 
+                                  ...formData.ogk, 
+                                  conflictRules: {
+                                    ...(formData.ogk?.conflictRules || {}),
+                                    allowOverride: e.target.checked
+                                  }
+                                }
+                              })}
+                            />
+                          }
+                          label="Überschreibung erlauben (mit Begründung)"
+                        />
+                        
+                        {formData.ogk?.conflictRules?.allowOverride && (
+                          <FormControlLabel
+                            control={
+                              <Switch
+                                checked={formData.ogk?.conflictRules?.overrideRequiresJustification !== false}
+                                onChange={(e) => setFormData({ 
+                                  ...formData, 
+                                  ogk: { 
+                                    ...formData.ogk, 
+                                    conflictRules: {
+                                      ...(formData.ogk?.conflictRules || {}),
+                                      overrideRequiresJustification: e.target.checked
+                                    }
+                                  }
+                                })}
+                              />
+                            }
+                            label="Begründung bei Überschreibung erforderlich"
+                            sx={{ ml: 2 }}
+                          />
+                        )}
+                        
+                        <TextField
+                          fullWidth
+                          label="Konflikt-Service-Codes"
+                          helperText="Komma-getrennte Liste von Service-Codes, die nicht gleichzeitig abgerechnet werden können (z.B. HB1,TELE)"
+                          value={formData.ogk?.conflictRules?.conflictsWith?.join(',') || ''}
+                          onChange={(e) => {
+                            const codes = e.target.value.split(',').map(c => c.trim()).filter(c => c);
+                            setFormData({ 
+                              ...formData, 
+                              ogk: { 
+                                ...formData.ogk, 
+                                conflictRules: {
+                                  ...(formData.ogk?.conflictRules || {}),
+                                  conflictsWith: codes.length > 0 ? codes : undefined
+                                }
+                              }
+                            });
+                          }}
+                          sx={{ mt: 2 }}
+                        />
+                      </Box>
+                      
+                      {/* NEU: Begründungspflicht-Regeln */}
+                      <Box sx={{ mt: 2, p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant="h6" gutterBottom>
+                          Begründungspflicht-Regeln
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                          Definieren Sie, welche Felder bei der Abrechnung dieses Services ausgefüllt werden müssen.
+                        </Typography>
+                        
+                        <FormControlLabel
+                          control={
+                            <Switch
+                              checked={formData.ogk?.justificationRules?.requiresJustification || false}
+                              onChange={(e) => setFormData({ 
+                                ...formData, 
+                                ogk: { 
+                                  ...formData.ogk, 
+                                  justificationRules: {
+                                    ...(formData.ogk?.justificationRules || {}),
+                                    requiresJustification: e.target.checked
+                                  }
+                                }
+                              })}
+                            />
+                          }
+                          label="Begründung erforderlich"
+                        />
+                        
+                        {formData.ogk?.justificationRules?.requiresJustification && (
+                          <>
+                            <FormControl fullWidth sx={{ mt: 2 }}>
+                              <InputLabel>Art der Begründung</InputLabel>
+                              <Select
+                                value={formData.ogk?.justificationRules?.justificationType || 'text'}
+                                onChange={(e) => setFormData({ 
+                                  ...formData, 
+                                  ogk: { 
+                                    ...formData.ogk, 
+                                    justificationRules: {
+                                      ...(formData.ogk?.justificationRules || {}),
+                                      justificationType: e.target.value as 'text' | 'time' | 'diagnosis' | 'combination'
+                                    }
+                                  }
+                                })}
+                                label="Art der Begründung"
+                              >
+                                <MenuItem value="text">Text</MenuItem>
+                                <MenuItem value="time">Uhrzeit</MenuItem>
+                                <MenuItem value="diagnosis">Diagnose</MenuItem>
+                                <MenuItem value="combination">Kombination</MenuItem>
+                              </Select>
+                            </FormControl>
+                            
+                            <Box sx={{ mt: 2 }}>
+                              <Typography variant="subtitle2" gutterBottom>
+                                Erforderliche Felder:
+                              </Typography>
+                              <FormControlLabel
+                                control={
+                                  <Switch
+                                    checked={formData.ogk?.justificationRules?.justificationFields?.text || false}
+                                    onChange={(e) => setFormData({ 
+                                      ...formData, 
+                                      ogk: { 
+                                        ...formData.ogk, 
+                                        justificationRules: {
+                                          ...formData.ogk?.justificationRules,
+                                          justificationFields: {
+                                            ...(formData.ogk?.justificationRules?.justificationFields || {}),
+                                            text: e.target.checked
+                                          }
+                                        }
+                                      }
+                                    })}
+                                  />
+                                }
+                                label="Textfeld"
+                              />
+                              <FormControlLabel
+                                control={
+                                  <Switch
+                                    checked={formData.ogk?.justificationRules?.justificationFields?.time || false}
+                                    onChange={(e) => setFormData({ 
+                                      ...formData, 
+                                      ogk: { 
+                                        ...formData.ogk, 
+                                        justificationRules: {
+                                          ...formData.ogk?.justificationRules,
+                                          justificationFields: {
+                                            ...(formData.ogk?.justificationRules?.justificationFields || {}),
+                                            time: e.target.checked
+                                          }
+                                        }
+                                      }
+                                    })}
+                                  />
+                                }
+                                label="Uhrzeit"
+                                sx={{ ml: 2 }}
+                              />
+                              <FormControlLabel
+                                control={
+                                  <Switch
+                                    checked={formData.ogk?.justificationRules?.justificationFields?.diagnosis || false}
+                                    onChange={(e) => setFormData({ 
+                                      ...formData, 
+                                      ogk: { 
+                                        ...formData.ogk, 
+                                        justificationRules: {
+                                          ...formData.ogk?.justificationRules,
+                                          justificationFields: {
+                                            ...(formData.ogk?.justificationRules?.justificationFields || {}),
+                                            diagnosis: e.target.checked
+                                          }
+                                        }
+                                      }
+                                    })}
+                                  />
+                                }
+                                label="Diagnose"
+                                sx={{ ml: 2 }}
+                              />
+                              <FormControlLabel
+                                control={
+                                  <Switch
+                                    checked={formData.ogk?.justificationRules?.justificationFields?.urgency || false}
+                                    onChange={(e) => setFormData({ 
+                                      ...formData, 
+                                      ogk: { 
+                                        ...formData.ogk, 
+                                        justificationRules: {
+                                          ...formData.ogk?.justificationRules,
+                                          justificationFields: {
+                                            ...(formData.ogk?.justificationRules?.justificationFields || {}),
+                                            urgency: e.target.checked
+                                          }
+                                        }
+                                      }
+                                    })}
+                                  />
+                                }
+                                label="Dringlichkeit"
+                                sx={{ ml: 2 }}
+                              />
+                            </Box>
+                            
+                            {formData.ogk?.justificationRules?.justificationFields?.text && (
+                              <>
+                                <TextField
+                                  fullWidth
+                                  label="Mindestlänge (Zeichen)"
+                                  type="number"
+                                  value={formData.ogk?.justificationRules?.minLength || ''}
+                                  onChange={(e) => setFormData({ 
+                                    ...formData, 
+                                    ogk: { 
+                                      ...formData.ogk, 
+                                      justificationRules: {
+                                        ...(formData.ogk?.justificationRules || {}),
+                                        minLength: e.target.value ? parseInt(e.target.value) : undefined
+                                      }
+                                    }
+                                  })}
+                                  sx={{ mt: 2 }}
+                                />
+                                <TextField
+                                  fullWidth
+                                  label="Maximallänge (Zeichen)"
+                                  type="number"
+                                  value={formData.ogk?.justificationRules?.maxLength || ''}
+                                  onChange={(e) => setFormData({ 
+                                    ...formData, 
+                                    ogk: { 
+                                      ...formData.ogk, 
+                                      justificationRules: {
+                                        ...(formData.ogk?.justificationRules || {}),
+                                        maxLength: e.target.value ? parseInt(e.target.value) : undefined
+                                      }
+                                    }
+                                  })}
+                                  sx={{ mt: 2 }}
+                                />
+                              </>
+                            )}
+                          </>
+                        )}
+                      </Box>
                     </Box>
                   </Box>
                 )}
@@ -2435,15 +2840,15 @@ const ServiceCatalog: React.FC = () => {
                     fullWidth
                     label="Mindestalter (Jahre)"
                     type="number"
-                    value={formData.min_age_years}
-                    onChange={(e) => setFormData({ ...formData, min_age_years: e.target.value })}
+                    value={formData.min_age_years || ''}
+                    onChange={(e) => setFormData({ ...formData, min_age_years: e.target.value ? parseInt(e.target.value) : undefined })}
                   />
                   <TextField
                     fullWidth
                     label="Höchstalter (Jahre)"
                     type="number"
-                    value={formData.max_age_years}
-                    onChange={(e) => setFormData({ ...formData, max_age_years: e.target.value })}
+                    value={formData.max_age_years || ''}
+                    onChange={(e) => setFormData({ ...formData, max_age_years: e.target.value ? parseInt(e.target.value) : undefined })}
                   />
                   <TextField
                     fullWidth
@@ -2502,11 +2907,11 @@ const ServiceCatalog: React.FC = () => {
                         multiple
                         options={getFilteredDevices()}
                         getOptionLabel={(option) => `${option.name} (${option.type})`}
-                        value={getFilteredDevices().filter(device => formData.assigned_devices.includes(device._id))}
+                        value={getFilteredDevices().filter(device => formData.assigned_devices?.some(ad => (typeof ad === 'string' ? ad : ad._id) === device._id)) || []}
                         onChange={(event, newValue) => {
                           setFormData({
                             ...formData,
-                            assigned_devices: newValue.map(device => device._id)
+                            assigned_devices: newValue
                           });
                         }}
                         renderInput={(params) => (
@@ -2568,11 +2973,11 @@ const ServiceCatalog: React.FC = () => {
                         multiple
                         options={getFilteredRooms()}
                         getOptionLabel={(option) => `${option.name} (${option.number})`}
-                        value={getFilteredRooms().filter(room => formData.assigned_rooms.includes(room._id))}
+                        value={getFilteredRooms().filter(room => formData.assigned_rooms?.some(ar => (typeof ar === 'string' ? ar : ar._id) === room._id)) || []}
                         onChange={(event, newValue) => {
                           setFormData({
                             ...formData,
-                            assigned_rooms: newValue.map(room => room._id)
+                            assigned_rooms: newValue
                           });
                         }}
                         renderInput={(params) => (
@@ -2602,14 +3007,14 @@ const ServiceCatalog: React.FC = () => {
                   Reservieren Sie bestimmte Zeitslots für Online-Buchungen dieses Services (z.B. "Blutabnahmen nur 08:00-12:00").
                 </Typography>
                 
-                {formData.online_contingents.map((contingent, index) => (
+                {(formData.online_contingents || []).map((contingent, index) => (
                   <Card key={index} sx={{ p: 2 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                       <Typography variant="subtitle1">Kontingent {index + 1}</Typography>
                       <IconButton
                         size="small"
                         onClick={() => {
-                          const newContingents = [...formData.online_contingents];
+                          const newContingents = [...(formData.online_contingents || [])];
                           newContingents.splice(index, 1);
                           setFormData({ ...formData, online_contingents: newContingents });
                         }}
@@ -2626,7 +3031,7 @@ const ServiceCatalog: React.FC = () => {
                           type="time"
                           value={contingent.timeWindow.start}
                           onChange={(e) => {
-                            const newContingents = [...formData.online_contingents];
+                            const newContingents = [...(formData.online_contingents || [])];
                             newContingents[index].timeWindow.start = e.target.value;
                             setFormData({ ...formData, online_contingents: newContingents });
                           }}
@@ -2640,7 +3045,7 @@ const ServiceCatalog: React.FC = () => {
                           type="time"
                           value={contingent.timeWindow.end}
                           onChange={(e) => {
-                            const newContingents = [...formData.online_contingents];
+                            const newContingents = [...(formData.online_contingents || [])];
                             newContingents[index].timeWindow.end = e.target.value;
                             setFormData({ ...formData, online_contingents: newContingents });
                           }}
@@ -2654,7 +3059,7 @@ const ServiceCatalog: React.FC = () => {
                             multiple
                             value={contingent.daysOfWeek}
                             onChange={(e) => {
-                              const newContingents = [...formData.online_contingents];
+                              const newContingents = [...(formData.online_contingents || [])];
                               newContingents[index].daysOfWeek = e.target.value as number[];
                               setFormData({ ...formData, online_contingents: newContingents });
                             }}
@@ -2687,7 +3092,7 @@ const ServiceCatalog: React.FC = () => {
                           type="number"
                           value={contingent.maxOnlineBookings}
                           onChange={(e) => {
-                            const newContingents = [...formData.online_contingents];
+                            const newContingents = [...(formData.online_contingents || [])];
                             newContingents[index].maxOnlineBookings = parseInt(e.target.value) || 0;
                             setFormData({ ...formData, online_contingents: newContingents });
                           }}
@@ -2702,7 +3107,7 @@ const ServiceCatalog: React.FC = () => {
                           type="number"
                           value={contingent.priority}
                           onChange={(e) => {
-                            const newContingents = [...formData.online_contingents];
+                            const newContingents = [...(formData.online_contingents || [])];
                             newContingents[index].priority = parseInt(e.target.value) || 0;
                             setFormData({ ...formData, online_contingents: newContingents });
                           }}
@@ -2716,7 +3121,7 @@ const ServiceCatalog: React.FC = () => {
                           label="Beschreibung"
                           value={contingent.description}
                           onChange={(e) => {
-                            const newContingents = [...formData.online_contingents];
+                            const newContingents = [...(formData.online_contingents || [])];
                             newContingents[index].description = e.target.value;
                             setFormData({ ...formData, online_contingents: newContingents });
                           }}
@@ -2729,7 +3134,7 @@ const ServiceCatalog: React.FC = () => {
                             <Switch
                               checked={contingent.isActive}
                               onChange={(e) => {
-                                const newContingents = [...formData.online_contingents];
+                                const newContingents = [...(formData.online_contingents || [])];
                                 newContingents[index].isActive = e.target.checked;
                                 setFormData({ ...formData, online_contingents: newContingents });
                               }}
@@ -2749,7 +3154,7 @@ const ServiceCatalog: React.FC = () => {
                     setFormData({
                       ...formData,
                       online_contingents: [
-                        ...formData.online_contingents,
+                        ...(formData.online_contingents || []),
                         {
                           timeWindow: { start: '08:00', end: '12:00' },
                           daysOfWeek: [1, 2, 3, 4, 5], // Mo-Fr
@@ -2777,7 +3182,7 @@ const ServiceCatalog: React.FC = () => {
                     variant="contained"
                     startIcon={<AddIcon />}
                     onClick={() => {
-                      const newQuestions = [...formData.anamnesisQuestions];
+                      const newQuestions = [...(formData.anamnesisQuestions || [])];
                       newQuestions.push({
                         questionText: '',
                         questionType: 'text',
@@ -2793,17 +3198,17 @@ const ServiceCatalog: React.FC = () => {
                   </Button>
                 </Box>
 
-                {formData.anamnesisQuestions.length === 0 ? (
+                {(formData.anamnesisQuestions || []).length === 0 ? (
                   <Alert severity="info">Keine Anamnese-Fragen konfiguriert. Fügen Sie Fragen hinzu, die Patienten vor der Buchung beantworten sollen.</Alert>
                 ) : (
-                  formData.anamnesisQuestions.map((question, index) => (
+                  (formData.anamnesisQuestions || []).map((question, index) => (
                     <Paper key={index} sx={{ p: 2, border: '1px solid', borderColor: 'divider' }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                         <Typography variant="subtitle1">Frage {index + 1}</Typography>
                         <IconButton
                           size="small"
                           onClick={() => {
-                            const newQuestions = formData.anamnesisQuestions.filter((_, i) => i !== index);
+                            const newQuestions = (formData.anamnesisQuestions || []).filter((_, i) => i !== index);
                             setFormData({ ...formData, anamnesisQuestions: newQuestions });
                           }}
                           color="error"
@@ -2819,7 +3224,7 @@ const ServiceCatalog: React.FC = () => {
                             label="Fragentext *"
                             value={question.questionText}
                             onChange={(e) => {
-                              const newQuestions = [...formData.anamnesisQuestions];
+                              const newQuestions = [...(formData.anamnesisQuestions || [])];
                               newQuestions[index].questionText = e.target.value;
                               setFormData({ ...formData, anamnesisQuestions: newQuestions });
                             }}
@@ -2832,7 +3237,7 @@ const ServiceCatalog: React.FC = () => {
                             <Select
                               value={question.questionType}
                               onChange={(e) => {
-                                const newQuestions = [...formData.anamnesisQuestions];
+                                const newQuestions = [...(formData.anamnesisQuestions || [])];
                                 newQuestions[index].questionType = e.target.value;
                                 // Lösche Options wenn Typ geändert wird
                                 if (e.target.value !== 'select' && e.target.value !== 'multiselect') {
@@ -2857,7 +3262,7 @@ const ServiceCatalog: React.FC = () => {
                               <Checkbox
                                 checked={question.isRequired}
                                 onChange={(e) => {
-                                  const newQuestions = [...formData.anamnesisQuestions];
+                                  const newQuestions = [...(formData.anamnesisQuestions || [])];
                                   newQuestions[index].isRequired = e.target.checked;
                                   setFormData({ ...formData, anamnesisQuestions: newQuestions });
                                 }}
@@ -2873,7 +3278,7 @@ const ServiceCatalog: React.FC = () => {
                               label="Optionen (durch Komma getrennt)"
                               value={question.options?.join(', ') || ''}
                               onChange={(e) => {
-                                const newQuestions = [...formData.anamnesisQuestions];
+                                const newQuestions = [...(formData.anamnesisQuestions || [])];
                                 newQuestions[index].options = e.target.value.split(',').map(o => o.trim()).filter(o => o);
                                 setFormData({ ...formData, anamnesisQuestions: newQuestions });
                               }}
@@ -2889,7 +3294,7 @@ const ServiceCatalog: React.FC = () => {
                               label="Standardwert (optional)"
                               value={question.defaultValue || ''}
                               onChange={(e) => {
-                                const newQuestions = [...formData.anamnesisQuestions];
+                                const newQuestions = [...(formData.anamnesisQuestions || [])];
                                 newQuestions[index].defaultValue = e.target.value;
                                 setFormData({ ...formData, anamnesisQuestions: newQuestions });
                               }}
@@ -2964,12 +3369,57 @@ const ServiceCatalog: React.FC = () => {
                   value={formData.max_waitlist}
                   onChange={(e) => setFormData({ ...formData, max_waitlist: parseInt(e.target.value) || 0 })}
                 />
-                <TextField
-                  fullWidth
-                  label="Color (Hex)"
-                  value={formData.color_hex}
-                  onChange={(e) => setFormData({ ...formData, color_hex: e.target.value })}
-                />
+                <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, flex: 1 }}>
+                    <TextField
+                      fullWidth
+                      label="Color (Hex)"
+                      value={formData.color_hex}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        // Validiere Hex-Format
+                        if (value === '' || /^#[0-9A-Fa-f]{0,6}$/.test(value)) {
+                          setFormData({ ...formData, color_hex: value });
+                        }
+                      }}
+                      placeholder="#2563EB"
+                      helperText="Hex-Code (z.B. #2563EB)"
+                    />
+                  </Box>
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'center', pt: 1 }}>
+                    <Box
+                      component="input"
+                      type="color"
+                      value={formData.color_hex || '#2563EB'}
+                      onChange={(e) => {
+                        setFormData({ ...formData, color_hex: e.target.value.toUpperCase() });
+                      }}
+                      sx={{
+                        width: 60,
+                        height: 40,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                        cursor: 'pointer',
+                        padding: 0,
+                        '&::-webkit-color-swatch-wrapper': {
+                          padding: 0,
+                        },
+                        '&::-webkit-color-swatch': {
+                          border: 'none',
+                          borderRadius: 1,
+                        },
+                        '&::-moz-color-swatch': {
+                          border: 'none',
+                          borderRadius: 1,
+                        }
+                      }}
+                    />
+                    <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                      Farbe wählen
+                    </Typography>
+                  </Box>
+                </Box>
               </Box>
             )}
           </Box>
@@ -3002,6 +3452,8 @@ const ServiceCatalog: React.FC = () => {
             <Tab label="Geräte & Räume" />
             <Tab label="Online-Buchung" />
             <Tab label="Preis & Abrechnung" />
+            <Tab label="Konflikt-Regeln" />
+            <Tab label="Begründungspflicht" />
             <Tab label="Tipps" />
           </Tabs>
 
@@ -3029,6 +3481,8 @@ const ServiceCatalog: React.FC = () => {
                   <li>✅ Preise und Abrechnung konfigurieren</li>
                   <li>✅ Online-Buchung aktivieren</li>
                   <li>✅ Pufferzeiten und Dauer einstellen</li>
+                  <li>🆕 <strong>Konflikt-Regeln:</strong> Ausschluss-Logik für Services</li>
+                  <li>🆕 <strong>Begründungspflicht:</strong> Dynamische Pflichtfelder für Abrechnung</li>
                 </Box>
               </Box>
 
@@ -3042,9 +3496,22 @@ const ServiceCatalog: React.FC = () => {
                   <li><strong>Geräte:</strong> Gerätezuweisung, Typ-basierte Auswahl</li>
                   <li><strong>Räume:</strong> Raumzuweisung, Typ-basierte Auswahl</li>
                   <li><strong>Zeit & Dauer:</strong> Grunddauer, Pufferzeiten</li>
-                  <li><strong>Preis & Abrechnung:</strong> Preise, Abrechnungscodes</li>
+                  <li><strong>Preis & Abrechnung:</strong> Preise, Abrechnungscodes, ÖGK-Konfiguration</li>
                   <li><strong>Online-Buchung:</strong> Online-Buchbarkeit, Kontingente</li>
                   <li><strong>Patienteneignung:</strong> Altersgrenzen, Einverständnis</li>
+                  <li><strong>Konflikt-Regeln:</strong> Ausschluss-Logik für Services (NEU)</li>
+                  <li><strong>Begründungspflicht:</strong> Pflichtfelder für Abrechnung (NEU)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Neue Features
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>🆕 <strong>Konflikt-Erkennung:</strong> Verhindert Abrechnung konfligierender Services am selben Tag</li>
+                  <li>🆕 <strong>Begründungspflicht:</strong> Dynamische Pflichtfelder in Rechnungserstellung</li>
+                  <li>🆕 <strong>Service-Code-Mapping:</strong> Automatische Code-Konvertierung für verschiedene Versicherungsträger</li>
                 </Box>
               </Box>
             </Box>
@@ -3270,11 +3737,21 @@ const ServiceCatalog: React.FC = () => {
                   ÖGK-Abrechnung
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
-                  <li><strong>EBM-Code:</strong> EBM-Code für ÖGK-Abrechnung</li>
-                  <li><strong>EBM-Preis:</strong> Preis für ÖGK-Abrechnung</li>
+                  <li><strong>KHO-Code:</strong> KHO-Code für ÖGK-Abrechnung (neue korrekte Bezeichnung)</li>
+                  <li><strong>KHO-Preis:</strong> Preis für ÖGK-Abrechnung in Euro</li>
+                  <li><strong>EBM-Code:</strong> EBM-Code (Legacy, für Backward Compatibility)</li>
+                  <li><strong>EBM-Preis:</strong> EBM-Preis (Legacy, für Backward Compatibility)</li>
+                  <li><strong>Versicherungsträger:</strong> ÖGK, BVAEB, SVS, KFA, PVA, VAEB, AUVA oder Alle</li>
+                  <li><strong>Bundesland:</strong> Bundesland-spezifische Abrechnung (optional)</li>
                   <li><strong>Genehmigung erforderlich:</strong> Muss die Abrechnung genehmigt werden?</li>
                   <li><strong>Abrechnungshäufigkeit:</strong> Einmalig oder periodisch</li>
                 </Box>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Hinweis:</strong> Für automatische Code-Konvertierung zwischen Versicherungsträgern 
+                    verwenden Sie die <strong>Service-Code-Mapping-Verwaltung</strong> (Einstellungen → Leistungen → Service-Code-Mapping).
+                  </Typography>
+                </Alert>
               </Box>
 
               <Box>
@@ -3302,6 +3779,172 @@ const ServiceCatalog: React.FC = () => {
           )}
 
           {helpTab === 5 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Konflikt-Regeln
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Konflikt-Regeln verhindern, dass bestimmte Services am selben Tag abgerechnet werden können.
+                  Dies ist wichtig für die korrekte Abrechnung bei Versicherungsträgern.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konflikt-Regeln konfigurieren
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab <strong>"Preis & Abrechnung"</strong></li>
+                  <li>Scrollen Sie zu <strong>"Konflikt-Regeln"</strong></li>
+                  <li>Aktivieren Sie <strong>"Überschreibung erlauben"</strong> (optional):
+                    <ul>
+                      <li>Wenn aktiviert: Arzt kann Konflikt überschreiben</li>
+                      <li>Wenn deaktiviert: Konflikt führt zu Fehler</li>
+                    </ul>
+                  </li>
+                  <li>Aktivieren Sie <strong>"Begründung bei Überschreibung erforderlich"</strong> (optional):
+                    <ul>
+                      <li>Wenn aktiviert: Bei Überschreibung muss Begründung eingegeben werden</li>
+                    </ul>
+                  </li>
+                  <li>Geben Sie <strong>Konflikt-Service-Codes</strong> ein:
+                    <ul>
+                      <li>Komma-getrennte Liste (z.B. "HB1,TELE")</li>
+                      <li>Diese Services können nicht gleichzeitig abgerechnet werden</li>
+                    </ul>
+                  </li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Beispiel: Ordination und Hausbesuch
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Wenn "Ordination" (Code: ORD1) und "Hausbesuch" (Code: HB1) nicht am selben Tag 
+                  abgerechnet werden sollen:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Service "Ordination" bearbeiten</li>
+                  <li>Konflikt-Regeln: "HB1" eingeben</li>
+                  <li>Service "Hausbesuch" bearbeiten</li>
+                  <li>Konflikt-Regeln: "ORD1" eingeben</li>
+                </Box>
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Wichtig:</strong> Konflikte müssen in beide Richtungen definiert werden 
+                    (Service A → Service B und Service B → Service A).
+                  </Typography>
+                </Alert>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Überschreibung mit Begründung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Wenn Überschreibung erlaubt ist, kann der Arzt den Konflikt überschreiben:
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Bei der Rechnungserstellung wird eine Warnung angezeigt</li>
+                  <li>Wenn "Begründung erforderlich" aktiviert ist, muss eine Begründung eingegeben werden</li>
+                  <li>Die Begründung wird in der Rechnung gespeichert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 6 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Begründungspflicht
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Begründungspflicht-Regeln definieren, welche Felder bei der Rechnungserstellung 
+                  ausgefüllt werden müssen. Diese Felder erscheinen automatisch in der Rechnungserstellung.
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Begründungspflicht aktivieren
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Wechseln Sie zum Tab <strong>"Preis & Abrechnung"</strong></li>
+                  <li>Scrollen Sie zu <strong>"Begründungspflicht-Regeln"</strong></li>
+                  <li>Aktivieren Sie <strong>"Begründungspflicht aktivieren"</strong></li>
+                  <li>Wählen Sie den <strong>Begründungstyp</strong>:
+                    <ul>
+                      <li><strong>Text:</strong> Textfeld für Begründung</li>
+                      <li><strong>Uhrzeit:</strong> Uhrzeit-Feld</li>
+                      <li><strong>Diagnose:</strong> Diagnose erforderlich</li>
+                      <li><strong>Kombination:</strong> Mehrere Felder</li>
+                    </ul>
+                  </li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Begründungsfelder konfigurieren
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Text:</strong> Textfeld für Begründung (Pflicht, wenn aktiviert)
+                    <ul>
+                      <li>Mindestlänge: Minimale Zeichenanzahl (optional)</li>
+                      <li>Maximallänge: Maximale Zeichenanzahl (optional)</li>
+                    </ul>
+                  </li>
+                  <li><strong>Uhrzeit:</strong> Uhrzeit-Feld (Pflicht, wenn aktiviert)</li>
+                  <li><strong>Diagnose:</strong> Diagnose muss in Rechnung vorhanden sein (Pflicht, wenn aktiviert)</li>
+                  <li><strong>Dringlichkeit:</strong> Dringlichkeitsstufe (Niedrig, Mittel, Hoch, Dringend)</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Beispiel: Dringlichkeitsleistung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Für eine Dringlichkeitsleistung müssen Text, Uhrzeit und Dringlichkeit angegeben werden:
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Begründungspflicht aktivieren</li>
+                  <li>Begründungstyp: <strong>"Kombination"</strong></li>
+                  <li>Begründungsfelder aktivieren:
+                    <ul>
+                      <li>✅ Text</li>
+                      <li>✅ Uhrzeit</li>
+                      <li>✅ Dringlichkeit</li>
+                    </ul>
+                  </li>
+                  <li>Mindestlänge für Text: z.B. 10 Zeichen</li>
+                </Box>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>In der Rechnungserstellung:</strong> Wenn dieser Service hinzugefügt wird, 
+                    erscheinen automatisch die konfigurierten Begründungsfelder unter der Service-Zeile.
+                  </Typography>
+                </Alert>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Validierung
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>Pflichtfelder werden beim Speichern validiert</li>
+                  <li>Fehlende Begründung führt zu Fehlermeldung</li>
+                  <li>Zu kurze Begründung (unter Mindestlänge) führt zu Fehlermeldung</li>
+                  <li>Begründungsfelder werden in der Rechnung gespeichert</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTab === 7 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -3364,6 +4007,48 @@ const ServiceCatalog: React.FC = () => {
                 </Box>
               </Box>
 
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konflikt-Regeln
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Definieren Sie Konflikte für alle Services, die nicht gleichzeitig abgerechnet werden können</li>
+                  <li>✅ Verwenden Sie konsistente Service-Codes</li>
+                  <li>✅ Aktivieren Sie "Begründung bei Überschreibung" für Nachvollziehbarkeit</li>
+                  <li>✅ Testen Sie Konflikte in der Rechnungserstellung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Begründungspflicht
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Aktivieren Sie Begründungspflicht für Services, die eine Begründung erfordern</li>
+                  <li>✅ Setzen Sie realistische Mindestlängen für Textfelder</li>
+                  <li>✅ Verwenden Sie "Kombination" für komplexe Begründungen</li>
+                  <li>✅ Testen Sie die Begründungsfelder in der Rechnungserstellung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Service-Code-Mapping
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>✅ Erstellen Sie Mappings für alle wichtigen Services</li>
+                  <li>✅ Verwenden Sie die automatische Erstellung aus ServiceCatalog</li>
+                  <li>✅ Prüfen Sie regelmäßig die Gültigkeitsdaten der Mappings</li>
+                  <li>✅ Aktualisieren Sie Mappings bei Änderungen der Versicherungsträger-Codes</li>
+                </Box>
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  <Typography variant="body2">
+                    <strong>Hinweis:</strong> Service-Code-Mapping finden Sie unter 
+                    <strong> Einstellungen → Leistungen → Service-Code-Mapping</strong>
+                  </Typography>
+                </Alert>
+              </Box>
+
               <Alert severity="success" sx={{ mt: 2 }}>
                 <Typography variant="body2">
                   <strong>Tipp:</strong> Verwenden Sie Filter, um schnell bestimmte Leistungen zu finden. 
@@ -3392,6 +4077,7 @@ const ServiceCatalogUpdateStatus: React.FC = () => {
 
   useEffect(() => {
     loadUpdateStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadUpdateStatus = async () => {
@@ -3578,4 +4264,4 @@ const ServiceCatalogUpdateStatus: React.FC = () => {
   );
 };
 
-export default ServiceCatalog;
+export default ServiceCatalogPage;
