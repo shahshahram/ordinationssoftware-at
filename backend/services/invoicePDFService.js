@@ -111,7 +111,7 @@ class InvoicePDFService {
   /**
    * Berechnet Erstattungsbetrag für einen Service
    */
-  async calculateServiceRefund(service, invoice) {
+  async calculateServiceRefund(service, invoice, location = null) {
     try {
       // Nur bei Wahlarzt oder Honorarnote
       if (invoice.billingType !== 'wahlarzt' && !invoice.privateBilling?.honorNote) {
@@ -128,8 +128,62 @@ class InvoicePDFService {
         return null;
       }
 
-      // Prüfe ob KHO-Preis vorhanden
-      const khoPrice = serviceDoc.ogk.khoPrice || serviceDoc.ogk.ebmPrice;
+      // NEU: Lade Bundesland und Arzt-Specialty aus Location für dynamische Punktwert-Berechnung
+      const federalStateConfig = require('../utils/federal-state-config');
+      let federalState = null;
+      let doctorSpecialty = null;
+      
+      // Versuche Location aus invoice zu laden, falls nicht übergeben
+      if (!location && invoice.locationId) {
+        location = await Location.findById(invoice.locationId).select('federalState owner.specialty');
+      }
+      
+      if (location && location.federalState) {
+        federalState = location.federalState;
+        doctorSpecialty = location.owner?.specialty || null;
+      }
+      
+      // Fallback: Versuche erste aktive Location MIT federalState zu finden
+      if (!federalState) {
+        const firstActiveLocation = await Location.findOne({ 
+          is_active: true, 
+          federalState: { $exists: true, $ne: null } 
+        }).select('federalState owner.specialty').sort({ createdAt: 1 });
+        if (firstActiveLocation && firstActiveLocation.federalState) {
+          federalState = firstActiveLocation.federalState;
+          doctorSpecialty = firstActiveLocation.owner?.specialty || null;
+        }
+      }
+      
+      // Letzter Fallback: Verwende OÖ als Default
+      if (!federalState) {
+        console.warn('[InvoicePDF] Kein Bundesland gefunden, verwende Default: oberoesterreich');
+        federalState = 'oberoesterreich';
+      }
+
+      // Berechne KHO-Preis: Wenn nur points vorhanden, berechne aus Punktwert
+      let khoPrice = serviceDoc.ogk.khoPrice || serviceDoc.ogk.ebmPrice;
+      
+      // NEU: Wenn kein khoPrice vorhanden, aber points, berechne dynamisch mit 3-stufigem Prioritätssystem
+      if ((!khoPrice || khoPrice === 0) && serviceDoc.ogk?.points && federalState) {
+        // Verwende neue getPointValue() Funktion mit Prioritätssystem
+        const servicePointValue = federalStateConfig.getPointValue(federalState, {
+          khoCode: serviceDoc.ogk?.khoCode,
+          doctorSpecialty: doctorSpecialty,
+          serviceSpecialty: serviceDoc.specialty,
+          billingGroup: serviceDoc.ogk?.billingGroup,
+          service: serviceDoc.ogk
+        });
+        
+        if (servicePointValue) {
+          khoPrice = Math.round((serviceDoc.ogk.points * servicePointValue) * 100) / 100;
+        } else {
+          // Fallback auf gespeicherten pointValue oder Default
+          const fallbackPointValue = serviceDoc.ogk.pointValue || federalStateConfig.getPointValueForState(federalState) || 0.53;
+          khoPrice = Math.round((serviceDoc.ogk.points * fallbackPointValue) * 100) / 100;
+        }
+      }
+      
       if (!khoPrice || khoPrice === 0) {
         return null;
       }
@@ -139,15 +193,17 @@ class InvoicePDFService {
       const refundRate = this.getRefundRate(billingGroup);
       const refundAmount = khoPrice * refundRate;
 
-      // Bundesland-Name
-      const federalState = serviceDoc.ogk.federalState;
-      const stateName = this.getStateName(federalState);
+      // Bundesland-Name (verwende Location-Bundesland, falls vorhanden)
+      const serviceFederalState = federalState || serviceDoc.ogk.federalState;
+      const stateName = this.getStateName(serviceFederalState);
 
       return {
         refundAmount: refundAmount,
         refundRate: refundRate,
         stateName: stateName,
-        billingGroup: billingGroup
+        billingGroup: billingGroup,
+        federalState: serviceFederalState,
+        pointValue: pointValue || serviceDoc.ogk.pointValue
       };
     } catch (error) {
       console.error('[InvoicePDF] Fehler bei Erstattungsberechnung:', error);
@@ -1040,7 +1096,7 @@ class InvoicePDFService {
                     <tbody>
                         ${(await Promise.all(invoice.services.map(async (service, index) => {
                           // Berechne Erstattung für diesen Service
-                          const refundInfo = await this.calculateServiceRefund(service, invoice);
+                          const refundInfo = await this.calculateServiceRefund(service, invoice, location);
                           
                           return `
                             <tr>

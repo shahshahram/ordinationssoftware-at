@@ -1175,17 +1175,26 @@ const LocationManagement: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <span>Standorte</span>
                   <Tooltip title="Hilfe & Leitfaden">
-                    <IconButton
+                    <Box
+                      component="div"
                       onClick={(e) => {
                         e.stopPropagation();
                         setHelpDialogLocationsOpen(true);
                       }}
-                      color="primary"
-                      size="small"
-                      sx={{ ml: 0.5 }}
+                      sx={{
+                        ml: 0.5,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'primary.main',
+                        '&:hover': {
+                          opacity: 0.7
+                        }
+                      }}
                     >
                       <HelpOutlineIcon fontSize="small" />
-                    </IconButton>
+                    </Box>
                   </Tooltip>
                 </Box>
               } 
@@ -1196,17 +1205,26 @@ const LocationManagement: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <span>Öffnungszeiten</span>
                   <Tooltip title="Hilfe & Leitfaden">
-                    <IconButton
+                    <Box
+                      component="div"
                       onClick={(e) => {
                         e.stopPropagation();
                         setHelpDialogHoursOpen(true);
                       }}
-                      color="primary"
-                      size="small"
-                      sx={{ ml: 0.5 }}
+                      sx={{
+                        ml: 0.5,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'primary.main',
+                        '&:hover': {
+                          opacity: 0.7
+                        }
+                      }}
                     >
                       <HelpOutlineIcon fontSize="small" />
-                    </IconButton>
+                    </Box>
                   </Tooltip>
                 </Box>
               } 
@@ -1217,17 +1235,26 @@ const LocationManagement: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <span>Wöchentliche Öffnungszeiten</span>
                   <Tooltip title="Hilfe & Leitfaden">
-                    <IconButton
+                    <Box
+                      component="div"
                       onClick={(e) => {
                         e.stopPropagation();
                         setHelpDialogWeeklyScheduleOpen(true);
                       }}
-                      color="primary"
-                      size="small"
-                      sx={{ ml: 0.5 }}
+                      sx={{
+                        ml: 0.5,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'primary.main',
+                        '&:hover': {
+                          opacity: 0.7
+                        }
+                      }}
                     >
                       <HelpOutlineIcon fontSize="small" />
-                    </IconButton>
+                    </Box>
                   </Tooltip>
                 </Box>
               } 
@@ -1238,17 +1265,26 @@ const LocationManagement: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <span>Schließtage</span>
                   <Tooltip title="Hilfe & Leitfaden">
-                    <IconButton
+                    <Box
+                      component="div"
                       onClick={(e) => {
                         e.stopPropagation();
                         setHelpDialogClosuresOpen(true);
                       }}
-                      color="primary"
-                      size="small"
-                      sx={{ ml: 0.5 }}
+                      sx={{
+                        ml: 0.5,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'primary.main',
+                        '&:hover': {
+                          opacity: 0.7
+                        }
+                      }}
                     >
                       <HelpOutlineIcon fontSize="small" />
-                    </IconButton>
+                    </Box>
                   </Tooltip>
                 </Box>
               } 
@@ -1259,17 +1295,26 @@ const LocationManagement: React.FC = () => {
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                   <span>Personal-Zuweisungen</span>
                   <Tooltip title="Hilfe & Leitfaden">
-                    <IconButton
+                    <Box
+                      component="div"
                       onClick={(e) => {
                         e.stopPropagation();
                         setHelpDialogAssignmentsOpen(true);
                       }}
-                      color="primary"
-                      size="small"
-                      sx={{ ml: 0.5 }}
+                      sx={{
+                        ml: 0.5,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        color: 'primary.main',
+                        '&:hover': {
+                          opacity: 0.7
+                        }
+                      }}
                     >
                       <HelpOutlineIcon fontSize="small" />
-                    </IconButton>
+                    </Box>
                   </Tooltip>
                 </Box>
               } 

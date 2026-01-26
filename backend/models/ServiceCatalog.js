@@ -312,7 +312,7 @@ const ServiceCatalogSchema = new mongoose.Schema({
     billingGroup: { 
       type: String, 
       trim: true,
-      enum: ['Ordination', 'Untersuchung', 'Behandlung', 'Sonderleistung', 'Grundleistung', 'Therapie', null],
+      enum: ['Ordination', 'Untersuchung', 'Behandlung', 'Sonderleistung', 'Grundleistung', 'Therapie', 'labor', null],
       default: null
     }, // Abrechnungsgruppe (für RefundRate-Logik: Grundleistung = 1.0, sonst = 0.8)
     

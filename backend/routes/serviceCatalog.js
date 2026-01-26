@@ -113,6 +113,51 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       page = 1,
       limit = 50
     } = req.query;
+    
+    // Lade Bundesland und Arzt-Specialty aus Location für dynamische Punktwert-Berechnung
+    let federalState = null;
+    let doctorSpecialty = null;
+    const federalStateConfig = require('../utils/federal-state-config');
+    const Location = require('../models/Location');
+    
+    // 1. Versuche Bundesland aus location_id Query-Parameter zu holen (wenn explizit übergeben)
+    if (location_id) {
+      const location = await Location.findById(location_id).select('federalState owner.specialty');
+      if (location && location.federalState) {
+        federalState = location.federalState;
+        doctorSpecialty = location.owner?.specialty || null;
+      }
+    }
+    
+    // 2. Fallback: Versuche Bundesland aus User's selectedLocation (aus Calendar Settings)
+    if (!federalState && req.user && req.user.profile?.preferences?.calendarSettings?.selectedLocation) {
+      const selectedLocationId = req.user.profile.preferences.calendarSettings.selectedLocation;
+      if (selectedLocationId && selectedLocationId !== 'all') {
+        const userLocation = await Location.findById(selectedLocationId).select('federalState owner.specialty');
+        if (userLocation && userLocation.federalState) {
+          federalState = userLocation.federalState;
+          doctorSpecialty = userLocation.owner?.specialty || null;
+        }
+      }
+    }
+    
+    // 3. Fallback: Versuche erste aktive Location MIT federalState zu finden
+    if (!federalState) {
+      const firstActiveLocation = await Location.findOne({ 
+        is_active: true, 
+        federalState: { $exists: true, $ne: null } 
+      }).select('federalState owner.specialty').sort({ createdAt: 1 });
+      if (firstActiveLocation && firstActiveLocation.federalState) {
+        federalState = firstActiveLocation.federalState;
+        doctorSpecialty = firstActiveLocation.owner?.specialty || null;
+      }
+    }
+    
+    // 4. Letzter Fallback: Verwende OÖ als Default
+    if (!federalState) {
+      console.warn('[ServiceCatalog] Kein Bundesland gefunden, verwende Default: oberoesterreich');
+      federalState = 'oberoesterreich';
+    }
 
     // Parse limit and page properly
     const parsedLimit = limit ? parseInt(limit.toString(), 10) : 50;
@@ -171,7 +216,7 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
     });
 
     const services = await ServiceCatalog.find(filter)
-      .populate('location_id', 'name code')
+      .populate('location_id', 'name code federalState')
       .populate('createdBy', 'firstName lastName')
       .populate('assigned_users', 'firstName lastName email role')
       .populate({
@@ -360,6 +405,46 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
         }));
         
         serviceObj.assigned_rooms = enrichedRooms.filter(r => r !== null);
+      }
+      
+      // NEU: Dynamische Punktwert-Berechnung basierend auf Bundesland
+      // Wenn nur points vorhanden sind, aber kein khoPrice, berechne khoPrice aus points * pointValue
+      // NEU: Verwende 3-stufiges Prioritätssystem
+      if (serviceObj.ogk && federalState) {
+        // Wenn points vorhanden, aber kein khoPrice, berechne es dynamisch
+        if (serviceObj.ogk.points && (!serviceObj.ogk.khoPrice || serviceObj.ogk.khoPrice === 0)) {
+          // Verwende neue getPointValue() Funktion mit Prioritätssystem
+          const servicePointValue = federalStateConfig.getPointValue(federalState, {
+            khoCode: serviceObj.ogk?.khoCode,
+            doctorSpecialty: doctorSpecialty,
+            serviceSpecialty: serviceObj.specialty,
+            billingGroup: serviceObj.ogk?.billingGroup,
+            service: serviceObj.ogk
+          });
+          
+          if (servicePointValue) {
+            serviceObj.ogk.khoPrice = Math.round((serviceObj.ogk.points * servicePointValue) * 100) / 100;
+            serviceObj.ogk.calculatedFromPoints = true;
+            serviceObj.ogk.pointValue = servicePointValue; // Setze pointValue für Konsistenz
+          } else {
+            // Fallback auf gespeicherten pointValue oder Default
+            const fallbackPointValue = serviceObj.ogk.pointValue || federalStateConfig.getPointValueForState(federalState) || 0.53;
+            serviceObj.ogk.khoPrice = Math.round((serviceObj.ogk.points * fallbackPointValue) * 100) / 100;
+            serviceObj.ogk.calculatedFromPoints = true;
+            serviceObj.ogk.pointValue = fallbackPointValue;
+          }
+        }
+        // Setze pointValue aus Config, falls nicht vorhanden (für Anzeige)
+        if (!serviceObj.ogk.pointValue && federalState) {
+          const defaultPointValue = federalStateConfig.getPointValueForState(federalState);
+          if (defaultPointValue) {
+            serviceObj.ogk.pointValue = defaultPointValue;
+          }
+        }
+        // Setze federalState aus Location, falls nicht vorhanden
+        if (!serviceObj.ogk.federalState && federalState) {
+          serviceObj.ogk.federalState = federalState;
+        }
       }
       
       return serviceObj;

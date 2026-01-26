@@ -45,6 +45,7 @@ import api from '../utils/api';
 import UpdateMonitoring from '../components/UpdateMonitoring';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
+import TariffPreview from './TariffPreview';
 
 const Settings: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -129,6 +130,7 @@ const Settings: React.FC = () => {
   const [helpTabNotifications, setHelpTabNotifications] = useState(0);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
+  const [mainTab, setMainTab] = useState(0);
 
   // Lade aktuelle Einstellungen
   useEffect(() => {
@@ -524,7 +526,15 @@ const Settings: React.FC = () => {
         </Alert>
       )}
 
-      <Grid container spacing={{ xs: 2, sm: 3 }}>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} variant="scrollable" scrollButtons="auto">
+          <Tab label="Allgemein" />
+          <Tab label="KHO-Tarifvorschau" />
+        </Tabs>
+      </Box>
+
+      {mainTab === 0 && (
+        <Grid container spacing={{ xs: 2, sm: 3 }}>
         {/* Update-Monitoring */}
         <Grid size={{ xs: 12 }}>
           <Card>
@@ -1568,6 +1578,11 @@ const Settings: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+      )}
+
+      {mainTab === 1 && (
+        <TariffPreview />
+      )}
 
       {/* Hilfe-Dialog für Abrechnungseinstellungen */}
       <Dialog 

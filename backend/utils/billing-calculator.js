@@ -455,13 +455,44 @@ function roundAmount(amount) {
  * @param {Object} patient - Patient-Objekt
  * @returns {Promise<Object>} { totalRefund: number, serviceRefunds: Array, warnings: Array }
  */
-async function calculateRefund(services, patient) {
+async function calculateRefund(services, patient, locationId = null) {
   const serviceRefunds = [];
   const warnings = [];
   let totalRefund = 0;
   
   try {
     const ServiceCatalog = require('../models/ServiceCatalog');
+    const Location = require('../models/Location');
+    const federalStateConfig = require('./federal-state-config');
+    
+    // Lade Bundesland und Arzt-Specialty aus Location für dynamische Punktwert-Berechnung
+    let federalState = null;
+    let doctorSpecialty = null;
+    if (locationId) {
+      const location = await Location.findById(locationId).select('federalState owner.specialty');
+      if (location && location.federalState) {
+        federalState = location.federalState;
+        doctorSpecialty = location.owner?.specialty || null;
+      }
+    }
+    
+    // Fallback: Versuche erste aktive Location MIT federalState zu finden
+    if (!federalState) {
+      const firstActiveLocation = await Location.findOne({ 
+        is_active: true, 
+        federalState: { $exists: true, $ne: null } 
+      }).select('federalState owner.specialty').sort({ createdAt: 1 });
+      if (firstActiveLocation && firstActiveLocation.federalState) {
+        federalState = firstActiveLocation.federalState;
+        doctorSpecialty = firstActiveLocation.owner?.specialty || null;
+      }
+    }
+    
+    // Letzter Fallback: Verwende OÖ als Default
+    if (!federalState) {
+      console.warn('[Billing Calculator] Kein Bundesland gefunden, verwende Default: oberoesterreich');
+      federalState = 'oberoesterreich';
+    }
     
     for (const service of services) {
       const serviceCode = service.serviceCode;
@@ -480,8 +511,28 @@ async function calculateRefund(services, patient) {
         continue;
       }
       
-      // Standard-Erstattung: 80% des Kassentarifs (oder 100% bei Grundleistung)
-      const kassenarztPrice = toEuro(serviceDoc.ogk?.khoPrice || serviceDoc.ogk?.ebmPrice || 0);
+      // Berechne Kassenarzt-Preis: Wenn nur points vorhanden, berechne aus Punktwert
+      let kassenarztPrice = toEuro(serviceDoc.ogk?.khoPrice || serviceDoc.ogk?.ebmPrice || 0);
+      
+      // NEU: Wenn kein khoPrice vorhanden, aber points, berechne dynamisch mit 3-stufigem Prioritätssystem
+      if ((!kassenarztPrice || kassenarztPrice === 0) && serviceDoc.ogk?.points && federalState) {
+        // Verwende neue getPointValue() Funktion mit Prioritätssystem
+        const servicePointValue = federalStateConfig.getPointValue(federalState, {
+          khoCode: serviceDoc.ogk?.khoCode,
+          doctorSpecialty: doctorSpecialty,
+          serviceSpecialty: serviceDoc.specialty,
+          billingGroup: serviceDoc.ogk?.billingGroup,
+          service: serviceDoc.ogk
+        });
+        
+        if (servicePointValue) {
+          kassenarztPrice = Math.round((serviceDoc.ogk.points * servicePointValue) * 100) / 100;
+        } else {
+          // Fallback auf gespeicherten pointValue oder Default
+          const fallbackPointValue = serviceDoc.ogk.pointValue || federalStateConfig.getPointValueForState(federalState) || 0.53;
+          kassenarztPrice = Math.round((serviceDoc.ogk.points * fallbackPointValue) * 100) / 100;
+        }
+      }
       
       // NEU: billingGroup-basierte RefundRate-Logik
       let refundRate = serviceDoc.wahlarzt?.reimbursementRate || 0.80; // Standard: 80%

@@ -222,9 +222,27 @@ async function importOEGKKatalog() {
         })
         .on('end', () => {
           console.log(`✓ ${lineCount} Zeilen verarbeitet`);
+          // Lösche temporäre Datei
+          try {
+            if (fs.existsSync(tempFilePath)) {
+              fs.unlinkSync(tempFilePath);
+            }
+          } catch (unlinkError) {
+            console.warn('Konnte temporäre Datei nicht löschen:', unlinkError.message);
+          }
           resolve();
         })
-        .on('error', reject);
+        .on('error', (error) => {
+          // Lösche temporäre Datei auch bei Fehler
+          try {
+            if (fs.existsSync(tempFilePath)) {
+              fs.unlinkSync(tempFilePath);
+            }
+          } catch (unlinkError) {
+            // Ignoriere Fehler beim Löschen
+          }
+          reject(error);
+        });
     });
 
     console.log(`✓ ${tariffs.length} Tarife aus CSV gelesen`);

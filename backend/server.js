@@ -112,6 +112,7 @@ const dataProtectionRoutes = require('./routes/dataProtection');
 const tariffsRoutes = require('./routes/tariffs');
 const ogkTariffDownloadRoutes = require('./routes/ogk-tariff-download');
 const tariffImportRoutes = require('./routes/tariff-import');
+const tariffConfigRoutes = require('./routes/tariff-config');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
@@ -390,6 +391,7 @@ function registerStaticRoutes(app) {
   app.use('/api/tariffs', tariffsRoutes);
   app.use('/api/ogk-tariff-download', ogkTariffDownloadRoutes);
   app.use('/api/tariff-import', tariffImportRoutes);
+  app.use('/api/tariff-config', tariffConfigRoutes);
   app.use('/api/chatbot', require('./routes/chatbot'));
   
   // Module-Management Route (immer verfügbar wenn Module Manager aktiviert)

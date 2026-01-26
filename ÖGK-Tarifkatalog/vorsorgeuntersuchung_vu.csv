@@ -1,0 +1,11 @@
+;;;;;;
+pos_nr;name;points;pointValue;federalState;billingGroup;
+VU1;Allgemeine VU inkl. Laborblock;88.00;1;oberoesterreich;Untersuchung;
+VU2;Allgemeine VU exkl. Laborblock;72.14;1;oberoesterreich;Untersuchung;
+V3;Gynäkologisches Programm inkl. PAP;17.52;1;oberoesterreich;Untersuchung;
+V4;Gynäkologisches Programm exkl. PAP;13.25;1;oberoesterreich;Untersuchung;
+VU6;VU-Laborblock;15.86;1;oberoesterreich;Untersuchung;
+VU7;VU-PAP-Abstrich;4.27;1;oberoesterreich;Untersuchung;
+V9;Mammasonographie, pro Seite;8.79;1;oberoesterreich;Untersuchung;
+VU10;Vollständige VU-Koloskopie bis ins Zökum (inkl. allfälliger Biopsien);203.85;1;oberoesterreich;Untersuchung;
+VU11;Inkomplette VU-Koloskopie (inkl. allfälliger Biopsien);203.85;1;oberoesterreich;Untersuchung;

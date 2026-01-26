@@ -52,7 +52,7 @@ const TariffSchema = new mongoose.Schema({
     billingGroup: { 
       type: String, 
       trim: true,
-      enum: ['Ordination', 'Untersuchung', 'Behandlung', 'Sonderleistung', 'Grundleistung', 'Therapie', null],
+      enum: ['Ordination', 'Untersuchung', 'Behandlung', 'Sonderleistung', 'Grundleistung', 'Therapie', 'Besuch', 'labor', null],
       default: null
     }, // Abrechnungsgruppe (für RefundRate-Logik)
     requiresApproval: { type: Boolean, default: false },

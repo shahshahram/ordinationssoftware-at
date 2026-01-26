@@ -12,25 +12,15 @@ const Tariff = require('../models/Tariff');
  * Punktwerte nach Bundesland (in Euro)
  * Diese Werte werden für die Berechnung von khoPrice aus Punkten verwendet
  */
-const POINT_VALUES_BY_STATE = {
-  'oberoesterreich': 0.53,  // OÖ
-  'wien': 0.49,              // Wien (ca. Wert, anpassen falls bekannt)
-  'niederoesterreich': 0.52, // NÖ (ca. Wert, anpassen falls bekannt)
-  'steiermark': 0.51,        // Steiermark (ca. Wert, anpassen falls bekannt)
-  'tirol': 0.50,             // Tirol (ca. Wert, anpassen falls bekannt)
-  'salzburg': 0.50,          // Salzburg (ca. Wert, anpassen falls bekannt)
-  'kaernten': 0.50,          // Kärnten (ca. Wert, anpassen falls bekannt)
-  'vorarlberg': 0.50,        // Vorarlberg (ca. Wert, anpassen falls bekannt)
-  'burgenland': 0.50         // Burgenland (ca. Wert, anpassen falls bekannt)
-};
+// NEU: Verwende zentrale Config-Datei für Punktwerte
+const federalStateConfig = require('./federal-state-config');
 
 /**
- * Ermittelt Punktwert für ein Bundesland
+ * Ermittelt Punktwert für ein Bundesland (verwendet zentrale Config)
+ * @deprecated Verwende direkt federalStateConfig.getPointValueForState()
  */
 function getPointValueForState(federalState) {
-  if (!federalState) return null;
-  const stateKey = federalState.toLowerCase();
-  return POINT_VALUES_BY_STATE[stateKey] || null;
+  return federalStateConfig.getPointValueForState(federalState);
 }
 
 class TariffImporter {
@@ -239,17 +229,37 @@ class TariffImporter {
                   }
                 }
               } else {
-                // Wenn pointValue leer oder ungültig, verwende Default
-                pointValue = 0.53; // Fallback
+                // Wenn pointValue leer oder ungültig, verwende Prioritätssystem aus Config
+                // Lese specialty und billingGroup für Prioritätssystem (wird später gelesen, aber hier schon vorbereitet)
+                const specialtyRaw = (row.specialty || row.fachgebiet || row.FACHGEBIET || 'allgemein').toLowerCase();
+                const billingGroupRaw = (row.billingGroup || row.BILLING_GROUP || row['billingGroup'] || '').toString().trim();
+                
+                // Verwende neue getPointValue() Funktion mit Prioritätssystem
+                pointValue = federalStateConfig.getPointValue(federalStateNormalized, {
+                  khoCode: khoCode,
+                  serviceSpecialty: specialtyRaw,
+                  billingGroup: billingGroupRaw
+                }) || 0.53; // Fallback
+                
                 if (lineNumber <= 5) {
-                  console.warn(`[KHO Import] Zeile ${lineNumber}: pointValue leer/ungültig für ${serviceCode} (raw: '${pointValueRaw}'), verwende 0.53`);
+                  console.warn(`[KHO Import] Zeile ${lineNumber}: pointValue leer/ungültig für ${serviceCode} (raw: '${pointValueRaw}'), verwende ${pointValue} aus Prioritätssystem`);
                 }
               }
             } else {
-              // Wenn pointValue nicht vorhanden, verwende Default
-              pointValue = 0.53; // Fallback
+              // Wenn pointValue nicht vorhanden, verwende Prioritätssystem aus Config
+              // Lese specialty und billingGroup für Prioritätssystem
+              const specialtyRaw = (row.specialty || row.fachgebiet || row.FACHGEBIET || 'allgemein').toLowerCase();
+              const billingGroupRaw = (row.billingGroup || row.BILLING_GROUP || row['billingGroup'] || '').toString().trim();
+              
+              // Verwende neue getPointValue() Funktion mit Prioritätssystem
+              pointValue = federalStateConfig.getPointValue(federalStateNormalized, {
+                khoCode: khoCode,
+                serviceSpecialty: specialtyRaw,
+                billingGroup: billingGroupRaw
+              }) || 0.53; // Fallback
+              
               if (lineNumber <= 5) {
-                console.warn(`[KHO Import] Zeile ${lineNumber}: pointValue nicht vorhanden für ${serviceCode}, verwende 0.53`);
+                console.warn(`[KHO Import] Zeile ${lineNumber}: pointValue nicht vorhanden für ${serviceCode}, verwende ${pointValue} aus Prioritätssystem`);
               }
             }
             
@@ -445,7 +455,12 @@ class TariffImporter {
         if (isNewFormat) {
           // NEU: tarife.json Format konvertieren
           const federalState = tariff.state ? this.normalizeFederalState(tariff.state) : null;
-          const pointValue = tariff.pointValue || (federalState ? getPointValueForState(federalState) : null);
+          // Verwende neue getPointValue() Funktion mit Prioritätssystem
+          const pointValue = tariff.pointValue || (federalState ? federalStateConfig.getPointValue(federalState, {
+            khoCode: tariff.serviceCode,
+            serviceSpecialty: tariff.specialty,
+            billingGroup: tariff.billingGroup
+          }) : null);
           
           // Berechne khoPrice aus points * pointValue falls vorhanden
           let khoPrice = tariff.basePrice;
