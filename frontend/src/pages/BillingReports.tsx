@@ -2981,7 +2981,7 @@ const BillingReports: React.FC = () => {
                   Angezeigte Informationen
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
-                  <li><strong>Leistungscode:</strong> EBM-Code oder Service-Code</li>
+                  <li><strong>Leistungscode:</strong> KHO-Code oder Service-Code</li>
                   <li><strong>Beschreibung:</strong> Leistungsbeschreibung</li>
                   <li><strong>Kategorie:</strong> Leistungskategorie</li>
                   <li><strong>Anzahl:</strong> Wie oft wurde die Leistung verwendet</li>

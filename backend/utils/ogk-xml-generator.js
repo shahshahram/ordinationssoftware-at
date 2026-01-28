@@ -98,7 +98,7 @@ class OGKXMLGenerator {
     return `<Service>
         <ServiceDate>${serviceDate}</ServiceDate>
         <ServiceCode>${this.escapeXML(service.serviceCode || '')}</ServiceCode>
-        <EBMCode>${this.escapeXML(service.ebmCode || service.serviceCode || '')}</EBMCode>
+        <EBMCode>${this.escapeXML(service.khoCode || service.ebmCode || service.serviceCode || '')}</EBMCode>
         <Description>${this.escapeXML(service.description || '')}</Description>
         <Quantity>${service.quantity || 1}</Quantity>
         <UnitPrice>${this.formatAmount(service.unitPrice || 0)}</UnitPrice>

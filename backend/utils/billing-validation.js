@@ -1,11 +1,12 @@
 /**
- * Validierungslogik für ÖGK-Abrechnungen
+ * Validierungslogik für ÖGK-Abrechnungen (Österreich) und EBM-Abrechnungen (Deutschland)
  * Prüft Plausibilität, Duplikate und Limitierungen
  */
 
 const Invoice = require('../models/Invoice');
 const ServiceCatalog = require('../models/ServiceCatalog');
 const Tariff = require('../models/Tariff');
+const tariffSystemSelector = require('./tariff-system-selector');
 
 /**
  * Prüft ob eine Leistung am selben Tag bereits verrechnet wurde
@@ -649,11 +650,13 @@ async function validateBillingServices(patientId, services, invoiceDate, exclude
 
 /**
  * Berechnet die voraussichtliche Erstattung für Wahlarzt-Leistungen
- * @param {Array} services - Array von Service-Objekten
+ * @param {Array} services - Array von Service-Objekten (optional pro Eintrag: date, performedAt)
  * @param {Object} patient - Patient-Objekt
+ * @param {string} [locationId] - Location-ID für Bundesland
+ * @param {Date|string} [billingDate] - Rechnungs-/Behandlungsdatum für Tarif-Jahr
  * @returns {Promise<Object>} { totalRefund: number, serviceRefunds: Array, warnings: Array }
  */
-async function calculateRefund(services, patient, locationId = null) {
+async function calculateRefund(services, patient, locationId = null, billingDate = null) {
   const serviceRefunds = [];
   const warnings = [];
   let totalRefund = 0;
@@ -662,31 +665,40 @@ async function calculateRefund(services, patient, locationId = null) {
     const Location = require('../models/Location');
     const federalStateConfig = require('./federal-state-config');
     
-    // Lade Bundesland und Arzt-Specialty aus Location für dynamische Punktwert-Berechnung
+    // Lade Location mit country, federalState und Arzt-Specialty
+    let location = null;
     let federalState = null;
     let doctorSpecialty = null;
+    let tariffSystem = 'kho'; // Default: Österreich (KHO)
+    
     if (locationId) {
-      const location = await Location.findById(locationId).select('federalState owner.specialty');
-      if (location && location.federalState) {
-        federalState = location.federalState;
+      location = await Location.findById(locationId).select('country federalState owner.specialty');
+      if (location) {
+        tariffSystem = tariffSystemSelector.getTariffSystem(location);
+        if (location.federalState) {
+          federalState = location.federalState;
+        }
         doctorSpecialty = location.owner?.specialty || null;
       }
     }
     
-    // Fallback: Versuche erste aktive Location MIT federalState zu finden
-    if (!federalState) {
+    // Fallback: Versuche erste aktive Location zu finden
+    if (!location) {
       const firstActiveLocation = await Location.findOne({ 
-        is_active: true, 
-        federalState: { $exists: true, $ne: null } 
-      }).select('federalState owner.specialty').sort({ createdAt: 1 });
-      if (firstActiveLocation && firstActiveLocation.federalState) {
-        federalState = firstActiveLocation.federalState;
+        is_active: true
+      }).select('country federalState owner.specialty').sort({ createdAt: 1 });
+      if (firstActiveLocation) {
+        location = firstActiveLocation;
+        tariffSystem = tariffSystemSelector.getTariffSystem(firstActiveLocation);
+        if (firstActiveLocation.federalState) {
+          federalState = firstActiveLocation.federalState;
+        }
         doctorSpecialty = firstActiveLocation.owner?.specialty || null;
       }
     }
     
-    // Letzter Fallback: Verwende OÖ als Default
-    if (!federalState) {
+    // Letzter Fallback: Verwende OÖ als Default (nur für Österreich)
+    if (!federalState && tariffSystem === 'kho') {
       console.warn('[Billing Validation] Kein Bundesland gefunden, verwende Default: oberoesterreich');
       federalState = 'oberoesterreich';
     }
@@ -708,25 +720,34 @@ async function calculateRefund(services, patient, locationId = null) {
         continue;
       }
       
-      // Berechne Kassenarzt-Preis: Wenn nur points vorhanden, berechne aus Punktwert
-      let kassenarztPrice = serviceDoc.ogk?.khoPrice || serviceDoc.ogk?.ebmPrice || 0;
+      // Country-basierte Auswahl: KHO für Österreich, EBM für Deutschland
+      let kassenarztPrice = 0;
+      if (tariffSystem === 'kho') {
+        // Österreich: Verwende KHO-Preis
+        kassenarztPrice = serviceDoc.ogk?.khoPrice || 0;
+      } else if (tariffSystem === 'ebm') {
+        // Deutschland: Verwende EBM-Preis
+        kassenarztPrice = serviceDoc.ogk?.ebmPrice || 0;
+      } else {
+        // Fallback: Backward Compatibility
+        kassenarztPrice = serviceDoc.ogk?.khoPrice || serviceDoc.ogk?.ebmPrice || 0;
+      }
       
-      // NEU: Wenn kein khoPrice vorhanden, aber points, berechne dynamisch mit 3-stufigem Prioritätssystem
-      if ((!kassenarztPrice || kassenarztPrice === 0) && serviceDoc.ogk?.points && federalState) {
-        // Verwende neue getPointValue() Funktion mit Prioritätssystem
+      // NEU: Wenn kein Preis vorhanden, aber points, berechne dynamisch (nur für Österreich/KHO)
+      if ((!kassenarztPrice || kassenarztPrice === 0) && serviceDoc.ogk?.points && federalState && tariffSystem === 'kho') {
+        const treatmentDate = service.performedAt || service.date || billingDate;
         const servicePointValue = federalStateConfig.getPointValue(federalState, {
           khoCode: serviceDoc.ogk?.khoCode,
           doctorSpecialty: doctorSpecialty,
           serviceSpecialty: serviceDoc.specialty,
           billingGroup: serviceDoc.ogk?.billingGroup,
-          service: serviceDoc.ogk
+          service: serviceDoc.ogk,
+          date: treatmentDate
         });
-        
         if (servicePointValue) {
           kassenarztPrice = Math.round((serviceDoc.ogk.points * servicePointValue) * 100) / 100;
         } else {
-          // Fallback auf gespeicherten pointValue oder Default
-          const fallbackPointValue = serviceDoc.ogk.pointValue || federalStateConfig.getPointValueForState(federalState) || 0.53;
+          const fallbackPointValue = serviceDoc.ogk.pointValue || federalStateConfig.getPointValue(federalState, { date: treatmentDate }) || 0.53;
           kassenarztPrice = Math.round((serviceDoc.ogk.points * fallbackPointValue) * 100) / 100;
         }
       }

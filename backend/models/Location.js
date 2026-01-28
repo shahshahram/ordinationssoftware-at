@@ -36,6 +36,13 @@ const locationSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  // Land für Abrechnung (Österreich oder Deutschland)
+  country: {
+    type: String,
+    enum: ['austria', 'germany'],
+    default: 'austria',
+    index: true
+  },
   // Bundesland für Abrechnung (österreichische Bundesländer)
   federalState: {
     type: String,

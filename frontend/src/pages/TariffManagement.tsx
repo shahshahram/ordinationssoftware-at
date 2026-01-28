@@ -55,7 +55,7 @@ interface Tariff {
   code: string;
   name: string;
   description?: string;
-  tariffType: 'goae' | 'kho' | 'et' | 'ebm' | 'custom';
+  tariffType: 'goae' | 'kho' | 'et' | 'custom';
   specialty: string;
   isActive: boolean;
   validFrom: string;
@@ -67,7 +67,6 @@ interface Tariff {
     multiplier: number;
   };
   kho?: {
-    ebmCode?: string;
     khoCode?: string;
     khoPrice?: number;
     price?: number;
@@ -76,9 +75,10 @@ interface Tariff {
 }
 
 interface TariffInfo {
-  ebm: { available: boolean; lastModified: Date | null; size: number | null };
   kho: { available: boolean; lastModified: Date | null; size: number | null };
   goae: { available: boolean; lastModified: Date | null; size: number | null };
+  /** @deprecated API kann ebm noch liefern – wird in der UI nicht mehr angezeigt */
+  ebm?: { available: boolean; lastModified: Date | null; size: number | null };
 }
 
 const TariffManagement: React.FC = () => {
@@ -92,7 +92,7 @@ const TariffManagement: React.FC = () => {
   const [downloadProgress, setDownloadProgress] = useState<{ [key: string]: boolean }>({});
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<'csv' | 'xml'>('csv'); // CSV als Standard, da ÖGK-URLs oft PDF statt XML zurückgeben
-  const [selectedTariffType, setSelectedTariffType] = useState<'ebm' | 'kho' | 'goae' | 'all'>('all');
+  const [selectedTariffType, setSelectedTariffType] = useState<'kho' | 'goae' | 'all'>('all');
   const [updateInfo, setUpdateInfo] = useState<any>(null);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
@@ -389,37 +389,7 @@ const TariffManagement: React.FC = () => {
       {/* Tarif-Informationen */}
       {tariffInfo && (
         <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid size={{ xs: 12, md: 4 }}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                  {tariffInfo.ebm.available ? (
-                    <CheckCircle color="success" />
-                  ) : (
-                    <Error color="error" />
-                  )}
-                  <Typography variant="h6">EBM-Tarifdatenbank</Typography>
-                </Box>
-                {tariffInfo.ebm.available ? (
-                  <>
-                    <Typography variant="body2" color="text.secondary">
-                      Letzte Änderung: {tariffInfo.ebm.lastModified 
-                        ? format(new Date(tariffInfo.ebm.lastModified), 'dd.MM.yyyy HH:mm', { locale: de })
-                        : 'Unbekannt'}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Größe: {formatFileSize(tariffInfo.ebm.size)}
-                    </Typography>
-                  </>
-                ) : (
-                  <Typography variant="body2" color="error">
-                    Nicht verfügbar
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -449,7 +419,7 @@ const TariffManagement: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-          <Grid size={{ xs: 12, md: 4 }}>
+          <Grid size={{ xs: 12, md: 6 }}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -571,9 +541,8 @@ const TariffManagement: React.FC = () => {
                 onChange={(e) => setSelectedTariffType(e.target.value as any)}
                 label="Tariftyp"
               >
-                <MenuItem value="all">Alle (EBM, KHO, GOÄ)</MenuItem>
-                <MenuItem value="ebm">EBM (Einheitlicher Bewertungsmaßstab)</MenuItem>
-                <MenuItem value="kho">KHO (Kassenhonorarordnung)</MenuItem>
+                <MenuItem value="all">Alle (KHO, GOÄ)</MenuItem>
+                <MenuItem value="kho">KHO (Kassenhonorarordnung, Österreich)</MenuItem>
                 <MenuItem value="goae">GOÄ (Gebührenordnung für Ärzte)</MenuItem>
               </Select>
             </FormControl>
@@ -685,7 +654,7 @@ const TariffManagement: React.FC = () => {
               Achtung: Diese Aktion kann nicht rückgängig gemacht werden!
             </Typography>
             <Typography variant="body2">
-              Alle KHO/ET/EBM-Tarife werden dauerhaft aus der Datenbank gelöscht.
+              Alle KHO/ET-Tarife werden dauerhaft aus der Datenbank gelöscht.
               {khoCount !== null && (
                 <> <strong>{khoCount} Tarife</strong> werden gelöscht.</>
               )}
@@ -777,7 +746,7 @@ const TariffManagement: React.FC = () => {
                   Hauptfunktionen
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
-                  <li>📋 <strong>Tarife verwalten:</strong> GOÄ, KHO, EBM Tarife verwalten</li>
+                  <li>📋 <strong>Tarife verwalten:</strong> KHO (Österreich), GOÄ Tarife verwalten</li>
                   <li>📥 <strong>Import:</strong> Tarife aus Dateien importieren</li>
                   <li>📤 <strong>Export:</strong> Tarife exportieren</li>
                   <li>🔄 <strong>Updates:</strong> Tarife aktualisieren</li>
@@ -802,7 +771,7 @@ const TariffManagement: React.FC = () => {
                   Schritt-für-Schritt Anleitung
                 </Typography>
                 <Box component="ol" sx={{ pl: 3, mb: 2 }}>
-                  <li>Wählen Sie den Tariftyp (GOÄ, KHO, EBM)</li>
+                  <li>Wählen Sie den Tariftyp (KHO, GOÄ)</li>
                   <li>Durchsuchen Sie die Tarifliste</li>
                   <li>Bearbeiten Sie Tarife nach Bedarf</li>
                   <li>Speichern Sie Änderungen</li>

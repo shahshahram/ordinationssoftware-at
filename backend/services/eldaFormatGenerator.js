@@ -205,7 +205,7 @@ class ELDAFormatGenerator {
       Leistungen: (services || []).map(service => ({
         Leistungsdatum: this.formatDate(service.date),
         Leistungscode: service.code || '',
-        EBMCode: service.ebmCode || service.code || '',
+        EBMCode: service.khoCode || service.ebmCode || service.code || '',
         Beschreibung: service.description || '',
         Menge: service.quantity || 1,
         Einzelpreis: service.unitPrice || 0,

@@ -36,7 +36,8 @@ router.get('/state/:federalState', auth, async (req, res) => {
         default: stateConfig.default,
         labor: stateConfig.labor,
         specialty: stateConfig.specialty,
-        positionSpecific: stateConfig.positionSpecific
+        positionSpecific: stateConfig.positionSpecific,
+        validFrom: config.validFrom || null
       }
     });
   } catch (error) {
@@ -110,7 +111,8 @@ router.get('/current', auth, async (req, res) => {
         labor: stateConfig.labor,
         specialty: stateConfig.specialty,
         positionSpecific: stateConfig.positionSpecific,
-        doctorSpecialty: doctorSpecialty
+        doctorSpecialty: doctorSpecialty,
+        validFrom: config.validFrom || null
       }
     });
   } catch (error) {
@@ -129,7 +131,7 @@ router.get('/current', auth, async (req, res) => {
  */
 router.post('/calculate', auth, async (req, res) => {
   try {
-    const { positionNumber, points, khoCode, specialty, billingGroup, federalState, doctorSpecialty } = req.body;
+    const { positionNumber, points, khoCode, specialty, billingGroup, federalState, doctorSpecialty, date } = req.body;
 
     if (!points || points <= 0) {
       return res.status(400).json({
@@ -167,13 +169,14 @@ router.post('/calculate', auth, async (req, res) => {
       }
     }
 
-    // Berechne Punktwert mit Prioritätssystem
+    // Berechne Punktwert mit Prioritätssystem (date = Rechnungs-/Behandlungsdatum für Tarif-Jahr)
     const pointValue = federalStateConfig.getPointValue(state, {
       positionNumber: positionNumber,
       khoCode: khoCode,
       doctorSpecialty: doctorSpecialty,
       serviceSpecialty: specialty,
-      billingGroup: billingGroup
+      billingGroup: billingGroup,
+      date: date || undefined
     });
 
     if (!pointValue) {

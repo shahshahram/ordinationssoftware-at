@@ -111,7 +111,7 @@ class AutoReimbursementService {
       serviceDescription: invoice.services?.map(s => s.description).join(', ') || 'Wahlarzt-Leistung',
       serviceCode: invoice.services?.[0]?.serviceCode || null,
       goaeCode: invoice.services?.[0]?.goaeCode || null,
-      ebmCode: invoice.services?.[0]?.ebmCode || null,
+      khoCode: invoice.services?.[0]?.khoCode || null,
       totalAmount: invoice.totalAmount || 0,
       requestedReimbursement: reimbursementCalculation.requestedAmount,
       status: 'pending',

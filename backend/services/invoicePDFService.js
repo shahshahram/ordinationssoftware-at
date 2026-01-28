@@ -3,6 +3,7 @@ const Invoice = require('../models/Invoice');
 const Location = require('../models/Location');
 const User = require('../models/User');
 const ServiceCatalog = require('../models/ServiceCatalog');
+const tariffSystemSelector = require('../utils/tariff-system-selector');
 const path = require('path');
 const fs = require('fs');
 const QRCode = require('qrcode');
@@ -128,70 +129,78 @@ class InvoicePDFService {
         return null;
       }
 
-      // NEU: Lade Bundesland und Arzt-Specialty aus Location für dynamische Punktwert-Berechnung
+      // NEU: Lade Location mit country, federalState und Arzt-Specialty
       const federalStateConfig = require('../utils/federal-state-config');
       let federalState = null;
       let doctorSpecialty = null;
+      let tariffSystem = 'kho'; // Default: Österreich (KHO)
       
       // Versuche Location aus invoice zu laden, falls nicht übergeben
       if (!location && invoice.locationId) {
-        location = await Location.findById(invoice.locationId).select('federalState owner.specialty');
+        location = await Location.findById(invoice.locationId).select('country federalState owner.specialty');
       }
       
-      if (location && location.federalState) {
-        federalState = location.federalState;
+      if (location) {
+        tariffSystem = tariffSystemSelector.getTariffSystem(location);
+        if (location.federalState) {
+          federalState = location.federalState;
+        }
         doctorSpecialty = location.owner?.specialty || null;
       }
       
-      // Fallback: Versuche erste aktive Location MIT federalState zu finden
-      if (!federalState) {
+      // Fallback: Versuche erste aktive Location zu finden
+      if (!location) {
         const firstActiveLocation = await Location.findOne({ 
-          is_active: true, 
-          federalState: { $exists: true, $ne: null } 
-        }).select('federalState owner.specialty').sort({ createdAt: 1 });
-        if (firstActiveLocation && firstActiveLocation.federalState) {
-          federalState = firstActiveLocation.federalState;
+          is_active: true
+        }).select('country federalState owner.specialty').sort({ createdAt: 1 });
+        if (firstActiveLocation) {
+          location = firstActiveLocation;
+          tariffSystem = tariffSystemSelector.getTariffSystem(firstActiveLocation);
+          if (firstActiveLocation.federalState) {
+            federalState = firstActiveLocation.federalState;
+          }
           doctorSpecialty = firstActiveLocation.owner?.specialty || null;
         }
       }
       
-      // Letzter Fallback: Verwende OÖ als Default
-      if (!federalState) {
+      // Letzter Fallback: Verwende OÖ als Default (nur für Österreich)
+      if (!federalState && tariffSystem === 'kho') {
         console.warn('[InvoicePDF] Kein Bundesland gefunden, verwende Default: oberoesterreich');
         federalState = 'oberoesterreich';
       }
 
-      // Berechne KHO-Preis: Wenn nur points vorhanden, berechne aus Punktwert
-      let khoPrice = serviceDoc.ogk.khoPrice || serviceDoc.ogk.ebmPrice;
+      // Nur KHO (Österreich)
+      let tariffPrice = serviceDoc.ogk?.khoPrice ?? 0;
+      let tariffCode = serviceDoc.ogk?.khoCode || null;
+      const tariffLabel = 'KHO';
       
-      // NEU: Wenn kein khoPrice vorhanden, aber points, berechne dynamisch mit 3-stufigem Prioritätssystem
-      if ((!khoPrice || khoPrice === 0) && serviceDoc.ogk?.points && federalState) {
-        // Verwende neue getPointValue() Funktion mit Prioritätssystem
+      // NEU: Wenn kein Preis vorhanden, aber points, berechne dynamisch (nur für Österreich/KHO)
+      if ((!tariffPrice || tariffPrice === 0) && serviceDoc.ogk?.points && federalState && tariffSystem === 'kho') {
+        const treatmentDate = service.date || invoice.invoiceDate;
         const servicePointValue = federalStateConfig.getPointValue(federalState, {
           khoCode: serviceDoc.ogk?.khoCode,
           doctorSpecialty: doctorSpecialty,
           serviceSpecialty: serviceDoc.specialty,
           billingGroup: serviceDoc.ogk?.billingGroup,
-          service: serviceDoc.ogk
+          service: serviceDoc.ogk,
+          date: treatmentDate
         });
-        
         if (servicePointValue) {
-          khoPrice = Math.round((serviceDoc.ogk.points * servicePointValue) * 100) / 100;
+          tariffPrice = Math.round((serviceDoc.ogk.points * servicePointValue) * 100) / 100;
         } else {
-          // Fallback auf gespeicherten pointValue oder Default
-          const fallbackPointValue = serviceDoc.ogk.pointValue || federalStateConfig.getPointValueForState(federalState) || 0.53;
-          khoPrice = Math.round((serviceDoc.ogk.points * fallbackPointValue) * 100) / 100;
+          const fallbackPointValue = serviceDoc.ogk.pointValue || federalStateConfig.getPointValue(federalState, { date: treatmentDate }) || 0.53;
+          tariffPrice = Math.round((serviceDoc.ogk.points * fallbackPointValue) * 100) / 100;
         }
       }
       
-      if (!khoPrice || khoPrice === 0) {
+      if (!tariffPrice || tariffPrice === 0) {
         return null;
       }
 
       // Berechne RefundRate basierend auf billingGroup
       const billingGroup = serviceDoc.ogk.billingGroup;
       const refundRate = this.getRefundRate(billingGroup);
-      const refundAmount = khoPrice * refundRate;
+      const refundAmount = tariffPrice * refundRate;
 
       // Bundesland-Name (verwende Location-Bundesland, falls vorhanden)
       const serviceFederalState = federalState || serviceDoc.ogk.federalState;
@@ -203,7 +212,10 @@ class InvoicePDFService {
         stateName: stateName,
         billingGroup: billingGroup,
         federalState: serviceFederalState,
-        pointValue: pointValue || serviceDoc.ogk.pointValue
+        tariffCode: tariffCode,
+        tariffLabel: tariffLabel,
+        tariffSystem: tariffSystem,
+        pointValue: serviceDoc.ogk.pointValue
       };
     } catch (error) {
       console.error('[InvoicePDF] Fehler bei Erstattungsberechnung:', error);

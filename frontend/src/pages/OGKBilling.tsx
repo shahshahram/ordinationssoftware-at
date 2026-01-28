@@ -376,7 +376,7 @@ const OGKBilling: React.FC = () => {
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li>Alle Kassenarzt-Rechnungen (Abrechnungstyp: "Kassenarzt")</li>
-                  <li>EBM-Codes und Preise</li>
+                  <li>KHO-Codes und Preise</li>
                   <li>Patientendaten und Versicherungsnummern</li>
                   <li>Diagnosen (ICD-10)</li>
                   <li>Leistungsdaten (Datum, Menge, Preis)</li>
@@ -391,7 +391,7 @@ const OGKBilling: React.FC = () => {
                   <li>✅ Kassenarzt-Vertrag mit ÖGK</li>
                   <li>✅ Rechnungen mit Abrechnungstyp "Kassenarzt"</li>
                   <li>✅ Rechnungen mit Status "Gesendet" oder "Bezahlt"</li>
-                  <li>✅ Korrekte EBM-Codes in den Leistungen</li>
+                  <li>✅ Korrekte KHO-Codes in den Leistungen</li>
                   <li>✅ ICD-10-Diagnosen bei den Rechnungen</li>
                 </Box>
               </Box>
@@ -432,7 +432,7 @@ const OGKBilling: React.FC = () => {
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li>Alle Kassenarzt-Rechnungen der Periode</li>
-                  <li>EBM-Codes und Preise</li>
+                  <li>KHO-Codes und Preise</li>
                   <li>Patienten- und Versicherungsdaten</li>
                   <li>Diagnosen (ICD-10)</li>
                   <li>Leistungsdaten (Datum, Menge, Beschreibung)</li>

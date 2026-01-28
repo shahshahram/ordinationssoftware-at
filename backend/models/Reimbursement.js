@@ -55,6 +55,11 @@ const ReimbursementSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
+  khoCode: {
+    type: String,
+    trim: true
+  },
+  /** @deprecated Verwende khoCode (Österreich). Feld bleibt für Lesekompatibilität. */
   ebmCode: {
     type: String,
     trim: true

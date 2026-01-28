@@ -2464,7 +2464,7 @@ const Billing: React.FC = () => {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                       <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                         <Box sx={{ flex: '1 1 200px' }}>
-                          <Typography variant="body2" color="text.secondary">EBM-Code</Typography>
+                          <Typography variant="body2" color="text.secondary">KHO-Code</Typography>
                           <Typography variant="body1">
                             {formData.services?.[0]?.serviceCode || 'Nicht angegeben'}
                           </Typography>
@@ -3315,7 +3315,7 @@ const Billing: React.FC = () => {
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li><strong>Versicherung zahlt:</strong> Vollständige Abrechnung über Krankenkasse</li>
                   <li><strong>Verwendung:</strong> Kassenpatienten mit Kassenarztvertrag</li>
-                  <li><strong>Preise:</strong> EBM-Tarife (Einheitlicher Bewertungsmaßstab)</li>
+                  <li><strong>Preise:</strong> KHO-Tarife (Kassenhonorarordnung, Österreich)</li>
                   <li><strong>Selbstbehalt:</strong> Je nach Leistung (z.B. Rezeptgebühr)</li>
                   <li><strong>Übermittlung:</strong> Über ÖGK-Turnusabrechnung</li>
                 </Box>
@@ -3373,7 +3373,7 @@ const Billing: React.FC = () => {
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li>Alle Kassenarzt-Rechnungen des Monats</li>
-                  <li>EBM-Codes und Preise</li>
+                  <li>KHO-Codes und Preise</li>
                   <li>Patientendaten</li>
                   <li>Diagnosen (ICD-10)</li>
                 </Box>
@@ -3402,7 +3402,7 @@ const Billing: React.FC = () => {
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li>Alle Rechnungen im ÖGK-Standardformat</li>
-                  <li>EBM-Codes und Preise</li>
+                  <li>KHO-Codes und Preise</li>
                   <li>Patienten- und Versicherungsdaten</li>
                   <li>Diagnosen (ICD-10)</li>
                   <li>Alle erforderlichen Metadaten</li>

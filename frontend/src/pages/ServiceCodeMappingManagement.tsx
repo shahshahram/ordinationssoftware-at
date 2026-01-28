@@ -617,7 +617,7 @@ const ServiceCodeMappingManagement: React.FC = () => {
               </Typography>
               <Box component="ol" sx={{ pl: 3, mb: 2 }}>
                 <li>Stellen Sie sicher, dass der Service im ServiceCatalog existiert</li>
-                <li>Der Service muss <strong>ogk.khoCode</strong> oder <strong>ogk.ebmCode</strong> haben</li>
+                <li>Der Service muss <strong>ogk.khoCode</strong> haben (Kassenhonorarordnung, Österreich)</li>
                 <li>Verwenden Sie den API-Endpunkt:
                   <code style={{ display: 'block', padding: '8px', background: '#f5f5f5', borderRadius: '4px', marginTop: '8px' }}>
                     POST /api/service-code-mapping/create-from-service-catalog/:serviceCode

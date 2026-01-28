@@ -114,46 +114,54 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
       limit = 50
     } = req.query;
     
-    // Lade Bundesland und Arzt-Specialty aus Location für dynamische Punktwert-Berechnung
+    // Lade Location mit country, federalState und Arzt-Specialty für country-basierte Tariff-Auswahl
+    let location = null;
     let federalState = null;
     let doctorSpecialty = null;
+    // Nur Österreich: Immer KHO verwenden
+    const tariffSystem = 'kho';
     const federalStateConfig = require('../utils/federal-state-config');
     const Location = require('../models/Location');
     
-    // 1. Versuche Bundesland aus location_id Query-Parameter zu holen (wenn explizit übergeben)
+    // 1. Versuche Location aus location_id Query-Parameter zu holen (wenn explizit übergeben)
     if (location_id) {
-      const location = await Location.findById(location_id).select('federalState owner.specialty');
-      if (location && location.federalState) {
-        federalState = location.federalState;
+      location = await Location.findById(location_id).select('country federalState owner.specialty');
+      if (location) {
+        if (location.federalState) {
+          federalState = location.federalState;
+        }
         doctorSpecialty = location.owner?.specialty || null;
       }
     }
     
-    // 2. Fallback: Versuche Bundesland aus User's selectedLocation (aus Calendar Settings)
-    if (!federalState && req.user && req.user.profile?.preferences?.calendarSettings?.selectedLocation) {
+    // 2. Fallback: Versuche Location aus User's selectedLocation (aus Calendar Settings)
+    if (!location && req.user && req.user.profile?.preferences?.calendarSettings?.selectedLocation) {
       const selectedLocationId = req.user.profile.preferences.calendarSettings.selectedLocation;
       if (selectedLocationId && selectedLocationId !== 'all') {
-        const userLocation = await Location.findById(selectedLocationId).select('federalState owner.specialty');
-        if (userLocation && userLocation.federalState) {
-          federalState = userLocation.federalState;
-          doctorSpecialty = userLocation.owner?.specialty || null;
+        location = await Location.findById(selectedLocationId).select('country federalState owner.specialty');
+        if (location) {
+          if (location.federalState) {
+            federalState = location.federalState;
+          }
+          doctorSpecialty = location.owner?.specialty || null;
         }
       }
     }
     
-    // 3. Fallback: Versuche erste aktive Location MIT federalState zu finden
-    if (!federalState) {
-      const firstActiveLocation = await Location.findOne({ 
-        is_active: true, 
-        federalState: { $exists: true, $ne: null } 
-      }).select('federalState owner.specialty').sort({ createdAt: 1 });
-      if (firstActiveLocation && firstActiveLocation.federalState) {
-        federalState = firstActiveLocation.federalState;
-        doctorSpecialty = firstActiveLocation.owner?.specialty || null;
+    // 3. Fallback: Versuche erste aktive Location zu finden
+    if (!location) {
+      location = await Location.findOne({ 
+        is_active: true
+      }).select('country federalState owner.specialty').sort({ createdAt: 1 });
+      if (location) {
+        if (location.federalState) {
+          federalState = location.federalState;
+        }
+        doctorSpecialty = location.owner?.specialty || null;
       }
     }
     
-    // 4. Letzter Fallback: Verwende OÖ als Default
+    // 4. Letzter Fallback: Verwende OÖ als Default (Österreich)
     if (!federalState) {
       console.warn('[ServiceCatalog] Kein Bundesland gefunden, verwende Default: oberoesterreich');
       federalState = 'oberoesterreich';
@@ -216,7 +224,7 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
     });
 
     const services = await ServiceCatalog.find(filter)
-      .populate('location_id', 'name code federalState')
+      .populate('location_id', 'name code country federalState')
       .populate('createdBy', 'firstName lastName')
       .populate('assigned_users', 'firstName lastName email role')
       .populate({
@@ -407,13 +415,35 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
         serviceObj.assigned_rooms = enrichedRooms.filter(r => r !== null);
       }
       
-      // NEU: Dynamische Punktwert-Berechnung basierend auf Bundesland
-      // Wenn nur points vorhanden sind, aber kein khoPrice, berechne khoPrice aus points * pointValue
-      // NEU: Verwende 3-stufiges Prioritätssystem
+      // Nur Österreich: Nur echte KHO-Daten anzeigen. EBM-Codes sind ungültig (deutscher Katalog).
+      if (serviceObj.ogk) {
+        // EBM-Codes NICHT als KHO übernehmen – sie existieren im KHO-Katalog nicht.
+        if (!serviceObj.ogk.khoCode && serviceObj.ogk.ebmCode) {
+          // khoCode bewusst leer lassen
+        }
+        // In DB steht ggf. noch EBM-Code in khoCode (von alter Migration): nicht anzeigen, leer liefern
+        if (serviceObj.ogk.khoCode && typeof serviceObj.ogk.khoCode === 'string' && /^EBM[- ]?/i.test(serviceObj.ogk.khoCode)) {
+          serviceObj.ogk.khoCode = '';
+        }
+        if ((!serviceObj.ogk.khoPrice || serviceObj.ogk.khoPrice === 0) && serviceObj.ogk.ebmPrice && serviceObj.ogk.khoCode) {
+          serviceObj.ogk.khoPrice = serviceObj.ogk.ebmPrice;
+        }
+        delete serviceObj.ogk.ebmCode;
+        delete serviceObj.ogk.ebmPrice;
+        delete serviceObj.ogk.ebmGroup;
+        delete serviceObj.ogk.ebmSubGroup;
+      }
+      
+      // Dynamische Punktwert-Berechnung basierend auf Bundesland (Österreich/KHO)
+      // Wenn nur points vorhanden sind, aber kein Preis, berechne Preis aus points * pointValue
       if (serviceObj.ogk && federalState) {
-        // Wenn points vorhanden, aber kein khoPrice, berechne es dynamisch
-        if (serviceObj.ogk.points && (!serviceObj.ogk.khoPrice || serviceObj.ogk.khoPrice === 0)) {
-          // Verwende neue getPointValue() Funktion mit Prioritätssystem
+        // Nur KHO verwenden (Österreich)
+        const targetPriceField = 'khoPrice';
+        const currentPrice = serviceObj.ogk[targetPriceField] || 0;
+        
+        // Wenn points vorhanden, aber kein Preis, berechne es dynamisch
+        if (serviceObj.ogk.points && (!currentPrice || currentPrice === 0)) {
+          // Verwende neue getPointValue() Funktion mit Prioritätssystem (nur für Österreich)
           const servicePointValue = federalStateConfig.getPointValue(federalState, {
             khoCode: serviceObj.ogk?.khoCode,
             doctorSpecialty: doctorSpecialty,
@@ -423,13 +453,13 @@ router.get('/', auth, checkPermission('services.read'), async (req, res) => {
           });
           
           if (servicePointValue) {
-            serviceObj.ogk.khoPrice = Math.round((serviceObj.ogk.points * servicePointValue) * 100) / 100;
+            serviceObj.ogk[targetPriceField] = Math.round((serviceObj.ogk.points * servicePointValue) * 100) / 100;
             serviceObj.ogk.calculatedFromPoints = true;
             serviceObj.ogk.pointValue = servicePointValue; // Setze pointValue für Konsistenz
           } else {
             // Fallback auf gespeicherten pointValue oder Default
             const fallbackPointValue = serviceObj.ogk.pointValue || federalStateConfig.getPointValueForState(federalState) || 0.53;
-            serviceObj.ogk.khoPrice = Math.round((serviceObj.ogk.points * fallbackPointValue) * 100) / 100;
+            serviceObj.ogk[targetPriceField] = Math.round((serviceObj.ogk.points * fallbackPointValue) * 100) / 100;
             serviceObj.ogk.calculatedFromPoints = true;
             serviceObj.ogk.pointValue = fallbackPointValue;
           }
@@ -647,9 +677,28 @@ router.get('/:id', auth, checkPermission('services.read'), async (req, res) => {
       });
     }
 
+    // Nur Österreich: Nur echte KHO-Daten anzeigen. EBM-Codes sind ungültig (deutscher Katalog).
+    const serviceObj = service.toObject();
+    if (serviceObj.ogk) {
+      if (!serviceObj.ogk.khoCode && serviceObj.ogk.ebmCode) {
+        // khoCode bewusst leer lassen
+      }
+      // In DB steht ggf. noch EBM-Code in khoCode: nicht anzeigen, leer liefern
+      if (serviceObj.ogk.khoCode && typeof serviceObj.ogk.khoCode === 'string' && /^EBM[- ]?/i.test(serviceObj.ogk.khoCode)) {
+        serviceObj.ogk.khoCode = '';
+      }
+      if ((!serviceObj.ogk.khoPrice || serviceObj.ogk.khoPrice === 0) && serviceObj.ogk.ebmPrice && serviceObj.ogk.khoCode) {
+        serviceObj.ogk.khoPrice = serviceObj.ogk.ebmPrice;
+      }
+      delete serviceObj.ogk.ebmCode;
+      delete serviceObj.ogk.ebmPrice;
+      delete serviceObj.ogk.ebmGroup;
+      delete serviceObj.ogk.ebmSubGroup;
+    }
+
     res.json({
       success: true,
-      data: service
+      data: serviceObj
     });
   } catch (error) {
     console.error('Error fetching service:', error);
@@ -805,6 +854,14 @@ router.put('/:id', [
     // Entferne leere required_role
     if (updateData.required_role === '') {
       delete updateData.required_role;
+    }
+
+    // Pauschalpreis-Leistungen (VU1, MKP): points = 1 für korrekte Preisberechnung (1 × Pauschalpreis)
+    if (updateData.ogk && updateData.ogk.khoCode) {
+      const khoCode = String(updateData.ogk.khoCode).trim().toUpperCase();
+      if (khoCode === 'VU1' || khoCode === 'MKP') {
+        updateData.ogk.points = 1;
+      }
     }
 
     const updatedService = await ServiceCatalog.findByIdAndUpdate(

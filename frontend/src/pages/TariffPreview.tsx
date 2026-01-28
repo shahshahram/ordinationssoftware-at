@@ -21,6 +21,10 @@ import {
   Stack,
   Tooltip,
   IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Calculate,
@@ -53,6 +57,14 @@ interface TariffConfig {
     [key: string]: number;
   };
   doctorSpecialty?: string;
+  validFrom?: string | null;
+}
+
+interface FederalStateOption {
+  federalState: string;
+  code: string;
+  name: string;
+  default: number;
 }
 
 interface CalculationResult {
@@ -69,7 +81,9 @@ const TariffPreview: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<TariffConfig | null>(null);
-  
+  const [allStates, setAllStates] = useState<FederalStateOption[]>([]);
+  const [selectedFederalStateKey, setSelectedFederalStateKey] = useState<string>('');
+
   // Calculator state
   const [positionNumber, setPositionNumber] = useState<string>('');
   const [points, setPoints] = useState<string>('');
@@ -79,26 +93,67 @@ const TariffPreview: React.FC = () => {
   const [calculationResult, setCalculationResult] = useState<CalculationResult | null>(null);
   const [calculationError, setCalculationError] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadConfig();
-  }, []);
-
-  const loadConfig = async () => {
+  const loadConfigForState = async (federalStateKey: string) => {
     try {
-      setLoading(true);
-      setError(null);
-      const response = await api.get<{ success: boolean; data: TariffConfig }>('/tariff-config/current');
+      const response = await api.get<{ success: boolean; data: TariffConfig }>(
+        `/tariff-config/state/${encodeURIComponent(federalStateKey)}`
+      );
       if (response.data.success) {
         setConfig(response.data.data);
-      } else {
-        setError('Konfiguration konnte nicht geladen werden');
       }
     } catch (err: any) {
-      console.error('Fehler beim Laden der Konfiguration:', err);
-      setError(err.response?.data?.message || 'Fehler beim Laden der Konfiguration');
-    } finally {
-      setLoading(false);
+      console.error('Fehler beim Laden der Konfiguration für Bundesland:', err);
+      setError(err.response?.data?.message || 'Konfiguration konnte nicht geladen werden');
     }
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const [allRes, currentRes] = await Promise.all([
+          api.get<{ success: boolean; data: FederalStateOption[] }>('/tariff-config/all'),
+          api.get<{ success: boolean; data: TariffConfig }>('/tariff-config/current'),
+        ]);
+        if (allRes.data.success && allRes.data.data?.length) {
+          setAllStates(allRes.data.data);
+        } else {
+          const fallback: FederalStateOption[] = [
+            { federalState: 'oberoesterreich', code: 'OOE', name: 'Oberösterreich', default: 0.553 },
+            { federalState: 'niederoesterreich', code: 'NOE', name: 'Niederösterreich', default: 0.769 },
+            { federalState: 'wien', code: 'W', name: 'Wien', default: 0.768 },
+            { federalState: 'burgenland', code: 'B', name: 'Burgenland', default: 0.542 },
+            { federalState: 'steiermark', code: 'ST', name: 'Steiermark', default: 0.534 },
+            { federalState: 'kaernten', code: 'K', name: 'Kärnten', default: 0.502 },
+            { federalState: 'salzburg', code: 'S', name: 'Salzburg', default: 0.418 },
+            { federalState: 'tirol', code: 'T', name: 'Tirol', default: 0.521 },
+            { federalState: 'vorarlberg', code: 'V', name: 'Vorarlberg', default: 0.522 },
+          ];
+          setAllStates(fallback);
+        }
+        if (currentRes.data.success && currentRes.data.data) {
+          const data = currentRes.data.data;
+          setConfig(data);
+          setSelectedFederalStateKey(data.federalState);
+        } else {
+          setError('Konfiguration konnte nicht geladen werden');
+        }
+      } catch (err: any) {
+        console.error('Fehler beim Laden der Konfiguration:', err);
+        setError(err.response?.data?.message || 'Fehler beim Laden der Konfiguration');
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+  }, []);
+
+  const handleFederalStateChange = async (federalStateKey: string) => {
+    setSelectedFederalStateKey(federalStateKey);
+    setCalculationResult(null);
+    setCalculationError(null);
+    await loadConfigForState(federalStateKey);
   };
 
   const handleCalculate = async () => {
@@ -119,6 +174,7 @@ const TariffPreview: React.FC = () => {
         specialty: specialty || undefined,
         billingGroup: billingGroup || undefined,
         doctorSpecialty: config?.doctorSpecialty || undefined,
+        federalState: config?.federalState || selectedFederalStateKey || undefined,
       });
 
       if (response.data.success) {
@@ -165,35 +221,60 @@ const TariffPreview: React.FC = () => {
         KHO-Tarifvorschau
       </Typography>
 
-      {/* Status-Anzeige */}
+      {/* Status-Anzeige inkl. validFrom und Bundesland-Umschalter */}
       <Card sx={{ mb: 3 }}>
         <CardContent>
-          <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
-            <Chip
-              icon={<LocationOn />}
-              label={`Bundesland: ${config.name} (${config.code})`}
-              color="primary"
-              variant="outlined"
-              sx={{ fontSize: '1rem', py: 2.5 }}
-            />
-            {config.doctorSpecialty && (
+          <Stack spacing={2}>
+            <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
+              <FormControl size="small" sx={{ minWidth: 220 }}>
+                <InputLabel id="tariff-federal-state-label">Bundesland</InputLabel>
+                <Select
+                  labelId="tariff-federal-state-label"
+                  id="tariff-federal-state"
+                  value={selectedFederalStateKey}
+                  label="Bundesland"
+                  onChange={(e) => handleFederalStateChange(e.target.value)}
+                >
+                  {allStates.map((s) => (
+                    <MenuItem key={s.federalState} value={s.federalState}>
+                      {s.name} ({s.code})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
               <Chip
-                icon={<LocalHospital />}
-                label={`Fachgebiet: ${config.doctorSpecialty}`}
-                color="secondary"
+                icon={<LocationOn />}
+                label={`Aktuell: ${config.name} (${config.code})`}
+                color="primary"
                 variant="outlined"
                 sx={{ fontSize: '1rem', py: 2.5 }}
               />
-            )}
-            {!config.doctorSpecialty && (
-              <Chip
-                icon={<LocalHospital />}
-                label="Fachgebiet: Nicht gesetzt"
-                color="default"
-                variant="outlined"
-                sx={{ fontSize: '1rem', py: 2.5 }}
-              />
-            )}
+              {config.validFrom && (
+                <Chip
+                  label={`Gültig ab: ${new Date(config.validFrom).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit', year: 'numeric' })}`}
+                  variant="outlined"
+                  sx={{ fontSize: '0.9rem', py: 2.5 }}
+                />
+              )}
+              {config.doctorSpecialty && (
+                <Chip
+                  icon={<LocalHospital />}
+                  label={`Fachgebiet: ${config.doctorSpecialty}`}
+                  color="secondary"
+                  variant="outlined"
+                  sx={{ fontSize: '1rem', py: 2.5 }}
+                />
+              )}
+              {!config.doctorSpecialty && (
+                <Chip
+                  icon={<LocalHospital />}
+                  label="Fachgebiet: Nicht gesetzt"
+                  color="default"
+                  variant="outlined"
+                  sx={{ fontSize: '1rem', py: 2.5 }}
+                />
+              )}
+            </Stack>
           </Stack>
         </CardContent>
       </Card>

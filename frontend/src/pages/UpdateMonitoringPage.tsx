@@ -203,7 +203,6 @@ const UpdateMonitoringPage: React.FC = () => {
                     <MenuItem value="SERVICE_CATALOG_PRICE_UPDATE">Preis-Update</MenuItem>
                     <MenuItem value="TARIFF_UPDATE">Tarif-Update</MenuItem>
                     <MenuItem value="TARIFF_DOWNLOAD">Tarif-Download</MenuItem>
-                    <MenuItem value="EBM_UPDATE">EBM-Update</MenuItem>
                     <MenuItem value="KHO_UPDATE">KHO-Update</MenuItem>
                     <MenuItem value="GOAE_UPDATE">GOÄ-Update</MenuItem>
                   </Select>

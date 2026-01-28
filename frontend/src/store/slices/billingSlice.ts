@@ -21,7 +21,7 @@ export interface Service {
   unit: string;
   icd10Codes?: string[];
   goaeCode?: string;
-  ebmCode?: string;
+  khoCode?: string;
   isActive: boolean;
   quick_select?: boolean;
   color_hex?: string;

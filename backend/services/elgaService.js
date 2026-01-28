@@ -206,7 +206,7 @@ class ELGAService {
         services: invoice.services.map(service => ({
           date: service.date,
           code: service.serviceCode,
-          ebmCode: service.ebmCode,
+          khoCode: service.khoCode,
           description: service.description,
           quantity: service.quantity,
           unitPrice: service.unitPrice,

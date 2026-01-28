@@ -1,219 +1,698 @@
 {
+  "2026": {
+    "validFrom": "2026-01-01",
+    "pointValues": {
+      "oberoesterreich": {
+        "code": "OOE",
+        "name": "Oberösterreich",
+        "default": 0.5751,
+        "labor": {
+          "ordination": 0.2059,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3328,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.8216,
+          "97": 0.8216,
+          "110": 0.8216,
+          "165": 0.9256,
+          "VU1": 103.40,
+          "MKP": 19.80
+        }
+      },
+      "niederoesterreich": {
+        "code": "NOE",
+        "name": "Niederösterreich",
+        "default": 0.7998,
+        "labor": {
+          "ordination": 0.2787,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 106.80,
+          "MKP": 19.80
+        }
+      },
+      "wien": {
+        "code": "W",
+        "name": "Wien",
+        "default": 0.7987,
+        "labor": {
+          "ordination": 0.2725,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 106.80,
+          "MKP": 19.80
+        }
+      },
+      "kaernten": {
+        "code": "K",
+        "name": "Kärnten",
+        "default": 0.5221,
+        "labor": {
+          "ordination": 0.2496,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 102.80,
+          "MKP": 19.80
+        }
+      },
+      "steiermark": {
+        "code": "ST",
+        "name": "Steiermark",
+        "default": 0.5554,
+        "labor": {
+          "ordination": 0.2184,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 101.20,
+          "MKP": 19.80
+        }
+      },
+      "salzburg": {
+        "code": "S",
+        "name": "Salzburg",
+        "default": 0.4347,
+        "labor": {
+          "ordination": 0.4316,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 104.10,
+          "MKP": 19.80
+        }
+      },
+      "tirol": {
+        "code": "T",
+        "name": "Tirol",
+        "default": 0.5418,
+        "labor": {
+          "ordination": 0.2704,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 105.50,
+          "MKP": 19.80
+        }
+      },
+      "vorarlberg": {
+        "code": "V",
+        "name": "Vorarlberg",
+        "default": 0.5429,
+        "labor": {
+          "ordination": 0.2704,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 106.20,
+          "MKP": 19.80
+        }
+      },
+      "burgenland": {
+        "code": "B",
+        "name": "Burgenland",
+        "default": 0.5637,
+        "labor": {
+          "ordination": 0.2184,
+          "institute": 0.0809
+        },
+        "specialty": {
+          "radiologie": 0.0893,
+          "physiotherapie": 0.2288,
+          "ekg": 0.3224,
+          "roentgen_non_radiologist": 0.3536
+        },
+        "positionSpecific": {
+          "14": 0.5096,
+          "27": 0.5096,
+          "83": 0.7696,
+          "97": 0.7696,
+          "110": 0.7696,
+          "165": 0.8632,
+          "VU1": 106.80,
+          "MKP": 19.80
+        }
+      }
+    }
+  },
+  "2027": {
+    "validFrom": "2027-01-01",
+    "pointValues": {
+      "oberoesterreich": {
+        "code": "OOE",
+        "name": "Oberösterreich",
+        "default": 0.5866,
+        "labor": {
+          "ordination": 0.21,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3395,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.838,
+          "97": 0.838,
+          "110": 0.838,
+          "165": 0.9441,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "niederoesterreich": {
+        "code": "NOE",
+        "name": "Niederösterreich",
+        "default": 0.8158,
+        "labor": {
+          "ordination": 0.2843,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "wien": {
+        "code": "W",
+        "name": "Wien",
+        "default": 0.8147,
+        "labor": {
+          "ordination": 0.278,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "kaernten": {
+        "code": "K",
+        "name": "Kärnten",
+        "default": 0.5325,
+        "labor": {
+          "ordination": 0.2546,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "steiermark": {
+        "code": "ST",
+        "name": "Steiermark",
+        "default": 0.5665,
+        "labor": {
+          "ordination": 0.2228,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "salzburg": {
+        "code": "S",
+        "name": "Salzburg",
+        "default": 0.4434,
+        "labor": {
+          "ordination": 0.4402,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "tirol": {
+        "code": "T",
+        "name": "Tirol",
+        "default": 0.5526,
+        "labor": {
+          "ordination": 0.2758,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "vorarlberg": {
+        "code": "V",
+        "name": "Vorarlberg",
+        "default": 0.5538,
+        "labor": {
+          "ordination": 0.2758,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      },
+      "burgenland": {
+        "code": "B",
+        "name": "Burgenland",
+        "default": 0.575,
+        "labor": {
+          "ordination": 0.2228,
+          "institute": 0.0825
+        },
+        "specialty": {
+          "radiologie": 0.0911,
+          "physiotherapie": 0.2334,
+          "ekg": 0.3288,
+          "roentgen_non_radiologist": 0.3607
+        },
+        "positionSpecific": {
+          "14": 0.5198,
+          "27": 0.5198,
+          "83": 0.785,
+          "97": 0.785,
+          "110": 0.785,
+          "165": 0.8805,
+          "VU1": 110,
+          "MKP": 19.80
+        }
+      }
+    }
+  },
+  "validFrom": "2025-01-01",
   "pointValues": {
     "oberoesterreich": {
       "code": "OOE",
       "name": "Oberösterreich",
-      "default": 0.5300,
+      "default": 0.553,
       "labor": {
-        "ordination": 0.1900,
+        "ordination": 0.198,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.32,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
-        "83": 0.74,
-        "97": 0.74,
-        "110": 0.74,
-        "165": 0.83,
         "14": 0.49,
-        "27": 0.49
+        "27": 0.49,
+        "83": 0.79,
+        "97": 0.79,
+        "110": 0.79,
+        "165": 0.89,
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "niederoesterreich": {
       "code": "NOE",
       "name": "Niederösterreich",
-      "default": 0.7376,
+      "default": 0.769,
       "labor": {
-        "ordination": 0.2000,
+        "ordination": 0.268,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "wien": {
       "code": "W",
       "name": "Wien",
-      "default": 0.7370,
+      "default": 0.768,
       "labor": {
-        "ordination": 0.2500,
+        "ordination": 0.262,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "kaernten": {
       "code": "K",
       "name": "Kärnten",
-      "default": 0.4805,
+      "default": 0.502,
       "labor": {
-        "ordination": 0.2300,
+        "ordination": 0.24,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "steiermark": {
       "code": "ST",
       "name": "Steiermark",
-      "default": 0.5100,
+      "default": 0.534,
       "labor": {
-        "ordination": 0.2000,
+        "ordination": 0.21,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "salzburg": {
       "code": "S",
       "name": "Salzburg",
-      "default": 0.4000,
+      "default": 0.418,
       "labor": {
-        "ordination": 0.3980,
+        "ordination": 0.415,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "tirol": {
       "code": "T",
       "name": "Tirol",
-      "default": 0.5000,
+      "default": 0.521,
       "labor": {
-        "ordination": 0.2500,
+        "ordination": 0.26,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "vorarlberg": {
       "code": "V",
       "name": "Vorarlberg",
-      "default": 0.5000,
+      "default": 0.522,
       "labor": {
-        "ordination": 0.2500,
+        "ordination": 0.26,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     },
     "burgenland": {
       "code": "B",
       "name": "Burgenland",
-      "default": 0.5200,
+      "default": 0.542,
       "labor": {
-        "ordination": 0.2000,
+        "ordination": 0.21,
         "institute": 0.0778
       },
       "specialty": {
         "radiologie": 0.0859,
-        "physiotherapie": 0.2200,
-        "ekg": 0.3100,
-        "roentgen_non_radiologist": 0.3400
+        "physiotherapie": 0.22,
+        "ekg": 0.31,
+        "roentgen_non_radiologist": 0.34
       },
       "positionSpecific": {
+        "14": 0.49,
+        "27": 0.49,
         "83": 0.74,
         "97": 0.74,
         "110": 0.74,
         "165": 0.83,
-        "14": 0.49,
-        "27": 0.49
+        "VU1": 110,
+        "MKP": 19.80
       }
     }
   },
   "metadata": {
     "version": "2.0",
-    "lastUpdated": "2025-01-25",
-    "description": "Erweiterte Punktwerte für österreichische Bundesländer gemäß Kassen-Honorarordnung (KHO) 2024/2025",
+    "lastUpdated": "2025-01-28",
+    "description": "Punktwerte für österreichische Bundesländer gemäß KHO 2025 (Rollout)",
     "unit": "Euro pro Punkt",
-    "source": "Österreichische Ärztekammer - Honorarordnung 2024/2025",
+    "source": "Österreichische Ärztekammer - Honorarordnung 2025",
     "prioritySystem": {
       "level1": "Positionsnummer-spezifische Fix-Punktwerte",
       "level2": "BillingGroup/Specialty-basierte Punktwerte",
@@ -221,14 +700,14 @@
     }
   },
   "notes": {
-    "oberoesterreich": "Basis-Werte für Oberösterreich (Stand 2024/2025)",
-    "niederoesterreich": "Seit 01.01.2024 deutlich angehoben",
-    "wien": "Harmonisiert mit NÖ (neuer Tarif 2024)",
-    "kaernten": "Basierend auf Zusatzübereinkommen 2024",
-    "steiermark": "Schätzwert / Oft Euro-Fixbeträge",
-    "salzburg": "Oft degressive Limits (Punktwert sinkt bei hoher Fallzahl)",
-    "tirol": "Starke Verwendung von Euro-Fixbeträgen",
-    "vorarlberg": "Nutzt fast ausschließlich Euro-Beträge im Katalog",
-    "burgenland": "Ähnlich wie NÖ/Wien orientiert"
+    "oberoesterreich": "Basis-Werte 2025 inkl. EKG 0.32, Pos 83/97/110/165 angepasst",
+    "niederoesterreich": "Tarife 2025",
+    "wien": "Tarife 2025",
+    "kaernten": "Tarife 2025",
+    "steiermark": "Tarife 2025",
+    "salzburg": "Tarife 2025",
+    "tirol": "Tarife 2025",
+    "vorarlberg": "Tarife 2025",
+    "burgenland": "Tarife 2025"
   }
 }

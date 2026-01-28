@@ -553,7 +553,9 @@ ServiceCatalogSchema.virtual('price_euro').get(function() {
 });
 
 // Pre-Hook: Migriere price_cents zu price und ebmCode/ebmPrice zu khoCode/khoPrice
-ServiceCatalogSchema.pre('save', function(next) {
+// WICHTIG: EBM → KHO Migration nur für Österreich (country === 'austria')
+// Für Deutschland: EBM-Felder beibehalten
+ServiceCatalogSchema.pre('save', async function(next) {
   // Migriere price_cents zu price
   if (this.price_cents && (this.price === undefined || this.price === null)) {
     this.price = this.price_cents / 100;
@@ -563,22 +565,50 @@ ServiceCatalogSchema.pre('save', function(next) {
   }
   
   // Migriere ebmCode/ebmPrice zu khoCode/khoPrice (Backward Compatibility)
+  // Nur wenn Location Österreich ist (country === 'austria')
   if (this.ogk) {
-    if (this.ogk.ebmCode && !this.ogk.khoCode) {
-      this.ogk.khoCode = this.ogk.ebmCode;
+    // Prüfe Location-Country, falls location_id vorhanden
+    let shouldMigrate = true; // Default: Migriere (für Backward Compatibility)
+    
+    if (this.location_id) {
+      try {
+        const Location = require('./Location');
+        const location = await Location.findById(this.location_id).select('country').lean();
+        if (location && location.country === 'germany') {
+          // Deutschland: Keine Migration, EBM-Felder beibehalten
+          shouldMigrate = false;
+        }
+      } catch (error) {
+        // Bei Fehler: Migriere (Backward Compatibility)
+        console.warn('[ServiceCatalog] Fehler beim Laden der Location, migriere trotzdem:', error.message);
+      }
     }
-    if (this.ogk.ebmPrice !== undefined && this.ogk.ebmPrice !== null && (this.ogk.khoPrice === undefined || this.ogk.khoPrice === null)) {
-      this.ogk.khoPrice = this.ogk.ebmPrice;
+    
+    // Migration nur für Österreich oder wenn keine Location vorhanden (Backward Compatibility)
+    if (shouldMigrate) {
+      if (this.ogk.ebmCode && !this.ogk.khoCode) {
+        this.ogk.khoCode = this.ogk.ebmCode;
+      }
+      if (this.ogk.ebmPrice !== undefined && this.ogk.ebmPrice !== null && (this.ogk.khoPrice === undefined || this.ogk.khoPrice === null)) {
+        this.ogk.khoPrice = this.ogk.ebmPrice;
+      }
+      if (this.ogk.ebmGroup && !this.ogk.khoGroup) {
+        this.ogk.khoGroup = this.ogk.ebmGroup;
+      }
+      if (this.ogk.ebmSubGroup && !this.ogk.khoSubGroup) {
+        this.ogk.khoSubGroup = this.ogk.ebmSubGroup;
+      }
     }
-    if (this.ogk.ebmGroup && !this.ogk.khoGroup) {
-      this.ogk.khoGroup = this.ogk.ebmGroup;
-    }
-    if (this.ogk.ebmSubGroup && !this.ogk.khoSubGroup) {
-      this.ogk.khoSubGroup = this.ogk.ebmSubGroup;
-    }
+    
     // Setze billingFrequency auf 'quarterly' wenn limitation.maxPerQuarter vorhanden ist
     if (this.ogk.limitation?.maxPerQuarter && this.ogk.billingFrequency === 'once') {
       this.ogk.billingFrequency = 'quarterly';
+    }
+
+    // Pauschalpreis-Leistungen (VU1, MKP): points muss 1 sein, damit Preis = 1 × Pauschalpreis
+    const khoCode = (this.ogk.khoCode && this.ogk.khoCode.trim()) || '';
+    if (['VU1', 'MKP'].includes(khoCode.toUpperCase())) {
+      this.ogk.points = 1;
     }
   }
   

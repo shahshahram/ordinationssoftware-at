@@ -3,7 +3,10 @@
  * Lädt Punktwerte aus federal_state_config.json
  * 
  * NEU: 3-stufiges Prioritätssystem:
- * 1. Positionsnummer-spezifische Fix-Punktwerte
+ * 1. Positionsnummer-/KHO-Code-spezifische Fix-Punktwerte (positionSpecific)
+ *    - Numerische Keys (z.B. "83", "165") = Punktwert in Euro.
+ *    - Nicht-numerische Keys (z.B. "VU1") = Pauschalpreis in Euro (Endpreis);
+ *      bei 1 Punkt der Leistung entspricht der Rückgabewert dem fixen Endpreis (Wirkung 1:1).
  * 2. BillingGroup/Specialty-basierte Punktwerte
  * 3. Default-Punktwert des Bundeslandes
  */
@@ -114,6 +117,7 @@ function isLaborInstitute(specialty, doctorSpecialty) {
  * @param {String} options.billingGroup - BillingGroup des Services
  * @param {Object} options.service - Service-Objekt (für Labor-Erkennung)
  * @param {Boolean} options.isLabor - Explizite Labor-Markierung (optional)
+ * @param {Date|string} [options.date] - Rechnungs-/Behandlungsdatum; Jahr bestimmt Tarif-Jahr (z.B. 2025/2026). Ohne: aktuelles Jahr
  * @returns {Number|null} Punktwert in Euro oder null wenn nicht gefunden
  */
 function getPointValue(federalState, options = {}) {
@@ -122,11 +126,15 @@ function getPointValue(federalState, options = {}) {
   }
 
   const config = loadConfig();
+  const year = options.date
+    ? new Date(options.date).getFullYear().toString()
+    : new Date().getFullYear().toString();
+  const pointValuesSource = config[year]?.pointValues ?? config.pointValues;
   const stateKey = federalState.toLowerCase().trim();
-  const stateConfig = config.pointValues[stateKey];
-  
+  const stateConfig = pointValuesSource[stateKey];
+
   if (!stateConfig) {
-    console.warn(`[Federal State Config] Bundesland '${federalState}' nicht gefunden`);
+    console.warn(`[Federal State Config] Bundesland '${federalState}' nicht gefunden (Jahr: ${year})`);
     return null;
   }
 
@@ -135,11 +143,13 @@ function getPointValue(federalState, options = {}) {
   if (!positionNumber && options.khoCode) {
     positionNumber = extractPositionNumber(options.khoCode);
   }
+  // Lookup-Key für positionSpecific: numerische Positionsnummer ODER roher KHO-Code (z.B. "VU1")
+  const positionKey = (positionNumber ?? (options.khoCode && options.khoCode.trim())) || null;
 
-  // STUFE 1: Positionsnummer-spezifischer Fix-Punktwert (höchste Priorität)
-  if (positionNumber && stateConfig.positionSpecific && stateConfig.positionSpecific[positionNumber]) {
-    const posValue = stateConfig.positionSpecific[positionNumber];
-    console.log(`[Federal State Config] Positionsnummer-spezifischer Wert für ${positionNumber}: ${posValue}`);
+  // STUFE 1: Positionsnummer-/KHO-Code-spezifischer Fix-Punktwert (höchste Priorität)
+  if (positionKey && stateConfig.positionSpecific && stateConfig.positionSpecific[positionKey] !== undefined) {
+    const posValue = stateConfig.positionSpecific[positionKey];
+    console.log(`[Federal State Config] positionSpecific Wert für ${positionKey}: ${posValue}`);
     return posValue;
   }
 

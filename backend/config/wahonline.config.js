@@ -35,6 +35,8 @@ const wahonlineConfig = {
   sit: {
     seriennummer: process.env.WAHONLINE_SIT_SERIENNUMMER || process.env.ELDA_SIT_SERIENNUMMER || process.env.ELDA_SERIENNUMMER || null,
     passwort: process.env.WAHONLINE_SIT_PASSWORT || process.env.ELDA_SIT_PASSWORT || process.env.ELDA_PASSWORT || null,
+    // SIT-Test-Vertragspartnernummer (Standard: 100014; ggf. ELDA-Support-Mail prüfen)
+    vpnr: process.env.ELDA_SIT_VPNR || null,
     // SIT verwendet ELDA-Webservice statt REST API
     useELDAWebservice: true
   },

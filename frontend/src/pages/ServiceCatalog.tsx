@@ -71,7 +71,7 @@ interface Location {
   address: string;
   city: string;
   postalCode: string;
-  country: string;
+  country?: 'austria' | 'germany';
   phone: string;
   email: string;
   isActive: boolean;
@@ -200,18 +200,12 @@ interface ServiceCatalog {
   // Abrechnungsfelder (Backend)
   billingType?: 'kassenarzt' | 'wahlarzt' | 'privat' | 'both';
   ogk?: {
-    // Neue korrekte Felder
     khoCode?: string;
     khoPrice?: number;
     khoGroup?: string;
     khoSubGroup?: string;
     insuranceProvider?: 'oegk' | 'bvaeb' | 'svs' | 'kfa' | 'pva' | 'vaeb' | 'auva' | 'all';
     federalState?: 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null;
-    // Legacy-Felder für Backward Compatibility
-    ebmCode?: string;
-    ebmPrice?: number;
-    ebmGroup?: string;
-    ebmSubGroup?: string;
     requiresApproval?: boolean;
     billingFrequency?: 'once' | 'periodic';
     // NEU: Ausschluss-Regeln (Conflict-Detection)
@@ -301,20 +295,6 @@ interface ServiceCatalog {
   updatedAt: string;
 }
 
-interface Location {
-  _id: string;
-  name: string;
-  code: string;
-}
-
-interface User {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: string;
-}
-
 const ServiceCatalogPage: React.FC = () => {
   const theme = useTheme();
   const { enqueueSnackbar } = useSnackbar();
@@ -343,7 +323,6 @@ const ServiceCatalogPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
-
   const [formData, setFormData] = useState<Partial<ServiceCatalog>>({
     code: '',
     name: '',
@@ -404,21 +383,14 @@ const ServiceCatalogPage: React.FC = () => {
     // Abrechnungsfelder
     billingType: 'both',
     ogk: {
-      // Neue korrekte Felder
       khoCode: '',
       khoPrice: 0,
       khoGroup: '',
       khoSubGroup: '',
       insuranceProvider: 'all' as 'oegk' | 'bvaeb' | 'svs' | 'kfa' | 'pva' | 'vaeb' | 'auva' | 'all',
       federalState: null as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null,
-      // Legacy-Felder für Backward Compatibility
-      ebmCode: '',
-      ebmPrice: 0,
-      ebmGroup: '',
-      ebmSubGroup: '',
       requiresApproval: false,
       billingFrequency: 'once' as 'once' | 'periodic',
-      // NEU: Conflict-Rules und Begründungspflicht-Regeln (optional)
       conflictRules: undefined,
       justificationRules: undefined
     } as ServiceCatalog['ogk'],
@@ -766,18 +738,12 @@ const ServiceCatalogPage: React.FC = () => {
       // Abrechnungsfelder
       billingType: 'both',
       ogk: {
-        // Neue korrekte Felder
         khoCode: '',
         khoPrice: 0,
         khoGroup: '',
         khoSubGroup: '',
         insuranceProvider: 'all' as 'oegk' | 'bvaeb' | 'svs' | 'kfa' | 'pva' | 'vaeb' | 'auva' | 'all',
         federalState: null as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null,
-        // Legacy-Felder für Backward Compatibility
-        ebmCode: '',
-        ebmPrice: 0,
-        ebmGroup: '',
-        ebmSubGroup: '',
         requiresApproval: false,
         billingFrequency: 'once' as 'once' | 'periodic'
       },
@@ -815,11 +781,9 @@ const ServiceCatalogPage: React.FC = () => {
     if (locations.length >= 1) {
       setSelectedDeviceLocation(locations[0]._id);
       setSelectedRoomLocation(locations[0]._id);
-      // Service-Standort automatisch vorbelegen und Bundesland übernehmen
       const firstLocation = locations[0];
       setFormData(prev => {
         const updated = { ...prev, location_id: firstLocation };
-        // Bundesland automatisch aus Standort übernehmen, wenn vorhanden
         if (firstLocation && (firstLocation as any).federalState) {
           updated.ogk = {
             ...updated.ogk,
@@ -832,7 +796,7 @@ const ServiceCatalogPage: React.FC = () => {
       setSelectedDeviceLocation('');
       setSelectedRoomLocation('');
     }
-    
+
     setDialogOpen(true);
   };
 
@@ -844,6 +808,7 @@ const ServiceCatalogPage: React.FC = () => {
     // Kategorien neu laden, falls neue hinzugefügt wurden
     fetchCategories();
     setEditingService(service);
+    
     setFormData({
       code: service.code,
       name: service.name,
@@ -890,29 +855,14 @@ const ServiceCatalogPage: React.FC = () => {
       // Abrechnungsfelder
       billingType: service.billingType || 'both',
       ogk: {
-        // Neue korrekte Felder
-        khoCode: service.ogk?.khoCode || service.ogk?.ebmCode || '',
-        khoPrice: service.ogk?.khoPrice !== undefined && service.ogk?.khoPrice !== null
-          ? service.ogk.khoPrice // ALLE PREISE SIND BEREITS IN EURO!
-          : (service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
-            ? service.ogk.ebmPrice // ALLE PREISE SIND BEREITS IN EURO!
-            : 0),
-        khoGroup: service.ogk?.khoGroup || service.ogk?.ebmGroup || '',
-        khoSubGroup: service.ogk?.khoSubGroup || service.ogk?.ebmSubGroup || '',
+        khoCode: service.ogk?.khoCode || '',
+        khoPrice: service.ogk?.khoPrice !== undefined && service.ogk?.khoPrice !== null ? service.ogk.khoPrice : 0,
+        khoGroup: service.ogk?.khoGroup || '',
+        khoSubGroup: service.ogk?.khoSubGroup || '',
         insuranceProvider: service.ogk?.insuranceProvider || 'all',
         federalState: service.ogk?.federalState || null,
-        // Legacy-Felder für Backward Compatibility
-        ebmCode: service.ogk?.khoCode || service.ogk?.ebmCode || '',
-        ebmPrice: service.ogk?.khoPrice !== undefined && service.ogk?.khoPrice !== null
-          ? service.ogk.khoPrice // ALLE PREISE SIND BEREITS IN EURO!
-          : (service.ogk?.ebmPrice !== undefined && service.ogk?.ebmPrice !== null
-            ? service.ogk.ebmPrice // ALLE PREISE SIND BEREITS IN EURO!
-            : 0),
-        ebmGroup: service.ogk?.khoGroup || service.ogk?.ebmGroup || '',
-        ebmSubGroup: service.ogk?.khoSubGroup || service.ogk?.ebmSubGroup || '',
         requiresApproval: service.ogk?.requiresApproval || false,
         billingFrequency: service.ogk?.billingFrequency || 'once',
-        // NEU: Conflict-Rules und Begründungspflicht-Regeln (optional)
         ...(service.ogk?.conflictRules ? { conflictRules: service.ogk.conflictRules } : {}),
         ...(service.ogk?.justificationRules ? { justificationRules: service.ogk.justificationRules } : {})
       },
@@ -964,15 +914,17 @@ const ServiceCatalogPage: React.FC = () => {
             }
             return updated;
           });
-        } else if (service.location_id && (service.location_id as any).federalState) {
-          // Bundesland aus bereits zugewiesenem Standort übernehmen
-          setFormData(prev => ({
-            ...prev,
-            ogk: {
-              ...prev.ogk,
-              federalState: (service.location_id as any).federalState
-            }
-          }));
+        } else if (service.location_id) {
+          const location = service.location_id as any;
+          if (location.federalState) {
+            setFormData(prev => ({
+              ...prev,
+              ogk: {
+                ...prev.ogk,
+                federalState: location.federalState
+              }
+            }));
+          }
         }
     } else {
       // Wenn Service bereits Geräte hat, deren Standort für Geräte-Auswahl verwenden
@@ -1018,6 +970,12 @@ const ServiceCatalogPage: React.FC = () => {
       // Entferne leere required_role
       if (payload.required_role === '') {
         delete payload.required_role;
+      }
+
+      // Nur KHO: Legacy-Felder (ebm*) aus Payload entfernen
+      if (payload.ogk) {
+        const { ebmCode, ebmPrice, ebmGroup, ebmSubGroup, ...ogkKhoOnly } = payload.ogk as Record<string, unknown>;
+        payload.ogk = ogkKhoOnly as typeof payload.ogk;
       }
 
         const response = editingService 
@@ -1915,7 +1873,6 @@ const ServiceCatalogPage: React.FC = () => {
                     onChange={(e) => {
                       const location = locations.find(loc => loc._id === e.target.value);
                       const updatedFormData = { ...formData, location_id: location || undefined };
-                      // Bundesland automatisch aus Standort übernehmen, wenn vorhanden
                       if (location && (location as any).federalState) {
                         updatedFormData.ogk = {
                           ...updatedFormData.ogk,
@@ -2115,15 +2072,11 @@ const ServiceCatalogPage: React.FC = () => {
                       <TextField
                         fullWidth
                         label="KHO-Code"
-                        helperText="Kassenhonorarordnung-Code (korrekte österreichische Bezeichnung)"
-                        value={formData.ogk?.khoCode || formData.ogk?.ebmCode || ''}
-                        onChange={(e) => setFormData({ 
-                          ...formData, 
-                          ogk: { 
-                            ...formData.ogk, 
-                            khoCode: e.target.value,
-                            ebmCode: e.target.value // Backward Compatibility
-                          }
+                        helperText="Kassenhonorarordnung-Code (Österreich)"
+                        value={formData.ogk?.khoCode || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          ogk: { ...formData.ogk, khoCode: e.target.value }
                         })}
                       />
                       <TextField
@@ -2132,22 +2085,11 @@ const ServiceCatalogPage: React.FC = () => {
                         helperText="Preis in Euro"
                         type="number"
                         inputProps={{ step: "0.01" }}
-                        value={formData.ogk?.khoPrice !== undefined && formData.ogk?.khoPrice !== null && formData.ogk?.khoPrice !== 0
-                          ? formData.ogk.khoPrice // ALLE PREISE SIND BEREITS IN EURO!
-                          : (formData.ogk?.ebmPrice !== undefined && formData.ogk?.ebmPrice !== null && formData.ogk?.ebmPrice !== 0
-                            ? formData.ogk.ebmPrice // ALLE PREISE SIND BEREITS IN EURO!
-                            : '')}
-                        onChange={(e) => {
-                          const euroValue = parseFloat(e.target.value) || 0;
-                          setFormData({ 
-                            ...formData, 
-                            ogk: { 
-                              ...formData.ogk, 
-                              khoPrice: euroValue,
-                              ebmPrice: euroValue // Backward Compatibility
-                            }
-                          });
-                        }}
+                        value={formData.ogk?.khoPrice !== undefined && formData.ogk?.khoPrice !== null && formData.ogk?.khoPrice !== 0 ? formData.ogk.khoPrice : ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          ogk: { ...formData.ogk, khoPrice: parseFloat(e.target.value) || 0 }
+                        })}
                       />
                       <FormControl fullWidth>
                         <InputLabel>Versicherungsträger</InputLabel>
@@ -3737,10 +3679,8 @@ const ServiceCatalogPage: React.FC = () => {
                   ÖGK-Abrechnung
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
-                  <li><strong>KHO-Code:</strong> KHO-Code für ÖGK-Abrechnung (neue korrekte Bezeichnung)</li>
+                  <li><strong>KHO-Code:</strong> Kassenhonorarordnung-Code für ÖGK-Abrechnung (Österreich)</li>
                   <li><strong>KHO-Preis:</strong> Preis für ÖGK-Abrechnung in Euro</li>
-                  <li><strong>EBM-Code:</strong> EBM-Code (Legacy, für Backward Compatibility)</li>
-                  <li><strong>EBM-Preis:</strong> EBM-Preis (Legacy, für Backward Compatibility)</li>
                   <li><strong>Versicherungsträger:</strong> ÖGK, BVAEB, SVS, KFA, PVA, VAEB, AUVA oder Alle</li>
                   <li><strong>Bundesland:</strong> Bundesland-spezifische Abrechnung (optional)</li>
                   <li><strong>Genehmigung erforderlich:</strong> Muss die Abrechnung genehmigt werden?</li>

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import React from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box, Typography } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
@@ -40,7 +40,7 @@ import Security from './pages/Security';
 import StaffManagement from './pages/StaffManagement';
 import Calendar from './pages/Calendar';
 import DemoCalendar from './pages/DemoCalendar';
-import EnhancedCalendar from './pages/EnhancedCalendar';
+// import EnhancedCalendar from './pages/EnhancedCalendar'; // Currently not used
 import ServiceDemoCalendar from './pages/ServiceDemoCalendar';
 import LocationManagement from './pages/LocationManagement';
 import LocationDashboard from './components/LocationDashboard';
@@ -234,7 +234,6 @@ const getTheme = (mode: 'light' | 'dark') => createTheme({
 // Inner Content Component (muss innerhalb Router sein)
 const InnerAppContent: React.FC = () => {
   const dispatch = useAppDispatch();
-  const location = useLocation();
   const [searchOpen, setSearchOpen] = React.useState(false);
   const navigationMode = useAppSelector((state) => state.navigation.mode);
   const sidebarOpen = useAppSelector((state) => state.navigation.sidebarOpen);
@@ -245,7 +244,6 @@ const InnerAppContent: React.FC = () => {
     setLocalSidebarOpen(sidebarOpen);
   }, [sidebarOpen]);
   const isAuthenticated = useAppSelector((state) => state.auth.isAuthenticated);
-  const isInternalMessages = location.pathname === '/internal-messages';
 
   // Lade Navigation-Modus beim Login
   React.useEffect(() => {

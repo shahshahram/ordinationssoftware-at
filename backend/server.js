@@ -11,7 +11,8 @@ const mongoSanitize = require('express-mongo-sanitize');
 const path = require('path');
 const fs = require('fs');
 const cron = require('node-cron');
-require('dotenv').config();
+// .env immer aus Backend-Verzeichnis laden (unabhängig vom Startordner)
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Zeitzonen-Utility importieren
 const { DEFAULT_TIMEZONE } = require('./utils/timezone');

@@ -1103,7 +1103,7 @@ class BillingService {
         services: [{
           date: performance.serviceDatetime || new Date(),
           code: serviceCode, // Konvertierter Code für Versicherungsträger
-          ebmCode: serviceCode, // EBM-Code (kann auch konvertiert sein)
+          khoCode: serviceCode,
           description: serviceName, // Konvertierter Name
           quantity: performance.quantity || 1,
           unitPrice: servicePrice, // Konvertierter Preis, falls vorhanden

@@ -39,7 +39,8 @@ const eldaConfig = {
       enabled: true // Bereits verfügbar
     },
     sit: {
-      baseUrl: 'https://online-itu5test.elda.at/elda-online/servlet/WebTrans',
+      // ELDA v4 TransferService (Vorgabe ELDA-Support)
+      baseUrl: 'https://online-itu5test.elda.at/eldaws/transfer/v4/TransferService',
       enabled: true
     }
   },
@@ -47,10 +48,13 @@ const eldaConfig = {
   // API-Key für Webservice
   apiKey: process.env.ELDA_API_KEY || null,
   
-  // SIT-Plattform Credentials (geteilt mit WAHonline)
+  // SIT-Plattform Credentials (geteilt mit WAHonline) – v4 SendenRequest: absender, passwort, apiKey, inhalt
   sit: {
     seriennummer: process.env.ELDA_SIT_SERIENNUMMER || process.env.ELDA_SERIENNUMMER || null,
-    passwort: process.env.ELDA_SIT_PASSWORT || process.env.ELDA_PASSWORT || null
+    passwort: process.env.ELDA_SIT_PASSWORT || process.env.ELDA_PASSWORT || null,
+    apiKey: process.env.ELDA_SIT_API_KEY || process.env.ELDA_API_KEY || null,
+    // SIT-Test-Vertragspartnernummer (Standard: 100014; ggf. ELDA-Support-Mail prüfen)
+    vpnr: process.env.ELDA_SIT_VPNR || null
   },
   
   // FTPS-Zertifikate
@@ -211,10 +215,14 @@ const eldaConfig = {
         errors.push('Webservice ist für diese Umgebung nicht verfügbar.');
       }
       
-      // Für SIT: Seriennummer und Passwort statt API-Key
+      // Für SIT (v4): Seriennummer, Passwort und API-Key für SendenRequest
       if (this.environment === 'sit') {
         if (!this.sit.seriennummer || !this.sit.passwort) {
           errors.push('SIT-Plattform benötigt Seriennummer und Passwort (ELDA_SIT_SERIENNUMMER, ELDA_SIT_PASSWORT).');
+        }
+        const sitApiKey = this.sit.apiKey != null ? this.sit.apiKey : this.apiKey;
+        if (!sitApiKey) {
+          errors.push('SIT v4 benötigt API-Key (ELDA_SIT_API_KEY oder ELDA_API_KEY).');
         }
       } else {
         // Für Test/Production: API-Key

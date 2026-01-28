@@ -2,6 +2,7 @@
 // Unterstützt FTPS (aktuell) und Webservice (ab 02.02.2026)
 
 const axios = require('axios');
+const crypto = require('crypto');
 const ftp = require('basic-ftp');
 const fs = require('fs').promises;
 const fsSync = require('fs');
@@ -9,6 +10,137 @@ const path = require('path');
 const https = require('https');
 const eldaConfig = require('../../config/elda.config');
 const eldaFormatGenerator = require('../eldaFormatGenerator');
+
+/** Anonymisiert XML-Body für Log (SV-Nummern, IBAN, Namen, Adressen). */
+function anonymizeXmlForLog(xml) {
+  if (!xml || typeof xml !== 'string') return xml || '';
+  let out = xml;
+  // SV-Nummer (10 Ziffern, österreichisches Format)
+  out = out.replace(/\b(\d{4}\s?\d{6})\b/g, '[SV-NR]');
+  out = out.replace(/\b(\d{10})\b/g, (m) => (/^\d{10}$/.test(m) ? '[SV-NR]' : m));
+  // IBAN (AT + 20 Ziffern)
+  out = out.replace(/\bAT\d{2}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{4}\s?\d{2}\b/gi, '[IBAN]');
+  out = out.replace(/\bAT\d{20}\b/gi, '[IBAN]');
+  // Tag-Inhalte: versicherungsnummer*, internationalBankAccountNumber
+  out = out.replace(/<(versicherungsnummer[A-Za-z]*)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  out = out.replace(/<(internationalBankAccountNumber)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  // Namen und Adressen (Inhalt von typischen Tags)
+  out = out.replace(/<(familienname[A-Za-z]*)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  out = out.replace(/<(vorname[A-Za-z]*)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  out = out.replace(/<(strasseHausnummer|strasse[A-Za-z]*)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  out = out.replace(/<(ort)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  // SIT v4 SOAP: Passwort und API-Key nicht loggen
+  out = out.replace(/<(passwort)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  out = out.replace(/<(apiKey)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  // SIT v4 securityParameters: kundenpasswort, apiKey
+  out = out.replace(/<(kundenpasswort)>([^<]*)<\/\1>/g, '<$1>[ANON]</$1>');
+  out = out.replace(/<apiKey>([^<]*)<\/apiKey>/g, '<apiKey>[ANON]</apiKey>');
+  return out;
+}
+
+/** Namespace für ELDA v4 TransferService (senden) – laut Server-Fehlermeldung. */
+const ELDA_V4_NS = 'http://v4.transfer.ws.elda.at/';
+const SOAP_ENV_NS = 'http://schemas.xmlsoap.org/soap/envelope/';
+
+/**
+ * Baut den SOAP-Envelope für ELDA v4 senden (laut offizieller Schnittstellenbeschreibung).
+ * arg0 enthält: securityParameters (nonce, created, seriennummer, kundenpasswort SHA512, apiKey) + dateiName + payload (Base64).
+ * @param {string} honorarnotenXml - Rohe n1:honorarnotenMeldung-XML
+ * @param {string} seriennummer - Seriennummer (z.B. 800062)
+ * @param {string} kundenpasswortPlain - ELDA-Kundenpasswort (wird SHA512 hex lowercase gesendet)
+ * @param {string} apiKey - API-Key
+ * @param {string} dateiName - Dateiname (max 255 Zeichen, z.B. honorarnote_20260128.xml)
+ * @returns {string} SOAP-XML
+ */
+function buildSitV4SoapEnvelope(honorarnotenXml, seriennummer, kundenpasswortPlain, apiKey, dateiName) {
+  const xmlUtf8 = String(honorarnotenXml).replace(/^\uFEFF/, '');
+  const payloadBase64 = Buffer.from(xmlUtf8, 'utf8').toString('base64');
+  const nonce = crypto.randomUUID();
+  const created = new Date().toISOString().replace(/\.\d{3}/, '.000'); // yyyy-MM-dd'T'HH:mm:ss.000'Z'
+  const kundenpasswort = crypto.createHash('sha512').update(String(kundenpasswortPlain || ''), 'utf8').digest('hex');
+  const escape = (str) => {
+    if (str == null) return '';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  };
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    `<soap:Envelope xmlns:soap="${SOAP_ENV_NS}" xmlns:ns2="${ELDA_V4_NS}">`,
+    '  <soap:Body>',
+    '    <ns2:senden>',
+    '      <arg0>',
+    '        <securityParameters>',
+    `          <apiKey>${escape(apiKey)}</apiKey>`,
+    `          <created>${escape(created)}</created>`,
+    `          <kundenpasswort>${escape(kundenpasswort)}</kundenpasswort>`,
+    `          <nonce>${escape(nonce)}</nonce>`,
+    `          <seriennummer>${escape(seriennummer)}</seriennummer>`,
+    '        </securityParameters>',
+    `        <dateiName>${escape(dateiName)}</dateiName>`,
+    `        <payload>${escape(payloadBase64)}</payload>`,
+    '      </arg0>',
+    '    </ns2:senden>',
+    '  </soap:Body>',
+    '</soap:Envelope>'
+  ].join('\n');
+}
+
+/** Schreibt Log-File des letzten gescheiterten ELDA-SIT-Requests. */
+async function writeEldaSitFailedRequestLog(options) {
+  const {
+    requestUrl,
+    requestHeaders,
+    requestBody,
+    responseStatus,
+    responseHeaders,
+    responseBody,
+    timestamp
+  } = options;
+  const logDir = path.join(__dirname, '../../../docs/logs');
+  const logPath = path.join(logDir, 'ELDA_SIT_LAST_FAILED_REQUEST.log');
+  const headersForLog = { ...requestHeaders };
+  if (headersForLog.Authorization) headersForLog.Authorization = 'Basic ***';
+  const anonymizedBody = anonymizeXmlForLog(requestBody);
+  const lines = [
+    '# ELDA-SIT – Letzter gescheiterter Request',
+    `# Erstellt: ${timestamp || new Date().toISOString()}`,
+    '',
+    '## Request',
+    `URL: ${requestUrl}`,
+    '',
+    '### HTTP-Request-Header',
+    ...Object.entries(headersForLog).map(([k, v]) => `${k}: ${v}`),
+    '',
+    '### Request-Body (XML, anonymisiert)',
+    '```xml',
+    anonymizedBody,
+    '```',
+    '',
+    '## Response',
+    `Status: ${responseStatus}`,
+    '',
+    '### HTTP-Response-Header',
+    ...(responseHeaders && typeof responseHeaders === 'object'
+      ? Object.entries(responseHeaders).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      : ['(nicht verfügbar)']),
+    '',
+    '### Response-Body',
+    '```',
+    typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody, null, 2),
+    '```'
+  ];
+  try {
+    await fs.mkdir(logDir, { recursive: true });
+    await fs.writeFile(logPath, lines.join('\n'), 'utf8');
+    console.warn('[ELDA] Log geschrieben:', logPath);
+  } catch (e) {
+    console.warn('[ELDA] Log-File konnte nicht geschrieben werden:', e.message);
+  }
+}
 
 class ELDAConnector {
   constructor() {
@@ -228,8 +360,12 @@ class ELDAConnector {
     const isSIT = this.config.environment === 'sit';
     
     if (isSIT) {
+      const sitApiKey = this.config.sit?.apiKey ?? this.config.apiKey;
       if (!this.config.sit?.seriennummer || !this.config.sit?.passwort) {
         throw new Error('ELDA-Seriennummer und Passwort für SIT fehlen');
+      }
+      if (!sitApiKey) {
+        throw new Error('ELDA API-Key für SIT v4 fehlt (ELDA_SIT_API_KEY oder ELDA_API_KEY)');
       }
     } else {
       if (!this.config.apiKey) {
@@ -268,67 +404,157 @@ class ELDAConnector {
         throw new Error(`XML-Generierung fehlgeschlagen: ${xmlError.message}`);
       }
       
-      // Headers für SIT oder normale Umgebung
+      // SIT v4: SOAP-Envelope mit Base64-kodierter Honorarnoten-XML (SendenRequest: absender, passwort, apiKey, inhalt)
+      let requestBody = xmlContent;
+      if (isSIT) {
+        // BOM entfernen, strikt UTF-8 (keine Byte-Order-Mark vor Base64)
+        xmlContent = xmlContent.replace(/^\uFEFF/, '');
+        // XML-Declaration entfernen: Payload soll direkt mit <honorarnotenMeldung... beginnen (ELDA Minimal-Modus)
+        xmlContent = xmlContent.replace(/^\s*<\?xml[^?]*\?>\s*\r?\n?/i, '').trim();
+        // Fertiges XML vor Base64-Kodierung loggen (Root mit xmlns/xmlns:xsi/xsi:schemaLocation/akz pruefbar)
+        const firstLine = xmlContent.split('\n')[0] || '';
+        console.log('[ELDA] Honorarnoten-XML (vor Base64) – Root-Zeile (xmlns/xmlns:xsi/akz):', firstLine);
+        console.log('[ELDA] Honorarnoten-XML komplett (ohne XML-Header):');
+        console.log(xmlContent);
+        const sitApiKey = this.config.sit?.apiKey ?? this.config.apiKey;
+        const seriennummer = (this.config.sit?.seriennummer || '800062').replace(/[^0-9]/g, '') || '800062';
+        const dateiName = `WA${seriennummer}.xml`;
+        requestBody = buildSitV4SoapEnvelope(
+          xmlContent,
+          this.config.sit.seriennummer,
+          this.config.sit.passwort,
+          sitApiKey,
+          dateiName
+        );
+      }
+      
+      // Headers für SIT v4 (SOAP) oder normale Umgebung
       const headers = {
-        'Content-Type': 'application/xml; charset=UTF-8',
+        'Content-Type': isSIT ? 'text/xml; charset=utf-8' : 'application/xml; charset=UTF-8',
         'X-Dataset-Type': datasetType
       };
       
       if (isSIT) {
-        // SIT: Basic Auth mit Seriennummer/Passwort
-        const credentials = Buffer.from(`${this.config.sit.seriennummer}:${this.config.sit.passwort}`).toString('base64');
-        headers['Authorization'] = `Basic ${credentials}`;
-        
-        // Log für Debugging (ohne Passwort)
+        // SIT v4: Kein SOAPAction-Header – Server lehnt "senden" und URI ab, ermittelt Operation aus Body
         if (process.env.LOG_LEVEL === 'debug') {
-          console.debug(`[ELDA SIT] Sende Request an: ${this.config.webservice.baseUrl}`);
-          console.debug(`[ELDA SIT] Seriennummer: ${this.config.sit.seriennummer}`);
-          console.debug(`[ELDA SIT] XML-Größe: ${xmlContent.length} bytes`);
+          console.debug(`[ELDA SIT v4] Sende Request an: ${this.config.webservice.baseUrl}`);
+          console.debug(`[ELDA SIT v4] Seriennummer: ${this.config.sit.seriennummer}`);
+          console.debug(`[ELDA SIT v4] SOAP-Body-Größe: ${requestBody.length} bytes`);
         }
       } else {
         // Test/Production: Bearer Token mit API-Key
         headers['Authorization'] = `Bearer ${this.config.apiKey}`;
       }
       
-      // Sende via HTTPS
-      // WICHTIG: Für SIT-Plattform könnte der Endpunkt SOAP-Envelope erwarten
-      // oder spezielle Header benötigen
       const requestConfig = {
         headers,
         timeout: this.config.timeout.webservice,
         httpsAgent: this.httpsAgent,
         maxContentLength: this.config.limits.https,
         maxBodyLength: this.config.limits.https,
-        // Akzeptiere alle Status-Codes für bessere Fehlerdiagnose
-        validateStatus: (status) => {
-          return status >= 200 && status < 600;
-        }
+        validateStatus: (status) => status >= 200 && status < 600
       };
       
-      // Log Request-Details für Debugging
       if (process.env.LOG_LEVEL === 'debug') {
         console.debug('[ELDA] Request-URL:', this.config.webservice.baseUrl);
         console.debug('[ELDA] Request-Headers:', JSON.stringify(headers, null, 2));
-        console.debug('[ELDA] XML-Länge:', xmlContent.length, 'bytes');
-        console.debug('[ELDA] Request-Config:', {
-          timeout: requestConfig.timeout,
-          hasHttpsAgent: !!requestConfig.httpsAgent
-        });
+        console.debug('[ELDA] Body-Länge:', requestBody.length, 'bytes');
       }
       
       const response = await axios.post(
         this.config.webservice.baseUrl,
-        xmlContent,
+        requestBody,
         requestConfig
       );
       
-      // Prüfe ob die Antwort HTML ist (Fehlermeldung)
       const responseData = response.data;
       let isError = false;
       let errorMessage = null;
       let errorDetails = null;
       
-      if (typeof responseData === 'string' && responseData.includes('<HTML>')) {
+      // v4 SendenResult: HTTP 200, aber statusCode im Body (558 = Credentials falsch, 403/405 etc.)
+      if (!isError && typeof responseData === 'string' && responseData.includes('sendenResponse') && responseData.includes('statusCode')) {
+        const statusCodeMatch = responseData.match(/<statusCode>([^<]*)<\/statusCode>/i);
+        const statusCode = statusCodeMatch ? statusCodeMatch[1].trim() : null;
+        const okCodes = ['000'];
+        if (statusCode && !okCodes.includes(statusCode)) {
+          isError = true;
+          // Alle Inhalte zwischen <messages> und </messages> extrahieren (oft Klartext wie „Feld X hat ungültiges Format“)
+          const messagesMatches = responseData.match(/<messages>([\s\S]*?)<\/messages>/gi);
+          const messages = messagesMatches
+            ? messagesMatches.map((m) => m.replace(/<\/?messages>/gi, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()).filter(Boolean)
+            : [];
+          errorMessage = messages[0] || `ELDA StatusCode ${statusCode}`;
+          if (messages.length > 1) {
+            errorDetails = messages.slice(1).join('; ');
+          }
+          console.warn('[ELDA] SendenResult Fehler – statusCode:', statusCode);
+          if (messages.length) {
+            console.warn('[ELDA] Alle <messages>-Inhalte der SOAP-Antwort (einzeln – oft „Feld X hat ungültiges Format“):');
+            messages.forEach((msg, i) => {
+              const lines = String(msg).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+              if (lines.length > 1) {
+                lines.forEach((line, j) => console.warn(`  [ELDA] <messages> Nr.${i + 1}, Zeile ${j + 1}: ${line}`));
+              } else {
+                console.warn(`  [ELDA] <messages> Nr.${i + 1}: ${msg}`);
+              }
+            });
+          } else {
+            const serviceResultMatch = responseData.match(/<serviceResult>[\s\S]*?<\/serviceResult>/i);
+            if (serviceResultMatch) {
+              console.warn('[ELDA] <serviceResult>-Block (Rohtext):', serviceResultMatch[0]);
+            }
+          }
+          if (messages.some((m) => String(m).includes('WA001'))) {
+            console.warn('[ELDA] Hinweis WA001: In den obigen <messages> steht oft im Klartext, welches Feld ungültig ist (z.B. „Feld X hat ungültiges Format“).');
+          }
+          if (this.config.environment === 'sit') {
+            await writeEldaSitFailedRequestLog({
+              requestUrl: this.config.webservice.baseUrl,
+              requestHeaders: requestConfig.headers,
+              requestBody,
+              responseStatus: response.status,
+              responseHeaders: response.headers,
+              responseBody: responseData,
+              timestamp: new Date().toISOString()
+            });
+          }
+        }
+      }
+      
+      // SOAP Fault (v4 Fehlerantwort als XML)
+      if (typeof responseData === 'string' && (responseData.includes('soap:Fault') || responseData.includes('<Fault>'))) {
+        isError = true;
+        const faultStringMatch = responseData.match(/<faultstring[^>]*>([^<]*)<\/faultstring>/i) ||
+          responseData.match(/<faultstring>([^<]*)<\/faultstring>/i);
+        const faultCodeMatch = responseData.match(/<faultcode[^>]*>([^<]*)<\/faultcode>/i);
+        const detailMatch = responseData.match(/<detail[^>]*>([\s\S]*?)<\/detail>/i);
+        const decode = (s) => (s || '').trim().replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        errorMessage = faultStringMatch && faultStringMatch[1] ? decode(faultStringMatch[1]) : 'SOAP Fault';
+        if (faultCodeMatch && faultCodeMatch[1]) {
+          errorDetails = `faultcode: ${decode(faultCodeMatch[1])}`;
+        }
+        if (detailMatch && detailMatch[1]) {
+          const detailText = detailMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+          if (detailText) {
+            errorDetails = (errorDetails ? errorDetails + ' | ' : '') + `detail: ${detailText}`;
+          }
+        }
+        if (this.config.environment === 'sit') {
+          await writeEldaSitFailedRequestLog({
+            requestUrl: this.config.webservice.baseUrl,
+            requestHeaders: requestConfig.headers,
+            requestBody,
+            responseStatus: response.status,
+            responseHeaders: response.headers,
+            responseBody: responseData,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+      
+      // HTML-Antwort (ältere Fehlermeldung)
+      if (!isError && typeof responseData === 'string' && responseData.includes('<HTML>')) {
         // HTML-Antwort bedeutet meistens einen Fehler
         isError = true;
         
@@ -376,16 +602,28 @@ class ELDAConnector {
           console.warn('[ELDA] Details:', errorDetails);
         }
         
-        // Immer das XML loggen, wenn ein Fehler auftritt (für Diagnose)
-        console.warn('[ELDA] Gesendetes XML (erste 2000 Zeichen):');
-        console.warn(xmlContent.substring(0, 2000));
+        // Immer das gesendete Body loggen (SIT: SOAP, sonst XML)
+        console.warn('[ELDA] Gesendeter Body (erste 2000 Zeichen):');
+        console.warn(requestBody.substring(0, 2000));
         
-        // Logge vollständige HTML-Antwort für bessere Diagnose
         console.warn('[ELDA] Vollständige HTML-Antwort vom Server:');
         console.warn(responseData);
         
         if (process.env.LOG_LEVEL === 'debug') {
-          console.debug('[ELDA] Vollständiges XML:', xmlContent);
+          console.debug('[ELDA] Vollständiger Body:', requestBody);
+        }
+
+        // Log-File des letzten gescheiterten ELDA-SIT-Requests (SOAP-Envelope inkl. Base64-Inhalt)
+        if (this.config.environment === 'sit') {
+          await writeEldaSitFailedRequestLog({
+            requestUrl: this.config.webservice.baseUrl,
+            requestHeaders: headers,
+            requestBody,
+            responseStatus: response.status,
+            responseHeaders: response.headers,
+            responseBody: responseData,
+            timestamp: new Date().toISOString()
+          });
         }
       }
       

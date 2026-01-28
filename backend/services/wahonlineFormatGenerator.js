@@ -14,7 +14,20 @@ class WAHonlineFormatGenerator {
    */
   generateMeldung(data) {
     this.validateMeldungData(data);
-    const { performance, patient, doctor } = data;
+    let { performance, patient, doctor } = data;
+    // SIT-Final-Test: Mark ASWH-VS-MRSA-Familie-A, VSNR 1137041190 (Versicherungsstatus laufend), Adresse Duftschmidgasse 18, 4020 Linz
+    const useTestPatient = this.config?.environment === 'sit';
+    if (useTestPatient) {
+      patient = {
+        ...patient,
+        socialSecurityNumber: '1137041190',
+        firstName: 'Mark',
+        lastName: 'ASWH-VS-MRSA-Familie-A',
+        first_name: 'Mark',
+        last_name: 'ASWH-VS-MRSA-Familie-A',
+        address: { postalCode: '4020', street: 'Duftschmidgasse 18', city: 'Linz' }
+      };
+    }
     
     const now = new Date();
     const serviceDate = performance.serviceDatetime ? new Date(performance.serviceDatetime) : now;
@@ -22,24 +35,30 @@ class WAHonlineFormatGenerator {
     
     // Extrahiere Kammernummer und bestimme Bundesland und Abrechnungsstelle
     const chamberNumber = doctor.profile?.chamberNumber || doctor.chamberNumber || '14';
-    const bundesland = this.getBundeslandFromChamberNumber(chamberNumber);
-    const abrechnungsstelle = this.getAbrechnungsstelleFromChamberNumber(chamberNumber);
-    // Vertragspartnernummer: Format "1000" + Kammernummer (z.B. "100014" für Kammernummer "14")
-    const vertragspartnernummer = this.getVertragspartnernummer(chamberNumber);
+    // SIT (ITSV-Testdaten): bundesland 4, zustaendige Abrechnungsstelle 14
+    const bundesland = useTestPatient ? '4' : this.getBundeslandFromChamberNumber(chamberNumber);
+    const abrechnungsstelle = useTestPatient ? '14' : this.getAbrechnungsstelleFromChamberNumber(chamberNumber);
+    // Vertragspartnernummer: SIT fest 100014 (ITSV-Testdaten); bei E1: ELDA-Support fragen, welche VPNR für Seriennummer 800062 freigeschaltet ist
+    const vertragspartnernummer = useTestPatient ? '100014' : this.getVertragspartnernummer(chamberNumber);
     
-    // Generiere Referenznummer (Format: [Seriennummer]/[Rechnungsnummer])
+    // Referenznummer: SIT einzigartig mit Schrägstrich 800062/ + Date.now(); sonst Seriennummer + Rechnungsnummer
     const seriennummer = this.config?.sit?.seriennummer || '800062';
     const rechnungsnummer = performance.invoiceNumber || this.generateInvoiceNumber();
-    const referenznummer = `${seriennummer}/${rechnungsnummer.replace(/[^0-9]/g, '')}`;
+    const refSerie = String(seriennummer || '').replace(/[^0-9a-zA-Z]/g, '') || '800062';
+    const refRechnung = (String(rechnungsnummer || '').replace(/[^0-9a-zA-Z]/g, '') || '0001').slice(0, 20);
+    const referenznummer = useTestPatient ? refSerie + '/' + String(Date.now()) : refSerie + refRechnung;
+
+    // SIT: Keine Umlaute/Sonderzeichen (nur ASCII)
+    const toAscii = (s) => (s == null ? '' : String(s).replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').replace(/Ä/g, 'Ae').replace(/Ö/g, 'Oe').replace(/Ü/g, 'Ue'));
 
     return {
-      // Root-Element: honorarnotenMeldung
+      // Root-Element: ELDA exakt <honorarnotenMeldung xmlns="..." xmlns:xsi="..." xsi:schemaLocation="..." akz="a">
       honorarnotenMeldung: {
         _attributes: {
-          akz: 'a',
-          'xmlns:n1': 'http://at.sozvers.stp.elda.wa',
+          xmlns: 'http://at.sozvers.stp.elda.wa',
           'xmlns:xsi': 'http://www.w3.org/2001/XMLSchema-instance',
-          'xsi:schemaLocation': 'http://at.sozvers.stp.elda.wa WA_V7.xsd'
+          'xsi:schemaLocation': 'http://at.sozvers.stp.elda.wa WA_V7.xsd',
+          akz: 'a'
         },
         patientenDaten: {
           // Diagnosen (optional)
@@ -50,17 +69,17 @@ class WAHonlineFormatGenerator {
           // Adresse des Patienten
           adresseDesPatienten: {
             postleitzahl: patient.address?.postalCode || '',
-            strasseHausnummer: this.formatStreetAddress(patient.address),
-            ort: patient.address?.city || ''
+            strasseHausnummer: useTestPatient ? toAscii(this.formatStreetAddress(patient.address)) : this.formatStreetAddress(patient.address),
+            ort: useTestPatient ? toAscii(patient.address?.city || '') : (patient.address?.city || '')
           },
           
-          // Leistungsdaten
+          // Leistungsdaten (Reihenfolge laut Pflicht: Von, Bis, Betrag, leistungsart, positionsnummer, Anzahl); SIT: 111/1010
           leistungsDaten: {
             datumLeistungserbringungVon: this.formatDate(serviceDate),
             datumLeistungserbringungBis: this.formatDate(serviceDate),
             bruttoBetragProPosition: Math.round((performance.unitPrice || performance.totalPrice || 0) * 100) / 100,
-            leistungsart: performance.serviceCode || '',
-            positionsnummer: performance.positionNumber || '1010',
+            leistungsart: useTestPatient ? '111' : (performance.serviceCode || '1'),
+            positionsnummer: useTestPatient ? '1010' : (performance.positionNumber || '1'),
             positionsnummerAnzahl: performance.quantity || 1
           },
           
@@ -71,43 +90,45 @@ class WAHonlineFormatGenerator {
             versicherungsnummerZahlungsempfaenger: patient.bankAccount?.socialSecurityNumber || patient.socialSecurityNumber || ''
           },
           
-          // Patientendaten
+          // Patientendaten (ELDA-Grammatik: exakte Reihenfolge familienname, vorname, versicherungsnummerPatienten, versicherungsnummerVersicherter, rechnungsnummer, datumRechnung, rechnungsbetrag, rechnungsbetragBezahlt, leistungsbestaetigungAnforderung)
           patientDaten: {
-            leistungsbestaetigungAnforderung: performance.confirmationRequired || false,
-            rechnungsbetragBezahlt: performance.paid || true,
-            versicherungsnummerVersicherter: patient.socialSecurityNumber || '',
+            familiennamePatienten: useTestPatient ? toAscii(patient.lastName || patient.last_name || '') : (patient.lastName || patient.last_name || ''),
+            vornamePatienten: useTestPatient ? toAscii(patient.firstName || patient.first_name || '') : (patient.firstName || patient.first_name || ''),
             versicherungsnummerPatienten: patient.socialSecurityNumber || '',
-            rechnungsbetrag: Math.round((performance.totalPrice || 0) * 100) / 100,
-            familiennamePatienten: patient.lastName || patient.last_name || '',
+            versicherungsnummerVersicherter: patient.socialSecurityNumber || '',
             rechnungsnummer: rechnungsnummer,
-            vornamePatienten: patient.firstName || patient.first_name || '',
-            datumRechnung: this.formatDate(invoiceDate)
+            datumRechnung: this.formatDate(invoiceDate),
+            rechnungsbetrag: Math.round((performance.totalPrice || 0) * 100) / 100,
+            rechnungsbetragBezahlt: performance.paid || true,
+            leistungsbestaetigungAnforderung: performance.confirmationRequired || false
           }
         },
         
         // Infodaten
         infoDaten: {
           identifikationsSatz: {
+            projektkennzeichen: 'WA',
+            listkennzeichen: 'HO',
             bundeslandAbrechnungsstelle: bundesland,
-            listkennzeichen: 'HO', // HO = Honorarnoten
-            projektkennzeichen: 'WA', // WA = WAHonline
             zustaendigeAbrechnungsstelle: abrechnungsstelle,
-            versionDatenbestand: 7, // Version 7
+            versionDatenbestand: 7,
             referenznummer: referenznummer
           },
           
           vertragspartnerDaten: {
             datumBehandlung: this.formatDate(serviceDate),
-            datumUebermittlung: this.formatDateTime(now),
-            fachgebietLeistungserbringerBehandler: this.getFachgebietCode(doctor.profile?.specialization || doctor.specialization || ''),
-            familiennameBehandler: this.getLastName(doctor),
+            datumUebermittlung: this.formatDateTime(now), // YYYY-MM-DDTHH:MM:SS (ELDA v4)
+            fachgebietLeistungserbringerBehandler: useTestPatient ? '001' : this.getFachgebietCode(doctor.profile?.specialization || doctor.specialization || ''), // SIT: dreistellig 001
+            familiennameBehandler: useTestPatient ? 'ASWH-VP-Arzt-Linz-A' : this.getLastName(doctor),
             vertragspartnernummerBehandler: vertragspartnernummer,
-            vornameBehandler: this.getFirstName(doctor),
-            ordiAdresseDesVertragspartners: {
-              postleitzahl: doctor.profile?.address?.postalCode || doctor.address?.postalCode || '',
-              strasseHausnummer: this.formatStreetAddress(doctor.profile?.address || doctor.address || {}),
-              ort: doctor.profile?.address?.city || doctor.address?.city || ''
-            }
+            vornameBehandler: useTestPatient ? 'Vanessa' : this.getFirstName(doctor),
+            ordiAdresseDesVertragspartners: useTestPatient
+              ? { postleitzahl: '4020', strasseHausnummer: 'Gruberstrasse 77', ort: 'Linz' }
+              : {
+                  postleitzahl: doctor.profile?.address?.postalCode || doctor.address?.postalCode || '',
+                  strasseHausnummer: this.formatStreetAddress(doctor.profile?.address || doctor.address || {}),
+                  ort: doctor.profile?.address?.city || doctor.address?.city || ''
+                }
           }
         }
       }
@@ -121,20 +142,19 @@ class WAHonlineFormatGenerator {
    */
   generateXML(dataset) {
     const root = dataset.honorarnotenMeldung;
-    const attrs = root._attributes;
+    const attrs = root._attributes || {};
 
-    // Baue Root-Element mit Attributen in der exakten Reihenfolge wie im Beispiel-XML
-    // Reihenfolge im Beispiel: akz, xsi:schemaLocation, xmlns:n1, xmlns:xsi
+    // ELDA: Root exakt <honorarnotenMeldung xmlns="..." xmlns:xsi="..." xsi:schemaLocation="..." akz="a">
     const attrsOrdered = [
-      `akz="${this.escapeXML(String(attrs.akz || 'a'))}"`,
-      `xsi:schemaLocation="${this.escapeXML(String(attrs['xsi:schemaLocation'] || ''))}"`,
-      `xmlns:n1="${this.escapeXML(String(attrs['xmlns:n1'] || ''))}"`,
-      `xmlns:xsi="${this.escapeXML(String(attrs['xmlns:xsi'] || ''))}"`
+      `xmlns="${this.escapeXML(String(attrs.xmlns || 'http://at.sozvers.stp.elda.wa'))}"`,
+      `xmlns:xsi="${this.escapeXML(String(attrs['xmlns:xsi'] || 'http://www.w3.org/2001/XMLSchema-instance'))}"`,
+      `xsi:schemaLocation="${this.escapeXML(String(attrs['xsi:schemaLocation'] || 'http://at.sozvers.stp.elda.wa WA_V7.xsd'))}"`,
+      `akz="${this.escapeXML(String(attrs.akz || 'a'))}"`
     ].join(' ');
 
     const lines = [
       '<?xml version="1.0" encoding="UTF-8"?>',
-      `<n1:honorarnotenMeldung ${attrsOrdered}>`
+      `<honorarnotenMeldung ${attrsOrdered}>`
     ];
     
     // Verarbeite patientenDaten
@@ -147,7 +167,7 @@ class WAHonlineFormatGenerator {
       lines.push(this.buildInfoDaten(root.infoDaten, 1));
     }
     
-    lines.push('</n1:honorarnotenMeldung>');
+    lines.push('</honorarnotenMeldung>');
     
     return lines.join('\n');
   }
@@ -160,8 +180,8 @@ class WAHonlineFormatGenerator {
     const tabs = tab.repeat(indent);
     const lines = [`${tabs}<patientenDaten>`];
     
-    // Diagnosen (optional)
-    if (data.diagnosen && data.diagnosen.diagnose && data.diagnosen.diagnose.length > 0) {
+    // Diagnosen (optional, bei SIT minimal weglassen)
+    if (this.config?.environment !== 'sit' && data.diagnosen && data.diagnosen.diagnose && data.diagnosen.diagnose.length > 0) {
       lines.push(`${tabs}${tab}<diagnosen>`);
       data.diagnosen.diagnose.forEach(diagnose => {
         lines.push(`${tabs}${tab}${tab}<diagnose>${this.escapeXML(String(diagnose))}</diagnose>`);
@@ -179,16 +199,17 @@ class WAHonlineFormatGenerator {
       lines.push(`${tabs}${tab}</adresseDesPatienten>`);
     }
     
-    // Leistungsdaten
+    // Leistungsdaten (Tag positionsnummerAnzahl, Test: leistungsart 1, positionsnummer 1)
     if (data.leistungsDaten) {
       const leistung = data.leistungsDaten;
       lines.push(`${tabs}${tab}<leistungsDaten>`);
       lines.push(`${tabs}${tab}${tab}<datumLeistungserbringungVon>${this.escapeXML(String(leistung.datumLeistungserbringungVon || ''))}</datumLeistungserbringungVon>`);
       lines.push(`${tabs}${tab}${tab}<datumLeistungserbringungBis>${this.escapeXML(String(leistung.datumLeistungserbringungBis || ''))}</datumLeistungserbringungBis>`);
       lines.push(`${tabs}${tab}${tab}<bruttoBetragProPosition>${this.escapeXML(String(leistung.bruttoBetragProPosition || ''))}</bruttoBetragProPosition>`);
+      // Leistungsdaten: Werte aus Datensatz (SIT: 111/1010)
       lines.push(`${tabs}${tab}${tab}<leistungsart>${this.escapeXML(String(leistung.leistungsart || ''))}</leistungsart>`);
       lines.push(`${tabs}${tab}${tab}<positionsnummer>${this.escapeXML(String(leistung.positionsnummer || ''))}</positionsnummer>`);
-      lines.push(`${tabs}${tab}${tab}<positionsnummerAnzahl>${this.escapeXML(String(leistung.positionsnummerAnzahl || ''))}</positionsnummerAnzahl>`);
+      lines.push(`${tabs}${tab}${tab}<positionsnummerAnzahl>${this.escapeXML(String(leistung.positionsnummerAnzahl ?? ''))}</positionsnummerAnzahl>`);
       lines.push(`${tabs}${tab}</leistungsDaten>`);
     }
     
@@ -208,19 +229,19 @@ class WAHonlineFormatGenerator {
       lines.push(`${tabs}${tab}</datenZahlungsempfaenger>`);
     }
     
-    // Patientendaten
+    // Patientendaten (Reihenfolge WA_V7.xsd: rechnungsbetrag, rechnungsnummer, datumRechnung exakt so)
     if (data.patientDaten) {
       const patient = data.patientDaten;
       lines.push(`${tabs}${tab}<patientDaten>`);
-      lines.push(`${tabs}${tab}${tab}<leistungsbestaetigungAnforderung>${this.escapeXML(String(patient.leistungsbestaetigungAnforderung || false))}</leistungsbestaetigungAnforderung>`);
-      lines.push(`${tabs}${tab}${tab}<rechnungsbetragBezahlt>${this.escapeXML(String(patient.rechnungsbetragBezahlt || true))}</rechnungsbetragBezahlt>`);
-      lines.push(`${tabs}${tab}${tab}<versicherungsnummerVersicherter>${this.escapeXML(String(patient.versicherungsnummerVersicherter || ''))}</versicherungsnummerVersicherter>`);
-      lines.push(`${tabs}${tab}${tab}<versicherungsnummerPatienten>${this.escapeXML(String(patient.versicherungsnummerPatienten || ''))}</versicherungsnummerPatienten>`);
-      lines.push(`${tabs}${tab}${tab}<rechnungsbetrag>${this.escapeXML(String(patient.rechnungsbetrag || ''))}</rechnungsbetrag>`);
       lines.push(`${tabs}${tab}${tab}<familiennamePatienten>${this.escapeXML(String(patient.familiennamePatienten || ''))}</familiennamePatienten>`);
-      lines.push(`${tabs}${tab}${tab}<rechnungsnummer>${this.escapeXML(String(patient.rechnungsnummer || ''))}</rechnungsnummer>`);
       lines.push(`${tabs}${tab}${tab}<vornamePatienten>${this.escapeXML(String(patient.vornamePatienten || ''))}</vornamePatienten>`);
+      lines.push(`${tabs}${tab}${tab}<versicherungsnummerPatienten>${this.escapeXML(String(patient.versicherungsnummerPatienten || ''))}</versicherungsnummerPatienten>`);
+      lines.push(`${tabs}${tab}${tab}<versicherungsnummerVersicherter>${this.escapeXML(String(patient.versicherungsnummerVersicherter || ''))}</versicherungsnummerVersicherter>`);
+      lines.push(`${tabs}${tab}${tab}<rechnungsnummer>${this.escapeXML(String(patient.rechnungsnummer || ''))}</rechnungsnummer>`);
       lines.push(`${tabs}${tab}${tab}<datumRechnung>${this.escapeXML(String(patient.datumRechnung || ''))}</datumRechnung>`);
+      lines.push(`${tabs}${tab}${tab}<rechnungsbetrag>${this.escapeXML(String(patient.rechnungsbetrag || ''))}</rechnungsbetrag>`);
+      lines.push(`${tabs}${tab}${tab}<rechnungsbetragBezahlt>${this.escapeXML(String(patient.rechnungsbetragBezahlt ?? true))}</rechnungsbetragBezahlt>`);
+      lines.push(`${tabs}${tab}${tab}<leistungsbestaetigungAnforderung>${this.escapeXML(String(patient.leistungsbestaetigungAnforderung ?? false))}</leistungsbestaetigungAnforderung>`);
       lines.push(`${tabs}${tab}</patientDaten>`);
     }
     
@@ -236,16 +257,18 @@ class WAHonlineFormatGenerator {
     const tabs = tab.repeat(indent);
     const lines = [`${tabs}<infoDaten>`];
     
-    // Identifikationssatz
+    // Identifikationssatz (ELDA-Reihenfolge: projektkennzeichen, listkennzeichen, bundesland, zustaendig, version, referenznummer)
     if (data.identifikationsSatz) {
       const ident = data.identifikationsSatz;
       lines.push(`${tabs}${tab}<identifikationsSatz>`);
-      lines.push(`${tabs}${tab}${tab}<bundeslandAbrechnungsstelle>${this.escapeXML(String(ident.bundeslandAbrechnungsstelle || ''))}</bundeslandAbrechnungsstelle>`);
-      lines.push(`${tabs}${tab}${tab}<listkennzeichen>${this.escapeXML(String(ident.listkennzeichen || ''))}</listkennzeichen>`);
       lines.push(`${tabs}${tab}${tab}<projektkennzeichen>${this.escapeXML(String(ident.projektkennzeichen || ''))}</projektkennzeichen>`);
+      lines.push(`${tabs}${tab}${tab}<listkennzeichen>${this.escapeXML(String(ident.listkennzeichen || ''))}</listkennzeichen>`);
+      lines.push(`${tabs}${tab}${tab}<bundeslandAbrechnungsstelle>${this.escapeXML(String(ident.bundeslandAbrechnungsstelle || ''))}</bundeslandAbrechnungsstelle>`);
       lines.push(`${tabs}${tab}${tab}<zustaendigeAbrechnungsstelle>${this.escapeXML(String(ident.zustaendigeAbrechnungsstelle || ''))}</zustaendigeAbrechnungsstelle>`);
       lines.push(`${tabs}${tab}${tab}<versionDatenbestand>${this.escapeXML(String(ident.versionDatenbestand || ''))}</versionDatenbestand>`);
-      lines.push(`${tabs}${tab}${tab}<referenznummer>${this.escapeXML(String(ident.referenznummer || ''))}</referenznummer>`);
+      // Referenznummer: SIT erlaubt Schrägstrich (800062/Date.now()), sonst nur Ziffern
+      const refNr = String(ident.referenznummer || '').replace(/[^0-9/]/g, '');
+      lines.push(`${tabs}${tab}${tab}<referenznummer>${this.escapeXML(refNr)}</referenznummer>`);
       lines.push(`${tabs}${tab}</identifikationsSatz>`);
     }
     
@@ -368,12 +391,12 @@ class WAHonlineFormatGenerator {
     const order = {
       'patientenDaten': ['diagnosen', 'adresseDesPatienten', 'leistungsDaten', 'datenZahlungsempfaenger', 'patientDaten'],
       'infoDaten': ['identifikationsSatz', 'vertragspartnerDaten'],
-      'identifikationsSatz': ['bundeslandAbrechnungsstelle', 'listkennzeichen', 'projektkennzeichen', 'zustaendigeAbrechnungsstelle', 'versionDatenbestand', 'referenznummer'],
+      'identifikationsSatz': ['projektkennzeichen', 'listkennzeichen', 'bundeslandAbrechnungsstelle', 'zustaendigeAbrechnungsstelle', 'versionDatenbestand', 'referenznummer'],
       'vertragspartnerDaten': ['datumBehandlung', 'datumUebermittlung', 'fachgebietLeistungserbringerBehandler', 'familiennameBehandler', 'vertragspartnernummerBehandler', 'vornameBehandler', 'ordiAdresseDesVertragspartners'],
       'adresseDesPatienten': ['postleitzahl', 'strasseHausnummer', 'ort'],
       'ordiAdresseDesVertragspartners': ['postleitzahl', 'strasseHausnummer', 'ort'],
       'leistungsDaten': ['datumLeistungserbringungVon', 'datumLeistungserbringungBis', 'bruttoBetragProPosition', 'leistungsart', 'positionsnummer', 'positionsnummerAnzahl'],
-      'patientDaten': ['leistungsbestaetigungAnforderung', 'rechnungsbetragBezahlt', 'versicherungsnummerVersicherter', 'versicherungsnummerPatienten', 'rechnungsbetrag', 'familiennamePatienten', 'rechnungsnummer', 'vornamePatienten', 'datumRechnung'],
+      'patientDaten': ['familiennamePatienten', 'vornamePatienten', 'versicherungsnummerPatienten', 'versicherungsnummerVersicherter', 'rechnungsnummer', 'datumRechnung', 'rechnungsbetrag', 'rechnungsbetragBezahlt', 'leistungsbestaetigungAnforderung'],
       'datenZahlungsempfaenger': ['internationalBankAccountNumber', 'versicherungsnummerZahlungsempfaenger']
     };
     

@@ -154,6 +154,7 @@ const LocationManagement: React.FC = () => {
     postal_code: '',
     city: '',
     state: '',
+    country: 'austria' as 'austria' | 'germany',
     federalState: null as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null | undefined,
     timezone: 'Europe/Vienna',
     phone: '',
@@ -351,6 +352,7 @@ const LocationManagement: React.FC = () => {
         postal_code: location.postal_code,
         city: location.city,
         state: location.state || '',
+        country: (location as any).country || 'austria',
         federalState: (location as any).federalState || null,
         timezone: location.timezone,
         phone: location.phone || '',
@@ -440,6 +442,7 @@ const LocationManagement: React.FC = () => {
         postal_code: '',
         city: '',
         state: '',
+        country: 'austria',
         federalState: null,
         timezone: 'Europe/Vienna',
         phone: '',
@@ -509,8 +512,10 @@ const LocationManagement: React.FC = () => {
   const handleLocationSubmit = async () => {
     try {
       // Konvertiere leere Strings zu null für federalState
+      // Für Deutschland: federalState auf null setzen
       const locationDataToSend = {
         ...locationForm,
+        country: locationForm.country || 'austria',
         federalState: locationForm.federalState || null
       };
       
@@ -1895,31 +1900,44 @@ const LocationManagement: React.FC = () => {
                 helperText="Freies Textfeld für Bundesland"
               />
               <FormControl fullWidth>
-                <InputLabel>Bundesland (für Abrechnung)</InputLabel>
+                <InputLabel>Land</InputLabel>
                 <Select
-                  value={locationForm.federalState ?? ''}
-                  onChange={(e) => {
-                    const value = String(e.target.value);
-                    const federalStateValue: 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null = value === '' ? null : (value as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien');
-                    setLocationForm({ 
-                      ...locationForm, 
-                      federalState: federalStateValue
-                    });
-                  }}
-                  label="Bundesland (für Abrechnung)"
+                  value={locationForm.country}
+                  onChange={(e) => setLocationForm({ ...locationForm, country: e.target.value as 'austria' | 'germany' })}
+                  label="Land"
+                  required
                 >
-                  <MenuItem value="">Keine Auswahl</MenuItem>
-                  <MenuItem value="burgenland">Burgenland</MenuItem>
-                  <MenuItem value="kaernten">Kärnten</MenuItem>
-                  <MenuItem value="niederoesterreich">Niederösterreich</MenuItem>
-                  <MenuItem value="oberoesterreich">Oberösterreich</MenuItem>
-                  <MenuItem value="salzburg">Salzburg</MenuItem>
-                  <MenuItem value="steiermark">Steiermark</MenuItem>
-                  <MenuItem value="tirol">Tirol</MenuItem>
-                  <MenuItem value="vorarlberg">Vorarlberg</MenuItem>
-                  <MenuItem value="wien">Wien</MenuItem>
+                  <MenuItem value="austria">Österreich</MenuItem>
                 </Select>
               </FormControl>
+              {locationForm.country === 'austria' && (
+                <FormControl fullWidth>
+                  <InputLabel>Bundesland (für Abrechnung)</InputLabel>
+                  <Select
+                    value={locationForm.federalState ?? ''}
+                    onChange={(e) => {
+                      const value = String(e.target.value);
+                      const federalStateValue: 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien' | null = value === '' ? null : (value as 'burgenland' | 'kaernten' | 'niederoesterreich' | 'oberoesterreich' | 'salzburg' | 'steiermark' | 'tirol' | 'vorarlberg' | 'wien');
+                      setLocationForm({ 
+                        ...locationForm, 
+                        federalState: federalStateValue
+                      });
+                    }}
+                    label="Bundesland (für Abrechnung)"
+                  >
+                    <MenuItem value="">Keine Auswahl</MenuItem>
+                    <MenuItem value="burgenland">Burgenland</MenuItem>
+                    <MenuItem value="kaernten">Kärnten</MenuItem>
+                    <MenuItem value="niederoesterreich">Niederösterreich</MenuItem>
+                    <MenuItem value="oberoesterreich">Oberösterreich</MenuItem>
+                    <MenuItem value="salzburg">Salzburg</MenuItem>
+                    <MenuItem value="steiermark">Steiermark</MenuItem>
+                    <MenuItem value="tirol">Tirol</MenuItem>
+                    <MenuItem value="vorarlberg">Vorarlberg</MenuItem>
+                    <MenuItem value="wien">Wien</MenuItem>
+                  </Select>
+                </FormControl>
+              )}
             </Box>
             <Box sx={{ display: 'flex', gap: 2 }}>
               <TextField
