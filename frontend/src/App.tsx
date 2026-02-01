@@ -12,6 +12,7 @@ import Layout from './components/Layout/Layout';
 import Header from './components/Layout/Header';
 import SidebarNavigation from './components/Layout/SidebarNavigation';
 import ProtectedRoute from './components/ProtectedRoute';
+import { ADMIN_ROLES } from './constants/roles';
 import LocationProvider from './components/Location/LocationProvider';
 import ChatbotWidget from './components/Chatbot/ChatbotWidget';
 import GlobalSearch from './components/SmartSearch/GlobalSearch';
@@ -28,8 +29,10 @@ import CashRegisterManagement from './pages/CashRegisterManagement';
 import Documents from './pages/Documents';
 import LetterTemplates from './pages/LetterTemplates';
 import OnlineBooking from './pages/OnlineBooking';
+import BookingWidgetPage from './pages/BookingWidgetPage';
 import OnlineBookings from './pages/OnlineBookings';
 import PatientBooking from './pages/PatientBooking';
+import AppointmentManagementPage from './pages/AppointmentManagementPage';
 import WaitingListReservation from './pages/WaitingListReservation';
 import ELGA from './pages/ELGA';
 import Users from './pages/Users';
@@ -78,6 +81,7 @@ import RBACManagement from './pages/RBACManagement';
 import RBACDiscovery from './pages/RBACDiscovery';
 import Checkin from './pages/Checkin';
 import InternalMessages from './pages/InternalMessages';
+import Chat from './pages/Chat';
 import Reimbursements from './pages/Reimbursements';
 import Absences from './pages/Absences';
 import AddressBook from './pages/AddressBook';
@@ -281,7 +285,9 @@ const InnerAppContent: React.FC = () => {
         <Route path="/login" element={<Login />} />
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/online-booking" element={<OnlineBooking />} />
+        <Route path="/booking/widget/:doctorId" element={<BookingWidgetPage />} />
         <Route path="/patient-booking/:token" element={<PatientBooking />} />
+        <Route path="/portal/appointment/:token" element={<AppointmentManagementPage />} />
         <Route path="/waiting-list-reservation/:token" element={<WaitingListReservation />} />
         <Route path="/checkin" element={<Checkin />} />
         
@@ -335,6 +341,7 @@ const InnerAppContent: React.FC = () => {
                       <Route path="/" element={<Navigate to="/dashboard" replace />} />
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/internal-messages" element={<InternalMessages />} />
+                      <Route path="/chat" element={<Chat />} />
                       <Route 
                         path="/patients" 
                         element={
@@ -548,7 +555,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/dekurs-vorlagen" 
                         element={
-                          <ProtectedRoute requiredRole={['admin', 'super_admin', 'arzt', 'doctor']}>
+                          <ProtectedRoute requiredRole={['admin', 'super_admin', 'arzt']}>
                             <DekursVorlagenAdmin />
                           </ProtectedRoute>
                         } 
@@ -613,7 +620,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/users" 
                         element={
-                          <ProtectedRoute requiredPermissions={['user.read']}>
+                          <ProtectedRoute requiredRole={[...ADMIN_ROLES]} requiredPermissions={['user.read']}>
                             <Users />
                           </ProtectedRoute>
                         } 
@@ -761,7 +768,7 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/settings" 
                         element={
-                          <ProtectedRoute requiredPermissions={['settings.read']}>
+                          <ProtectedRoute requiredRole={[...ADMIN_ROLES]} requiredPermissions={['settings.read']}>
                             <Settings />
                           </ProtectedRoute>
                         } 

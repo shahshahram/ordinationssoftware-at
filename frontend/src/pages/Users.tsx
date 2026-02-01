@@ -37,7 +37,10 @@ import {
   Tab,
 } from '@mui/material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
+import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { setUserProfilePhoto } from '../store/slices/authSlice';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
+import api, { getUserPhotoUrl } from '../utils/api';
 import {
   Search,
   Add,
@@ -55,6 +58,7 @@ import {
   Lock,
   LockOpen,
   HelpOutline as HelpOutlineIcon,
+  PhotoCamera,
 } from '@mui/icons-material';
 
 interface User {
@@ -70,6 +74,7 @@ interface User {
   lastLogin?: string;
   createdAt?: string;
   updatedAt?: string;
+  profilePhoto?: { filename?: string; uploadedAt?: string };
   profile?: {
     title?: string;
     specialization?: string;
@@ -79,6 +84,8 @@ interface User {
 }
 
 const Users: React.FC = () => {
+  const dispatch = useAppDispatch();
+  const { user: currentUser } = useAppSelector((state) => state.auth);
   const { marginTopValue } = useGlobalNavigationOffset();
   
   const [users, setUsers] = useState<User[]>([]);
@@ -101,6 +108,8 @@ const Users: React.FC = () => {
   });
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTabUsers, setHelpTabUsers] = useState(0);
+  const [photoFileInputRef, setPhotoFileInputRef] = useState<HTMLInputElement | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
 
   const [formData, setFormData] = useState<Partial<User>>({
     email: '',
@@ -578,8 +587,12 @@ const Users: React.FC = () => {
                   <TableRow key={user._id || user.id} hover>
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={2}>
-                        <Avatar sx={{ bgcolor: 'primary.main' }}>
-                          {getRoleIcon(user.role)}
+                        <Avatar
+                          sx={{ bgcolor: 'primary.main' }}
+                          src={getUserPhotoUrl(user) ?? undefined}
+                          alt={`${user.firstName} ${user.lastName}`}
+                        >
+                          {!getUserPhotoUrl(user) && getRoleIcon(user.role)}
                         </Avatar>
                         <Box>
                           <Typography variant="subtitle2">
@@ -854,6 +867,87 @@ const Users: React.FC = () => {
                 label="Aktiv"
               />
             </Grid>
+            {(dialogMode === 'edit' || dialogMode === 'view') && (formData._id || formData.id) && (
+              <Grid size={{ xs: 12 }}>
+                <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1 }}>
+                  Profilfoto
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                  <Avatar
+                    sx={{ width: 64, height: 64, bgcolor: 'primary.main' }}
+                    src={getUserPhotoUrl(formData) ?? undefined}
+                    alt={`${formData.firstName} ${formData.lastName}`}
+                  >
+                    {!getUserPhotoUrl(formData) && getRoleIcon(formData.role || 'assistent')}
+                  </Avatar>
+                  {dialogMode === 'edit' && (
+                    <>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="user"
+                        ref={(el) => setPhotoFileInputRef(el ?? null)}
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file || !(formData._id || formData.id)) return;
+                          setPhotoUploading(true);
+                          try {
+                            const fd = new FormData();
+                            fd.append('photo', file);
+                            const res = await api.put<{ profilePhoto: { filename: string; uploadedAt: string } }>(
+                              `/users/${formData._id || formData.id}/photo`,
+                              fd
+                            );
+                            const profilePhoto = res.data?.profilePhoto;
+                            if (res.success && profilePhoto) {
+                              setFormData((prev) => ({ ...prev, profilePhoto }));
+                              setSnackbar({ open: true, message: 'Profilfoto wurde aktualisiert', severity: 'success' });
+                              loadUsers();
+                              const editedId = formData._id || formData.id;
+                              if (editedId && (currentUser?.id === editedId || currentUser?._id === editedId)) {
+                                dispatch(setUserProfilePhoto(profilePhoto));
+                              }
+                            }
+                          } catch (err: unknown) {
+                            const msg = (err as { response?: { data?: { message?: string } }; message?: string })?.response?.data?.message
+                              ?? (err as { message?: string })?.message
+                              ?? 'Fehler beim Hochladen';
+                            setSnackbar({ open: true, message: String(msg), severity: 'error' });
+                          } finally {
+                            setPhotoUploading(false);
+                            e.target.value = '';
+                          }
+                        }}
+                        style={{ display: 'none' }}
+                        aria-hidden="true"
+                      />
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={photoUploading ? <CircularProgress size={16} /> : <PhotoCamera />}
+                        onClick={() => photoFileInputRef?.click()}
+                        disabled={photoUploading}
+                        aria-label="Foto aufnehmen oder hochladen"
+                      >
+                        {photoUploading ? 'Wird hochgeladen…' : 'Foto aufnehmen/hochladen'}
+                      </Button>
+                    </>
+                  )}
+                </Box>
+                {dialogMode === 'edit' && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                    Auf dem Smartphone öffnet sich die Kamera; am PC wählen Sie eine Bilddatei aus.
+                  </Typography>
+                )}
+              </Grid>
+            )}
+            {dialogMode === 'add' && (
+              <Grid size={{ xs: 12 }}>
+                <Typography variant="caption" color="text.secondary">
+                  Nach dem Speichern können Sie unter „Bearbeiten“ ein Profilfoto hinzufügen (Aufnahme oder Upload).
+                </Typography>
+              </Grid>
+            )}
           </Grid>
         </DialogContent>
         <DialogActions>

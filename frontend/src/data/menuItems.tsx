@@ -27,6 +27,7 @@ import {
   Article,
   Assignment,
   Mail,
+  ChatBubbleOutline,
   Schedule,
   CreditCard,
   AccessTime,
@@ -110,6 +111,7 @@ export const menuItems: MenuItem[] = [
     ]
   },
   { text: 'Interne Nachrichten', icon: <Mail />, path: '/internal-messages' },
+  { text: 'Chat', icon: <ChatBubbleOutline />, path: '/chat' },
   { 
     text: 'Einstellungen', 
     icon: <Settings />, 

@@ -52,6 +52,10 @@ const UserSchema = new mongoose.Schema({
     match: /^#[0-9A-F]{6}$/i,
     trim: true
   },
+  profilePhoto: {
+    filename: { type: String, trim: true },
+    uploadedAt: { type: Date, default: null }
+  },
   lastLogin: {
     type: Date
   },

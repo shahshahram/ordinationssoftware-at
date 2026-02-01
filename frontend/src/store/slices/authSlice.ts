@@ -36,6 +36,7 @@ interface User {
   lastName: string;
   role: string;
   permissions?: string[];
+  profilePhoto?: { filename?: string; uploadedAt?: string };
   profile?: {
     preferences?: {
       calendarSettings?: {
@@ -239,6 +240,11 @@ const authSlice = createSlice({
       localStorage.setItem('token', action.payload.token);
       localStorage.setItem('refreshToken', action.payload.refreshToken);
     },
+    setUserProfilePhoto: (state, action: PayloadAction<{ filename?: string; uploadedAt?: string }>) => {
+      if (state.user) {
+        state.user.profilePhoto = action.payload;
+      }
+    },
     updateCalendarSettings: (state, action: PayloadAction<{
       useStaffColumns?: boolean;
       selectedStaffForColumns?: string[];
@@ -365,5 +371,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, setCredentials, updateCalendarSettings } = authSlice.actions;
+export const { clearError, setCredentials, setUserProfilePhoto, updateCalendarSettings } = authSlice.actions;
 export default authSlice.reducer;

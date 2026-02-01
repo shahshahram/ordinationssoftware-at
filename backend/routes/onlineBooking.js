@@ -20,6 +20,7 @@ const InternalMessage = require('../models/InternalMessage');
 const TimeBlock = require('../models/TimeBlock');
 const LocationException = require('../models/LocationException');
 const auth = require('../middleware/auth');
+const notificationService = require('../services/notificationService');
 const router = express.Router();
 
 // SMS-Service (optional, falls konfiguriert)
@@ -1740,8 +1741,12 @@ router.post('/book', [
       });
 
       const newAppointment = new Appointment(appointmentData);
+      newAppointment.managementToken = crypto.randomBytes(32).toString('hex');
+      const tokenExpires = new Date(newAppointment.endTime);
+      tokenExpires.setDate(tokenExpires.getDate() + 90);
+      newAppointment.managementTokenExpires = tokenExpires;
       await newAppointment.save();
-      
+
       console.log('[OnlineBooking] Appointment created successfully:', {
         id: newAppointment._id,
         bookingNumber: booking.bookingNumber,
@@ -1756,6 +1761,12 @@ router.post('/book', [
         await notifyStaffAboutOnlineBooking(newAppointment, existingPatient, booking, doctorExists, serviceDoc);
       } catch (notificationError) {
         console.error('[OnlineBooking] Error sending staff notifications (non-blocking):', notificationError);
+      }
+      try {
+        const doctorName = `${doctorExists.firstName} ${doctorExists.lastName}`.trim();
+        await notificationService.notifyPracticeOfNewBooking(newAppointment, existingPatient, doctorName);
+      } catch (practiceEmailError) {
+        console.error('[OnlineBooking] Fehler beim Senden der Praxis-E-Mail:', practiceEmailError.message);
       }
     } else {
       // Double Opt-In erforderlich: Sende Benachrichtigung auch ohne Termin
@@ -1786,6 +1797,12 @@ router.post('/book', [
         console.error('[OnlineBooking] Error sending staff notifications for Double Opt-In booking (non-blocking):', notificationError);
         console.error('[OnlineBooking] Notification error details:', notificationError.stack);
       }
+      try {
+        const doctorName = `${doctorExists.firstName} ${doctorExists.lastName}`.trim();
+        await notificationService.notifyPracticeOfNewBooking(tempAppointment, existingPatient, doctorName);
+      } catch (practiceEmailError) {
+        console.error('[OnlineBooking] Fehler beim Senden der Praxis-E-Mail:', practiceEmailError.message);
+      }
     }
 
     // Sende E-Mail: Double Opt-In Code oder Bestätigung
@@ -1795,7 +1812,8 @@ router.post('/book', [
         // Sende auch SMS mit Code
         await sendDoubleOptInSMS(booking);
       } else {
-        await sendConfirmationEmail(booking);
+        const managementToken = (typeof newAppointment !== 'undefined' && newAppointment?.managementToken) ? newAppointment.managementToken : undefined;
+        await sendConfirmationEmail(booking, managementToken);
         // Sende auch SMS-Bestätigung
         await sendConfirmationSMS(booking);
       }
@@ -1990,6 +2008,10 @@ router.post('/verify-opt-in', [
     });
 
     const newAppointment = new Appointment(appointmentData);
+    newAppointment.managementToken = crypto.randomBytes(32).toString('hex');
+    const tokenExpiresVerify = new Date(newAppointment.endTime);
+    tokenExpiresVerify.setDate(tokenExpiresVerify.getDate() + 90);
+    newAppointment.managementTokenExpires = tokenExpiresVerify;
     await newAppointment.save();
 
     console.log('[OnlineBooking] Appointment created successfully after Double Opt-In:', {
@@ -2003,10 +2025,16 @@ router.post('/verify-opt-in', [
     } catch (notificationError) {
       console.error('[OnlineBooking] Error sending staff notifications (non-blocking):', notificationError);
     }
+    try {
+      const doctorName = `${doctorExists.firstName} ${doctorExists.lastName}`.trim();
+      await notificationService.notifyPracticeOfNewBooking(newAppointment, existingPatient, doctorName);
+    } catch (practiceEmailError) {
+      console.error('[OnlineBooking] Fehler beim Senden der Praxis-E-Mail:', practiceEmailError.message);
+    }
 
     // Sende Bestätigungs-E-Mail und SMS
     try {
-      await sendConfirmationEmail(booking);
+      await sendConfirmationEmail(booking, newAppointment.managementToken);
       await sendConfirmationSMS(booking);
     } catch (emailError) {
       console.error('[OnlineBooking] Error sending confirmation email (non-blocking):', emailError);
@@ -2758,7 +2786,7 @@ Ihr Praxisteam
   }
 }
 
-async function sendConfirmationEmail(booking) {
+async function sendConfirmationEmail(booking, managementToken) {
   try {
     // Lade Location-Daten für Adresse (falls verfügbar)
     let location = null;
@@ -2824,6 +2852,7 @@ async function sendConfirmationEmail(booking) {
               
               ${icsContent ? '<p>📅 Der Termin wurde als Anhang beigefügt und kann direkt in Ihren Kalender importiert werden.</p>' : ''}
               
+              ${managementToken ? `<p>Sie können Ihren Termin hier verwalten oder stornieren: <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/portal/appointment/${managementToken}">Termin verwalten</a></p>` : ''}
               <p>Bitte erscheinen Sie pünktlich zum vereinbarten Termin.</p>
               <p>Bei Fragen stehen wir Ihnen gerne zur Verfügung.</p>
             </div>
@@ -2850,9 +2879,7 @@ Termindetails:
 ${booking.doctor.specialization ? `- Fachrichtung: ${booking.doctor.specialization}\n` : ''}- Art der Behandlung: ${stripHtmlTags(booking.appointment.type || '')}
 ${booking.appointment.reason ? `- Grund: ${stripHtmlTags(booking.appointment.reason || '')}\n` : ''}${location ? `- Adresse: ${location.address_line1}, ${location.postal_code} ${location.city}\n` : ''}
 ${icsContent ? '\nDer Termin wurde als .ics-Datei beigefügt und kann direkt in Ihren Kalender importiert werden.\n' : ''}
-
-Sie können Ihren Termin jederzeit online verwalten:
-${booking.magicLink?.token ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}/patient-booking/${booking.magicLink.token}` : 'Link wird generiert...'}
+${managementToken ? `\nSie können Ihren Termin hier verwalten oder stornieren: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/portal/appointment/${managementToken}\n` : (booking.magicLink?.token ? `\nSie können Ihren Termin jederzeit online verwalten: ${process.env.FRONTEND_URL || 'http://localhost:3000'}/patient-booking/${booking.magicLink.token}\n` : '')}
 
 Bitte erscheinen Sie pünktlich zum vereinbarten Termin.
 

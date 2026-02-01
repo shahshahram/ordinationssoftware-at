@@ -37,7 +37,8 @@ import {
   Medication,
   Mail,
   Science,
-  BookOnline
+  BookOnline,
+  CloudUpload
 } from '@mui/icons-material';
 
 export interface AvailableWidget {
@@ -131,6 +132,15 @@ const AVAILABLE_WIDGETS: AvailableWidget[] = [
     icon: <Receipt />,
     defaultConfig: {},
     defaultPosition: { x: 6, y: 20, w: 6, h: 8 }
+  },
+  {
+    widgetId: 'elda-status',
+    widgetType: 'custom',
+    title: 'ELDA/WAHonline Status',
+    description: 'Status Honorarnoten-Übermittlung (ELDA-SIT)',
+    icon: <CloudUpload />,
+    defaultConfig: { status: 'pending' },
+    defaultPosition: { x: 0, y: 20, w: 4, h: 4 }
   },
   {
     widgetId: 'new-dicom-studies',

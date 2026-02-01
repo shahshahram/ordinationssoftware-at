@@ -409,12 +409,10 @@ class ELDAConnector {
       if (isSIT) {
         // BOM entfernen, strikt UTF-8 (keine Byte-Order-Mark vor Base64)
         xmlContent = xmlContent.replace(/^\uFEFF/, '');
-        // XML-Declaration entfernen: Payload soll direkt mit <honorarnotenMeldung... beginnen (ELDA Minimal-Modus)
-        xmlContent = xmlContent.replace(/^\s*<\?xml[^?]*\?>\s*\r?\n?/i, '').trim();
-        // Fertiges XML vor Base64-Kodierung loggen (Root mit xmlns/xmlns:xsi/xsi:schemaLocation/akz pruefbar)
+        // Support-Vorgabe: XML-Deklaration im Base64-String belassen (nicht entfernen)
         const firstLine = xmlContent.split('\n')[0] || '';
-        console.log('[ELDA] Honorarnoten-XML (vor Base64) – Root-Zeile (xmlns/xmlns:xsi/akz):', firstLine);
-        console.log('[ELDA] Honorarnoten-XML komplett (ohne XML-Header):');
+        console.log('[ELDA] Honorarnoten-XML (vor Base64) – erste Zeile (Deklaration/Root):', firstLine);
+        console.log('[ELDA] Honorarnoten-XML komplett (mit XML-Header):');
         console.log(xmlContent);
         const sitApiKey = this.config.sit?.apiKey ?? this.config.apiKey;
         const seriennummer = (this.config.sit?.seriennummer || '800062').replace(/[^0-9]/g, '') || '800062';
@@ -633,12 +631,24 @@ class ELDAConnector {
           : 'ELDA-Server-Fehler: Unbekannter Fehler (HTML-Antwort erhalten)';
         throw new Error(fullErrorMessage);
       }
-      
+
+      // Erfolg: statusCode und protokollnummer aus SendenResponse extrahieren (für WAHonline-Sync-Status)
+      let statusCode = null;
+      let protokollnummer = null;
+      if (typeof responseData === 'string' && responseData.includes('sendenResponse')) {
+        const statusCodeMatch = responseData.match(/<statusCode>([^<]*)<\/statusCode>/i);
+        statusCode = statusCodeMatch ? statusCodeMatch[1].trim() : null;
+        const protokollMatch = responseData.match(/<protokollnummer>([^<]*)<\/protokollnummer>/i);
+        protokollnummer = protokollMatch ? protokollMatch[1].trim() : null;
+      }
+
       return {
         success: true,
         method: 'webservice',
         environment: this.config.environment,
         status: response.status,
+        statusCode: statusCode || '000',
+        protokollnummer: protokollnummer || undefined,
         data: responseData,
         message: 'Daten erfolgreich via Webservice übertragen',
         timestamp: new Date().toISOString()

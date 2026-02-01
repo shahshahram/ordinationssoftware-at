@@ -215,23 +215,33 @@ const Patients: React.FC = () => {
     return `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
   };
 
+  /** Rosa für weibliche, Blau für männliche Patienten (exakt wie DB/UI). */
   const getAvatarColor = (gender: string) => {
     switch (gender?.toLowerCase()) {
       case 'w':
       case 'weiblich':
       case 'female':
-        return 'secondary.main'; // Rosa
+      case 'f':
+        return '#f48fb1'; // Rosa für Frauen
       case 'm':
       case 'männlich':
       case 'male':
-        return 'primary.main'; // Blau
+        return '#90caf9'; // Hellblau für Männer
       case 'd':
       case 'divers':
       case 'other':
-        return 'info.main'; // Grau/Info
+        return '#b0bec5'; // Grau
       default:
-        return 'primary.main'; // Standard: Blau
+        return '#90caf9'; // Standard: Blau
     }
+  };
+
+  const getPatientPhotoUrl = (patient: Patient): string | undefined => {
+    if (!patient.photo?.filename) return undefined;
+    const base = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+    const path = `uploads/patient-photos/${patient.photo.filename}`;
+    const t = patient.photo.uploadedAt ? new Date(patient.photo.uploadedAt).getTime() : Date.now();
+    return `${base.replace(/\/api\/?$/, '')}/${path}?t=${t}`;
   };
 
   const getAge = (dateOfBirth: string) => {
@@ -941,6 +951,7 @@ const Patients: React.FC = () => {
           {/* Header with Avatar and Name */}
           <Box display="flex" alignItems="center" gap={{ xs: 1, sm: 2 }} mb={{ xs: 1, sm: 2 }}>
             <Avatar 
+              src={getPatientPhotoUrl(patient)}
               sx={{ 
                 width: { xs: 36, sm: 48 }, 
                 height: { xs: 36, sm: 48 }, 
@@ -948,11 +959,12 @@ const Patients: React.FC = () => {
                 fontSize: { xs: '0.8rem', sm: '1.1rem' },
                 fontWeight: 'bold',
                 border: '2px solid',
-                borderColor: patient.gender?.toLowerCase().includes('w') ? 'pink.300' : 'blue.300',
+                borderColor: patient.gender === 'w' || patient.gender === 'f' || patient.gender?.toLowerCase().includes('weiblich') ? '#f48fb1' : '#90caf9',
                 flexShrink: 0
               }}
+              imgProps={{ loading: 'lazy' }}
             >
-              {getInitials(patient.firstName, patient.lastName)}
+              {!patient.photo?.filename && getInitials(patient.firstName, patient.lastName)}
             </Avatar>
             <Box flexGrow={1} minWidth={0}>
               <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
@@ -1264,23 +1276,27 @@ const Patients: React.FC = () => {
           <Badge
             overlap="circular"
             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-                    badgeContent={
-                      <Tooltip title={`Status: ${healthStatus}`}>
-                        <Avatar 
-                          sx={{ 
-                            width: 16, 
-                            height: 16, 
-                            bgcolor: `${getHealthStatusColor(healthStatus)}.main`,
-                            border: '2px solid white'
-                          }}
-                        >
-                          {getHealthStatusIcon(healthStatus || 'healthy')}
-                        </Avatar>
-                      </Tooltip>
-                    }
+            badgeContent={
+              <Tooltip title={`Status: ${healthStatus}`}>
+                <Avatar 
+                  sx={{ 
+                    width: 16, 
+                    height: 16, 
+                    bgcolor: `${getHealthStatusColor(healthStatus)}.main`,
+                    border: '2px solid white'
+                  }}
+                >
+                  {getHealthStatusIcon(healthStatus || 'healthy')}
+                </Avatar>
+              </Tooltip>
+            }
           >
-            <Avatar sx={{ bgcolor: getAvatarColor(patient.gender) }}>
-              {getInitials(patient.firstName, patient.lastName)}
+            <Avatar 
+              src={getPatientPhotoUrl(patient)} 
+              sx={{ bgcolor: getAvatarColor(patient.gender) }}
+              imgProps={{ loading: 'lazy' }}
+            >
+              {!patient.photo?.filename && getInitials(patient.firstName, patient.lastName)}
             </Avatar>
           </Badge>
         </ListItemAvatar>

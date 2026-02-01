@@ -36,7 +36,8 @@ import {
   Send,
   CheckCircle,
   Error as ErrorIcon,
-  HelpOutline
+  HelpOutline,
+  ContentCopy
 } from '@mui/icons-material';
 import { useSelector } from 'react-redux';
 import { useAppDispatch } from '../store/hooks';
@@ -81,6 +82,7 @@ const Settings: React.FC = () => {
   const [smtpUser, setSmtpUser] = useState<string>('');
   const [smtpPassword, setSmtpPassword] = useState<string>('');
   const [smtpFrom, setSmtpFrom] = useState<string>('');
+  const [practiceNotificationEmail, setPracticeNotificationEmail] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [testEmailAddress, setTestEmailAddress] = useState<string>('');
   const [testEmailLoading, setTestEmailLoading] = useState<boolean>(false);
@@ -102,6 +104,11 @@ const Settings: React.FC = () => {
   const [testSmsNumber, setTestSmsNumber] = useState<string>('');
   const [testSmsLoading, setTestSmsLoading] = useState<boolean>(false);
   const [testSmsResult, setTestSmsResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Widget-Integration (Online-Buchung)
+  const [widgetDoctors, setWidgetDoctors] = useState<Array<{ id: string; name: string }>>([]);
+  const [widgetDoctorId, setWidgetDoctorId] = useState<string>('');
+  const [widgetCopySuccess, setWidgetCopySuccess] = useState(false);
   
   // Proaktive Benachrichtigungen State
   const [notificationSettings, setNotificationSettings] = useState({
@@ -167,7 +174,29 @@ const Settings: React.FC = () => {
     loadEmailSettings();
     loadSmsSettings();
     loadBillingSettings();
+    loadWidgetDoctors();
   }, [user]);
+
+  const loadWidgetDoctors = async () => {
+    try {
+      const response = await api.get<{ success: boolean; data: Array<{ id: string; name: string }> }>('/online-booking/doctors');
+      const data = response.data as { success?: boolean; data?: Array<{ id: string; name: string }> } | undefined;
+      if (data?.success && Array.isArray(data.data)) {
+        const list = data.data.map((d) => ({ id: String(d.id), name: d.name }));
+        setWidgetDoctors(list);
+        if (list.length > 0) {
+          setWidgetDoctorId((prev) => {
+            if (prev) return prev;
+            const userId = user?.id ?? user?._id;
+            const currentInList = userId ? list.find((d) => d.id === String(userId)) : null;
+            return currentInList ? currentInList.id : list[0].id;
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Fehler beim Laden der Ärzte für Widget:', err);
+    }
+  };
 
   const loadBillingSettings = async () => {
     try {
@@ -204,6 +233,7 @@ const Settings: React.FC = () => {
         setSmtpUser(config.smtp?.user || '');
         setSmtpPassword(config.smtp?.password === '***ENCRYPTED***' ? '' : (config.smtp?.password || ''));
         setSmtpFrom(config.smtp?.from || '');
+        setPracticeNotificationEmail(config.practiceNotificationEmail || '');
       }
     } catch (error: any) {
       console.error('Fehler beim Laden der E-Mail-Konfiguration:', error);
@@ -339,7 +369,8 @@ const Settings: React.FC = () => {
           user: smtpUser,
           password: smtpPassword || '***ENCRYPTED***', // Wenn leer, behalte verschlüsseltes Passwort
           from: smtpFrom
-        }
+        },
+        practiceNotificationEmail: practiceNotificationEmail.trim()
       });
 
       if (response.data.success) {
@@ -1032,6 +1063,22 @@ const Settings: React.FC = () => {
                   />
                 </Grid>
 
+                {/* Praxis-Benachrichtigungs-E-Mail(s) */}
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    minRows={2}
+                    maxRows={6}
+                    label="E-Mail-Adressen für Praxis-Benachrichtigungen"
+                    value={practiceNotificationEmail}
+                    onChange={(e) => setPracticeNotificationEmail(e.target.value)}
+                    placeholder="rezeption@praxis.at, leitung@praxis.at"
+                    helperText="Mehrere Adressen durch Komma oder neue Zeile getrennt. Erhalten eine E-Mail bei neuer Online-Buchung."
+                    inputProps={{ 'aria-label': 'E-Mail-Adressen für Praxis-Benachrichtigungen bei Online-Buchung' }}
+                  />
+                </Grid>
+
                 {/* Speichern Button */}
                 <Grid size={{ xs: 12 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2 }}>
@@ -1102,6 +1149,81 @@ const Settings: React.FC = () => {
                   </Alert>
                 </Grid>
               </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Widget-Integration (Online-Buchung) */}
+        <Grid size={{ xs: 12 }}>
+          <Card>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Typography variant="h6" gutterBottom sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }}>
+                Online-Buchung Widget
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Einbettung der Terminbuchung auf Ihrer Webseite (z. B. WordPress). Patienten buchen direkt auf Ihrer Seite.
+              </Typography>
+              <Divider sx={{ my: 2 }} />
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel id="widget-doctor-label">Arzt für Widget</InputLabel>
+                <Select
+                  labelId="widget-doctor-label"
+                  id="widget-doctor"
+                  value={widgetDoctorId}
+                  label="Arzt für Widget"
+                  onChange={(e) => setWidgetDoctorId(e.target.value)}
+                >
+                  {widgetDoctors.map((d) => (
+                    <MenuItem key={d.id} value={d.id}>
+                      {d.name}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {widgetDoctorId && (
+                <>
+                  <Typography variant="subtitle2" gutterBottom>
+                    HTML-Snippet (in Ihre Webseite einfügen):
+                  </Typography>
+                  <Box
+                    component="pre"
+                    sx={{
+                      p: 2,
+                      bgcolor: 'action.hover',
+                      borderRadius: 1,
+                      overflow: 'auto',
+                      fontSize: '0.875rem',
+                      fontFamily: 'monospace',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                    }}
+                  >
+                    {`<iframe\n  src="${process.env.REACT_APP_PUBLIC_URL || process.env.REACT_APP_FRONTEND_URL || (typeof window !== 'undefined' ? window.location.origin : '')}/booking/widget/${widgetDoctorId}"\n  style="width: 100%; height: 700px; border: none;"\n  title="Terminbuchung">\n</iframe>`}
+                  </Box>
+                  <Button
+                    variant="outlined"
+                    startIcon={<ContentCopy />}
+                    onClick={async () => {
+                      const snippet = `<iframe\n  src="${process.env.REACT_APP_PUBLIC_URL || process.env.REACT_APP_FRONTEND_URL || (typeof window !== 'undefined' ? window.location.origin : '')}/booking/widget/${widgetDoctorId}"\n  style="width: 100%; height: 700px; border: none;"\n  title="Terminbuchung">\n</iframe>`;
+                      try {
+                        await navigator.clipboard.writeText(snippet);
+                        setWidgetCopySuccess(true);
+                        setTimeout(() => setWidgetCopySuccess(false), 2000);
+                      } catch {
+                        setError('Kopieren fehlgeschlagen. Bitte Snippet manuell markieren und kopieren.');
+                      }
+                    }}
+                    sx={{ mt: 2 }}
+                  >
+                    {widgetCopySuccess ? 'Kopiert!' : 'In Zwischenablage kopieren'}
+                  </Button>
+                </>
+              )}
+              {widgetDoctors.length === 0 && (
+                <Alert severity="info">
+                  Keine Ärzte mit aktivierter Online-Buchung. Aktivieren Sie die Online-Buchung in der Personalverwaltung.
+                </Alert>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -2260,6 +2382,7 @@ const Settings: React.FC = () => {
             <Tab label="Outlook" />
             <Tab label="Yahoo" />
             <Tab label="Eigener SMTP" />
+            <Tab label="Praxis-Benachrichtigung" />
             <Tab label="Test-E-Mail" />
             <Tab label="Best Practices" />
           </Tabs>
@@ -2272,8 +2395,23 @@ const Settings: React.FC = () => {
                 </Typography>
                 <Typography variant="body1" paragraph>
                   Die E-Mail-Konfiguration ermöglicht es, Benachrichtigungen über gebuchte Termine 
-                  per E-Mail zu versenden.
+                  per E-Mail zu versenden – an Patienten und an die Praxis.
                 </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
+                  Praxis-Benachrichtigung bei Online-Buchung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Unter „E-Mail-Adressen für Praxis-Benachrichtigungen“ können Sie eine oder mehrere 
+                  E-Mail-Adressen angeben (z.B. Rezeption, Praxisleitung). Bei jeder neuen Online-Buchung 
+                  erhalten diese Adressen automatisch eine E-Mail mit Patient, Termin und Arzt.
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li>📬 <strong>Mehrere Adressen:</strong> Durch Komma oder neue Zeile getrennt eingeben</li>
+                  <li>📬 <strong>Optional:</strong> Leer lassen, wenn keine Praxis-Mail gewünscht ist</li>
+                </Box>
               </Box>
 
               <Box>
@@ -2594,6 +2732,43 @@ const Settings: React.FC = () => {
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
+                  Praxis-Benachrichtigung bei Online-Buchung
+                </Typography>
+                <Typography variant="body2" paragraph>
+                  Sie können festlegen, an welche E-Mail-Adressen eine Benachrichtigung gesendet wird, 
+                  wenn ein Patient online einen Termin bucht (sofort oder nach Double-Opt-in).
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  E-Mail-Adressen für Praxis-Benachrichtigungen
+                </Typography>
+                <Box component="ul" sx={{ pl: 3, mb: 2 }}>
+                  <li><strong>Mehrere Adressen:</strong> Trennen Sie Adressen durch Komma oder neue Zeile (z.B. rezeption@praxis.at, leitung@praxis.at)</li>
+                  <li><strong>Inhalt der E-Mail:</strong> Patient, SVNR, Termindatum/-zeit, zugewiesener Arzt, Grund</li>
+                  <li><strong>Optional:</strong> Feld leer lassen = keine E-Mail an die Praxis bei Online-Buchung</li>
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2" gutterBottom sx={{ mt: 2, fontWeight: 'bold' }}>
+                  Konfiguration
+                </Typography>
+                <Box component="ol" sx={{ pl: 3, mb: 2 }}>
+                  <li>Öffnen Sie die E-Mail-Konfiguration auf der Einstellungsseite</li>
+                  <li>Scrollen Sie zum Feld „E-Mail-Adressen für Praxis-Benachrichtigungen“</li>
+                  <li>Geben Sie eine oder mehrere Adressen ein (Komma oder Zeilenumbruch)</li>
+                  <li>Klicken Sie auf „E-Mail-Konfiguration speichern“</li>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {helpTabEmail === 7 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Box>
+                <Typography variant="h6" gutterBottom color="primary">
                   Test-E-Mail senden
                 </Typography>
                 <Typography variant="body2" paragraph>
@@ -2627,7 +2802,7 @@ const Settings: React.FC = () => {
             </Box>
           )}
 
-          {helpTabEmail === 7 && (
+          {helpTabEmail === 8 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
@@ -2653,6 +2828,7 @@ const Settings: React.FC = () => {
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li>✅ <strong>Testen:</strong> Senden Sie immer eine Test-E-Mail</li>
                   <li>✅ <strong>Überprüfen:</strong> Überprüfen Sie die Einstellungen regelmäßig</li>
+                  <li>✅ <strong>Praxis-Benachrichtigung:</strong> Tragen Sie E-Mail-Adressen für Online-Buchungs-Benachrichtigungen ein (mehrere mit Komma oder Zeilenumbruch)</li>
                   <li>✅ <strong>Backup:</strong> Dokumentieren Sie die Einstellungen</li>
                 </Box>
               </Box>

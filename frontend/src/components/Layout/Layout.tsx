@@ -8,16 +8,15 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
-  const isInternalMessages = location.pathname === '/internal-messages';
-  
+  const isFullHeightPage = location.pathname === '/internal-messages' || location.pathname === '/chat';
   return (
     <Box
       sx={{
         flexGrow: 1,
-        px: isInternalMessages ? 0 : { xs: 2, sm: 3 }, // Symmetrisches Padding links und rechts
-        py: isInternalMessages ? 0 : { xs: 2, sm: 3 }, // Symmetrisches Padding oben und unten
+        px: isFullHeightPage ? 0 : { xs: 2, sm: 3 }, // Symmetrisches Padding links und rechts
+        py: isFullHeightPage ? 0 : { xs: 2, sm: 3 }, // Symmetrisches Padding oben und unten
         backgroundColor: 'background.default',
-        overflow: isInternalMessages ? 'hidden' : 'auto',
+        overflow: isFullHeightPage ? 'hidden' : 'auto',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',

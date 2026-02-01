@@ -1,4 +1,5 @@
 const { authorize, requirePermission, loadResource, ROLES, ACTIONS, RESOURCES } = require('../utils/rbac');
+const { ADMIN_ROLES, SUPER_ADMIN_ROLES, ARZT_ROLES, STAFF_ROLES } = require('../config/roles');
 
 /**
  * RBAC Middleware für feingranulare Autorisierung
@@ -155,7 +156,7 @@ function requireSensitivityLevel(sensitivityLevel) {
     }
 
     // Super Admin und Admin haben immer Zugriff
-    if (['super_admin', 'admin'].includes(req.user.role)) {
+    if (ADMIN_ROLES.includes(req.user.role)) {
       return next();
     }
 
@@ -165,7 +166,7 @@ function requireSensitivityLevel(sensitivityLevel) {
     }
 
     // Andere Rollen haben nur Zugriff auf normale Daten
-    if (sensitivityLevel !== 'normal' && !['arzt', 'admin', 'super_admin'].includes(req.user.role)) {
+    if (sensitivityLevel !== 'normal' && !ARZT_ROLES.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
         message: 'Zugriff auf sensible Daten verweigert',
@@ -291,11 +292,11 @@ const rbacMiddleware = {
   canCreateBilling: requirePolicy(ACTIONS.CREATE, RESOURCES.BILLING),
   canGenerateBilling: requirePolicy(ACTIONS.GENERATE, RESOURCES.BILLING),
   
-  // Admin-Funktionen
-  requireAdmin: requireRole(['admin', 'super_admin']),
-  requireSuperAdmin: requireRole('super_admin'),
-  requireDoctor: requireRole(['arzt', 'admin', 'super_admin']),
-  requireStaff: requireRole(['assistent', 'rezeption', 'arzt', 'admin', 'super_admin']),
+  // Admin-Funktionen (Rollen exakt wie in DB: backend/models/User.js)
+  requireAdmin: requireRole(ADMIN_ROLES),
+  requireSuperAdmin: requireRole(SUPER_ADMIN_ROLES),
+  requireDoctor: requireRole(ARZT_ROLES),
+  requireStaff: requireRole(STAFF_ROLES),
   
   // Sensible Daten
   requireNormalData: requireSensitivityLevel('normal'),

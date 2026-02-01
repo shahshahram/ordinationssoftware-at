@@ -8,6 +8,8 @@ const wahonlineConfig = require('../../config/wahonline.config');
 const wahonlineFormatGenerator = require('../wahonlineFormatGenerator');
 const eldaConnector = require('./eldaConnector');
 const eldaFormatGenerator = require('../eldaFormatGenerator');
+const WAHonlineSync = require('../../models/WAHonlineSync');
+const EldaSubmission = require('../../models/EldaSubmission');
 
 class WAHonlineConnector {
   constructor() {
@@ -167,7 +169,8 @@ class WAHonlineConnector {
       
       // SIT-Umgebung: Verwende ELDA-Webservice
       if (this.isSIT) {
-        return await this.sendViaELDAWebservice(payload, idempotencyKey, autoFormat);
+        const performanceId = payload?.performance?._id || payload?.performanceId || null;
+        return await this.sendViaELDAWebservice(payload, idempotencyKey, autoFormat, performanceId);
       }
       
       // Normale Umgebung: Verwende REST API
@@ -250,16 +253,16 @@ class WAHonlineConnector {
    * @param {object} payload - Meldungsdaten
    * @param {string} idempotencyKey - Idempotency-Key
    * @param {boolean} autoFormat - Automatisch Format generieren
+   * @param {string} [performanceId] - Performance-ID für Sync-Status (Honorarnote)
    * @returns {Promise<object>} ELDA-Response
    */
-  async sendViaELDAWebservice(payload, idempotencyKey, autoFormat = true) {
+  async sendViaELDAWebservice(payload, idempotencyKey, autoFormat = true, performanceId = null) {
     if (!this.config.sit?.seriennummer || !this.config.sit?.passwort) {
       throw new Error('WAHonline-SIT benötigt Seriennummer und Passwort');
     }
     
+    let xmlContent = null;
     try {
-      let xmlContent;
-      
       if (autoFormat) {
         // Setze Konfiguration für Format-Generator (für Seriennummer)
         wahonlineFormatGenerator.setConfig(this.config);
@@ -309,7 +312,14 @@ class WAHonlineConnector {
           xmlContent, // XML-String direkt senden
           'WA' // Dataset-Type für Header (entspricht projektkennzeichen im XML)
         );
-        
+
+        if (performanceId) {
+          if (eldaResult.statusCode === '000') {
+            await this.saveWAHonlineSyncStatus(performanceId, 'SYNCED', eldaResult.protokollnummer || null, null);
+          }
+          await this.saveEldaSubmission(performanceId, xmlContent, eldaResult.data || null, eldaResult.statusCode || null, eldaResult.protokollnummer || null, null);
+        }
+
         return {
           success: true,
           message: 'WAHonline-Meldung erfolgreich via ELDA-Webservice (SIT) übermittelt',
@@ -332,6 +342,11 @@ class WAHonlineConnector {
       }
       
     } catch (error) {
+      const performanceId = payload?.performance?._id || payload?.performanceId || null;
+      if (performanceId) {
+        await this.saveWAHonlineSyncStatus(performanceId, 'ERROR', null, error.message || String(error));
+        await this.saveEldaSubmission(performanceId, xmlContent, null, null, null, error.message || String(error));
+      }
       console.error('❌ WAHonline-Übermittlung via ELDA-Webservice fehlgeschlagen:', error.message);
       console.error('❌ Fehler-Details:', {
         message: error.message,
@@ -341,7 +356,60 @@ class WAHonlineConnector {
       throw new Error(`WAHonline-Übermittlung via ELDA-Webservice fehlgeschlagen: ${error.message}`);
     }
   }
-  
+
+  /**
+   * Speichert WAHonline-Sync-Status für eine Honorarnote (Performance)
+   * @param {string} performanceId - Performance-ID
+   * @param {string} status - 'SYNCED' | 'ERROR'
+   * @param {string|null} protokollnummer - Protokollnummer (bei SYNCED)
+   * @param {string|null} errorText - Fehlertext (bei ERROR)
+   */
+  async saveWAHonlineSyncStatus(performanceId, status, protokollnummer = null, errorText = null) {
+    try {
+      const id = typeof performanceId === 'string' ? performanceId : performanceId?.toString?.();
+      if (!id) return;
+      await WAHonlineSync.findOneAndUpdate(
+        { performanceId: id },
+        {
+          status,
+          protokollnummer: protokollnummer || undefined,
+          errorText: errorText || undefined,
+          updatedAt: new Date()
+        },
+        { upsert: true, new: true }
+      );
+    } catch (err) {
+      console.error('[WAHonline] Fehler beim Speichern des Sync-Status:', err.message);
+    }
+  }
+
+  /**
+   * Archiviert eine ELDA-Übermittlung (raw request/response) für Nachweis und Debugging
+   * @param {string} performanceId - Performance-ID (Honorarnote)
+   * @param {string|null} rawRequestXml - Gesendetes Honorarnoten-XML
+   * @param {string|null} rawResponseSoap - SOAP-Response-Body
+   * @param {string|null} statusCode - ELDA statusCode
+   * @param {string|null} protokollnummer - ELDA protokollnummer
+   * @param {string|null} errorText - Fehlertext (bei Fehler)
+   */
+  async saveEldaSubmission(performanceId, rawRequestXml, rawResponseSoap, statusCode, protokollnummer, errorText) {
+    try {
+      const id = typeof performanceId === 'string' ? performanceId : performanceId?.toString?.();
+      if (!id) return;
+      await EldaSubmission.create({
+        performanceId: id,
+        rawRequestXml: rawRequestXml || undefined,
+        rawResponseSoap: rawResponseSoap || undefined,
+        statusCode: statusCode || undefined,
+        protokollnummer: protokollnummer || undefined,
+        errorText: errorText || undefined,
+        createdAt: new Date()
+      });
+    } catch (err) {
+      console.error('[WAHonline] Fehler beim Archivieren der ELDA-Übermittlung:', err.message);
+    }
+  }
+
   /**
    * Sendet eine Batch-Meldung (mehrere Leistungen)
    * @param {Array} performances - Array von Leistungen mit patient/doctor Daten

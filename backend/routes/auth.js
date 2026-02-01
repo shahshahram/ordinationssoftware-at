@@ -228,7 +228,7 @@ router.post('/login', [
       user.save().catch(err => console.log('Could not update last login:', err));
     }
 
-    // Lade vollständige User-Daten inklusive Profile
+    // Lade vollständige User-Daten inklusive Profile und Profilfoto
     let userData = {
       id: user.id,
       email: user.email,
@@ -238,11 +238,11 @@ router.post('/login', [
       permissions: user.permissions || user.getDefaultPermissions?.() || []
     };
 
-    // Wenn es ein MongoDB-User ist, füge das Profile hinzu
-    if (!isMockUser && user.profile) {
-      userData.profile = user.profile;
-    } else if (isMockUser) {
-      // Für Mock-User: Kein Profile (wird später über /auth/me geladen)
+    // Wenn es ein MongoDB-User ist, füge das Profile und Profilfoto hinzu
+    if (!isMockUser) {
+      if (user.profile) userData.profile = user.profile;
+      if (user.profilePhoto) userData.profilePhoto = user.profilePhoto;
+    } else {
       userData.profile = null;
     }
 
@@ -309,7 +309,7 @@ router.get('/me', auth, async (req, res) => {
           console.log('Found user in MongoDB:', dbUser.email);
           console.log('📥 User profile from DB:', JSON.stringify(dbUser.profile, null, 2));
         }
-        // Convert MongoDB user to the expected format, including profile
+        // Convert MongoDB user to the expected format, including profile and profilePhoto
         user = {
           id: dbUser._id.toString(),
           _id: dbUser._id.toString(),
@@ -318,7 +318,8 @@ router.get('/me', auth, async (req, res) => {
           lastName: dbUser.lastName,
           role: dbUser.role,
           permissions: dbUser.permissions || [],
-          profile: dbUser.profile || null
+          profile: dbUser.profile || null,
+          profilePhoto: dbUser.profilePhoto || null
         };
       }
     } catch (dbError) {
@@ -353,7 +354,8 @@ router.get('/me', auth, async (req, res) => {
         lastName: user.lastName,
         role: user.role,
         permissions: user.permissions || user.getDefaultPermissions?.() || [],
-        profile: user.profile || (user.id ? null : undefined) // Nur null wenn user aus DB, sonst undefined
+        profile: user.profile || (user.id ? null : undefined),
+        profilePhoto: user.profilePhoto || null
       }
     });
   } catch (error) {

@@ -1,10 +1,16 @@
 const express = require('express');
 const router = express.Router();
+const auth = require('../middleware/auth');
+const { requireRole } = require('../middleware/rbac');
+const { ADMIN_ROLES } = require('../config/roles');
 const ModuleRegistry = require('../models/ModuleRegistry');
 const moduleManager = require('../services/moduleManager');
 const { authorize } = require('../utils/rbac');
 const { ACTIONS, RESOURCES } = require('../utils/rbac');
 const logger = require('../utils/logger');
+
+router.use(auth);
+router.use(requireRole(ADMIN_ROLES));
 
 /**
  * GET /api/modules

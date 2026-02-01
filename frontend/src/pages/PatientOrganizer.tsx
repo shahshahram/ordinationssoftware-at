@@ -2695,25 +2695,30 @@ const PatientOrganizer: React.FC = () => {
                   <Avatar
                     src={(() => {
                       if (!patient.photo?.filename) return undefined;
-                      const photoUrl = `http://localhost:5001/uploads/patient-photos/${patient.photo.filename}?t=${patient.photo.uploadedAt ? new Date(patient.photo.uploadedAt).getTime() : Date.now()}`;
-                      console.log('Patientenfoto URL:', photoUrl, 'Patient photo data:', patient.photo);
-                      return photoUrl;
+                      const base = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+                      const baseUrl = base.replace(/\/api\/?$/, '');
+                      return `${baseUrl}/uploads/patient-photos/${patient.photo.filename}?t=${patient.photo.uploadedAt ? new Date(patient.photo.uploadedAt).getTime() : Date.now()}`;
                     })()}
                     sx={{
                       width: { xs: 50, sm: 80 },
                       height: { xs: 50, sm: 80 },
                       border: '3px solid',
                       borderColor: 'rgba(255, 255, 255, 0.3)',
-                      bgcolor: 'rgba(255, 255, 255, 0.2)',
+                      bgcolor: (patient.gender === 'w' || patient.gender === 'f') ? '#f48fb1' : '#90caf9',
+                      color: 'white',
+                      fontSize: { xs: '1.25rem', sm: '2rem' },
+                      fontWeight: 'bold',
                       flexShrink: 0
                     }}
                     onError={(e) => {
-                      console.error('Fehler beim Laden des Patientenfotos:', e);
-                      // Setze src auf undefined, um den Fallback zu zeigen
                       (e.target as HTMLImageElement).src = '';
                     }}
                   >
-                    {!patient.photo?.filename && <Person sx={{ fontSize: 40 }} />}
+                    {!patient.photo?.filename &&
+                      ((patient.firstName || patient.lastName)
+                        ? `${(patient.firstName || '').charAt(0)}${(patient.lastName || '').charAt(0)}`.toUpperCase()
+                        : <Person sx={{ fontSize: 40 }} />)
+                    }
                   </Avatar>
                   <input
                     type="file"
@@ -2730,14 +2735,13 @@ const PatientOrganizer: React.FC = () => {
                         onClick={() => photoInputRef?.click()}
                         disabled={uploadingPhoto}
                         sx={{
-                          bgcolor: 'background.paper',
-                          color: 'text.primary',
-                          '&:hover': {
-                            bgcolor: 'action.hover'
-                          }
+                          bgcolor: '#4caf50',
+                          color: 'white',
+                          '&:hover': { bgcolor: '#43a047' }
                         }}
+                        aria-label={patient.photo?.filename ? "Foto ändern" : "Foto hinzufügen"}
                       >
-                        {uploadingPhoto ? <CircularProgress size={20} /> : <CameraAlt fontSize="small" />}
+                        {uploadingPhoto ? <CircularProgress size={20} color="inherit" /> : <Add fontSize="small" />}
                       </IconButton>
                     </Tooltip>
                   </Box>

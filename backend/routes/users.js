@@ -1,16 +1,50 @@
 const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const StaffProfile = require('../models/StaffProfile');
 const auth = require('../middleware/auth');
+const { requireRole } = require('../middleware/rbac');
+const { ADMIN_ROLES } = require('../config/roles');
 const { authorize } = require('../utils/rbac');
 const { ACTIONS, RESOURCES } = require('../utils/rbac');
 const router = express.Router();
 
+router.use(auth);
+router.use(requireRole(ADMIN_ROLES));
+
+const userPhotoStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const userId = req.params.id;
+    const uploadPath = path.join(__dirname, '..', 'uploads', 'user-photos', userId);
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const ext = (file.originalname && path.extname(file.originalname)) || '.jpg';
+    const safeExt = /^\.(jpe?g|png|gif|webp)$/i.test(ext) ? ext : '.jpg';
+    cb(null, `profile-${Date.now()}${safeExt}`);
+  }
+});
+
+const userPhotoUpload = multer({
+  storage: userPhotoStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = /jpeg|jpg|png|gif|webp/i.test(file.mimetype);
+    if (allowed) return cb(null, true);
+    cb(new Error('Nur Bilddateien (JPEG, PNG, GIF, WebP) erlaubt'));
+  }
+});
+
 // @route   GET /api/users
 // @desc    Get all users
 // @access  Private (Admin only)
-router.get('/', auth, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     // Check RBAC permissions
     const context = {
@@ -68,16 +102,8 @@ router.get('/', auth, async (req, res) => {
 // @route   GET /api/users/:id
 // @desc    Get single user
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
-    // Users can only view their own profile unless they're admin
-    if (req.user.role !== 'admin' && req.user.id !== req.params.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Zugriff verweigert'
-      });
-    }
-
     const user = await User.findById(req.params.id).select('-password');
     if (!user) {
       return res.status(404).json({
@@ -101,7 +127,7 @@ router.get('/:id', auth, async (req, res) => {
 // @route   POST /api/users
 // @desc    Create new user
 // @access  Private (Admin only)
-router.post('/', auth, [
+router.post('/', [
   body('email').isEmail().normalizeEmail().withMessage('Ungültige E-Mail-Adresse'),
   body('password').isLength({ min: 6 }).withMessage('Das Passwort muss mindestens 6 Zeichen lang sein'),
   body('firstName').notEmpty().trim().withMessage('Vorname ist erforderlich'),
@@ -201,10 +227,88 @@ router.post('/', auth, [
   }
 });
 
+// @route   PUT /api/users/:id/photo
+// @desc    Profilfoto hochladen (Datei oder Aufnahme vom mobilen Gerät)
+// @access  Private (eigener User oder Admin)
+router.put('/:id/photo', userPhotoUpload.single('photo'), async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const isOwn = req.user._id.toString() === userId || req.user.id === userId;
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    const canUpdate = isOwn || (await authorize(req.user, ACTIONS.UPDATE, RESOURCES.USER, userId, context)).allowed;
+    if (!canUpdate) {
+      if (req.file && fs.existsSync(req.file.path)) {
+        fs.unlinkSync(req.file.path);
+      }
+      return res.status(403).json({
+        success: false,
+        message: 'Zugriff verweigert'
+      });
+    }
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Bilddatei gesendet. Bitte wählen Sie ein Foto aus oder nehmen Sie eines auf.'
+      });
+    }
+
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(404).json({
+        success: false,
+        message: 'Benutzer nicht gefunden'
+      });
+    }
+
+    const oldPhoto = user.profilePhoto?.filename;
+    const relativePath = path.join('user-photos', userId, req.file.filename);
+
+    user.profilePhoto = {
+      filename: relativePath.replace(/\\/g, '/'),
+      uploadedAt: new Date()
+    };
+    await user.save();
+
+    if (oldPhoto) {
+      const oldPath = path.join(__dirname, '..', 'uploads', oldPhoto);
+      if (fs.existsSync(oldPath)) {
+        try {
+          fs.unlinkSync(oldPath);
+        } catch (e) {
+          console.warn('Altes Profilfoto konnte nicht gelöscht werden:', e.message);
+        }
+      }
+    }
+
+    const data = user.toObject();
+    res.json({
+      success: true,
+      message: 'Profilfoto wurde aktualisiert',
+      data: { profilePhoto: data.profilePhoto }
+    });
+  } catch (error) {
+    if (req.file && req.file.path && fs.existsSync(req.file.path)) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (e) {}
+    }
+    console.error('Error uploading user photo:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Hochladen des Profilfotos'
+    });
+  }
+});
+
 // @route   PUT /api/users/:id
 // @desc    Update user
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     // Check RBAC permissions
     const context = {
@@ -259,7 +363,7 @@ router.put('/:id', auth, async (req, res) => {
 // @route   DELETE /api/users/:id
 // @desc    Delete user
 // @access  Private (Admin only)
-router.delete('/:id', auth, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     // Check RBAC permissions
     const context = {
@@ -332,7 +436,7 @@ router.delete('/:id', auth, async (req, res) => {
 // @route   PUT /api/users/:id/password
 // @desc    Change user password
 // @access  Private
-router.put('/:id/password', auth, [
+router.put('/:id/password', [
   body('currentPassword').notEmpty(),
   body('newPassword').isLength({ min: 6 })
 ], async (req, res) => {
@@ -392,7 +496,7 @@ router.put('/:id/password', auth, [
 // @route   PUT /api/users/:id/toggle-status
 // @desc    Toggle user active status
 // @access  Private (Admin only)
-router.put('/:id/toggle-status', auth, async (req, res) => {
+router.put('/:id/toggle-status', async (req, res) => {
   try {
     // Check RBAC permissions
     const context = {
@@ -445,7 +549,7 @@ router.put('/:id/toggle-status', auth, async (req, res) => {
 // @route   GET /api/users/statistics
 // @desc    Get user statistics
 // @access  Private (Admin only)
-router.get('/statistics', auth, async (req, res) => {
+router.get('/statistics', async (req, res) => {
   try {
     // Check RBAC permissions
     const context = {

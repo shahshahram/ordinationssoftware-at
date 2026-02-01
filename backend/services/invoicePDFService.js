@@ -3,6 +3,8 @@ const Invoice = require('../models/Invoice');
 const Location = require('../models/Location');
 const User = require('../models/User');
 const ServiceCatalog = require('../models/ServiceCatalog');
+const Performance = require('../models/Performance');
+const WAHonlineSync = require('../models/WAHonlineSync');
 const tariffSystemSelector = require('../utils/tariff-system-selector');
 const path = require('path');
 const fs = require('fs');
@@ -337,6 +339,15 @@ class InvoicePDFService {
     // NEU: Prüfe ob ÖGK-Services vorhanden sind (für Disclaimer)
     const isWahlarztOrHonorNote = invoice.billingType === 'wahlarzt' || invoice.privateBilling?.honorNote;
     let hasOGKServices = false;
+    let eldaProtokollnummern = [];
+    if (isWahlarztOrHonorNote) {
+      const performances = await Performance.find({ 'billingData.invoiceNumber': invoice.invoiceNumber }).select('_id').lean();
+      const performanceIds = performances.map((p) => p._id);
+      if (performanceIds.length > 0) {
+        const syncRecords = await WAHonlineSync.find({ performanceId: { $in: performanceIds }, status: 'SYNCED' }).select('protokollnummer').lean();
+        eldaProtokollnummern = syncRecords.map((r) => r.protokollnummer).filter(Boolean);
+      }
+    }
     if (isWahlarztOrHonorNote) {
       for (const service of invoice.services) {
         if (service.serviceCode) {
@@ -1071,6 +1082,7 @@ class InvoicePDFService {
                         <div><strong>Rechnungsdatum:</strong> ${formatDate(invoice.invoiceDate)}</div>
                         ${invoice.status !== 'paid' ? `<div><strong>Fälligkeitsdatum:</strong> ${formatDate(invoice.dueDate)}</div>` : ''}
                         <div><strong>Status:</strong> ${getStatusLabel(invoice.status)}</div>
+                        ${eldaProtokollnummern.length > 0 ? `<div><strong>ELDA-Protokollnummer(n):</strong> ${eldaProtokollnummern.join(', ')}</div>` : ''}
                         <div class="billing-type-badge billing-type-${invoice.billingType}">
                             ${invoice.billingType === 'kassenarzt' ? 'Kassenarzt' : 
                               invoice.billingType === 'wahlarzt' ? 'Wahlarzt' : 'Privat'}

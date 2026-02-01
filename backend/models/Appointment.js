@@ -75,6 +75,19 @@ const AppointmentSchema = new mongoose.Schema({
     trim: true
   },
 
+  // Magic-Link-Token für Patient-Portal (Anzeige/Storno ohne Login)
+  managementToken: {
+    type: String,
+    trim: true,
+    index: true,
+    unique: true,
+    sparse: true
+  },
+  managementTokenExpires: {
+    type: Date,
+    index: true
+  },
+
   // Terminart und Status
   type: { 
     type: String, 

@@ -1,6 +1,6 @@
 // Professionelle Abrechnungsberichte mit erweiterten Analysen
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -300,6 +300,9 @@ const BillingReports: React.FC = () => {
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
 
+  // Ref: letzte BI-Dashboard-Parameter, um Doppelaufrufe zu vermeiden
+  const lastBiParamsRef = useRef<string | null>(null);
+
   // Load targetHourlyRate from settings
   useEffect(() => {
     const loadTargetHourlyRate = async () => {
@@ -338,49 +341,54 @@ const BillingReports: React.FC = () => {
   // Load data based on active tab
   useEffect(() => {
     if (activeTab === 0) {
+      const paramsKey = `${startDate?.getTime() ?? ''}-${endDate?.getTime() ?? ''}-${targetHourlyRate}`;
+      if (lastBiParamsRef.current === paramsKey) return;
+      lastBiParamsRef.current = paramsKey;
       loadBIDashboard();
-    } else if (activeTab === 1) {
-      loadPatientAnalysis();
-    } else if (activeTab === 2) {
-      loadServiceAnalysis();
-    } else if (activeTab === 3) {
-      loadTrends();
-    } else if (activeTab === 4) {
-      loadProfitability();
-    } else if (activeTab === 5) {
-      // Lade alle drei Analysen parallel
-      Promise.all([
-        loadEfficiency(),
-        loadNoShow(),
-        loadBillingOptimizer()
-      ]);
-    } else if (activeTab === 6) {
-      loadTopPatients();
+    } else {
+      lastBiParamsRef.current = null;
+      if (activeTab === 1) {
+        loadPatientAnalysis();
+      } else if (activeTab === 2) {
+        loadServiceAnalysis();
+      } else if (activeTab === 3) {
+        loadTrends();
+      } else if (activeTab === 4) {
+        loadProfitability();
+      } else if (activeTab === 5) {
+        Promise.all([
+          loadEfficiency(),
+          loadNoShow(),
+          loadBillingOptimizer()
+        ]);
+      } else if (activeTab === 6) {
+        loadTopPatients();
+      }
     }
   }, [activeTab, startDate, endDate, selectedPatient, groupBy, targetHourlyRate]);
 
-  const loadBIDashboard = async () => {
+  const loadBIDashboard = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
       if (startDate) params.append('startDate', format(startDate, 'yyyy-MM-dd'));
       if (endDate) params.append('endDate', format(endDate, 'yyyy-MM-dd'));
       params.append('targetHourlyRate', targetHourlyRate.toString());
-      
+
       const response = await api.get<any>(`/billing-reports/bi-dashboard?${params.toString()}`);
       if (response.success && response.data) {
         setBiDashboard(response.data);
       } else {
         setBiDashboard(null);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error loading BI dashboard:', error);
       enqueueSnackbar('Fehler beim Laden des BI-Dashboards', { variant: 'error' });
       setBiDashboard(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [startDate, endDate, targetHourlyRate, enqueueSnackbar]);
 
   const loadPatientAnalysis = async () => {
     setLoading(true);

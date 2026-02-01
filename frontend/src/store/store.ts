@@ -21,6 +21,7 @@ import dekursReducer from './slices/dekursSlice';
 import dashboardWidgetsReducer from './slices/dashboardWidgetsSlice';
 import internalMessagesReducer from './slices/internalMessagesSlice';
 import messageFoldersReducer from './slices/messageFoldersSlice';
+import chatReducer from './slices/chatSlice';
 import tasksReducer from './slices/tasksSlice';
 import vitalSignsReducer from './slices/vitalSignsSlice';
 import contactReducer from './slices/contactSlice';
@@ -51,6 +52,7 @@ export const store = configureStore({
     dashboardWidgets: dashboardWidgetsReducer,
     internalMessages: internalMessagesReducer,
     messageFolders: messageFoldersReducer,
+    chat: chatReducer,
     tasks: tasksReducer,
     vitalSigns: vitalSignsReducer,
     contacts: contactReducer,

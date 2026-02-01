@@ -1,9 +1,10 @@
 import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../../store/hooks';
+import { getUserPhotoUrl } from '../../utils/api';
 import { logout } from '../../store/slices/authSlice';
 import { fetchUnreadCount } from '../../store/slices/internalMessagesSlice';
-import { setCurrentLocation, fetchUserLocations } from '../../store/slices/locationSlice';
+import { setCurrentLocation } from '../../store/slices/locationSlice';
 import { toggleTheme } from '../../store/slices/uiSlice';
 import { updateNavigationMode } from '../../store/slices/navigationSlice';
 import DropdownNavigation from './DropdownNavigation';
@@ -54,9 +55,9 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen, onSearchCl
   const { theme } = useAppSelector((state) => state.ui);
   const { mode: navigationMode } = useAppSelector((state) => state.navigation);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
-  const [messagesDialogOpen, setMessagesDialogOpen] = React.useState(false);
+  const [_messagesDialogOpen, _setMessagesDialogOpen] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
-  
+
   // Lade unreadCount beim Mount und alle 30 Sekunden
   useEffect(() => {
     // Prüfe, ob User authentifiziert ist, bevor unreadCount geladen wird
@@ -379,8 +380,22 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen, onSearchCl
               onClick={handleProfileMenuOpen}
               color="inherit"
             >
-              <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                <AccountCircle />
+              <Avatar
+                key={user?.profilePhoto?.filename ?? 'no-photo'}
+                sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}
+                src={
+                  (() => {
+                    const url = getUserPhotoUrl(user);
+                    if (!url) return undefined;
+                    const ts = user?.profilePhoto?.uploadedAt
+                      ? String(new Date(user.profilePhoto.uploadedAt).getTime())
+                      : String(Date.now());
+                    return `${url}${url.includes('?') ? '&' : '?'}t=${ts}`;
+                  })()
+                }
+                alt={`${user?.firstName} ${user?.lastName}`}
+              >
+                {!getUserPhotoUrl(user) && <AccountCircle />}
               </Avatar>
             </IconButton>
           </Tooltip>

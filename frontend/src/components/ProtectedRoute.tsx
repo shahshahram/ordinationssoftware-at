@@ -1,9 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress, Alert, Typography } from '@mui/material';
 import { loadUser } from '../store/slices/authSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { useRBAC } from '../utils/rbac';
+
+/** Nur ein loadUser() pro Session – viele ProtectedRoute-Instanzen würden sonst alle /auth/me aufrufen. */
+let loadUserDispatchedThisSession = false;
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -31,19 +34,19 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   const { user, isAuthenticated, loading, token } = useAppSelector((state) => state.auth);
   const rbac = useRBAC(user);
 
-  // Prevent multiple loadUser calls
-  const [hasLoadedUser, setHasLoadedUser] = useState(false);
-  
   useEffect(() => {
-    // If we have a token but no user, try to load user (only once)
-    if (token && !user && !loading && !hasLoadedUser) {
-      if (process.env.NODE_ENV === 'development') {
-        console.log('ProtectedRoute: Loading user with token');
-      }
-      setHasLoadedUser(true);
-      dispatch(loadUser());
+    if (!token) {
+      loadUserDispatchedThisSession = false;
+      return;
     }
-  }, [dispatch, token, user, loading, hasLoadedUser]);
+    if (user || loading) return;
+    if (loadUserDispatchedThisSession) return;
+    loadUserDispatchedThisSession = true;
+    if (process.env.NODE_ENV === 'development') {
+      console.log('ProtectedRoute: Loading user with token (once per session)');
+    }
+    dispatch(loadUser());
+  }, [dispatch, token, user, loading]);
 
   // Show loading spinner while checking authentication
   if (loading || (token && !user)) {

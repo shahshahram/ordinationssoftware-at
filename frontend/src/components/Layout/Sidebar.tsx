@@ -44,6 +44,7 @@ import {
   Article,
   Assignment,
   Mail,
+  ChatBubbleOutline,
   EventBusy,
   Schedule,
   CreditCard,
@@ -56,13 +57,23 @@ import {
   Sync,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import RoleGuard from '../auth/RoleGuard';
+import { ADMIN_ROLES } from '../../constants/roles';
 
 interface SidebarProps {
   open: boolean;
   onClose: () => void;
 }
 
-const menuItems = [
+interface MenuItemType {
+  text: string;
+  icon: React.ReactElement;
+  path: string;
+  subItems?: Array<MenuItemType & { allowedRoles?: string[] }>;
+  allowedRoles?: string[];
+}
+
+const menuItems: MenuItemType[] = [
   { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
   { 
     text: 'Patienten', 
@@ -129,10 +140,12 @@ const menuItems = [
         ]
       },
   { text: 'Interne Nachrichten', icon: <Mail />, path: '/internal-messages' },
+  { text: 'Chat', icon: <ChatBubbleOutline />, path: '/chat' },
   { 
     text: 'Einstellungen', 
     icon: <Settings />, 
     path: '/settings',
+    allowedRoles: [...ADMIN_ROLES],
     subItems: [
       { text: 'Allgemeine Einstellungen', icon: <Settings />, path: '/settings' },
       { text: 'Update-Monitoring', icon: <CloudDownload />, path: '/update-monitoring' },
@@ -274,8 +287,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         {menuItems.map((item) => {
           const isActive = isItemActive(item);
           const isExpanded = expandedItems.includes(item.text);
-          
-          return (
+          const content = (
             <Box key={item.text}>
               <Box
                 sx={{
@@ -380,7 +392,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                             {hasNestedItems && (
                               <Collapse in={isNestedExpanded} timeout="auto" unmountOnExit>
                                 <List component="div" disablePadding>
-                                  {subItem.subItems.map((nestedItem) => {
+                                  {subItem.subItems!.map((nestedItem: MenuItemType) => {
                                     const isNestedActive = location.pathname === nestedItem.path;
                                     return (
                                       <ListItem key={nestedItem.text} disablePadding>
@@ -427,6 +439,13 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 )}
               </Box>
             </Box>
+          );
+          return item.allowedRoles ? (
+            <RoleGuard key={item.text} allowedRoles={item.allowedRoles}>
+              {content}
+            </RoleGuard>
+          ) : (
+            content
           );
         })}
       </Box>

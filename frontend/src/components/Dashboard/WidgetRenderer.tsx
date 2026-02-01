@@ -11,6 +11,8 @@ import CalendarWidget from './CalendarWidget';
 import QueueWidget from './QueueWidget';
 import TasksWidget from './TasksWidget';
 import MessagesWidget from './MessagesWidget';
+import OGKStatusWidget from './OGKStatusWidget';
+import EldaStatusWidget from './EldaStatusWidget';
 
 interface WidgetRendererProps {
   widget: DashboardWidget;
@@ -62,8 +64,10 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
           return <ReimbursementsWidget widget={widget} data={data} />;
         }
         if (widget.widgetId === 'ogk-status') {
-          const OGKStatusWidget = require('./OGKStatusWidget').default;
           return <OGKStatusWidget widget={widget} data={data} />;
+        }
+        if (widget.widgetId === 'elda-status') {
+          return <EldaStatusWidget widget={widget} data={data} />;
         }
         return (
           <Box sx={{ p: 2 }}>

@@ -185,7 +185,14 @@ const toEuro = (value: number | undefined | null): number => {
   return value > 100000 ? value / 100 : value;
 };
 
-const OnlineBooking: React.FC = () => {
+export interface OnlineBookingProps {
+  /** Pre-select this doctor (e.g. from widget URL). */
+  initialDoctorId?: string;
+  /** Compact/embedded mode (e.g. iframe widget). */
+  widgetMode?: boolean;
+}
+
+const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMode = false }) => {
   const dispatch = useAppDispatch();
   const [activeStep, setActiveStep] = useState(0);
   
@@ -277,6 +284,13 @@ const OnlineBooking: React.FC = () => {
       loadDoctorsByService(selectedService._id);
     }
   }, [selectedService]);
+
+  // formData.doctor.id in Sync mit selectedDoctor (z. B. bei initialDoctorId-Vorauswahl)
+  useEffect(() => {
+    if (selectedDoctor && formData.doctor.id !== selectedDoctor.id) {
+      setFormData(prev => ({ ...prev, doctor: { id: selectedDoctor.id } }));
+    }
+  }, [selectedDoctor]);
 
   // Lade Kalender-Daten wenn Arzt und Service ausgewählt sind
   useEffect(() => {
@@ -424,6 +438,10 @@ const OnlineBooking: React.FC = () => {
         
         if (Array.isArray(doctorsData)) {
           setDoctors(doctorsData);
+          if (initialDoctorId) {
+            const preSelect = doctorsData.find((d: Doctor) => String(d.id) === String(initialDoctorId));
+            if (preSelect) setSelectedDoctor(preSelect);
+          }
           if (doctorsData.length === 0) {
             setSnackbar({ 
               open: true, 
@@ -467,6 +485,10 @@ const OnlineBooking: React.FC = () => {
         
         if (Array.isArray(doctorsData)) {
           setDoctors(doctorsData);
+          if (initialDoctorId) {
+            const preSelect = doctorsData.find((d: Doctor) => String(d.id) === String(initialDoctorId));
+            if (preSelect) setSelectedDoctor(preSelect);
+          }
           if (doctorsData.length === 0) {
             setSnackbar({ 
               open: true, 

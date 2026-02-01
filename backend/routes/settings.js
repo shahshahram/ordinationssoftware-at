@@ -1,8 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
+const { requireRole } = require('../middleware/rbac');
+const { ADMIN_ROLES } = require('../config/roles');
 const { authorize, ACTIONS, RESOURCES } = require('../utils/rbac');
 const SystemSettings = require('../models/SystemSettings');
+
+router.use(auth);
+router.use(requireRole(ADMIN_ROLES));
 const crypto = require('crypto');
 const emailService = require('../services/emailService');
 const notificationService = require('../services/notificationService');
@@ -10,8 +15,8 @@ const smsService = require('../services/smsService');
 
 // @route   GET /api/settings
 // @desc    Get all settings
-// @access  Private (requires 'settings.read' permission)
-router.get('/', auth, async (req, res) => {
+// @access  Private (Admin only)
+router.get('/', async (req, res) => {
   try {
     // Check RBAC permissions
     const context = {
@@ -91,7 +96,7 @@ router.get('/', auth, async (req, res) => {
 // @route   PUT /api/settings
 // @desc    Update settings
 // @access  Private (requires 'settings.write' permission)
-router.put('/', auth, async (req, res) => {
+router.put('/', async (req, res) => {
   try {
     // Check RBAC permissions
     const context = {
@@ -328,7 +333,7 @@ function decryptPassword(encryptedText) {
 // @route   GET /api/settings/email
 // @desc    Get email configuration
 // @access  Private (requires 'settings.read' permission)
-router.get('/email', auth, async (req, res) => {
+router.get('/email', async (req, res) => {
   try {
     const context = {
       ip: req.ip,
@@ -363,6 +368,7 @@ router.get('/email', auth, async (req, res) => {
           : (process.env.SMTP_PASS || process.env.SMTP_PASSWORD ? '***ENCRYPTED***' : ''),
         from: emailSettings['email.smtp.from'] || process.env.SMTP_FROM || process.env.SMTP_USER || ''
       },
+      practiceNotificationEmail: emailSettings.practiceNotificationEmail || '',
       isConfigured: !!(emailSettings['email.smtp.host'] || process.env.SMTP_HOST)
     };
 
@@ -384,7 +390,7 @@ router.get('/email', auth, async (req, res) => {
 // @route   PUT /api/settings/email
 // @desc    Update email configuration
 // @access  Private (requires 'settings.write' permission)
-router.put('/email', auth, async (req, res) => {
+router.put('/email', async (req, res) => {
   try {
     const context = {
       ip: req.ip,
@@ -401,7 +407,7 @@ router.put('/email', auth, async (req, res) => {
       });
     }
 
-    const { provider, smtp } = req.body;
+    const { provider, smtp, practiceNotificationEmail } = req.body;
 
     if (!smtp || !smtp.host || !smtp.user) {
       return res.status(400).json({
@@ -501,6 +507,17 @@ router.put('/email', auth, async (req, res) => {
       );
     }
 
+    // Praxis-Benachrichtigungs-E-Mail(s) speichern (mehrere Adressen komma-/zeilengetrennt)
+    if (practiceNotificationEmail !== undefined) {
+      await SystemSettings.setSetting(
+        'notifications',
+        'practiceNotificationEmail',
+        typeof practiceNotificationEmail === 'string' ? practiceNotificationEmail.trim() : '',
+        'string',
+        req.user.id
+      );
+    }
+
     // Lade neue Konfiguration und initialisiere Transporter neu
     try {
       // Aktualisiere EmailService und NotificationService
@@ -539,7 +556,10 @@ router.put('/email', auth, async (req, res) => {
         smtp: {
           ...smtp,
           password: '***ENCRYPTED***' // Passwort nicht zurückgeben
-        }
+        },
+        practiceNotificationEmail: practiceNotificationEmail !== undefined
+          ? (typeof practiceNotificationEmail === 'string' ? practiceNotificationEmail.trim() : '')
+          : undefined
       }
     });
   } catch (error) {
@@ -555,7 +575,7 @@ router.put('/email', auth, async (req, res) => {
 // @route   POST /api/settings/email/test
 // @desc    Send test email
 // @access  Private (requires 'settings.write' permission)
-router.post('/email/test', auth, async (req, res) => {
+router.post('/email/test', async (req, res) => {
   try {
     const context = {
       ip: req.ip,
@@ -722,7 +742,7 @@ router.post('/email/test', auth, async (req, res) => {
 // @route   GET /api/settings/sms
 // @desc    Get SMS configuration
 // @access  Private (requires 'settings.read' permission)
-router.get('/sms', auth, async (req, res) => {
+router.get('/sms', async (req, res) => {
   try {
     const context = {
       ip: req.ip,
@@ -777,7 +797,7 @@ router.get('/sms', auth, async (req, res) => {
 // @route   PUT /api/settings/sms
 // @desc    Update SMS configuration
 // @access  Private (requires 'settings.write' permission)
-router.put('/sms', auth, async (req, res) => {
+router.put('/sms', async (req, res) => {
   try {
     const context = {
       ip: req.ip,
@@ -920,7 +940,7 @@ router.put('/sms', auth, async (req, res) => {
 // @route   POST /api/settings/sms/test
 // @desc    Send test SMS
 // @access  Private (requires 'settings.write' permission)
-router.post('/sms/test', auth, async (req, res) => {
+router.post('/sms/test', async (req, res) => {
   try {
     const context = {
       ip: req.ip,

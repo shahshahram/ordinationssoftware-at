@@ -85,6 +85,7 @@ const dashboardRoutes = require('./routes/dashboard');
 const dekursRoutes = require('./routes/dekurs');
 const internalMessagesRoutes = require('./routes/internalMessages');
 const messageFoldersRoutes = require('./routes/messageFolders');
+const chatRoutes = require('./routes/chat');
 const smartNotificationsRoutes = require('./routes/smartNotifications');
 const vitalSignsRoutes = require('./routes/vitalSigns');
 const medicalDataHistoryRoutes = require('./routes/medicalDataHistory');
@@ -114,10 +115,12 @@ const tariffsRoutes = require('./routes/tariffs');
 const ogkTariffDownloadRoutes = require('./routes/ogk-tariff-download');
 const tariffImportRoutes = require('./routes/tariff-import');
 const tariffConfigRoutes = require('./routes/tariff-config');
+const patientPortalRoutes = require('./routes/patientPortal');
 
 // Import middleware
 const errorHandler = require('./middleware/errorHandler');
 const logger = require('./utils/logger');
+const { seedDatabase } = require('./utils/seeder');
 const backupService = require('./utils/backupService');
 
 // RBAC Auto-Discovery Service
@@ -171,6 +174,23 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'Accept', 'X-Requested-With'],
   exposedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// CORS für Online-Booking (Widget-Einbettung auf externen Domains): Origin reflektieren oder * erlauben
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/online-booking')) {
+    const origin = req.headers.origin;
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-auth-token, Accept, X-Requested-With');
+    if (origin) {
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
+    }
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(204);
+    }
+  }
+  next();
+});
 
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
@@ -283,8 +303,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
 
 // Database connection
 mongoose.connect(process.env.MONGODB_URI)
-.then(() => {
+.then(async () => {
   logger.info('MongoDB erfolgreich verbunden');
+  await seedDatabase();
 })
 .catch((err) => {
   logger.error('MongoDB Verbindungsfehler:', err);
@@ -309,6 +330,15 @@ function registerStaticRoutes(app) {
   app.use('/api/checkin', require('./routes/checkin'));
   app.use('/api/documents', documentRoutes);
   app.use('/api/online-booking', onlineBookingRoutes);
+  // Patient Portal (öffentlich, Rate-Limit: 10 Anfragen pro IP und Minute)
+  const portalLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 10,
+    message: { success: false, message: 'Zu viele Anfragen. Bitte später erneut versuchen.' },
+    standardHeaders: true,
+    legacyHeaders: false
+  });
+  app.use('/api/portal', portalLimiter, patientPortalRoutes);
   app.use('/api/elga', elgaRoutes);
   app.use('/api/elda', eldaRoutes);
   app.use('/api/wahonline', wahonlineRoutes);
@@ -364,6 +394,7 @@ function registerStaticRoutes(app) {
   app.use('/api/dekurs-vorlagen', dekursVorlagenRoutes);
   app.use('/api/internal-messages', internalMessagesRoutes);
   app.use('/api/message-folders', messageFoldersRoutes);
+  app.use('/api/chat', chatRoutes);
   app.use('/api/smart-notifications', smartNotificationsRoutes);
   app.use('/api/smart-suggestions', require('./routes/smartSuggestions'));
   app.use('/api/vital-signs', vitalSignsRoutes);

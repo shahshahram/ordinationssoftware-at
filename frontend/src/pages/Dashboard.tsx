@@ -42,6 +42,7 @@ import {
 import { generateCheckInCode, clearError } from '../store/slices/checkinSlice';
 import WidgetRenderer from '../components/Dashboard/WidgetRenderer';
 import WidgetSelectorDialog, { AVAILABLE_WIDGETS } from '../components/Dashboard/WidgetSelectorDialog';
+import EldaMaintenanceAlert from '../components/Dashboard/EldaMaintenanceAlert';
 import QRCodeGenerator from '../components/QRCodeGenerator';
 import TabletMode from '../components/TabletMode';
 import InternalMessagesDialog from '../components/InternalMessagesDialog';
@@ -897,6 +898,8 @@ const Dashboard: React.FC = () => {
       case 'tasks':
       case 'todos':
         return [];
+      case 'elda-status':
+        return { status: widget.config?.status || 'pending', errorCode: widget.config?.errorCode ?? null };
       case 'important-patients':
         if (importantPatients.length > 0) {
           return importantPatients;
@@ -1547,6 +1550,8 @@ const Dashboard: React.FC = () => {
         </Alert>
       )}
 
+      <EldaMaintenanceAlert />
+
       {widgets.length === 0 ? (
         <Box
           sx={{
@@ -1627,6 +1632,7 @@ const Dashboard: React.FC = () => {
                     const statusItems = (data as any)?.items || data;
                     return Array.isArray(statusItems) && statusItems.length > 0;
                   case 'custom':
+                    if (w.widgetId === 'elda-status') return true;
                     const customData = (data as any)?.tasks || (data as any)?.items || data;
                     if (Array.isArray(customData)) {
                       return customData.length > 0;

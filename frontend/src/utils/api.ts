@@ -10,6 +10,21 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
+/** Basis-URL für Uploads (ohne /api) */
+export const getUploadsBaseUrl = (): string => {
+  const base = getApiBaseUrl();
+  return base.replace(/\/api\/?$/, '');
+};
+
+/** URL für Benutzer-Profilfoto; User-Objekt mit optional profilePhoto.filename und _id/id */
+export const getUserPhotoUrl = (user: { _id?: string; id?: string; profilePhoto?: { filename?: string } } | null): string | null => {
+  if (!user?.profilePhoto?.filename) return null;
+  const userId = user._id ?? user.id;
+  if (!userId) return null;
+  const base = getUploadsBaseUrl();
+  return `${base}/uploads/${user.profilePhoto.filename}`;
+};
+
 interface ApiResponse<T = any> {
   data: T;
   message?: string;

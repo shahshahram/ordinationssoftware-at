@@ -314,6 +314,15 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "1; mode=block" always;
 
+    # Widget-Einbettung (Online-Buchung in iFrame auf externen Webseiten)
+    # Erlaube Einbettung überall; muss VOR location / stehen
+    location /booking/widget {
+        root /home/ordinationssoftware/ordinationssoftware-at/frontend/build;
+        try_files $uri $uri/ /index.html;
+        add_header Content-Security-Policy "frame-ancestors *";
+        # X-Frame-Options nicht setzen (CSP frame-ancestors steuert Einbettung)
+    }
+
     # Frontend (React Build)
     location / {
         root /home/ordinationssoftware/ordinationssoftware-at/frontend/build;
@@ -374,6 +383,9 @@ sudo ln -s /etc/nginx/sites-available/ordinationssoftware /etc/nginx/sites-enabl
 sudo nginx -t  # Konfiguration testen
 sudo systemctl reload nginx
 ```
+
+**Widget-Einbettung (/booking/widget):**  
+Der Block `location /booking/widget` ermöglicht, die Online-Buchung als iFrame auf externen Arzt-Webseiten einzubetten. `Content-Security-Policy: frame-ancestors *` erlaubt das Einbetten auf beliebigen Domains. Für diese Location wird bewusst kein `X-Frame-Options` gesetzt, damit die Einbettung funktioniert. Die React-App wird wie gewohnt über `try_files` und `/index.html` ausgeliefert; der Pfad `/booking/widget/:doctorId` wird clientseitig vom Router behandelt.
 
 ### 5.3 SSL-Zertifikat mit Let's Encrypt
 

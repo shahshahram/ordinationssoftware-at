@@ -318,6 +318,72 @@ class NotificationService {
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * Parst einen String mit E-Mail-Adressen (komma-, zeilen- oder semikolongetrennt) zu einem Array.
+   * @param {string} value - Roher String aus SystemSettings oder Env
+   * @returns {string[]} - Bereinigte Adressen
+   */
+  parsePracticeNotificationEmails(value) {
+    if (!value || typeof value !== 'string') return [];
+    return value
+      .split(/[\s,;\n]+/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0 && s.includes('@'));
+  }
+
+  /**
+   * Sendet eine Info-Mail an die Ordination bei neuer Online-Buchung.
+   * Empfänger: zuerst aus SystemSettings (practiceNotificationEmail), dann Fallback Env.
+   * Mehrere Adressen werden unterstützt (komma-/zeilengetrennt).
+   */
+  async notifyPracticeOfNewBooking(appointment, patient, doctorName) {
+    let targetEmails = [];
+
+    try {
+      const notificationsSettings = await SystemSettings.getCategorySettings('notifications');
+      const raw = notificationsSettings.practiceNotificationEmail;
+      targetEmails = this.parsePracticeNotificationEmails(raw);
+    } catch (err) {
+      console.warn('Fehler beim Laden der Praxis-E-Mail aus SystemSettings:', err.message);
+    }
+
+    if (targetEmails.length === 0) {
+      const envEmail = process.env.PRACTICE_NOTIFICATION_EMAIL
+        || process.env.SYSTEM_EMAIL_FROM
+        || process.env.SMTP_FROM
+        || process.env.SMTP_USER;
+      if (envEmail) {
+        targetEmails = this.parsePracticeNotificationEmails(envEmail);
+      }
+    }
+
+    if (targetEmails.length === 0) {
+      console.log('ℹ️ Keine Praxis-Benachrichtigungs-E-Mail konfiguriert. Überspringe Praxis-Mail.');
+      return { success: false, skipped: true };
+    }
+
+    const startDate = new Date(appointment.startTime || appointment.start);
+    const dateStr = startDate.toLocaleDateString('de-AT');
+    const timeStr = startDate.toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' });
+    const svnr = patient.socialSecurityNumber || patient.svnr || '-';
+
+    const subject = `Neue Online-Buchung: ${patient.firstName} ${patient.lastName}`;
+    const html = `
+      <h3>Neue Terminbuchung empfangen</h3>
+      <p>Ein neuer Patient hat soeben online gebucht:</p>
+      <ul>
+        <li><strong>Patient:</strong> ${patient.firstName} ${patient.lastName} (SVNR: ${svnr})</li>
+        <li><strong>Termin:</strong> ${dateStr} um ${timeStr}</li>
+        <li><strong>Arzt:</strong> ${doctorName || 'Nicht zugewiesen'}</li>
+        <li><strong>Grund:</strong> ${appointment.notes || 'Keine Angabe'}</li>
+      </ul>
+      <p><a href="${process.env.FRONTEND_URL || ''}/dashboard">Zur Buchung im System</a></p>
+    `;
+    const text = `Neue Buchung von ${patient.lastName} – ${dateStr} ${timeStr}`;
+
+    return this.sendEmail(targetEmails.join(', '), subject, html, text);
+  }
 }
 
 module.exports = new NotificationService();

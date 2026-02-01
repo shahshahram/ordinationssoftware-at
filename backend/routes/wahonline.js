@@ -11,6 +11,8 @@ const { body, param, validationResult } = require('express-validator');
 const Performance = require('../models/Performance');
 const PatientExtended = require('../models/PatientExtended');
 const User = require('../models/User');
+const Invoice = require('../models/Invoice');
+const WAHonlineSync = require('../models/WAHonlineSync');
 
 /**
  * @route   GET /api/wahonline/status
@@ -43,6 +45,94 @@ router.get('/status', auth, checkPermission('settings.read'), async (req, res) =
     res.status(500).json({
       success: false,
       message: 'Fehler beim Prüfen des WAHonline-Status',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @route   GET /api/wahonline/status/:invoiceId
+ * @desc    WAHonline-Sync-Status für eine Rechnung (Honorarnoten) abrufen
+ * @access  Private
+ */
+router.get('/status/:invoiceId', auth, checkPermission('billing.read'), [
+  param('invoiceId').isMongoId().withMessage('Ungültige Rechnungs-ID')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validierungsfehler',
+        errors: errors.array()
+      });
+    }
+
+    const { invoiceId } = req.params;
+    const invoice = await Invoice.findById(invoiceId).select('invoiceNumber').lean();
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rechnung nicht gefunden'
+      });
+    }
+
+    const performances = await Performance.find({
+      'billingData.invoiceNumber': invoice.invoiceNumber
+    })
+      .select('_id serviceCode serviceDescription serviceDatetime totalPrice billingData.invoiceNumber')
+      .lean();
+
+    const performanceIds = performances.map((p) => p._id);
+    const syncRecords = await WAHonlineSync.find({
+      performanceId: { $in: performanceIds }
+    }).lean();
+
+    const byPerformanceId = {};
+    syncRecords.forEach((r) => {
+      byPerformanceId[r.performanceId.toString()] = {
+        status: r.status,
+        protokollnummer: r.protokollnummer || null,
+        errorText: r.errorText || null,
+        updatedAt: r.updatedAt
+      };
+    });
+
+    const items = performances.map((p) => ({
+      performanceId: p._id,
+      serviceCode: p.serviceCode,
+      serviceDescription: p.serviceDescription,
+      serviceDatetime: p.serviceDatetime,
+      totalPrice: p.totalPrice,
+      wahonline: byPerformanceId[p._id.toString()] || { status: null, protokollnummer: null, errorText: null, updatedAt: null }
+    }));
+
+    const hasSynced = items.some((i) => i.wahonline.status === 'SYNCED');
+    const hasError = items.some((i) => i.wahonline.status === 'ERROR');
+    const allSynced = items.length > 0 && items.every((i) => i.wahonline.status === 'SYNCED');
+
+    res.json({
+      success: true,
+      data: {
+        invoiceId,
+        invoiceNumber: invoice.invoiceNumber,
+        summary: {
+          totalItems: items.length,
+          synced: items.filter((i) => i.wahonline.status === 'SYNCED').length,
+          error: items.filter((i) => i.wahonline.status === 'ERROR').length,
+          pending: items.filter((i) => !i.wahonline.status).length,
+          allSynced,
+          hasError,
+          hasSynced
+        },
+        items
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching WAHonline status for invoice:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen des WAHonline-Status',
       error: error.message
     });
   }
