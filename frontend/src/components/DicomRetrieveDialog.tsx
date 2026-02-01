@@ -27,7 +27,6 @@ import {
 import {
   Search as SearchIcon,
   Download as DownloadIcon,
-  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
@@ -62,7 +61,7 @@ const DicomRetrieveDialog: React.FC<DicomRetrieveDialogProps> = ({
   const { enqueueSnackbar } = useSnackbar();
   const [providers, setProviders] = useState<DicomProvider[]>([]);
   const [selectedProviderId, setSelectedProviderId] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [_loading, _setLoading] = useState(false);
   const [searching, setSearching] = useState(false);
   const [retrieving, setRetrieving] = useState(false);
   const [studies, setStudies] = useState<any[]>([]);

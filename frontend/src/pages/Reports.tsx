@@ -4,11 +4,11 @@ import {
   TableContainer, TableHead, TableRow, Paper, Chip, IconButton, Dialog, DialogTitle,
   DialogContent, DialogActions, TextField, Select, MenuItem, FormControl, InputLabel,
   Tabs, Tab, Alert, CircularProgress, Stack, Tooltip, Checkbox, FormControlLabel,
-  Accordion, AccordionSummary, AccordionDetails, Divider, Switch, Autocomplete
+  Accordion, AccordionSummary, AccordionDetails, Switch
 } from '@mui/material';
 import {
   Add, Edit, Delete, PlayArrow, Download, Assessment, FilterList,
-  Visibility, VisibilityOff, Search, Category as CategoryIcon, ExpandMore,
+  Search, ExpandMore,
   AddCircle, RemoveCircle, Settings, TableChart, BarChart,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
@@ -82,8 +82,8 @@ const Reports: React.FC = () => {
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [dateRange, setDateRange] = useState<{ start: Date | null; end: Date | null }>({ start: null, end: null });
   const { enqueueSnackbar } = useSnackbar();
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [_helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [_helpTab, _setHelpTab] = useState(0);
 
   // Report Builder State
   const [builderTab, setBuilderTab] = useState(0);
@@ -139,6 +139,7 @@ const Reports: React.FC = () => {
 
   useEffect(() => {
     loadReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadReports stable
   }, [selectedCategory, searchTerm]);
 
   const loadReports = async () => {

@@ -6,14 +6,13 @@ import {
   IconButton,
   Grid,
   Tooltip,
-  Chip
 } from '@mui/material';
 import {
   ChevronLeft,
   ChevronRight,
   CalendarToday
 } from '@mui/icons-material';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isSameDay, isToday, getDay, isPast, startOfDay } from 'date-fns';
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isToday, getDay, isPast, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 
 interface CalendarWeekViewProps {
@@ -70,12 +69,12 @@ const CalendarWeekView: React.FC<CalendarWeekViewProps> = ({
     onWeekChange(new Date());
   };
 
-  const isSlotAvailable = (date: Date, time: string): boolean => {
+  const isSlotAvailable = (date: Date, _time: string): boolean => {
     const slots = getSlotsForDate(date);
-    return slots.includes(time);
+    return slots.includes(_time);
   };
 
-  const isSlotSelected = (date: Date, time: string): boolean => {
+  const isSlotSelected = (date: Date, _time: string): boolean => {
     if (!selectedDate) return false;
     const dateStr = format(date, 'yyyy-MM-dd');
     const selectedDateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -203,7 +202,7 @@ const CalendarWeekView: React.FC<CalendarWeekViewProps> = ({
                 {timeSlots.map((time) => {
                   const slotAvailable = isSlotAvailable(day, time);
                   const slotSelected = isSlotSelected(day, time);
-                  const isHour = isFullHour(time);
+                  const _isHour = isFullHour(time);
 
                   // Prüfe ob es einen Termin-Block gibt, der hier startet
                   const hasAppointment = daySlots.some(slot => {

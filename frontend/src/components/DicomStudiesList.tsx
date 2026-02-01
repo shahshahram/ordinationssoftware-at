@@ -7,7 +7,6 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
-  ListItemSecondaryAction,
   ListItemIcon,
   IconButton,
   Chip,
@@ -24,11 +23,8 @@ import {
 } from '@mui/material';
 import {
   Visibility,
-  Delete,
   Upload,
   CalendarToday,
-  Person,
-  Description,
   LocalHospital,
   ExpandMore,
   ExpandLess,
@@ -102,6 +98,7 @@ const DicomStudiesList: React.FC<DicomStudiesListProps> = ({ patientId }) => {
     if (patientId) {
       loadStudies();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadStudies intentionally not in deps
   }, [patientId]);
 
   const loadStudies = async () => {
@@ -248,7 +245,7 @@ const DicomStudiesList: React.FC<DicomStudiesListProps> = ({ patientId }) => {
     setExpandedStudies(newExpanded);
   };
 
-  const handleViewSeries = (series: GroupedSeries, study: GroupedStudy) => {
+  const handleViewSeries = (series: GroupedSeries, _study: GroupedStudy) => {
     // Öffne Viewer mit der ersten Instanz der Serie
     const firstImage = series.images[0];
     setSelectedStudy(firstImage);
@@ -256,7 +253,7 @@ const DicomStudiesList: React.FC<DicomStudiesListProps> = ({ patientId }) => {
     setViewerOpen(true);
   };
 
-  const handleDeleteClick = (study: DicomStudy) => {
+  const _handleDeleteClick = (study: DicomStudy) => {
     setStudyToDelete(study);
     setDeleteDialogOpen(true);
   };

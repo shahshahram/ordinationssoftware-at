@@ -62,7 +62,7 @@ const DocumentVersionComparison: React.FC<DocumentVersionComparisonProps> = ({
   documentId,
   version1,
   version2,
-  onClose
+  onClose: _onClose
 }) => {
   const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [version1Data, setVersion1Data] = useState<any | null>(null);

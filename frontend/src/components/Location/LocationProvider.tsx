@@ -11,7 +11,7 @@ interface LocationProviderProps {
 const LocationProvider: React.FC<LocationProviderProps> = ({ children }) => {
   const dispatch = useAppDispatch();
   const { user, isAuthenticated } = useAppSelector((state) => state.auth);
-  const { locations, availableLocations, currentLocation, hasNoAssignment, loading } = useAppSelector((state) => state.locations);
+  const { locations, availableLocations, currentLocation, hasNoAssignment, loading: _loading } = useAppSelector((state) => state.locations);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [hasCheckedLocation, setHasCheckedLocation] = useState(false);
 

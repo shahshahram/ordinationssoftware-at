@@ -17,32 +17,20 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   IconButton,
   Tooltip,
   Tabs,
   Tab,
   Grid,
-  Card,
-  CardContent,
   Alert
 } from '@mui/material';
 import {
-  GetApp,
   Send,
-  CheckCircle,
-  Cancel,
-  Pending,
   Visibility,
   Add,
-  FilterList,
   HelpOutline
 } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { useAppDispatch } from '../store/hooks';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
@@ -81,7 +69,7 @@ interface Reimbursement {
 }
 
 const Reimbursements: React.FC = () => {
-  const dispatch = useAppDispatch();
+  const _dispatch = useAppDispatch();
   const { enqueueSnackbar } = useSnackbar();
   const { marginTopValue } = useGlobalNavigationOffset();
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([]);
@@ -89,12 +77,13 @@ const Reimbursements: React.FC = () => {
   const [activeTab, setActiveTab] = useState(0);
   const [selectedReimbursement, setSelectedReimbursement] = useState<Reimbursement | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
-  const [filterStatus, setFilterStatus] = useState<string>('all');
+  const [filterStatus, _setFilterStatus] = useState<string>('all');
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadReimbursements();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadReimbursements stable
   }, [activeTab, filterStatus]);
 
   const loadReimbursements = async () => {

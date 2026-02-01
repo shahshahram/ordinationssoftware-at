@@ -12,10 +12,8 @@ import {
   Menu,
   MenuItem,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -35,7 +33,6 @@ import {
   Grid,
   Tabs,
   Tab,
-  Divider,
   Tooltip,
 } from '@mui/material';
 import api from '../utils/api';
@@ -54,10 +51,6 @@ import {
   Build,
   OnlinePrediction,
   OfflineBolt,
-  Schedule,
-  Settings,
-  CheckCircle,
-  Cancel,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 
@@ -189,6 +182,7 @@ const Resources: React.FC = () => {
   useEffect(() => {
     loadResources();
     fetchLocations();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadResources/fetchLocations stable
   }, [page, rowsPerPage, searchTerm, typeFilter, categoryFilter, onlineBookableFilter]);
 
   const fetchLocations = async () => {

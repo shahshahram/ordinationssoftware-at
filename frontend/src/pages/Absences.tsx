@@ -4,8 +4,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
   Button,
   Table,
   TableBody,
@@ -26,9 +24,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Alert,
   CircularProgress,
-  Grid,
   Tabs,
   Tab,
   TablePagination,
@@ -38,10 +34,6 @@ import {
   Edit,
   Delete,
   CheckCircle,
-  Cancel,
-  Pending,
-  Visibility,
-  Refresh,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -89,12 +81,13 @@ const Absences: React.FC = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [_helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [_helpTab, _setHelpTab] = useState(0);
 
   useEffect(() => {
     loadAbsences();
     loadStaffMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAbsences/loadStaffMembers intentionally not in deps
   }, [activeTab, page, rowsPerPage]);
 
   const loadAbsences = async () => {

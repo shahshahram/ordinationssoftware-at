@@ -7,10 +7,6 @@ import {
   Typography,
   Stack,
   Chip,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Autocomplete,
   CircularProgress,
   Alert
@@ -18,7 +14,6 @@ import {
 import {
   Save,
   Assignment,
-  Add,
   CheckCircle
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';

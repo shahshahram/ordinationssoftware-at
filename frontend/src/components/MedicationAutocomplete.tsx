@@ -179,7 +179,7 @@ const MedicationAutocomplete: React.FC<MedicationAutocompleteProps> = ({
           placeholder="Medikament oder Wirkstoff suchen... (min. 2 Zeichen)"
         />
       )}
-      filterOptions={(options, state) => options} // Keine clientseitige Filterung, nutze Backend
+      filterOptions={(options, _state) => options} // Keine clientseitige Filterung, nutze Backend
     />
   );
 };

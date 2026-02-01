@@ -10,7 +10,6 @@ import {
   Paper,
   Typography,
   Button,
-  Chip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -25,27 +24,15 @@ import {
   Stack,
   IconButton,
   Tooltip,
-  Divider,
-  Card,
-  CardContent,
-  Switch,
-  FormControlLabel,
-  Grid
 } from '@mui/material';
 import {
   Add,
-  Edit,
   Delete,
   Refresh,
   ViewWeek,
   ViewDay,
   CalendarMonth,
   Schedule,
-  Person,
-  Room,
-  Warning,
-  CheckCircle,
-  AccessTime
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment } from '../store/slices/appointmentSlice';
@@ -56,14 +43,11 @@ import {
   confirmReservation, 
   cancelReservation, 
   checkConflicts,
-  getAvailableSlots,
-  clearConflicts,
   setCurrentReservation
 } from '../store/slices/slotReservationSlice';
 import { Appointment } from '../store/slices/appointmentSlice';
-import { Patient } from '../store/slices/patientSlice';
 
-interface SlotReservation {
+interface _SlotReservation {
   id: string;
   start: Date;
   end: Date;
@@ -104,27 +88,27 @@ interface AdvancedCalendarProps {
 }
 
 const AdvancedCalendar: React.FC<AdvancedCalendarProps> = ({
-  onAppointmentSelect,
-  onAppointmentCreate,
-  onAppointmentUpdate,
-  onAppointmentDelete
+  onAppointmentSelect: _onAppointmentSelect,
+  onAppointmentCreate: _onAppointmentCreate,
+  onAppointmentUpdate: _onAppointmentUpdate,
+  onAppointmentDelete: _onAppointmentDelete
 }) => {
   const dispatch = useAppDispatch();
-  const { appointments, loading } = useAppSelector((state) => state.appointments);
+  const { appointments, loading: _loading } = useAppSelector((state) => state.appointments);
   const { patients } = useAppSelector((state) => state.patients);
-  const { user } = useAppSelector((state) => state.auth);
+  const { user: _user } = useAppSelector((state) => state.auth);
   const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
   const { 
-    reservations, 
-    availableSlots, 
+    reservations: _reservations, 
+    availableSlots: _availableSlots, 
     conflicts, 
-    loading: slotLoading,
+    loading: _slotLoading,
     currentReservation 
   } = useAppSelector((state) => state.slotReservations);
 
   const calendarRef = useRef<FullCalendar>(null);
   const [view, setView] = useState<'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'>('timeGridWeek');
-  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [_selectedDate, _setSelectedDate] = useState<Date>(new Date());
   const [showAppointmentDialog, setShowAppointmentDialog] = useState(false);
   const [selectedAppointment, setSelectedAppointment] = useState<Appointment | null>(null);
   const [isCreating, setIsCreating] = useState(false);

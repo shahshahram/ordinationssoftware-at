@@ -10,10 +10,6 @@ import {
   CardContent,
   Stack,
   Divider,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
   Skeleton,
   Alert
 } from '@mui/material';
@@ -34,7 +30,6 @@ import {
   Receipt,
   Science,
   Assignment,
-  Edit,
   Visibility,
   ExpandMore,
   ExpandLess,
@@ -73,10 +68,10 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({
   maxItems = 20
 }) => {
   const dispatch = useAppDispatch();
-  const { appointments, loading: appointmentsLoading } = useAppSelector((state) => state.appointments);
-  const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((state) => state.diagnoses);
-  const { documents, loading: documentsLoading } = useAppSelector((state) => state.documents);
-  const { entries: dekursEntries, loading: dekursLoading } = useAppSelector((state) => state.dekurs);
+  const { appointments, loading: _appointmentsLoading } = useAppSelector((state) => state.appointments);
+  const { patientDiagnoses, loading: _diagnosesLoading } = useAppSelector((state) => state.diagnoses);
+  const { documents, loading: _documentsLoading } = useAppSelector((state) => state.documents);
+  const { entries: dekursEntries, loading: _dekursLoading } = useAppSelector((state) => state.dekurs);
 
   const [timelineEvents, setTimelineEvents] = useState<TimelineEvent[]>([]);
   const [loading, setLoading] = useState(false);
@@ -423,7 +418,7 @@ const PatientTimeline: React.FC<PatientTimelineProps> = ({
       <Divider sx={{ mb: 2 }} />
       
       <Timeline position="alternate">
-        {timelineEvents.map((event, index) => (
+        {timelineEvents.map((event, _index) => (
           <TimelineItem key={event.id}>
             <TimelineOppositeContent
               sx={{ m: 'auto 0' }}

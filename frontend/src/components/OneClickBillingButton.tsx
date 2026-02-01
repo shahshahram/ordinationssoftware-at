@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   Dialog,
@@ -21,15 +21,11 @@ import {
 import {
   Receipt as ReceiptIcon,
   Send as SendIcon,
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
   Refresh as RefreshIcon,
   MoreVert as MoreVertIcon,
   History as HistoryIcon,
-  Euro as EuroIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
-import { fetchInvoices } from '../store/slices/billingSlice';
 
 interface Performance {
   _id: string;
@@ -78,8 +74,8 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
   onStatusChange,
   compact = false
 }) => {
-  const dispatch = useDispatch();
-  const { user } = useSelector((state: any) => state.auth);
+  const _dispatch = useDispatch();
+  const { user: _user } = useSelector((state: any) => state.auth);
   
   // State
   const [loading, setLoading] = useState(false);

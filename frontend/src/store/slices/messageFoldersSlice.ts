@@ -155,7 +155,7 @@ const messageFoldersSlice = createSlice({
         state.folderMessages[action.payload.folderId] = action.payload.messages;
       })
       // Move Messages to Folder
-      .addCase(moveMessagesToFolder.fulfilled, (state, action) => {
+      .addCase(moveMessagesToFolder.fulfilled, (_state, _action) => {
         // Nachrichten wurden verschoben, aktualisiere die Ordner-Nachrichten
         // Die Nachrichten sollten neu geladen werden
       });

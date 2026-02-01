@@ -81,7 +81,7 @@ interface Performance {
 
 const WAHonlineTestPage: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user: _user } = useAppSelector((state) => state.auth);
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [wahonlineStatus, setWahonlineStatus] = useState<WAHonlineStatus | null>(null);
@@ -159,13 +159,14 @@ const WAHonlineTestPage: React.FC = () => {
     performanceId: '',
     data: '',
   });
-  const [patients, setPatients] = useState<Patient[]>([]);
+  const [_patients, setPatients] = useState<Patient[]>([]);
   const [performances, setPerformances] = useState<Performance[]>([]);
 
   useEffect(() => {
     fetchWahonlineStatus();
     fetchPatients();
     fetchPerformances();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchWahonlineStatus bewusst ausgelassen
   }, []);
 
   const fetchWahonlineStatus = async () => {

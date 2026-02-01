@@ -105,6 +105,7 @@ const DekursVorlagenAdmin: React.FC = () => {
   useEffect(() => {
     loadVorlagen();
     loadMedicalSpecialties();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Mount laden
   }, []);
 
   const loadVorlagen = async () => {

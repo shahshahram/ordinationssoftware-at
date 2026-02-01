@@ -23,7 +23,6 @@ import {
   LocalHospital,
   AccessTime,
   Cancel,
-  CheckCircle,
   Email,
   Phone,
 } from '@mui/icons-material';
@@ -70,6 +69,7 @@ const PatientBooking: React.FC = () => {
     if (token) {
       loadBooking();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadBooking stable
   }, [token]);
 
   const loadBooking = async () => {

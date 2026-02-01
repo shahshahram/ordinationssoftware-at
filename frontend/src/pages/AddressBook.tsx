@@ -45,7 +45,6 @@ import {
   CircularProgress,
   Divider,
   Autocomplete,
-  Tooltip,
   ToggleButton,
   ToggleButtonGroup,
   List,
@@ -62,27 +61,21 @@ import {
   Email,
   LocationOn,
   Business,
-  Person,
-  Favorite,
-  FavoriteBorder,
   Edit,
   Delete,
   Star,
   StarBorder,
   Clear,
-  FilterList,
   ViewModule,
   ViewList,
   Category,
   Link as LinkIcon,
-  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useTheme, useMediaQuery } from '@mui/material';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
-import { createFilterOptions } from '@mui/material/Autocomplete';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -95,15 +88,15 @@ import {
 
 const AddressBook: React.FC = () => {
   const dispatch = useAppDispatch();
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { marginTopValue } = useGlobalNavigationOffset();
 
   const {
     contacts,
-    selectedContact,
+    selectedContact: _selectedContact,
     loading,
     error,
     pagination,
@@ -149,7 +142,7 @@ const AddressBook: React.FC = () => {
     isActive: true,
     isFavorite: false,
   });
-  const [patientSearchTerm, setPatientSearchTerm] = useState('');
+  const [patientSearchTerm, _setPatientSearchTerm] = useState('');
 
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -181,6 +174,7 @@ const AddressBook: React.FC = () => {
   // Sync local search term with Redux on mount
   useEffect(() => {
     setLocalSearchTerm(searchTerm);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Mount syncen
   }, []);
 
   // Search with debounce
@@ -193,6 +187,7 @@ const AddressBook: React.FC = () => {
     }, 300);
 
     return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchTerm intentionally not in deps to avoid loop
   }, [localSearchTerm, searchTerm, dispatch]);
 
   // Show error messages

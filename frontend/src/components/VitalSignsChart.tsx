@@ -3,14 +3,9 @@ import {
   Box,
   Paper,
   Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Checkbox,
   FormControlLabel,
   Stack,
-  Chip,
   Alert
 } from '@mui/material';
 import {
@@ -43,7 +38,7 @@ type ParameterType =
   | 'bloodGlucose'
   | 'bmi';
 
-const VitalSignsChart: React.FC<VitalSignsChartProps> = ({ vitalSigns, patientId }) => {
+const VitalSignsChart: React.FC<VitalSignsChartProps> = ({ vitalSigns, patientId: _patientId }) => {
   const [selectedParameters, setSelectedParameters] = useState<ParameterType[]>([
     'bloodPressure_systolic',
     'bloodPressure_diastolic',

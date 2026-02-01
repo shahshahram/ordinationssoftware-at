@@ -14,8 +14,7 @@ import {
   Document
 } from '../store/slices/documentSlice';
 import { 
-  fetchDocumentTemplates,
-  DocumentTemplate
+  fetchDocumentTemplates
 } from '../store/slices/documentTemplateSlice';
 import { fetchPatients, Patient } from '../store/slices/patientSlice';
 import PatientTimeline from '../components/PatientTimeline';
@@ -37,7 +36,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Paper,
   Table,
   TableBody,
   TableCell,
@@ -49,7 +47,6 @@ import {
   InputLabel,
   Select,
   MenuItem as SelectMenuItem,
-  Divider,
   Alert,
   Snackbar,
   Tabs,
@@ -70,7 +67,6 @@ import {
   Edit,
   Delete,
   Visibility,
-  Print,
   AttachFile,
   Download,
   Description,
@@ -79,7 +75,6 @@ import {
   Receipt,
   Assessment,
   Description as FormIcon,
-  MoreHoriz,
   Person,
   PendingActions,
   Timeline as TimelineIcon,
@@ -116,8 +111,8 @@ const Documents: React.FC = () => {
   const [standaloneDialogOpen, setStandaloneDialogOpen] = useState(false);
   const [standaloneDialogDocument, setStandaloneDialogDocument] = useState<Document | null>(null);
   const [standaloneDialogPatient, setStandaloneDialogPatient] = useState<Patient | null>(null);
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [_helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [_helpTab, _setHelpTab] = useState(0);
   const [formData, setFormData] = useState<Partial<Document>>({
     title: '',
     type: 'rezept',

@@ -16,7 +16,6 @@ import {
   Paper,
   List,
   ListItem,
-  ListItemText,
   Chip,
   Link,
 } from '@mui/material';
@@ -68,6 +67,7 @@ const DicomTestTool: React.FC = () => {
 
   useEffect(() => {
     fetchProviders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProviders bewusst ausgelassen
   }, []);
 
   const fetchProviders = async () => {

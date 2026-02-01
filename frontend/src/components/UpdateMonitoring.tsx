@@ -25,7 +25,7 @@ import {
   Category,
   PriceCheck
 } from '@mui/icons-material';
-import { format, formatDistanceToNow, isAfter, isBefore } from 'date-fns';
+import { format, formatDistanceToNow, isBefore } from 'date-fns';
 import { de } from 'date-fns/locale';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
@@ -84,6 +84,7 @@ const UpdateMonitoring: React.FC<UpdateMonitoringProps> = ({ refreshInterval = 3
       const interval = setInterval(loadStatus, refreshInterval);
       return () => clearInterval(interval);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadStatus intentionally not in deps
   }, [refreshInterval]);
 
   const handleRefresh = () => {

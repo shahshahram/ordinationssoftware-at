@@ -19,7 +19,6 @@ import {
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -29,22 +28,17 @@ import {
   Chip,
   IconButton,
   CircularProgress,
-  Grid,
-  Divider,
   Tabs,
   Tab,
   Tooltip
 } from '@mui/material';
 import {
   Add,
-  QrCode,
   CalendarToday,
-  Settings,
   CheckCircle,
   Error as ErrorIcon,
   Science,
   Verified,
-  BugReport,
   HelpOutline
 } from '@mui/icons-material';
 import api from '../utils/api';
@@ -97,7 +91,7 @@ const CashRegisterManagement: React.FC = () => {
   const [receiptChain, setReceiptChain] = useState<ReceiptChainEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [openDialog, setOpenDialog] = useState(false);
-  const [selectedRegister, setSelectedRegister] = useState<CashRegister | null>(null);
+  const [_selectedRegister, _setSelectedRegister] = useState<CashRegister | null>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   
   const [newRegister, setNewRegister] = useState({
@@ -116,13 +110,13 @@ const CashRegisterManagement: React.FC = () => {
   
   const [testDialogOpen, setTestDialogOpen] = useState(false);
   const [validationDialogOpen, setValidationDialogOpen] = useState(false);
-  const [selectedReceiptForValidation, setSelectedReceiptForValidation] = useState<ReceiptChainEntry | null>(null);
+  const [_selectedReceiptForValidation, _setSelectedReceiptForValidation] = useState<ReceiptChainEntry | null>(null);
   const [validationResult, setValidationResult] = useState<any>(null);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
   const [helpDialogRegistersOpen, setHelpDialogRegistersOpen] = useState(false);
   const [helpDialogReceiptChainOpen, setHelpDialogReceiptChainOpen] = useState(false);
-  const [helpDialogConfigOpen, setHelpDialogConfigOpen] = useState(false);
+  const [_helpDialogConfigOpen, setHelpDialogConfigOpen] = useState(false);
 
   useEffect(() => {
     loadCashRegisters();
@@ -328,7 +322,7 @@ const CashRegisterManagement: React.FC = () => {
     }
   };
 
-  const handleValidateQRCode = async (qrCodeData: string) => {
+  const _handleValidateQRCode = async (qrCodeData: string) => {
     try {
       setLoading(true);
       const response = await api.post<{ success: boolean; data: any }>('/billing/validate-qr-code', {

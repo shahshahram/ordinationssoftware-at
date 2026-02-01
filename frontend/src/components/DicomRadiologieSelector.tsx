@@ -50,6 +50,7 @@ const DicomRadiologieSelector: React.FC<DicomRadiologieSelectorProps> = ({
     if (open && patientId) {
       loadStudies();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadStudies intentionally not in deps
   }, [open, patientId]);
 
   const loadStudies = async () => {

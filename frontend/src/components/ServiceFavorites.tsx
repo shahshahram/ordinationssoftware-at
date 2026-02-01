@@ -12,7 +12,6 @@ import {
 } from '@mui/material';
 import {
   Star as StarIcon,
-  StarBorder as StarBorderIcon,
   AccessTime as TimeIcon,
   Euro as EuroIcon,
   LocationOn as LocationIcon
@@ -82,6 +81,7 @@ const ServiceFavorites: React.FC<ServiceFavoritesProps> = ({
 
   useEffect(() => {
     fetchFavorites();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchFavorites intentionally not in deps
   }, [locationId]);
 
   const formatDuration = (service: ServiceFavorite) => {

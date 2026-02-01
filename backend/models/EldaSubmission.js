@@ -44,7 +44,7 @@ const EldaSubmissionSchema = new mongoose.Schema({
   collection: 'eldasubmissions'
 });
 
-EldaSubmissionSchema.index({ performanceId: 1 });
+// performanceId hat bereits index: true im Schema
 EldaSubmissionSchema.index({ createdAt: -1 });
 
 module.exports = mongoose.model('EldaSubmission', EldaSubmissionSchema);

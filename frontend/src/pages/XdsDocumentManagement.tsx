@@ -49,7 +49,6 @@ import {
   Storage,
   LocationOn,
   Description,
-  FilterList,
   Article,
   ExpandMore,
 } from '@mui/icons-material';
@@ -109,7 +108,7 @@ function TabPanel(props: TabPanelProps) {
 const XdsDocumentManagement: React.FC = () => {
   const dispatch = useAppDispatch();
   const { locations } = useAppSelector((state) => state.locations);
-  const { user } = useAppSelector((state) => state.auth);
+  const { user: _user } = useAppSelector((state) => state.auth);
 
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [documents, setDocuments] = useState<XdsDocument[]>([]);
@@ -281,6 +280,7 @@ const XdsDocumentManagement: React.FC = () => {
     if (selectedLocation && selectedLocation.xdsRegistry?.enabled) {
       loadDocuments();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDocuments bewusst ausgelassen
   }, [selectedLocation, page, searchTerm, sourceFilter, statusFilter, patientIdFilter]);
 
   // Filtere Standorte mit aktivierter XDS Registry

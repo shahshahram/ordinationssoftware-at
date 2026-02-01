@@ -24,7 +24,7 @@ import {
 export { ROLES, ACTIONS, RESOURCES, type Role, type Action, type Resource };
 
 // Rollen-Hierarchie (aus generierter Datei)
-const ROLE_HIERARCHY = GENERATED_ROLE_HIERARCHY as Record<string, string[]>;
+const _ROLE_HIERARCHY = GENERATED_ROLE_HIERARCHY as Record<string, string[]>;
 
 // Standard-Permissions für jede Rolle (aus generierter Datei)
 // Konvertiere die generierte Struktur in das erwartete Format

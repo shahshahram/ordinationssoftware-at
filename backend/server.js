@@ -165,10 +165,11 @@ app.use(helmet({
 // app.use(limiter);
 
 // CORS configuration
+// In Entwicklung: Origin reflektieren, damit Zugriff von anderen Geräten im LAN funktioniert (z. B. Tablet/Handy)
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? ['https://yourdomain.com'] 
-    : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://192.168.178.163:3000'],
+  origin: process.env.NODE_ENV === 'production'
+    ? ['https://yourdomain.com']
+    : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'Accept', 'X-Requested-With'],
@@ -204,14 +205,16 @@ app.use(mongoSanitize());
 app.use(compression());
 
 // Static files with CORS headers - muss VOR den Routes kommen
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? ['https://yourdomain.com'] 
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? ['https://yourdomain.com']
   : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://192.168.178.163:3000'];
 
 // Custom handler for static files to ensure CORS headers are always set
 const setCorsHeaders = (req, res, next) => {
   const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
+  if (process.env.NODE_ENV !== 'production' && origin) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  } else if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin);
   } else if (allowedOrigins.length > 0) {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
@@ -245,7 +248,9 @@ app.get('/uploads/*', (req, res, next) => {
     
     // Set CORS headers BEFORE sending the file
     const origin = req.headers.origin;
-    if (origin && allowedOrigins.includes(origin)) {
+    if (process.env.NODE_ENV !== 'production' && origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (origin && allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
     } else if (allowedOrigins.length > 0) {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);
@@ -286,7 +291,9 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   setHeaders: (res, filePath, stat) => {
     // Set CORS headers for all static files
     const origin = res.req?.headers?.origin;
-    if (origin && allowedOrigins.includes(origin)) {
+    if (process.env.NODE_ENV !== 'production' && origin) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+    } else if (origin && allowedOrigins.includes(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin);
     } else if (allowedOrigins.length > 0) {
       res.setHeader('Access-Control-Allow-Origin', allowedOrigins[0]);

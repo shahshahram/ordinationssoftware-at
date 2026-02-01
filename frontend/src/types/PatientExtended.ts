@@ -221,7 +221,7 @@ export const validatePatientData = (patient: Partial<any>): string[] => {
     errors.push('E-Mail-Adresse ist ungültig');
   }
   
-  if (patient.phone && !/^[\+]?[\d\s\-\(\)]{7,}$/.test(patient.phone)) {
+  if (patient.phone && !/^[+]?[\d\s\-()]{7,}$/.test(patient.phone)) {
     errors.push('Telefonnummer ist ungültig');
   }
   

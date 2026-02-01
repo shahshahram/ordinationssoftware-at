@@ -8,17 +8,13 @@ import {
   TextField,
   Box,
   Divider,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem
 } from '@mui/material';
 import { useAppDispatch } from '../store/hooks';
 import {
   createMedication,
   updateMedication,
   checkNewMedicationInteraction,
-  validateMedicationDosage
+  validateMedicationDosage,
 } from '../store/slices/medicationSlice';
 import { CreateMedicationData, PatientMedication } from '../store/slices/medicationSlice';
 import MedicationAutocomplete from './MedicationAutocomplete';
@@ -111,6 +107,7 @@ const MedicationDialog: React.FC<MedicationDialogProps> = ({
         resetForm();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- resetForm intentionally not in deps
   }, [open, initialMedication, propSelectedCatalogMedication, patientId, encounterId, source]);
 
   const resetForm = () => {

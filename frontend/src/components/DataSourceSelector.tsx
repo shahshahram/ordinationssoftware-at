@@ -182,7 +182,7 @@ const DataSourceSelector: React.FC<DataSourceSelectorProps> = ({
             value={selectedValue}
             onChange={(e) => setSelectedValue(e.target.value)}
           >
-            {options.map((option, index) => {
+            {options.map((option, _index) => {
               const optionId = option.type === 'manual' 
                 ? 'manual' 
                 : `${option.type}-${option.data?._id || 'latest'}`;

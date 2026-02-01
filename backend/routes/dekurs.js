@@ -1584,13 +1584,14 @@ router.post('/:id/attach-photo', auth, photoUpload.single('photo'), async (req, 
       });
     }
 
-    // Füge Foto hinzu
+    // Relativer Pfad für Frontend (ohne ./, einheitlich mit /)
+    const normalizedPath = req.file.path.replace(/^\.\/+/, '').replace(/\\/g, '/');
     dekursEntry.attachments.push({
       filename: req.file.filename,
       originalName: req.file.originalname,
       mimeType: req.file.mimetype,
       size: req.file.size,
-      path: req.file.path,
+      path: normalizedPath,
       uploadedAt: new Date()
     });
 

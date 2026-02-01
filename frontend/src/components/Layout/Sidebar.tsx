@@ -6,8 +6,6 @@ import {
   ListItemIcon,
   ListItemText,
   Box,
-  Typography,
-  IconButton,
   useMediaQuery,
   useTheme,
   Collapse,
@@ -45,7 +43,6 @@ import {
   Assignment,
   Mail,
   ChatBubbleOutline,
-  EventBusy,
   Schedule,
   CreditCard,
   AccessTime,
@@ -54,7 +51,6 @@ import {
   Image,
   Science,
   CloudDownload,
-  Sync,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import RoleGuard from '../auth/RoleGuard';
@@ -240,7 +236,7 @@ const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const _isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   const handleNavigation = (path: string) => {

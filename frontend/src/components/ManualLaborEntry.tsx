@@ -17,9 +17,8 @@ import {
   Divider,
   Autocomplete,
   CircularProgress,
-  Alert,
 } from '@mui/material';
-import { Add, Delete, Science } from '@mui/icons-material';
+import { Delete, Science } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import api from '../utils/api';
 

@@ -16,19 +16,14 @@ import {
   DialogContent,
   DialogActions,
   IconButton,
-  Divider,
   Stack,
   Alert,
   CircularProgress,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   useTheme
 } from '@mui/material';
 import {
   History,
   Close,
-  ExpandMore,
   Visibility,
   CompareArrows
 } from '@mui/icons-material';
@@ -97,6 +92,7 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
     if (patientId && showInline) {
       loadHistory();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadHistory intentionally not in deps
   }, [patientId, showInline]);
 
   const loadHistory = async () => {
@@ -152,7 +148,7 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
     return fieldMap[field] || field;
   };
 
-  const formatValue = (value: any): string => {
+  const _formatValue = (value: any): string => {
     if (value === null || value === undefined) return 'Nicht erfasst';
     if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
     if (Array.isArray(value)) return value.length > 0 ? `${value.length} Einträge` : 'Keine';
@@ -549,7 +545,7 @@ const MedicalDataHistory: React.FC<MedicalDataHistoryProps> = ({ patientId }) =>
     );
   };
 
-  const renderSnapshotDetails = (snapshot: MedicalDataHistoryEntry['snapshot']) => {
+  const _renderSnapshotDetails = (snapshot: MedicalDataHistoryEntry['snapshot']) => {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>

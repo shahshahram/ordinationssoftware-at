@@ -23,7 +23,6 @@ import {
   DialogActions,
   TextField,
   Autocomplete,
-  Paper,
   IconButton,
   Tooltip,
 } from '@mui/material';
@@ -33,13 +32,8 @@ import {
   Receipt,
   Description,
   Sync,
-  CheckCircle,
-  Error as ErrorIcon,
-  Warning,
   Refresh,
-  Search,
   Download,
-  Upload,
   HelpOutline,
 } from '@mui/icons-material';
 import api from '../utils/api';
@@ -110,12 +104,14 @@ const ELGA: React.FC = () => {
 
   useEffect(() => {
     fetchELGAStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchELGAStatus bewusst ausgelassen
   }, []);
 
   useEffect(() => {
     if (selectedPatient) {
       fetchPatientData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPatientData bewusst ausgelassen
   }, [selectedPatient, activeTab]);
 
   const fetchELGAStatus = async () => {
@@ -326,7 +322,7 @@ const ELGA: React.FC = () => {
               <TextField {...params} label="Patient" placeholder="Patient suchen..." />
             )}
             renderOption={(props, option) => {
-              const { key, ...otherProps } = props;
+              const { key: _key, ...otherProps } = props;
               const uniqueKey = option._id || option.id || `${option.firstName}-${option.lastName}-${option.dateOfBirth || Math.random()}`;
               return (
                 <Box component="li" key={uniqueKey} {...otherProps}>

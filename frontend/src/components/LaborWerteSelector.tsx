@@ -61,6 +61,7 @@ const LaborWerteSelector: React.FC<LaborWerteSelectorProps> = ({
     if (open && patientId) {
       loadResults();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadResults intentionally not in deps
   }, [open, patientId, timeRange, onlyCritical]);
 
   const loadResults = async () => {

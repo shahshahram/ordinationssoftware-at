@@ -43,7 +43,7 @@ interface ReimbursementsWidgetProps {
   data?: any;
 }
 
-const ReimbursementsWidget: React.FC<ReimbursementsWidgetProps> = ({ widget, data }) => {
+const ReimbursementsWidget: React.FC<ReimbursementsWidgetProps> = ({ widget: _widget, data: _data }) => {
   const navigate = useNavigate();
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([]);
   const [loading, setLoading] = useState(true);

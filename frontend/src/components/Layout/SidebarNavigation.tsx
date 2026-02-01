@@ -30,7 +30,7 @@ const SidebarNavigation: React.FC<SidebarNavigationProps> = ({ open, onClose }) 
   const navigate = useNavigate();
   const location = useLocation();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const _isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
 
   const handleNavigation = (path: string) => {

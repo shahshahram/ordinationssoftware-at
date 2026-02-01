@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, AlertTitle, Box, Typography, Button, Stack } from '@mui/material';
+import { Alert, AlertTitle, Typography, Button, Stack } from '@mui/material';
 import { Warning, Edit, History } from '@mui/icons-material';
 
 interface DocumentStatusWarningProps {

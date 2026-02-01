@@ -11,17 +11,9 @@ import {
   CardContent,
   TextField,
   MenuItem,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
   IconButton,
   Tooltip,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Alert,
@@ -32,9 +24,6 @@ import {
   GetApp,
   Send,
   Refresh,
-  CheckCircle,
-  Pending,
-  Description,
   HelpOutline
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
@@ -57,9 +46,9 @@ const OGKBilling: React.FC = () => {
   const { marginTopValue } = useGlobalNavigationOffset();
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
   const [stats, setStats] = useState<OGKBillingStats | null>(null);
-  const [invoices, setInvoices] = useState<any[]>([]);
+  const [_invoices, _setInvoices] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [_exportDialogOpen, _setExportDialogOpen] = useState(false);
   const [autoSubmitStatus, setAutoSubmitStatus] = useState<any>(null);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
@@ -71,6 +60,7 @@ const OGKBilling: React.FC = () => {
     setSelectedPeriod(currentPeriod);
     loadStats(currentPeriod);
     loadAutoSubmitStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init load once
   }, []);
 
   const loadStats = async (period: string) => {

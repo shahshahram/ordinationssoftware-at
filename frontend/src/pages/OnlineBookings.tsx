@@ -9,13 +9,11 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  Divider,
   Stack,
   IconButton,
   Button,
 } from '@mui/material';
 import {
-  CalendarToday,
   Person,
   AccessTime,
   LocationOn,
@@ -68,7 +66,7 @@ interface Appointment {
 const OnlineBookings: React.FC = () => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { appointments: reduxAppointments, loading } = useAppSelector((state) => state.appointments);
+  const { appointments: _reduxAppointments, loading: _loading } = useAppSelector((state) => state.appointments);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +112,7 @@ const OnlineBookings: React.FC = () => {
 
   useEffect(() => {
     loadOnlineBookings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init load once
   }, [dispatch]);
 
   // Lade Daten neu, wenn die Seite wieder sichtbar wird (z.B. nach Bearbeitung)
@@ -128,6 +127,7 @@ const OnlineBookings: React.FC = () => {
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadOnlineBookings stable, visibility listener
   }, [dispatch]);
 
   // Gruppiere Buchungen nach Erstellungsdatum

@@ -12,14 +12,12 @@ import {
   IconButton,
   CircularProgress,
   Alert,
-  Divider,
   Chip,
   Tooltip
 } from '@mui/material';
 import {
   ExpandMore,
   Add,
-  Visibility,
   Science,
   MonitorHeart,
   Description,
@@ -223,6 +221,7 @@ const DocumentSidebar: React.FC<DocumentSidebarProps> = ({
     if (accordionState.diagnoses && diagnoses.length === 0 && !loading.diagnoses) {
       loadDiagnoses();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally load only when accordion/patientId change
   }, [accordionState, patientId]);
 
   // Handle Accordion Change

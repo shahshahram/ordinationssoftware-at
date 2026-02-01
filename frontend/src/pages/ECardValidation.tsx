@@ -2,22 +2,19 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
   Button,
   TextField,
   Table,
   TableBody,
   TableCell,
   TableContainer,
-  Paper,
   TableHead,
   TableRow,
   TablePagination,
+  Paper,
   CircularProgress,
   Chip,
   Alert,
-  Grid,
   Autocomplete,
   Dialog,
   DialogTitle,
@@ -32,10 +29,7 @@ import {
 import {
   CreditCard,
   Refresh,
-  CheckCircle,
-  Cancel,
   Sync,
-  Search,
   HelpOutline,
 } from '@mui/icons-material';
 import api from '../utils/api';
@@ -43,7 +37,7 @@ import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 
-interface ECardValidation {
+interface ECardValidationData {
   _id?: string;
   patientId: string;
   patient?: { firstName: string; lastName: string };
@@ -72,7 +66,7 @@ interface ECardValidation {
 }
 
 const ECardValidation: React.FC = () => {
-  const [validations, setValidations] = useState<ECardValidation[]>([]);
+  const [validations, setValidations] = useState<ECardValidationData[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState<any>(null);
@@ -87,6 +81,7 @@ const ECardValidation: React.FC = () => {
   useEffect(() => {
     loadPatients();
     loadValidCards();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Mount laden
   }, []);
 
   const loadPatients = async () => {

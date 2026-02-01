@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import QRCodeGenerator from '../components/QRCodeGenerator';
-import api from '../utils/api';
+import api, { getApiBaseUrl } from '../utils/api';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -35,7 +35,6 @@ import {
   Menu,
   MenuItem,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Paper,
@@ -69,18 +68,14 @@ import {
   Delete,
   Visibility,
   Print,
-  Euro,
   Receipt,
-  TrendingUp,
   AttachMoney,
   QrCode,
   Download,
   Article,
-  Star,
   Stars,
   LocalHospital,
   Person,
-  PersonAdd,
   Email,
   HelpOutline,
 } from '@mui/icons-material';
@@ -113,8 +108,8 @@ const Billing: React.FC = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const { invoices, services, loading, error, statistics } = useAppSelector((state) => state.billing);
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const { invoices, services, loading, error, statistics: _statistics } = useAppSelector((state) => state.billing);
   const { patients } = useAppSelector((state) => state.patients);
   const { marginTopValue } = useGlobalNavigationOffset();
   
@@ -495,7 +490,7 @@ const Billing: React.FC = () => {
         throw new Error('Kein Authentifizierungstoken gefunden');
       }
 
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/invoices/${invoice._id}/pdf`, {
+      const response = await fetch(`${getApiBaseUrl()}/billing/invoices/${invoice._id}/pdf`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -610,7 +605,7 @@ const Billing: React.FC = () => {
         throw new Error('Kein Authentifizierungstoken gefunden');
       }
 
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/invoices/${invoice._id}/send-email`, {
+      const response = await fetch(`${getApiBaseUrl()}/billing/invoices/${invoice._id}/send-email`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
@@ -656,7 +651,7 @@ const Billing: React.FC = () => {
         severity: 'info'
       });
 
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/invoices/${invoice._id}/one-click`, {
+      const response = await fetch(`${getApiBaseUrl()}/billing/invoices/${invoice._id}/one-click`, {
         method: 'POST',
         headers: {
           'x-auth-token': token,
@@ -1024,7 +1019,7 @@ const Billing: React.FC = () => {
       const token = localStorage.getItem('token');
       
       // Lade CashRegister-Liste
-      const cashRegistersResponse = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/cash-registers`, {
+      const cashRegistersResponse = await fetch(`${getApiBaseUrl()}/billing/cash-registers`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -1036,7 +1031,7 @@ const Billing: React.FC = () => {
         cashRegisterId = cashRegistersData.data[0]._id;
       }
       
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/generate-rksvo-receipt`, {
+      const response = await fetch(`${getApiBaseUrl()}/billing/generate-rksvo-receipt`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1070,7 +1065,7 @@ const Billing: React.FC = () => {
     try {
       setLoadingOGK(true);
       const token = localStorage.getItem('token');
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/export-ogk-xml`, {
+      const response = await fetch(`${getApiBaseUrl()}/billing/export-ogk-xml`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1175,7 +1170,7 @@ const Billing: React.FC = () => {
   };
 
   // Test-E-Mail senden
-  const handleTestEmail = async (email: string) => {
+  const _handleTestEmail = async (email: string) => {
     try {
       const response = await api.post<any>('/billing/test-email', { email });
 
@@ -2276,8 +2271,8 @@ const Billing: React.FC = () => {
                                               : undefined
                                           }
                                           error={
-                                            fields.text && 
-                                            (!service.justification && !service.notes) ||
+                                            (fields.text && 
+                                            (!service.justification && !service.notes)) ||
                                             (justificationRules?.minLength && 
                                              (service.justification?.length || service.notes?.length || 0) < justificationRules.minLength)
                                           }

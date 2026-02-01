@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Box, TextField, List, ListItem, ListItemText, Typography, CircularProgress, Alert } from '@mui/material';
 
 interface Icd10Code {
@@ -106,7 +106,7 @@ const DirectICD10Search: React.FC = () => {
       </Typography>
 
       <List dense>
-        {results.map((code, index) => (
+        {results.map((code, _index) => (
           <ListItem
             key={code._id}
             sx={{

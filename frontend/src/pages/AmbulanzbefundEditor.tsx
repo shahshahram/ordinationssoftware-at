@@ -22,17 +22,14 @@ import {
   CardContent,
   Divider,
   MenuItem,
-  TextField,
   LinearProgress,
   CircularProgress,
 } from '@mui/material';
 import {
   Save,
-  Send,
   CheckCircle,
   Cancel,
   Article,
-  LocalHospital,
   Person,
   CalendarToday,
   Wc,
@@ -40,7 +37,6 @@ import {
   Badge as BadgeIcon,
   VerifiedUser,
   Delete as DeleteIcon,
-  Add as AddIcon,
 } from '@mui/icons-material';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { apiRequest } from '../utils/api';
@@ -50,8 +46,6 @@ import { fetchPatients, Patient } from '../store/slices/patientSlice';
 import AmbulanzbefundFormRenderer from '../components/AmbulanzbefundFormRenderer';
 import ICD10Autocomplete from '../components/ICD10Autocomplete';
 import { Specialization, AmbulanzbefundFormTemplate, Ambulanzbefund } from '../types/ambulanzbefund';
-import { format } from 'date-fns';
-import { de } from 'date-fns/locale';
 import { Icd10Code } from '../store/slices/icd10Slice';
 
 const SPECIALIZATION_LABELS: Record<Specialization, string> = {
@@ -108,7 +102,7 @@ const AmbulanzbefundEditor: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { enqueueSnackbar } = useSnackbar();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user: _user } = useAppSelector((state) => state.auth);
   const { locations } = useAppSelector((state) => state.locations);
   const { patients } = useAppSelector((state) => state.patients);
   const dispatch = useAppDispatch();
@@ -164,6 +158,7 @@ const AmbulanzbefundEditor: React.FC = () => {
     } else if (ambefundId) {
       loadAmbulanzbefund(ambefundId);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAmbulanzbefund intentionally not in deps
   }, [ambefundId, locations]);
 
   // Lade Default-Location
@@ -395,7 +390,7 @@ const AmbulanzbefundEditor: React.FC = () => {
     setFormData(updatedFormData);
   };
   
-  const handlePrimaryDiagnosisSelect = (code: string, display: string, fullCode: Icd10Code) => {
+  const handlePrimaryDiagnosisSelect = (code: string, display: string, _fullCode: Icd10Code) => {
     setPrimaryDiagnosis({ code, display });
     // Aktualisiere formData
     const updatedFormData = { ...formData };
@@ -413,7 +408,7 @@ const AmbulanzbefundEditor: React.FC = () => {
     setFormData(updatedFormData);
   };
   
-  const handleSecondaryDiagnosisSelect = (code: string, display: string, fullCode: Icd10Code) => {
+  const handleSecondaryDiagnosisSelect = (code: string, display: string, _fullCode: Icd10Code) => {
     const newDiagnosis = { code, display };
     setSecondaryDiagnoses([...secondaryDiagnoses, newDiagnosis]);
     // Aktualisiere formData

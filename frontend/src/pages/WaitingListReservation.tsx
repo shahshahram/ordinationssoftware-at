@@ -4,15 +4,13 @@ import {
   Box,
   Typography,
   Card,
-  CardContent,
   Button,
   CircularProgress,
   Alert,
   TextField,
-  Grid,
   Paper,
 } from '@mui/material';
-import { CheckCircle, Error as ErrorIcon, AccessTime } from '@mui/icons-material';
+import { CheckCircle, AccessTime } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import api from '../utils/api';

@@ -216,6 +216,7 @@ const useGinaBox = (options?: {
         wsConnection.close();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect/loadStatus/options intentionally omitted
   }, []);
 
   return {

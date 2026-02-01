@@ -8,7 +8,6 @@ import {
   Chip,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -18,7 +17,6 @@ import {
   MenuItem,
   Switch,
   FormControlLabel,
-  InputAdornment,
   Tabs,
   Tab,
   Table,
@@ -47,7 +45,6 @@ import {
   Refresh as RefreshIcon,
   LocationOn as LocationOnIcon,
   CalendarToday as CalendarTodayIcon,
-  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -56,8 +53,6 @@ import api from '../utils/api';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import {
   fetchStaffProfiles,
-  createStaffProfile,
-  updateStaffProfile,
   deleteStaffProfile,
   toggleStaffStatus,
   fetchAbsences,
@@ -98,8 +93,8 @@ const StaffManagement: React.FC = () => {
   const { marginTopValue } = useGlobalNavigationOffset();
   const {
     staffProfiles,
-    loading,
-    error,
+    loading: _loading,
+    error: _error,
   } = useAppSelector((state) => state.staff);
 
   const [activeTab, setActiveTab] = useState(0);
@@ -136,8 +131,8 @@ const StaffManagement: React.FC = () => {
   }>({ open: false, message: '', severity: 'info' });
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [_helpDialogOpen, _setHelpDialogOpen] = useState(false);
+  const [_helpTab, _setHelpTab] = useState(0);
   const [weeklyScheduleOpen, setWeeklyScheduleOpen] = useState(false);
   const [selectedStaffForSchedule, setSelectedStaffForSchedule] = useState<any>(null);
   const [scheduleOverviewOpen, setScheduleOverviewOpen] = useState(false);
@@ -732,7 +727,7 @@ const StaffManagement: React.FC = () => {
     }
   };
 
-  const handleApproveAbsence = async (id: string, status: 'approved' | 'rejected', comment?: string) => {
+  const handleApproveAbsence = async (id: string, status: 'approved' | 'rejected', _comment?: string) => {
     try {
       await dispatch(approveAbsence(id)).unwrap();
       setSnackbar({ 

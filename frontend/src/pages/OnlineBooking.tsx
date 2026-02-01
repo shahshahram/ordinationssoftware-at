@@ -38,9 +38,8 @@ import {
   AccessTime,
   Check,
   QuestionAnswer,
-  Category,
+  Category as CategoryIcon,
   MedicalServices,
-  HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import CalendarMonthView from '../components/CalendarMonthView';
 import CalendarWeekView from '../components/CalendarWeekView';
@@ -49,14 +48,11 @@ import {
   Autocomplete,
   Checkbox,
   FormControlLabel,
-  Radio,
-  RadioGroup,
 } from '@mui/material';
 import api from '../utils/api';
 import { useAppDispatch } from '../store/hooks';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
-import GradientDialogTitle from '../components/GradientDialogTitle';
 
 interface Category {
   _id?: string | null;
@@ -106,7 +102,7 @@ interface TimeSlot {
   duration: number;
 }
 
-interface Room {
+interface _Room {
   id: string;
   name: string;
   type: string;
@@ -118,7 +114,7 @@ interface Room {
   };
 }
 
-interface Device {
+interface _Device {
   id: string;
   name: string;
   type: string;
@@ -130,7 +126,7 @@ interface Device {
   };
 }
 
-interface ServiceRequirements {
+interface _ServiceRequirements {
   requiresRoomSelection: boolean;
   roomQuantityRequired: number;
   requiresDeviceSelection: boolean;
@@ -192,7 +188,7 @@ export interface OnlineBookingProps {
   widgetMode?: boolean;
 }
 
-const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMode = false }) => {
+const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMode: _widgetMode = false }) => {
   const dispatch = useAppDispatch();
   const [activeStep, setActiveStep] = useState(0);
   
@@ -208,7 +204,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
   const [selectedDoctor, setSelectedDoctor] = useState<Doctor | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedDateObj, setSelectedDateObj] = useState<Date | null>(null);
-  const [selectedTime, setSelectedTime] = useState<string>('');
+  const [_selectedTime, setSelectedTime] = useState<string>('');
   const [currentMonth, setCurrentMonth] = useState<Date>(startOfMonth(new Date()));
   const [currentWeek, setCurrentWeek] = useState<Date>(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [calendarView, setCalendarView] = useState<'month' | 'week'>('week');
@@ -283,6 +279,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
     if (selectedService) {
       loadDoctorsByService(selectedService._id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDoctorsByService stable
   }, [selectedService]);
 
   // formData.doctor.id in Sync mit selectedDoctor (z. B. bei initialDoctorId-Vorauswahl)
@@ -290,6 +287,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
     if (selectedDoctor && formData.doctor.id !== selectedDoctor.id) {
       setFormData(prev => ({ ...prev, doctor: { id: selectedDoctor.id } }));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- formData.doctor.id sync only on selectedDoctor
   }, [selectedDoctor]);
 
   // Lade Kalender-Daten wenn Arzt und Service ausgewählt sind
@@ -301,6 +299,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
         loadWeekAvailability();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadCalendar/WeekAvailability stable
   }, [selectedDoctor, selectedService, currentMonth, currentWeek, calendarView]);
 
   // Öffne Bestätigungsdialog automatisch, wenn bookingResult gesetzt wird (nur einmal)
@@ -309,6 +308,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
       console.log('[OnlineBooking] Opening confirmation dialog for new booking result');
       setShowConfirmation(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to new bookingNumber
   }, [bookingResult?.bookingNumber]); // Nur wenn bookingNumber sich ändert (neue Buchung)
 
   // Lade Wochen-Verfügbarkeit
@@ -393,7 +393,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
   };
 
   // Lade Services (alte Funktion für Kompatibilität)
-  const loadServices = async () => {
+  const _loadServices = async () => {
     try {
       const response = await api.get<any>('/service-catalog?limit=1000&is_active=true');
       if (response.success && response.data) {
@@ -471,7 +471,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
   };
 
   // Lade Ärzte (alte Funktion für Kompatibilität)
-  const loadDoctors = async () => {
+  const _loadDoctors = async () => {
     try {
       setLoading(true);
       const response = await api.get<any>('/online-booking/doctors');
@@ -735,7 +735,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
     }
   };
 
-  const handleDateSelect = (date: string) => {
+  const _handleDateSelect = (date: string) => {
     // Validiere das Datum bevor es gesetzt wird
     if (date && !isNaN(new Date(date).getTime())) {
       setSelectedDate(date);
@@ -1078,7 +1078,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
     }
   };
 
-  const getMinDate = () => {
+  const _getMinDate = () => {
     try {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -1089,7 +1089,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
     }
   };
 
-  const getMaxDate = () => {
+  const _getMaxDate = () => {
     try {
       const maxDate = new Date();
       maxDate.setDate(maxDate.getDate() + 90);
@@ -1127,7 +1127,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
           <Step>
             <StepLabel>
               <Box display="flex" alignItems="center" gap={1}>
-                <Category />
+                <CategoryIcon />
                 Kategorie auswählen
               </Box>
             </StepLabel>

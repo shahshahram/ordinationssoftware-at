@@ -69,7 +69,7 @@ const SimpleICD10Search: React.FC = () => {
       </Typography>
 
       <List dense>
-        {searchResults.map((code, index) => (
+        {searchResults.map((code, _index) => (
           <ListItem
             key={code._id}
             sx={{

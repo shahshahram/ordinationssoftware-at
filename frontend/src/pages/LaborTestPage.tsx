@@ -22,7 +22,6 @@ import {
   TableRow,
   Chip,
   Divider,
-  Stack,
   Grid,
   Autocomplete,
   IconButton,
@@ -133,6 +132,7 @@ const LaborTestPage: React.FC = () => {
   useEffect(() => {
     fetchProviders();
     fetchPatients();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProviders bewusst ausgelassen
   }, []);
 
   const fetchProviders = async () => {

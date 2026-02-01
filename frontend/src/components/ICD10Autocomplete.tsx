@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   TextField,
-  Autocomplete,
   Chip,
   Typography,
   Paper,
@@ -11,11 +10,9 @@ import {
   Tabs,
   Tab,
   List,
-  ListItem,
   ListItemText,
   ListItemButton,
   Divider,
-  IconButton,
   Tooltip,
   Badge
 } from '@mui/material';
@@ -23,11 +20,6 @@ import {
   Search as SearchIcon,
   History as HistoryIcon,
   Star as StarIcon,
-  Public as PublicIcon,
-  Person as PersonIcon,
-  LocationOn as LocationIcon,
-  MedicalServices as ServiceIcon,
-  Info as InfoIcon,
   CheckCircle as CheckCircleIcon,
   Warning as WarningIcon
 } from '@mui/icons-material';
@@ -37,8 +29,7 @@ import {
   getTopIcd10Codes,
   getRecentIcd10Codes,
   updateIcd10Usage,
-  clearSearchResults,
-  setSearchParams
+  clearSearchResults
 } from '../store/slices/icd10Slice';
 import { Icd10Code, Icd10TopCode } from '../store/slices/icd10Slice';
 
@@ -82,7 +73,7 @@ const ICD10Autocomplete: React.FC<ICD10AutocompleteProps> = ({
     recentCodes,
     loading,
     error: searchError,
-    searchParams
+    searchParams: _searchParams
   } = useAppSelector(state => state.icd10);
 
   const [inputValue, setInputValue] = useState(value);
@@ -160,7 +151,7 @@ const ICD10Autocomplete: React.FC<ICD10AutocompleteProps> = ({
   };
 
   // Handle top code selection
-  const handleTopCodeSelect = (topCode: Icd10TopCode) => {
+  const _handleTopCodeSelect = (topCode: Icd10TopCode) => {
     console.log('ICD10Autocomplete: handleTopCodeSelect called with:', topCode);
     
     // Try to find the full code object from search results first

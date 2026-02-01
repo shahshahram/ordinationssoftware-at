@@ -248,7 +248,7 @@ export const ROLE_INFO: Record<Role, RoleInfo> = {
   },
 } as const;
 
-export default {
+const permissions = {
   ROLES,
   ACTIONS,
   RESOURCES,
@@ -256,3 +256,5 @@ export default {
   ROLE_HIERARCHY,
   ROLE_INFO,
 };
+
+export default permissions;

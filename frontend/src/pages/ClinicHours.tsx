@@ -2,18 +2,12 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
   IconButton,
   Table,
@@ -24,11 +18,8 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Snackbar,
-  Alert,
   CircularProgress,
   Grid,
-  Divider,
   Checkbox,
   FormControlLabel,
   Stack,
@@ -41,9 +32,6 @@ import {
   Edit,
   Delete,
   Refresh,
-  AccessTime,
-  CheckCircle,
-  Cancel,
   HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import api from '../utils/api';
@@ -52,7 +40,7 @@ import { format } from 'date-fns';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
-interface ClinicHours {
+interface ClinicHoursData {
   _id?: string;
   rrule: string;
   startTime: string;
@@ -76,11 +64,11 @@ const weekdays = [
 
 const ClinicHours: React.FC = () => {
   const { marginTopValue } = useGlobalNavigationOffset();
-  const [clinicHours, setClinicHours] = useState<ClinicHours[]>([]);
+  const [clinicHours, setClinicHours] = useState<ClinicHoursData[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [formData, setFormData] = useState<ClinicHours>({
+  const [formData, setFormData] = useState<ClinicHoursData>({
     rrule: '',
     startTime: '08:00',
     endTime: '17:00',
@@ -96,6 +84,7 @@ const ClinicHours: React.FC = () => {
 
   useEffect(() => {
     loadClinicHours();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Mount laden
   }, []);
 
   const loadClinicHours = async () => {
@@ -112,7 +101,7 @@ const ClinicHours: React.FC = () => {
     }
   };
 
-  const handleOpenDialog = (item?: ClinicHours) => {
+  const handleOpenDialog = (item?: ClinicHoursData) => {
     if (item) {
       setEditingId(item._id || null);
       setFormData({

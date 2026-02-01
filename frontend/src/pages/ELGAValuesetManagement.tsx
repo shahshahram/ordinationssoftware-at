@@ -34,12 +34,10 @@ import {
 import { apiRequest } from '../utils/api';
 import {
   Upload,
-  Download,
   Edit,
   Delete,
   Refresh,
   Search,
-  Add,
   Link as LinkIcon,
   Visibility,
   Category as CategoryIcon,
@@ -116,7 +114,7 @@ function TabPanel(props: TabPanelProps) {
 }
 
 const ELGAValuesetManagement: React.FC = () => {
-  const dispatch = useAppDispatch();
+  const _dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { user } = useAppSelector((state) => state.auth);
 
@@ -151,7 +149,7 @@ const ELGAValuesetManagement: React.FC = () => {
   const [importType, setImportType] = useState<'csv' | 'xlsx' | 'url'>('csv');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [importUrl, setImportUrl] = useState('');
-  const [importProgress, setImportProgress] = useState(0);
+  const [_importProgress, setImportProgress] = useState(0);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
 

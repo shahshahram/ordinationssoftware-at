@@ -5,7 +5,6 @@ import {
   Button,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -27,7 +26,7 @@ import {
   Event as EventIcon,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
-import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, addYears, subYears, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfWeek, addDays, startOfMonth, endOfMonth, endOfWeek, isSameMonth, isSameDay, addMonths, subMonths, addWeeks, subWeeks, startOfDay, endOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -68,7 +67,7 @@ interface NewEventState {
   const Calendar: React.FC = () => {
     const navigate = useNavigate();
     const dispatch = useAppDispatch();
-    const theme = useTheme();
+    const _theme = useTheme();
     const { appointments, loading, error } = useAppSelector((state) => state.appointments);
     const { staffProfiles } = useAppSelector((state) => state.staff);
     const { rooms } = useAppSelector((state) => state.rooms);
@@ -131,10 +130,12 @@ interface NewEventState {
     dispatch(fetchStaffProfiles());
     dispatch(fetchRooms());
     loadTimeBlocks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTimeBlocks bewusst ausgelassen
   }, [dispatch]);
 
   useEffect(() => {
     loadTimeBlocks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTimeBlocks bewusst ausgelassen
   }, [currentDate, viewMode]);
 
   const handleDateChange = (direction: 'prev' | 'next' | 'today') => {
@@ -372,12 +373,12 @@ interface NewEventState {
               });
               
               // Render events and time blocks
-              const eventElements = Object.entries(groupedEvents).flatMap(([timeKey, eventsAtTime]) => {
+              const eventElements = Object.entries(groupedEvents).flatMap(([_timeKey, eventsAtTime]) => {
                 const baseEvent = eventsAtTime[0];
                 const startHour = baseEvent.start.getHours();
                 const startMinute = baseEvent.start.getMinutes();
-                const endHour = baseEvent.end.getHours();
-                const endMinute = baseEvent.end.getMinutes();
+                const _endHour = baseEvent.end.getHours();
+                const _endMinute = baseEvent.end.getMinutes();
 
                 const top = (startHour * 60 + startMinute) / 60 * 60;
                 const durationMinutes = (baseEvent.end.getTime() - baseEvent.start.getTime()) / (1000 * 60);
@@ -553,8 +554,8 @@ interface NewEventState {
                 const blockEnd = new Date(block.endTime);
                 const startHour = blockStart.getHours();
                 const startMinute = blockStart.getMinutes();
-                const endHour = blockEnd.getHours();
-                const endMinute = blockEnd.getMinutes();
+                const _endHour = blockEnd.getHours();
+                const _endMinute = blockEnd.getMinutes();
                 
                 const top = (startHour * 60 + startMinute) / 60 * 60;
                 const durationMinutes = (blockEnd.getTime() - blockStart.getTime()) / (1000 * 60);
@@ -713,7 +714,7 @@ interface NewEventState {
                     </Box>
                   );
                 })}
-                {Object.entries(groupedEvents).flatMap(([timeKey, eventsAtTime]) => {
+                {Object.entries(groupedEvents).flatMap(([_timeKey, eventsAtTime]) => {
                   const baseEvent = eventsAtTime[0];
                   const startHour = baseEvent.start.getHours();
                   const startMinute = baseEvent.start.getMinutes();

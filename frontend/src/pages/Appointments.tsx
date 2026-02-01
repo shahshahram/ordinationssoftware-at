@@ -12,7 +12,6 @@ import {
   IconButton,
   Chip,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -302,7 +301,7 @@ const Appointments: React.FC = () => {
   const location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { marginTopValue } = useGlobalNavigationOffset();
   const [viewMode, setViewMode] = useState<'day' | 'week' | 'month'>('day');
   const [openDialog, setOpenDialog] = useState(false);
@@ -319,8 +318,8 @@ const Appointments: React.FC = () => {
   const [filterOnline, setFilterOnline] = useState<string>('all'); // 'all', 'online', 'offline'
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [_helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [_helpTab, _setHelpTab] = useState(0);
   const [waitingList, setWaitingList] = useState<WaitingList[]>([]);
   const [inTreatmentList, setInTreatmentList] = useState<WaitingList[]>([]);
   const [completedList, setCompletedList] = useState<WaitingList[]>([]);
@@ -1200,7 +1199,7 @@ const Appointments: React.FC = () => {
       const startTime = `${date}T${time}:00`;
       const duration = formData.duration || 30;
       // Berechne endTime korrekt
-      const [hours, minutes] = time.split(':').map(Number);
+      const [_hours, _minutes] = time.split(':').map(Number);
       const endDate = new Date(`${date}T${time}:00`);
       endDate.setMinutes(endDate.getMinutes() + duration);
       const endHours = endDate.getHours();
@@ -1330,7 +1329,7 @@ const Appointments: React.FC = () => {
       const time = formData.time || '09:00';
       const startTime = `${date}T${time}:00`;
       const duration = formData.duration || 30;
-      const [hours, minutes] = time.split(':').map(Number);
+      const [_hoursEdit, _minutesEdit] = time.split(':').map(Number);
       const endDate = new Date(`${date}T${time}:00`);
       endDate.setMinutes(endDate.getMinutes() + duration);
       const endHours = endDate.getHours();
@@ -1451,7 +1450,7 @@ const Appointments: React.FC = () => {
         const decodedReturnUrl = decodeURIComponent(returnUrl);
         // Entferne returnUrl aus der URL und navigiere zurück
         searchParams.delete('returnUrl');
-        const newSearch = searchParams.toString();
+        const _newSearch = searchParams.toString();
         // Navigiere zur returnUrl (ohne weitere Parameter, da wir zurück zur Übersicht wollen)
         navigate(decodedReturnUrl, { replace: true });
         console.log('🔧 Navigation zurück zu:', decodedReturnUrl);
@@ -2192,6 +2191,7 @@ const Appointments: React.FC = () => {
         // This will be handled by the useEffect dependency on appointments
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleEditAppointment/handleViewAppointment bewusst ausgelassen
   }, [location.search, navigate, location.pathname, appointments, reduxAppointments, patients]);
 
   // Initialize with real data from API - only once
@@ -2460,6 +2460,7 @@ const Appointments: React.FC = () => {
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedLocation/selectedStaff bewusst ausgelassen
   }, [dialogMode, selectedAppointment, openDialog, services, locations, staff, formData.serviceId, formData.service]);
 
   // Berechne Patient-IDs mit useMemo, um unnötige Neuberechnungen zu vermeiden
@@ -2499,6 +2500,7 @@ const Appointments: React.FC = () => {
       // Aktualisiere den Ref mit den aktuell geladenen IDs
       currentlyLoadedIds.forEach(id => loadedPatientIdsRef.current.add(id));
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patientDiagnoses bewusst ausgelassen
   }, [patientIdsFromAppointments, dispatch]); // Entferne patientDiagnoses aus den Dependencies
   
   // Erstelle eine Map von Patient-ID zu Diagnosen
@@ -3738,7 +3740,7 @@ const Appointments: React.FC = () => {
         }}
         slotProps={{
           backdrop: {
-            onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+            onClick: (_e: React.MouseEvent<HTMLDivElement>) => {
               if (dialogMode === 'view') {
                 handleCloseDialog();
               }
@@ -3869,7 +3871,7 @@ const Appointments: React.FC = () => {
                     const cleanName = stripHtmlTags(option.name || '');
                     return `${option.code || ''} - ${cleanName}`;
                   }}
-                  filterOptions={(options, state) => {
+                  filterOptions={(options, _state) => {
                     // Die Filterung wird bereits in getFilteredAndSortedServices durchgeführt
                     // Hier geben wir einfach alle Optionen zurück, die bereits gefiltert wurden
                     return options;
@@ -4119,7 +4121,7 @@ const Appointments: React.FC = () => {
                     />
                   )}
                   renderOption={(props: any, option: Patient) => {
-                    const { key, ...otherProps } = props;
+                    const { key: _key, ...otherProps } = props;
                     return (
                       <Box component="li" key={option._id} {...otherProps}>
                         <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>

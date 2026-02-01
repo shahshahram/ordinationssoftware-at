@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Paper,
   Button,
   Card,
   CardContent,
@@ -14,7 +13,6 @@ import {
   TableRow,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -72,6 +70,7 @@ const ServiceCodeMappingManagement: React.FC = () => {
 
   useEffect(() => {
     loadMappings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init load once
   }, []);
 
   const loadMappings = async () => {
@@ -239,7 +238,7 @@ const ServiceCodeMappingManagement: React.FC = () => {
     }
   };
 
-  const handleCreateFromServiceCatalog = async (baseCode: string) => {
+  const _handleCreateFromServiceCatalog = async (baseCode: string) => {
     try {
       const response: any = await api.post(`/service-code-mapping/create-from-service-catalog/${baseCode}`);
       if (response.data?.success) {

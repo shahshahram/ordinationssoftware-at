@@ -12,7 +12,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  Tooltip,
   IconButton,
   Fade,
   Paper,
@@ -22,25 +21,20 @@ import {
   Search,
   Star,
   History,
-  Info,
   CheckCircle,
   Warning,
   Error as ErrorIcon,
-  Help,
   AutoFixHigh
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { searchIcd10Codes, getTopIcd10Codes, getRecentIcd10Codes, Icd10Code, Icd10TopCode, clearError } from '../store/slices/icd10Slice';
+import { searchIcd10Codes, getTopIcd10Codes, getRecentIcd10Codes, Icd10Code } from '../store/slices/icd10Slice';
 import { 
-  validateIcd10Code, 
-  formatIcd10Code, 
   getChapterName, 
   isCommonCode,
   autoCorrectCode,
   getCodeLevel,
   validateCodeInContext,
   ValidationResult,
-  ValidationOptions
 } from '../utils/icd10Validation';
 import { useErrorHandler } from '../hooks/useErrorHandler';
 
@@ -65,7 +59,7 @@ const EnhancedICD10Autocomplete: React.FC<EnhancedICD10AutocompleteProps> = ({
   value,
   context = 'clinical',
   patientId,
-  encounterId,
+  encounterId: _encounterId,
   requireBillable = false,
   currentYear = new Date().getFullYear(),
   showValidation = true,
@@ -73,13 +67,13 @@ const EnhancedICD10Autocomplete: React.FC<EnhancedICD10AutocompleteProps> = ({
 }) => {
   const dispatch = useAppDispatch();
   const { searchResults, topCodes, recentCodes, loading, error } = useAppSelector((state) => state.icd10);
-  const { handleError, clearError: clearErrorHandler } = useErrorHandler();
+  const { handleError: _handleError, clearError: _clearErrorHandler } = useErrorHandler();
 
   const [inputValue, setInputValue] = useState(value || '');
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<Icd10Code[]>([]);
   const [activeTab, setActiveTab] = useState(0);
-  const [selectedCode, setSelectedCode] = useState<Icd10Code | null>(null);
+  const [_selectedCode, setSelectedCode] = useState<Icd10Code | null>(null);
   const [showSuggestionsPanel, setShowSuggestionsPanel] = useState(false);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [confidence, setConfidence] = useState<number>(0);

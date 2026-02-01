@@ -24,19 +24,10 @@ import {
   Chip,
   Alert,
   CircularProgress,
-  Divider,
-  Stack,
   LinearProgress,
   Autocomplete,
   IconButton,
   Tooltip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Collapse,
-  List,
-  ListItem,
-  ListItemText,
   Avatar,
   Dialog,
   DialogContent,
@@ -46,18 +37,12 @@ import {
 } from '@mui/material';
 import {
   Assessment,
-  Download,
-  DateRange,
   TrendingUp,
-  AttachMoney,
-  Receipt,
-  LocalHospital,
   Refresh,
   People,
   MedicalServices,
   ShowChart,
   BarChart,
-  PieChart,
   Info,
   HelpOutline,
   Person,
@@ -68,7 +53,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { de } from 'date-fns/locale';
-import { LineChart, BarChart as RechartsBarChart, PieChart as RechartsPieChart, Line, Bar, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, ComposedChart, Area, AreaChart, Scatter, ScatterChart } from 'recharts';
+import { LineChart, BarChart as RechartsBarChart, PieChart as RechartsPieChart, Line, Bar, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer, Area, AreaChart, Scatter, ScatterChart } from 'recharts';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
@@ -266,7 +251,7 @@ const BillingReports: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const [activeTab, setActiveTab] = useState(0);
   const [loading, setLoading] = useState(false);
   const [startDate, setStartDate] = useState<Date | null>(startOfMonth(subMonths(new Date(), 1)));
@@ -365,6 +350,7 @@ const BillingReports: React.FC = () => {
         loadTopPatients();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load*-Funktionen bewusst ausgelassen
   }, [activeTab, startDate, endDate, selectedPatient, groupBy, targetHourlyRate]);
 
   const loadBIDashboard = useCallback(async () => {
@@ -572,7 +558,7 @@ const BillingReports: React.FC = () => {
     return value > 100000 ? value / 100 : value;
   };
 
-  const formatAmount = (euros: number) => {
+  const _formatAmount = (euros: number) => {
     return toEuro(euros).toFixed(2).replace('.', ',') + ' €';
   };
 

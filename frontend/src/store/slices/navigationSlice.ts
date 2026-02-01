@@ -22,7 +22,7 @@ export const updateNavigationMode = createAsyncThunk(
   'navigation/updateMode',
   async (mode: NavigationMode, { rejectWithValue }) => {
     try {
-      const response = await api.put('/auth/profile', {
+      const _response = await api.put('/auth/profile', {
         profile: {
           preferences: {
             navigationMode: mode,
@@ -43,7 +43,7 @@ export const updateNavigationMode = createAsyncThunk(
 // Async thunk to load navigation mode from user profile
 export const loadNavigationMode = createAsyncThunk(
   'navigation/loadMode',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue: _rejectWithValue }) => {
     try {
       const response = await api.get('/auth/me') as any;
       const user = response.data?.user || response.user;

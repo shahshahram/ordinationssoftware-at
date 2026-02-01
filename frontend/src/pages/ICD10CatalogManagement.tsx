@@ -56,7 +56,7 @@ interface CatalogYear {
 }
 
 const ICD10CatalogManagement: React.FC = () => {
-  const dispatch = useAppDispatch();
+  const _dispatch = useAppDispatch();
   const navigate = useNavigate();
   const { user } = useAppSelector((state) => state.auth);
 
@@ -72,7 +72,7 @@ const ICD10CatalogManagement: React.FC = () => {
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [validateOnly, setValidateOnly] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [importProgress, setImportProgress] = useState(0);
+  const [_importProgress, setImportProgress] = useState(0);
   const [importResults, setImportResults] = useState<any>(null);
 
   // Check if user is admin
@@ -84,6 +84,7 @@ const ICD10CatalogManagement: React.FC = () => {
       return;
     }
     loadCatalogYears();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadCatalogYears bewusst ausgelassen
   }, [isAdmin, navigate]);
 
   const loadCatalogYears = async () => {

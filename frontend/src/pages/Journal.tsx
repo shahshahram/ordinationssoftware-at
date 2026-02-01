@@ -15,7 +15,6 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  Paper,
   TableHead,
   TableRow,
   Tabs,
@@ -23,7 +22,6 @@ import {
   Chip,
   CircularProgress,
   Alert,
-  Snackbar,
   IconButton,
   Tooltip,
   Dialog,
@@ -40,10 +38,9 @@ import {
   GetApp as GetAppIcon,
   Close as CloseIcon,
   Visibility as VisibilityIcon,
-  AttachMoney as AttachMoneyIcon,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
-import api from '../utils/api';
+import api, { getApiBaseUrl } from '../utils/api';
 import { format as formatDate } from 'date-fns';
 import { useSnackbar } from 'notistack';
 import GradientDialogTitle from '../components/GradientDialogTitle';
@@ -235,6 +232,7 @@ const Journal: React.FC = () => {
 
   useEffect(() => {
     loadJournalEntries();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadJournalEntries bewusst ausgelassen
   }, [activeTab, filterType, selectedDate, selectedMonth, selectedYear, startDate, endDate, locationId, billingType, status]);
 
   // Export-Funktion
@@ -264,9 +262,8 @@ const Journal: React.FC = () => {
       
       // Für Blob-Response müssen wir fetch direkt verwenden
       const token = localStorage.getItem('token');
-      const baseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
       const queryString = new URLSearchParams(params).toString();
-      const url = `${baseUrl}/api${endpoint}?${queryString}`;
+      const url = `${getApiBaseUrl()}${endpoint}?${queryString}`;
       
       const fetchResponse = await fetch(url, {
         method: 'GET',
@@ -916,7 +913,7 @@ const Journal: React.FC = () => {
                     invoiceEntries.map((entry) => (
                       <TableRow 
                         key={entry._id}
-                        onClick={(e) => {
+                        onClick={(_e) => {
                           handleViewDetails(entry);
                         }}
                         sx={{
@@ -1018,7 +1015,7 @@ const Journal: React.FC = () => {
                     receiptEntries.map((entry) => (
                       <TableRow 
                         key={entry._id}
-                        onClick={(e) => {
+                        onClick={(_e) => {
                           handleViewReceiptDetails(entry);
                         }}
                         sx={{

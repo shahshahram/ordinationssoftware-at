@@ -11,14 +11,12 @@ import {
   Tab,
   Paper,
   Chip,
-  Divider,
   Stack,
   Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Autocomplete,
   IconButton,
   Tooltip,
   Dialog,
@@ -31,7 +29,6 @@ import {
   Refresh as RefreshIcon,
   Send as SendIcon,
   Build as BuildIcon,
-  CloudUpload as CloudUploadIcon,
   Settings as SettingsIcon,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
@@ -131,6 +128,7 @@ const ELDATestPage: React.FC = () => {
   useEffect(() => {
     loadELDAStatus();
     loadAvailableMethods();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Mount laden
   }, []);
 
   const loadELDAStatus = async () => {

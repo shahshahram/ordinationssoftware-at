@@ -974,7 +974,7 @@ const ServiceCatalogPage: React.FC = () => {
 
       // Nur KHO: Legacy-Felder (ebm*) aus Payload entfernen
       if (payload.ogk) {
-        const { ebmCode, ebmPrice, ebmGroup, ebmSubGroup, ...ogkKhoOnly } = payload.ogk as Record<string, unknown>;
+        const { ebmCode: _ebmCode, ebmPrice: _ebmPrice, ebmGroup: _ebmGroup, ebmSubGroup: _ebmSubGroup, ...ogkKhoOnly } = payload.ogk as Record<string, unknown>;
         payload.ogk = ogkKhoOnly as typeof payload.ogk;
       }
 
@@ -1997,7 +1997,7 @@ const ServiceCatalogPage: React.FC = () => {
                   )}
                   renderTags={(value, getTagProps) =>
                     value.map((option, index) => {
-                      const { key, ...tagProps } = getTagProps({ index });
+                      const { key: _key, ...tagProps } = getTagProps({ index });
                       return (
                         <Chip
                           {...tagProps}

@@ -6,7 +6,7 @@ import PatientAdmissionPage from './PatientAdmissionPage';
 import SelfCheckInPage from './SelfCheckInPage';
 
 const PatientAdmissionDemo: React.FC = () => {
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const [activeForm, setActiveForm] = React.useState<'menu' | 'admission' | 'checkin'>('menu');
 
   const handleBackToMenu = () => {

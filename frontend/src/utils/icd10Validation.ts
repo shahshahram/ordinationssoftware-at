@@ -26,11 +26,11 @@ const COMMON_TYPOS: { [key: string]: string } = {
 
 export const validateIcd10Code = (code: string, options: ValidationOptions = {}): ValidationResult => {
   const {
-    strictMode = false,
+    strictMode: _strictMode = false,
     allowPartial = true,
     suggestCorrections = true,
-    checkBillability = false,
-    context = 'medical'
+    checkBillability: _checkBillability = false,
+    context: _context = 'medical'
   } = options;
 
   if (!code || code.trim() === '') {
@@ -42,7 +42,7 @@ export const validateIcd10Code = (code: string, options: ValidationOptions = {})
   }
 
   const trimmedCode = code.trim().toUpperCase();
-  let confidence = 1.0;
+  const _confidence = 1.0;
   
   // Basic format validation: Letter followed by 2 digits, optionally followed by decimal and 1-3 digits
   const icd10Pattern = /^[A-Z]\d{2}(\.\d{1,3})?$/;

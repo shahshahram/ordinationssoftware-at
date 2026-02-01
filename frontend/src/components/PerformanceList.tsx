@@ -28,11 +28,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Divider,
   Tabs,
   Tab
 } from '@mui/material';
@@ -40,7 +35,6 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Receipt as ReceiptIcon,
   Person as PersonIcon,
   CalendarToday as CalendarIcon,
   Euro as EuroIcon,
@@ -49,6 +43,7 @@ import {
   HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
+import api from '../utils/api';
 import OneClickBillingButton from './OneClickBillingButton';
 import PerformanceForm from './PerformanceForm';
 import GradientDialogTitle from './GradientDialogTitle';
@@ -97,8 +92,8 @@ interface Performance {
 }
 
 const PerformanceList: React.FC = () => {
-  const dispatch = useDispatch();
-  const { user } = useSelector((state: any) => state.auth);
+  const _dispatch = useDispatch();
+  const { user: _user } = useSelector((state: any) => state.auth);
   
   // State
   const [performances, setPerformances] = useState<Performance[]>([]);
@@ -128,54 +123,34 @@ const PerformanceList: React.FC = () => {
     pages: 0
   });
 
-  // Performances laden
+  // Performances laden – nutzt zentralen ApiClient (gleiche Basis-URL wie Auth)
   const loadPerformances = async () => {
     setLoading(true);
     setError(null);
-    
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Kein Authentifizierungstoken gefunden');
-      }
-
-      const queryParams = new URLSearchParams({
-        page: (pagination?.page || 1).toString(),
-        limit: (pagination?.limit || 50).toString(),
-        ...Object.fromEntries(
-          Object.entries(filters).filter(([_, value]) => value !== '')
-        )
+      const params: Record<string, string | number> = {
+        page: pagination?.page || 1,
+        limit: pagination?.limit || 50
+      };
+      Object.entries(filters).forEach(([k, v]) => {
+        if (v !== '') params[k] = v;
       });
-
-      const response = await fetch(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/performances?${queryParams}`,
-        {
-          headers: {
-            'x-auth-token': token || ''
-          }
-        }
+      const response = await api.get<{ data: Performance[]; pagination?: typeof pagination }>(
+        '/billing/performances',
+        params
       );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Leistungen konnten nicht geladen werden');
-      }
-
-      // Debug: Log first performance to check patientId
-      if (result.data && result.data.length > 0) {
+      const result = response.data as { data?: Performance[]; pagination?: typeof pagination };
+      if (result?.data && result.data.length > 0) {
         console.log('First performance from API:', result.data[0]);
         console.log('First performance patientId:', result.data[0].patientId);
       }
-
-      setPerformances(result.data || []);
-      if (result.pagination) {
-        setPagination(result.pagination);
+      setPerformances(result?.data || []);
+      if (result?.pagination) {
+        setPagination((prev) => ({ ...prev, ...result.pagination }));
       }
-      
     } catch (error: any) {
       console.error('Leistungen laden Fehler:', error);
-      setError(error.message);
+      setError(error?.response?.data?.message || error?.message || 'Leistungen konnten nicht geladen werden');
     } finally {
       setLoading(false);
     }
@@ -192,8 +167,8 @@ const PerformanceList: React.FC = () => {
     try {
       const token = localStorage.getItem('token');
       const url = editingPerformance 
-        ? `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/performances/${editingPerformance._id}`
-        : `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/performances`;
+        ? `${getApiBaseUrl()}/billing/performances/${editingPerformance._id}`
+        : `${getApiBaseUrl()}/billing/performances`;
       
       const method = editingPerformance ? 'PUT' : 'POST';
 
@@ -235,7 +210,7 @@ const PerformanceList: React.FC = () => {
       const token = localStorage.getItem('token');
       
       const response = await fetch(
-        `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/performances/${performanceToDelete._id}`,
+        `${getApiBaseUrl()}/billing/performances/${performanceToDelete._id}`,
         {
           method: 'DELETE',
           headers: {

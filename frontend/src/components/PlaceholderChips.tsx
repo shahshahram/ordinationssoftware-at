@@ -63,7 +63,7 @@ const PlaceholderChips: React.FC<PlaceholderChipsProps> = ({
     }
   };
 
-  const renderChip = (item: { placeholder: string; description: string }, category: string) => {
+  const renderChip = (item: { placeholder: string; description: string }, _category: string) => {
     const chip = (
       <Chip
         key={item.placeholder}

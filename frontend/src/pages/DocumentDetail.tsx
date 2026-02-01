@@ -24,7 +24,6 @@ import {
   CompareArrows,
   Send,
   CheckCircle,
-  Cancel,
   Edit,
   ArrowBack
 } from '@mui/icons-material';
@@ -77,7 +76,7 @@ const DocumentDetail: React.FC = () => {
     if (!data || !id) return;
     try {
       setSaving(true);
-      const token = localStorage.getItem('token');
+      const _token = localStorage.getItem('token');
       const res: any = await api.post(`/documents/${id}/new-version`, {
         ...edit,
         changeReason

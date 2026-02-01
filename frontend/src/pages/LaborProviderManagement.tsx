@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Card,
   Typography,
   Button,
   IconButton,
@@ -23,10 +22,7 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Alert,
   CircularProgress,
-  Divider,
-  Stack,
   Tooltip,
   Tabs,
   Tab,
@@ -187,6 +183,7 @@ const LaborProviderManagement: React.FC = () => {
 
   useEffect(() => {
     fetchProviders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProviders bewusst ausgelassen
   }, []);
 
   const fetchProviders = async () => {

@@ -3,15 +3,8 @@ import {
   Box,
   Typography,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
   Chip,
   IconButton,
-  Tooltip,
   Stack,
   Divider,
   Alert,
@@ -45,9 +38,6 @@ import {
   ExpandMore,
   ExpandLess,
   Search,
-  FilterList,
-  Visibility,
-  Edit,
   MonitorHeart,
   ShowChart,
   Close,
@@ -60,7 +50,6 @@ import {
   UnfoldLess,
   CheckCircle,
   Schedule,
-  Person,
   Psychology
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -69,7 +58,6 @@ import { fetchPatientDiagnoses } from '../store/slices/diagnosisSlice';
 import { fetchDocuments } from '../store/slices/documentSlice';
 import { fetchDekursEntries, resetDekursState } from '../store/slices/dekursSlice';
 import { fetchVitalSigns, clearVitalSigns } from '../store/slices/vitalSignsSlice';
-import { fetchPatients } from '../store/slices/patientSlice';
 import { fetchPatientMedications } from '../store/slices/medicationSlice';
 import api from '../utils/api';
 import { format } from 'date-fns';
@@ -616,17 +604,17 @@ const EPADateCard = memo(({
 
 EPADateCard.displayName = 'EPADateCard';
 
-const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabChange, onOpenMedicationManager, onDocumentPreview }) => {
+const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabChange, onOpenMedicationManager, onDocumentPreview: _onDocumentPreview }) => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const { appointments, loading: appointmentsLoading } = useAppSelector((state) => state.appointments);
-  const { patientDiagnoses, loading: diagnosesLoading } = useAppSelector((state) => state.diagnoses);
-  const { documents, loading: documentsLoading } = useAppSelector((state) => state.documents);
-  const { entries: dekursEntries, loading: dekursLoading } = useAppSelector((state) => state.dekurs);
-  const { patientMedications, loading: medicationsLoading } = useAppSelector((state) => state.medications);
-  const { vitalSigns, loading: vitalSignsLoading } = useAppSelector((state) => state.vitalSigns);
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const { appointments, loading: _appointmentsLoading } = useAppSelector((state) => state.appointments);
+  const { patientDiagnoses, loading: _diagnosesLoading } = useAppSelector((state) => state.diagnoses);
+  const { documents, loading: _documentsLoading } = useAppSelector((state) => state.documents);
+  const { entries: dekursEntries, loading: _dekursLoading } = useAppSelector((state) => state.dekurs);
+  const { patientMedications, loading: _medicationsLoading } = useAppSelector((state) => state.medications);
+  const { vitalSigns, loading: _vitalSignsLoading } = useAppSelector((state) => state.vitalSigns);
   const { patients } = useAppSelector((state) => state.patients);
   
   // Finde den aktuellen Patienten im Redux Store
@@ -666,6 +654,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       implants: patientFromStore.implants || [],
       isPregnant: patientFromStore.isPregnant
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patientFromStore ref: einzelne Felder in deps
   }, [
     patientFromStore?.infections,
     patientFromStore?.allergies,
@@ -683,6 +672,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     patientFromStore?.hasDefibrillator,
     patientFromStore?.implants,
     patientFromStore?.isPregnant
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patientFromStore intentionally not in deps
   ]);
   
   // Debug: Logge Änderungen von patientFromStore und prüfe auf Datenänderungen
@@ -702,6 +692,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       // Speichere die aktuelle Version für den nächsten Vergleich
       lastPatientFromStoreRef.current = { ...patientFromStore, dataHash: patientDataHash };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patientFromStore intentionally not in deps
   }, [patientDataHash, patientFromStore?._id]);
 
   // Ref to track if initial expansion has been done
@@ -806,7 +797,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   // 1. Das spezifische Feld sich geändert hat (im Vergleich zur letzten bekannten Version)
   // 2. UND der Patient kürzlich aktualisiert wurde (innerhalb der letzten 24 Stunden)
   // 3. UND es ein neues Update ist (größer als der letzte bekannte Update-Zeitpunkt)
-  const shouldShowMedicalField = useCallback((fieldName: string, fieldValue: any, entryDate: Date | string | null, patient: any): boolean => {
+  const _shouldShowMedicalField = useCallback((fieldName: string, fieldValue: any, entryDate: Date | string | null, patient: any): boolean => {
     if (!patient || !patient.updatedAt) {
       console.log(`🔍 shouldShowMedicalField [${fieldName}]: Kein Patient oder updatedAt`);
       return false;
@@ -817,7 +808,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     const hoursSincePatientUpdate = (now - patientUpdatedAt) / (1000 * 60 * 60);
     
     // Prüfe, ob der Patient kürzlich aktualisiert wurde (innerhalb der letzten 4 Stunden)
-    const isRecentPatientUpdate = hoursSincePatientUpdate < 4;
+    const _isRecentPatientUpdate = hoursSincePatientUpdate < 4;
     
     // Prüfe, ob dies ein neues Update ist (größer als der letzte bekannte Update-Zeitpunkt)
     const isNewPatientUpdate = patientUpdatedAt > lastPatientUpdateRef.current;
@@ -1022,7 +1013,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         const hasDocuments = documents && documents.length > 0 && 
           documents.some((doc: any) => doc.patientId === patientId);
         // Hilfsfunktion zum Extrahieren der patientId aus einem Dekurs-Eintrag (für Prüfung)
-        const getDekursPatientIdForCheck = (dekurs: any): string | null => {
+        const _getDekursPatientIdForCheck = (dekurs: any): string | null => {
           if (dekurs.patientId) return String(dekurs.patientId);
           if (dekurs.patient && typeof dekurs.patient === 'string') return String(dekurs.patient);
           if (dekurs.patient && typeof dekurs.patient === 'object' && dekurs.patient._id) return String(dekurs.patient._id);
@@ -1032,7 +1023,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         
         // WICHTIG: Dekurs-Einträge immer neu laden, um sicherzustellen, dass neue Einträge verfügbar sind
         // Die Prüfung auf hasDekurs wird entfernt, damit Dekurs-Einträge immer geladen werden
-        const hasDekurs = false; // Immer false, damit Dekurs-Einträge immer neu geladen werden
+        const _hasDekurs = false; // Immer false, damit Dekurs-Einträge immer neu geladen werden
         const hasVitalSigns = vitalSigns && vitalSigns.length > 0 && 
           vitalSigns.some((vs: any) => vs.patientId === patientId);
 
@@ -1132,6 +1123,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     };
 
     loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst begrenzte deps, volle Liste würde Re-Fetch-Loop auslösen
   }, [patientId, dispatch, patientFromStore]);
 
   // Aktualisiere Patientendaten, wenn sich der Patient im Redux Store ändert
@@ -1182,6 +1174,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally limited deps to avoid loops
   }, [patientFromStoreUpdatedAt, patientId, patient?.updatedAt]);
 
   // Zusätzlicher useEffect: Reagiere sofort auf Änderungen von patientFromStore
@@ -1266,6 +1259,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         });
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bewusst begrenzte deps
   }, [
     patientId, 
     patientFromStore?.updatedAt,
@@ -1288,6 +1282,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
     patientFromStore?.notes,
     patientFromStore?.medicalNotes,
     patient?.updatedAt
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally limited deps
   ]);
 
   // Erstelle EPA-Einträge aus allen Datenquellen
@@ -2058,6 +2053,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
         processTimeoutRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally limited deps to avoid refetch loops
   }, [patientId, appointments, dekursEntries, patientDiagnoses, documents, laborResults, dicomStudies, photos, vitalSigns, patient]);
 
   // Synchronisiere den Ref mit dem State, wenn sich epaEntries ändert (z.B. durch andere Quellen)
@@ -2167,6 +2163,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       console.error('Fehler beim Filtern der Einträge:', error);
       return [];
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- searchInObject is stable
   }, [epaEntries, searchTerm, filterType]);
 
   const getTypeIcon = React.useCallback((type: string) => {
@@ -2261,7 +2258,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
 
 
 
-  const formatDate = (date: Date) => {
+  const _formatDate = (date: Date) => {
     return format(date, 'dd.MM.yyyy HH:mm', { locale: de });
   };
 
@@ -2293,7 +2290,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
   };
 
   // Funktion zum Erstellen einer formatierten Vitalwert-Anzeige mit Markierung
-  const formatVitalValue = (label: string, value: number | string, type: string, unit?: string): { text: string; isAbnormal: boolean } => {
+  const _formatVitalValue = (label: string, value: number | string, type: string, unit?: string): { text: string; isAbnormal: boolean } => {
     const numValue = typeof value === 'number' ? value : parseFloat(String(value));
     if (isNaN(numValue)) {
       return { text: `${label}: ${value}`, isAbnormal: false };
@@ -2534,6 +2531,7 @@ const PatientEPA: React.FC<PatientEPAProps> = ({ patientId, onNavigate, onTabCha
       console.error('Fehler beim Sortieren der Daten:', error);
       return [];
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- groupedEntriesKey is stable proxy for groupedEntries
   }, [groupedEntriesKey]); // Verwende den stabilen Key statt groupedEntries direkt
 
 

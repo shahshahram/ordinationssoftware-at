@@ -22,9 +22,6 @@ import {
   DialogActions,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
   MenuItem,
   Switch,
   FormControlLabel,
@@ -52,7 +49,7 @@ import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 
-interface IntegrationStatus {
+interface IntegrationStatusData {
   id: string;
   name: string;
   description: string;
@@ -69,11 +66,11 @@ interface IntegrationConfig {
 }
 
 const IntegrationStatus: React.FC = () => {
-  const [integrations, setIntegrations] = useState<IntegrationStatus[]>([]);
+  const [integrations, setIntegrations] = useState<IntegrationStatusData[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
-  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationStatus | null>(null);
+  const [selectedIntegration, setSelectedIntegration] = useState<IntegrationStatusData | null>(null);
   const [config, setConfig] = useState<IntegrationConfig>({});
   const [configLoading, setConfigLoading] = useState(false);
   const [configSaving, setConfigSaving] = useState(false);
@@ -83,6 +80,7 @@ const IntegrationStatus: React.FC = () => {
 
   useEffect(() => {
     loadAllStatuses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAllStatuses bewusst ausgelassen
   }, []);
 
   const loadAllStatuses = async () => {
@@ -100,7 +98,7 @@ const IntegrationStatus: React.FC = () => {
 
       const results = await Promise.allSettled(statusPromises);
       
-      const integrationList: IntegrationStatus[] = [];
+      const integrationList: IntegrationStatusData[] = [];
       
       results.forEach((result, index) => {
         if (result.status === 'fulfilled' && result.value) {
@@ -135,7 +133,7 @@ const IntegrationStatus: React.FC = () => {
     }
   };
 
-  const loadOGKStatus = async (): Promise<IntegrationStatus | null> => {
+  const loadOGKStatus = async (): Promise<IntegrationStatusData | null> => {
     try {
       const response: any = await api.get('/ogk-billing/auto-submit/status');
       if (response.data?.success) {
@@ -171,7 +169,7 @@ const IntegrationStatus: React.FC = () => {
     };
   };
 
-  const loadELGAStatus = async (): Promise<IntegrationStatus | null> => {
+  const loadELGAStatus = async (): Promise<IntegrationStatusData | null> => {
     try {
       const response: any = await api.get('/elga/status');
       if (response.data?.success) {
@@ -207,7 +205,7 @@ const IntegrationStatus: React.FC = () => {
     };
   };
 
-  const loadGINAStatus = async (): Promise<IntegrationStatus | null> => {
+  const loadGINAStatus = async (): Promise<IntegrationStatusData | null> => {
     try {
       const response: any = await api.get('/gina/status');
       if (response.data?.success) {
@@ -243,7 +241,7 @@ const IntegrationStatus: React.FC = () => {
     };
   };
 
-  const loadGinaBoxStatus = async (): Promise<IntegrationStatus | null> => {
+  const loadGinaBoxStatus = async (): Promise<IntegrationStatusData | null> => {
     try {
       const response: any = await api.get('/gina-box/status');
       if (response.data?.success) {
@@ -278,7 +276,7 @@ const IntegrationStatus: React.FC = () => {
     };
   };
 
-  const loadKDokStatus = async (): Promise<IntegrationStatus | null> => {
+  const loadKDokStatus = async (): Promise<IntegrationStatusData | null> => {
     try {
       const response: any = await api.get('/kdok/status');
       if (response.data?.success) {
@@ -313,7 +311,7 @@ const IntegrationStatus: React.FC = () => {
     };
   };
 
-  const loadECardStatus = async (): Promise<IntegrationStatus | null> => {
+  const loadECardStatus = async (): Promise<IntegrationStatusData | null> => {
     try {
       const response: any = await api.get('/ecard/status');
       if (response.data?.success) {
@@ -348,7 +346,7 @@ const IntegrationStatus: React.FC = () => {
     };
   };
 
-  const loadAutoReimbursementStatus = async (): Promise<IntegrationStatus | null> => {
+  const loadAutoReimbursementStatus = async (): Promise<IntegrationStatusData | null> => {
     try {
       const response: any = await api.get('/auto-reimbursement/status');
       if (response.data?.success) {
@@ -393,7 +391,7 @@ const IntegrationStatus: React.FC = () => {
     }
   };
 
-  const handleOpenConfig = async (integration: IntegrationStatus) => {
+  const handleOpenConfig = async (integration: IntegrationStatusData) => {
     setSelectedIntegration(integration);
     setConfigDialogOpen(true);
     setConfigLoading(true);

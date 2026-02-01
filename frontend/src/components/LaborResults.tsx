@@ -13,7 +13,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  IconButton,
   Tooltip,
   Alert,
   CircularProgress,
@@ -34,9 +33,7 @@ import {
   FormLabel,
   List,
   ListItem,
-  ListItemText,
   Divider,
-  Chip as MuiChip
 } from '@mui/material';
 import {
   ExpandMore,
@@ -144,6 +141,7 @@ const LaborResults: React.FC<LaborResultsProps> = ({ patientId, patientData }) =
       setResults([]);
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchLaborResults/fetchPatientInfo intentionally not in deps
   }, [patientId, patientData]);
 
   const fetchPatientInfo = async () => {
@@ -1458,7 +1456,7 @@ const LaborResults: React.FC<LaborResultsProps> = ({ patientId, patientData }) =
                           stroke="#666"
                         />
                         <RechartsTooltip 
-                          formatter={(value: any, name: string) => [
+                          formatter={(value: any, _name: string) => [
                             `${typeof value === 'number' ? value.toLocaleString('de-DE', { maximumFractionDigits: 2 }) : value} ${getTrendDataForTest[0]?.unit || ''}`,
                             'Wert'
                           ]}

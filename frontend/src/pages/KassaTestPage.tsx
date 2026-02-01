@@ -17,7 +17,6 @@ import {
   TableHead,
   TableRow,
   Chip,
-  Divider,
   Stack,
   Grid,
   Autocomplete,
@@ -35,7 +34,6 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Receipt as ReceiptIcon,
-  Refresh as RefreshIcon,
   Send as SendIcon,
   List as ListIcon,
   Build as BuildIcon,
@@ -196,7 +194,7 @@ const KassaTestPage: React.FC = () => {
     setLoading(true);
     try {
       const performance = performances.find((p) => p._id === sendTestData.performanceId);
-      const patient = patients.find((p) => p._id === sendTestData.patientId);
+      const _patient = patients.find((p) => p._id === sendTestData.patientId);
 
       const payload = {
         performanceId: sendTestData.performanceId || null,

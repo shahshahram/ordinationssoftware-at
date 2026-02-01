@@ -26,7 +26,6 @@ import {
   Tab,
   Alert,
   Snackbar,
-  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -35,15 +34,9 @@ import {
   useTheme,
   useMediaQuery,
   Tooltip,
-  Collapse,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Drawer,
-  Fab,
 } from '@mui/material';
 import {
-  Favorite,
   Search,
   Add,
   ArrowBackIos,
@@ -53,9 +46,7 @@ import {
   CheckBox,
   Mail,
   Euro,
-  Help,
   Build,
-  Fullscreen,
   Folder,
   Event as EventIcon,
   Person,
@@ -72,9 +63,8 @@ import {
   LockOpen,
   Merge,
   Close,
-  FilterList,
 } from '@mui/icons-material';
-import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, endOfWeek, isSameDay, isSameMonth, eachDayOfInterval, parseISO, addMonths, subMonths, startOfDay, endOfDay, getISOWeek, getISOWeekYear, differenceInYears } from 'date-fns';
+import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMonth, endOfWeek, isSameDay, isSameMonth, eachDayOfInterval, parseISO, addMonths, subMonths, startOfDay, differenceInYears } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -211,12 +201,12 @@ const DemoCalendar: React.FC = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   
   // Redux State
   const { appointments, loading: appointmentsLoading } = useAppSelector((state) => state.appointments);
-  const { locations, loading: locationsLoading, currentLocation } = useAppSelector((state) => state.locations);
-  const { patients, loading: patientsLoading } = useAppSelector((state) => state.patients);
+  const { locations, loading: locationsLoading, currentLocation: _currentLocation } = useAppSelector((state) => state.locations);
+  const { patients, loading: _patientsLoading } = useAppSelector((state) => state.patients);
   const { staffProfiles } = useAppSelector((state) => state.staff);
   const { rooms } = useAppSelector((state) => state.rooms);
   const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
@@ -256,7 +246,7 @@ const DemoCalendar: React.FC = () => {
   const [services, setServices] = useState<Service[]>([]);
   const [patientSearchValue, setPatientSearchValue] = useState<Patient | null>(null);
   const [patientSearchInput, setPatientSearchInput] = useState('');
-  const [patientSearchLoading, setPatientSearchLoading] = useState(false);
+  const [patientSearchLoading, _setPatientSearchLoading] = useState(false);
   const [serviceSearchInput, setServiceSearchInput] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<string>('');
   const [selectedStaff, setSelectedStaff] = useState<string>('');
@@ -665,7 +655,7 @@ const DemoCalendar: React.FC = () => {
     });
     
     return mapped.filter((apt): apt is CalendarAppointment => apt !== null);
-  }, [appointments, selectedLocations, searchQuery, patientMap, locationMap, services, rooms, openSearchDialog]);
+  }, [appointments, selectedLocations, searchQuery, patientMap, locationMap, services, rooms]);
 
   // Berechne angezeigte Tage basierend auf viewMode
   const displayedDays = useMemo(() => {
@@ -1451,7 +1441,7 @@ const DemoCalendar: React.FC = () => {
       const time = formData.time || '09:00';
       const startTime = `${date}T${time}:00`;
       const duration = formData.duration || 30;
-      const [hours, minutes] = time.split(':').map(Number);
+      const [_hours, _minutes] = time.split(':').map(Number);
       const endDate = new Date(`${date}T${time}:00`);
       endDate.setMinutes(endDate.getMinutes() + duration);
       const endHours = endDate.getHours();
@@ -1508,7 +1498,7 @@ const DemoCalendar: React.FC = () => {
       };
       
       try {
-        const result = await dispatch(createAppointment(newAppointment)).unwrap();
+        const _result = await dispatch(createAppointment(newAppointment)).unwrap();
         setSnackbar({ open: true, message: 'Termin erfolgreich hinzugefügt', severity: 'success' });
         
         // Navigate to the week of the created appointment
@@ -2464,18 +2454,18 @@ const DemoCalendar: React.FC = () => {
                     }
                   }}
                 >
-                  {timeSlots.map((time, index) => {
+                  {timeSlots.map((time, _index) => {
                     const isInSelection = isSlotInSelection(day, time);
                     
                     return (
                       <Box
                         key={time}
-                        onClick={(e) => {
+                        onClick={(ev) => {
                           if (!isSelecting) {
                             // Wenn eine Markierung existiert und man auf einen nicht-markierten Slot klickt, entferne die Markierung
                             if ((selectionStart || selectionEnd) && !isInSelection) {
-                              e.preventDefault();
-                              e.stopPropagation();
+                              ev.preventDefault();
+                              ev.stopPropagation();
                               clearSelection();
                               return;
                             }
@@ -2492,7 +2482,7 @@ const DemoCalendar: React.FC = () => {
                             startSelection(day, time);
                           }
                         }}
-                        onMouseMove={(e) => {
+                        onMouseMove={(_e) => {
                           if (isSelecting) {
                             updateSelection(day, time);
                           }
@@ -2602,7 +2592,7 @@ const DemoCalendar: React.FC = () => {
                       const blockEnd = new Date(block.endTime);
                       const startMinutes = blockStart.getHours() * 60 + blockStart.getMinutes();
                       const endMinutes = blockEnd.getHours() * 60 + blockEnd.getMinutes();
-                      const duration = endMinutes - startMinutes;
+                      const _duration = endMinutes - startMinutes;
                       
                       // Basis: 6:00 = 0, jede halbe Stunde = 40px (gleiche Logik wie getAppointmentPosition)
                       // Stelle sicher, dass die Zeit im lokalen Format verwendet wird
@@ -3121,7 +3111,7 @@ const DemoCalendar: React.FC = () => {
         }}
         slotProps={{
           backdrop: {
-            onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+            onClick: (_e: React.MouseEvent<HTMLDivElement>) => {
               if (dialogMode === 'view') {
                 handleCloseEventDialog();
               }
@@ -3530,7 +3520,7 @@ const DemoCalendar: React.FC = () => {
                       />
                     )}
                     renderOption={(props: any, option: Patient) => {
-                      const { key, ...otherProps } = props;
+                      const { key: _key, ...otherProps } = props;
                       return (
                         <Box component="li" key={option._id} {...otherProps}>
                           <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>

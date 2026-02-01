@@ -46,11 +46,54 @@ import {
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchDekursEntries, DekursEntry, DekursAttachment } from '../store/slices/dekursSlice';
-import api from '../utils/api';
+import api, { getUploadsBaseUrl, normalizeAbsoluteUrl } from '../utils/api';
+
+/** Baut eine absolute Upload-URL mit Protokoll. Funktioniert lokal (localhost) und auf anderen Geräten. */
+const toAbsoluteUploadUrl = (path: string | undefined): string => {
+  const p = (path || '').trim().replace(/^\.\/+/, '').replace(/\\/g, '/');
+  const base = getUploadsBaseUrl();
+  if (!p) return `${base}/uploads/`;
+  if (p.startsWith('http://') || p.startsWith('https://')) return normalizeAbsoluteUrl(p);
+  // Fehlerhafte Voll-URL (z. B. aus Backend): http/localhost:5001/uploads/... → sofort korrigieren
+  if (p.startsWith('http/') || p.startsWith('https/')) return normalizeAbsoluteUrl(p.startsWith('https/') ? `https://${p.slice(6)}` : `http://${p.slice(5)}`);
+  const withoutLeadingSlash = p.replace(/^\/+/, '');
+  if (withoutLeadingSlash.match(/^[a-zA-Z0-9.-]+:\d+/)) return normalizeAbsoluteUrl(`http://${withoutLeadingSlash}`);
+  let relative = p.startsWith('uploads/') ? p : `uploads/${p}`;
+  if (relative.match(/^uploads\/[^/]+:\d+\//)) {
+    relative = relative.replace(/^uploads\/[^/]+:\d+\//, '');
+    if (relative && !relative.startsWith('uploads/')) relative = `uploads/${relative}`;
+    else if (!relative) relative = 'uploads/';
+  }
+  let url = `${base}/${relative}`.replace(/\/+/g, '/').replace(/\/\.\//g, '/');
+  if (url.startsWith('http/')) url = `http://${url.slice(5)}`;
+  if (url.startsWith('https/')) url = `https://${url.slice(6)}`;
+  const withProtocol = url.startsWith('http://') || url.startsWith('https://') ? url : `http://${url.replace(/^\/+/, '')}`;
+  return normalizeAbsoluteUrl(withProtocol.startsWith('http') ? withProtocol : `${base}/uploads/`);
+};
+
+/** Stellt sicher, dass eine Bild-URL immer genau einmal http:// oder https:// hat – wird bei der Anzeige (img src) verwendet. */
+const ensureImageSrcUrl = (url: string | undefined): string => {
+  let u = (url || '').trim();
+  if (!u) return `${getUploadsBaseUrl()}/uploads/`;
+  // Hartnäckige doppelte/fehlerhafte Protokolle (z. B. http://http/localhost:5001/...) in Schleife entfernen
+  while (u.includes('http://http/') || u.includes('https://http/') || u.includes('http://https/') || u.includes('https://https/')) {
+    u = u.replace(/^https?:\/\/http\//i, 'http://').replace(/^https?:\/\/https\//i, 'https://');
+  }
+  // Fehlender Doppelpunkt: http/ oder https/ am Anfang
+  if (/^http\/./i.test(u)) u = `http://${u.slice(5)}`;
+  else if (/^https\/./i.test(u)) u = `https://${u.slice(6)}`;
+  if (u.startsWith('http://') || u.startsWith('https://')) return normalizeAbsoluteUrl(u);
+  // host:port (z. B. localhost:5001) ohne Protokoll
+  if (u.match(/^[a-zA-Z0-9.-]+:\d+/)) return normalizeAbsoluteUrl(`http://${u}`);
+  const base = getUploadsBaseUrl();
+  return normalizeAbsoluteUrl(`${base}/${u.replace(/^\/+/, '')}`.replace(/\/+/g, '/'));
+};
 
 interface PatientPhoto {
   id: string;
   url: string;
+  /** Normalisierter relativer Pfad (z. B. uploads/dekurs-photos/xxx). Wird für img src verwendet, um fehlerhafte url zu umgehen. */
+  relativePath?: string;
   filename: string;
   originalName: string;
   source: 'dekurs' | 'direct' | 'document' | 'other';
@@ -63,6 +106,16 @@ interface PatientPhoto {
   };
   folderName?: string; // Ordner-Name für Gruppierung
 }
+
+/** Liefert die Anzeige-URL für ein Foto: bevorzugt relativePath + getUploadsBaseUrl(), sonst ensureImageSrcUrl(url). */
+const getPhotoDisplayUrl = (photo: PatientPhoto): string => {
+  if (photo.relativePath) {
+    const base = getUploadsBaseUrl();
+    const path = photo.relativePath.replace(/^\/+/, '').replace(/\/+/g, '/');
+    return `${base}/${path}`;
+  }
+  return ensureImageSrcUrl(photo.url);
+};
 
 interface PatientPhotoGalleryProps {
   patientId: string;
@@ -130,9 +183,18 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
           if (entry.attachments && entry.attachments.length > 0) {
                 entry.attachments.forEach((attachment: DekursAttachment) => {
                   try {
-              dekursPhotos.push({
+                    const rawPath = (attachment.path || '').trim().replace(/^\.\/+/, '').replace(/\\/g, '/');
+                    const relativePath = rawPath.startsWith('uploads/')
+                      ? rawPath
+                      : rawPath.includes('uploads/')
+                        ? rawPath.slice(rawPath.indexOf('uploads/'))
+                        : rawPath
+                          ? `uploads/${rawPath.replace(/^\/+/, '')}`
+                          : `uploads/dekurs-photos/${attachment.filename}`;
+                    dekursPhotos.push({
                 id: `${entry._id}-${attachment.filename}`,
-                url: `http://localhost:5001/${attachment.path}`,
+                url: toAbsoluteUploadUrl(attachment.path?.startsWith('uploads/') ? attachment.path : attachment.path ? `uploads/${attachment.path}` : ''),
+                relativePath,
                 filename: attachment.filename,
                 originalName: attachment.originalName,
                 source: 'dekurs',
@@ -168,34 +230,31 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
               try {
             // Der Pfad sollte relativ zu uploads sein (z.B. "patient-photos/68fbf91109f619287f04a78f/scan-2025-11-24_14-53-59/file.jpg")
             const photoPath = photo.path || photo.filename;
-            
-            // Konstruiere URL: Der Pfad ist relativ zu uploads, also einfach /uploads/ + path
+            let relativePath: string;
             let photoUrl: string;
+                const baseUrl = getUploadsBaseUrl();
                 if (photoPath && photoPath.startsWith('uploads/')) {
-              // Bereits vollständiger Pfad mit uploads/
-              photoUrl = `http://localhost:5001/${photoPath}`;
+              relativePath = photoPath;
+              photoUrl = `${baseUrl}/${photoPath}`;
                 } else if (photoPath && (photoPath.startsWith('/') || photoPath.startsWith('C:') || photoPath.startsWith('D:'))) {
-              // Absoluter Pfad (alte Einträge) - extrahiere relativen Teil
               const uploadsIndex = photoPath.indexOf('uploads');
               if (uploadsIndex !== -1) {
-                const relativePath = photoPath.substring(uploadsIndex);
-                photoUrl = `http://localhost:5001/${relativePath.replace(/\\/g, '/')}`;
+                relativePath = photoPath.substring(uploadsIndex).replace(/\\/g, '/');
+                photoUrl = `${baseUrl}/${relativePath}`;
               } else {
-                // Fallback: verwende filename
-                    photoUrl = `http://localhost:5001/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                relativePath = `uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                photoUrl = `${baseUrl}/${relativePath}`;
               }
                 } else if (photoPath) {
-              // Relativer Pfad (neue Einträge) - path beginnt mit "patient-photos/"
-              // Normalisiere den Pfad (entferne doppelte Slashes, normalisiere Backslashes)
               const normalizedPath = photoPath.replace(/\\/g, '/').replace(/\/+/g, '/');
-              photoUrl = `http://localhost:5001/uploads/${normalizedPath}`;
+              relativePath = normalizedPath.startsWith('uploads/') ? normalizedPath : `uploads/${normalizedPath}`;
+              photoUrl = `${baseUrl}/${relativePath}`;
                 } else {
-                  // Fallback: verwende filename
-                  photoUrl = `http://localhost:5001/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                  relativePath = `uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                  photoUrl = `${baseUrl}/${relativePath}`;
             }
             
             // Verwende folderName aus der API-Antwort, falls vorhanden
-            // Fallback: Extrahiere Ordnernamen aus filename (z.B. "68fbf91109f619287f04a78f/scan-2025-11-24_15-22-17/file.png")
             let folderName = photo.folderName;
             if (!folderName && photo.filename) {
               const folderMatch = photo.filename.match(/scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:_(.+))?/);
@@ -205,6 +264,7 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
             return {
                   id: photo._id || photo.id || `photo-${Date.now()}-${Math.random()}`,
               url: photoUrl,
+              relativePath,
                   filename: photo.filename || 'unknown.jpg',
                   originalName: photo.originalName || photo.filename || 'unknown.jpg',
               source: 'direct',
@@ -281,9 +341,18 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
               if (entry.attachments && entry.attachments.length > 0) {
                 entry.attachments.forEach((attachment: DekursAttachment) => {
                   try {
+                    const rawPath = (attachment.path || '').trim().replace(/^\.\/+/, '').replace(/\\/g, '/');
+                    const relativePath = rawPath.startsWith('uploads/')
+                      ? rawPath
+                      : rawPath.includes('uploads/')
+                        ? rawPath.slice(rawPath.indexOf('uploads/'))
+                        : rawPath
+                          ? `uploads/${rawPath.replace(/^\/+/, '')}`
+                          : `uploads/dekurs-photos/${attachment.filename}`;
                     dekursPhotos.push({
                       id: `${entry._id}-${attachment.filename}`,
-                      url: `http://localhost:5001/${attachment.path}`,
+                      url: toAbsoluteUploadUrl(attachment.path?.startsWith('uploads/') ? attachment.path : attachment.path ? `uploads/${attachment.path}` : ''),
+                      relativePath,
                       filename: attachment.filename,
                       originalName: attachment.originalName,
                       source: 'dekurs',
@@ -311,51 +380,44 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
       // Lade direkt hochgeladene Fotos
       try {
         const response = await api.get(`/patients-extended/${patientId}/photos`);
-        // Die API-Klasse wrappt die Antwort, response.data ist das Backend-Response
         const backendResponse = response.data as { success?: boolean; data?: any[]; message?: string };
         if (backendResponse?.success && backendResponse?.data && Array.isArray(backendResponse.data)) {
           const directPhotos: PatientPhoto[] = backendResponse.data
             .map((photo: any): PatientPhoto | null => {
               try {
-                // Der Pfad sollte relativ zu uploads sein (z.B. "patient-photos/68fbf91109f619287f04a78f/scan-2025-11-24_14-53-59/file.jpg")
                 const photoPath = photo.path || photo.filename;
-                
-                // Konstruiere URL: Der Pfad ist relativ zu uploads, also einfach /uploads/ + path
+                const baseUrl = getUploadsBaseUrl();
+                let relativePath: string;
                 let photoUrl: string;
                 if (photoPath && photoPath.startsWith('uploads/')) {
-                  // Bereits vollständiger Pfad mit uploads/
-                  photoUrl = `http://localhost:5001/${photoPath}`;
+                  relativePath = photoPath;
+                  photoUrl = `${baseUrl}/${photoPath}`;
                 } else if (photoPath && (photoPath.startsWith('/') || photoPath.startsWith('C:') || photoPath.startsWith('D:'))) {
-                  // Absoluter Pfad (alte Einträge) - extrahiere relativen Teil
                   const uploadsIndex = photoPath.indexOf('uploads');
                   if (uploadsIndex !== -1) {
-                    const relativePath = photoPath.substring(uploadsIndex);
-                    photoUrl = `http://localhost:5001/${relativePath.replace(/\\/g, '/')}`;
+                    relativePath = photoPath.substring(uploadsIndex).replace(/\\/g, '/');
+                    photoUrl = `${baseUrl}/${relativePath}`;
                   } else {
-                    // Fallback: verwende filename
-                    photoUrl = `http://localhost:5001/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                    relativePath = `uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                    photoUrl = `${baseUrl}/${relativePath}`;
                   }
                 } else if (photoPath) {
-                  // Relativer Pfad (neue Einträge) - path beginnt mit "patient-photos/"
-                  // Normalisiere den Pfad (entferne doppelte Slashes, normalisiere Backslashes)
                   const normalizedPath = photoPath.replace(/\\/g, '/').replace(/\/+/g, '/');
-                  photoUrl = `http://localhost:5001/uploads/${normalizedPath}`;
+                  relativePath = normalizedPath.startsWith('uploads/') ? normalizedPath : `uploads/${normalizedPath}`;
+                  photoUrl = `${baseUrl}/${relativePath}`;
                 } else {
-                  // Fallback: verwende filename
-                  photoUrl = `http://localhost:5001/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                  relativePath = `uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+                  photoUrl = `${baseUrl}/${relativePath}`;
                 }
-                
-                // Verwende folderName aus der API-Antwort, falls vorhanden
-                // Fallback: Extrahiere Ordnernamen aus filename (z.B. "68fbf91109f619287f04a78f/scan-2025-11-24_15-22-17/file.png")
                 let folderName = photo.folderName;
                 if (!folderName && photo.filename) {
                   const folderMatch = photo.filename.match(/scan-\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}(?:_(.+))?/);
                   folderName = folderMatch ? folderMatch[0] : undefined;
                 }
-                
                 return {
                   id: photo._id || photo.id || `photo-${Date.now()}-${Math.random()}`,
                   url: photoUrl,
+                  relativePath,
                   filename: photo.filename || 'unknown.jpg',
                   originalName: photo.originalName || photo.filename || 'unknown.jpg',
                   source: 'direct',
@@ -372,7 +434,6 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
           dekursPhotos.push(...directPhotos);
         }
       } catch (err: any) {
-        // Route existiert möglicherweise noch nicht, ignorieren
         console.log('Direkte Foto-Route noch nicht verfügbar:', err.message);
       }
 
@@ -564,18 +625,18 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
     }
     
     // Prüfe, ob wir in Produktion sind (HTTPS sollte automatisch vorhanden sein)
-    const isProduction = process.env.NODE_ENV === 'production' || 
-                       window.location.hostname !== 'localhost' && 
+    const isProduction = process.env.NODE_ENV === 'production' || (
+                       window.location.hostname !== 'localhost' &&
                        window.location.hostname !== '127.0.0.1' &&
                        !window.location.hostname.startsWith('192.168.') &&
                        !window.location.hostname.startsWith('10.') &&
-                       !window.location.hostname.startsWith('172.');
+                       !window.location.hostname.startsWith('172.'));
     
     // Prüfe, ob die Seite über HTTPS oder localhost aufgerufen wird
-    const isSecureContext = window.isSecureContext || 
-                           window.location.protocol === 'https:' || 
-                           window.location.hostname === 'localhost' || 
-                           window.location.hostname === '127.0.0.1';
+    const isSecureContext = window.isSecureContext || (
+                           window.location.protocol === 'https:' ||
+                           window.location.hostname === 'localhost' ||
+                           window.location.hostname === '127.0.0.1');
     
     // In Produktion sollte HTTPS automatisch vorhanden sein
     if (isProduction && window.location.protocol !== 'https:') {
@@ -671,6 +732,7 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
       
       setError(errorMessage);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stream, videoRef absichtlich weggelassen
   }, [facingMode]);
 
   const toggleCamera = useCallback(async () => {
@@ -680,6 +742,7 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
     setTimeout(() => {
       startCamera();
     }, 100);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stream, videoRef absichtlich weggelassen
   }, [stopCamera, startCamera]);
 
   const captureImage = useCallback(() => {
@@ -1155,7 +1218,7 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
                       </Box>
                       <Box
                         component="img"
-                        src={photo.url}
+                        src={getPhotoDisplayUrl(photo)}
                         alt={photo.originalName}
                         onClick={() => {
                           if (!isSelected) {
@@ -1442,7 +1505,7 @@ const PatientPhotoGallery: React.FC<PatientPhotoGalleryProps> = ({ patientId }) 
           {selectedImage && (
             <Box
               component="img"
-              src={selectedImage.url}
+              src={selectedImage ? getPhotoDisplayUrl(selectedImage) : ''}
               alt={selectedImage.originalName}
               sx={{
                 maxWidth: '100%',

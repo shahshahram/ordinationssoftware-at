@@ -22,7 +22,7 @@ import {
   Lock,
   Login as LoginIcon,
 } from '@mui/icons-material';
-import { login, clearError, loadUser } from '../store/slices/authSlice';
+import { login, clearError } from '../store/slices/authSlice';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { store } from '../store/store';
 import LoginTest from '../components/LoginTest';

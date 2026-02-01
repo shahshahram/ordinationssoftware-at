@@ -17,7 +17,6 @@ import {
   CheckCircle,
   Cancel,
   Refresh,
-  Settings,
   PersonSearch,
 } from '@mui/icons-material';
 import useGinaBox from '../hooks/useGinaBox';

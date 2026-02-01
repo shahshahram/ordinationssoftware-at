@@ -29,7 +29,7 @@ const TabletMode: React.FC<TabletModeProps> = ({ onExit }) => {
   const { isLoading, error } = useAppSelector((state) => state.checkin);
   const [mode, setMode] = useState<'scanner' | 'form' | 'success'>('scanner');
   const [scannedData, setScannedData] = useState<string | null>(null);
-  const [patientData, setPatientData] = useState<any>(null);
+  const [_patientData, setPatientData] = useState<any>(null);
   const [scannerError, setScannerError] = useState<string | null>(null);
 
   const handleScan = async (result: string) => {

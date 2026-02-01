@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box,
@@ -24,8 +24,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  Tabs,
-  Tab,
   Drawer,
   ListItemButton,
   Toolbar,
@@ -38,7 +36,6 @@ import {
   Alert,
   CircularProgress,
   InputAdornment,
-  Fab,
   useTheme,
   useMediaQuery,
 } from '@mui/material';
@@ -51,33 +48,22 @@ import {
   Reply,
   Forward,
   PriorityHigh,
-  Person,
   Close,
-  Add,
   Folder,
-  FolderOpen,
   Edit,
   MoreVert,
   Search,
-  CheckCircle,
-  Star,
-  StarBorder,
-  FilterList,
   Refresh,
   Inbox,
   Send as SendIcon,
-  DeleteOutline,
   CreateNewFolder,
-  DriveFileMove,
-  MarkEmailRead,
-  MarkEmailUnread
+  DriveFileMove
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   fetchMessages,
   sendMessage,
   markAsRead,
-  markAllAsRead,
   archiveMessage,
   deleteMessage,
   fetchUnreadCount,
@@ -96,24 +82,24 @@ import {
   CreateFolderData
 } from '../store/slices/messageFoldersSlice';
 import { fetchStaffProfiles } from '../store/slices/staffSlice';
-import { addNotification } from '../store/slices/uiSlice';
+import { addNotification as _addNotification } from '../store/slices/uiSlice';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
 const InternalMessages: React.FC = () => {
   const dispatch = useAppDispatch();
-  const navigate = useNavigate();
-  const location = useLocation();
+  const _navigate = useNavigate();
+  const _location = useLocation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { user } = useAppSelector((state) => state.auth);
   const { marginTopValue } = useGlobalNavigationOffset();
   const { inbox, sent, archived, unreadCount, selectedMessage, loading } = useAppSelector(
     (state) => state.internalMessages
   );
-  const { folders, folderMessages, selectedFolder, loading: foldersLoading } = useAppSelector(
+  const { folders, folderMessages, selectedFolder: _selectedFolder, loading: _foldersLoading } = useAppSelector(
     (state) => state.messageFolders
   );
   const { staffProfiles } = useAppSelector((state) => state.staff);
@@ -133,8 +119,8 @@ const InternalMessages: React.FC = () => {
     message: '',
     severity: 'success'
   });
-  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [helpTab, setHelpTab] = useState(0);
+  const [_helpDialogOpen, _setHelpDialogOpen] = useState(false);
+  const [_helpTab, _setHelpTab] = useState(0);
 
   const [composeData, setComposeData] = useState<CreateMessageData>({
     recipientId: '',
@@ -169,7 +155,7 @@ const InternalMessages: React.FC = () => {
     }
   }, [selectedFolderId, activeTab, dispatch]);
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+  const _handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     const tabs: Array<'inbox' | 'sent' | 'archived' | 'folder'> = ['inbox', 'sent', 'archived', 'folder'];
     const newTab = tabs[newValue] || 'inbox';
     setActiveTab(newTab);
@@ -409,7 +395,7 @@ const InternalMessages: React.FC = () => {
     );
   });
 
-  const systemFolders = folders.filter(f => f.isSystem);
+  const _systemFolders = folders.filter(f => f.isSystem);
   const customFolders = folders.filter(f => !f.isSystem);
 
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);

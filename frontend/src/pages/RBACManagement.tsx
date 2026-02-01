@@ -448,6 +448,7 @@ const RBACManagement: React.FC = () => {
       console.error('Error loading RBAC data:', error);
       setSnackbar({ open: true, message: 'Fehler beim Laden der Daten', severity: 'error' });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadData init once
   }, []);
 
   useEffect(() => {

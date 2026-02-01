@@ -17,13 +17,11 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Autocomplete,
   Divider,
   Alert,
   CircularProgress,
   Grid,
   Paper,
-  Tooltip,
   FormControlLabel,
   Switch
 } from '@mui/material';
@@ -33,15 +31,10 @@ import {
   Assignment,
   PhotoCamera,
   Delete,
-  Add,
-  Description,
   LocalHospital,
   Medication,
-  Psychology,
   CheckCircle,
   Cancel,
-  ZoomIn,
-  Print,
   Edit,
   Star,
   StarBorder,
@@ -112,12 +105,12 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
   onSave
 }) => {
   const dispatch = useAppDispatch();
-  const { vorlagen, loading } = useAppSelector((state) => state.dekurs);
-  const { diagnoses } = useAppSelector((state) => state.diagnoses);
+  const { vorlagen: _vorlagen, loading } = useAppSelector((state) => state.dekurs);
+  const { diagnoses: _diagnoses } = useAppSelector((state) => state.diagnoses);
   const { patients } = useAppSelector((state) => state.patients);
 
   const [activeTab, setActiveTab] = useState(0);
-  const [selectedVorlage, setSelectedVorlage] = useState<DekursVorlage | null>(null);
+  const [_selectedVorlage, setSelectedVorlage] = useState<DekursVorlage | null>(null);
   const [formData, setFormData] = useState<Partial<DekursEntry>>({
     patientId,
     encounterId,
@@ -471,7 +464,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     }));
   };
 
-  const handleUpdateDiagnosisSide = (index: number, side: 'left' | 'right' | 'bilateral' | '') => {
+  const _handleUpdateDiagnosisSide = (index: number, side: 'left' | 'right' | 'bilateral' | '') => {
     setFormData((prev) => {
       const updatedDiagnoses = [...(prev.linkedDiagnoses || [])];
       if (updatedDiagnoses[index]) {
@@ -559,25 +552,23 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
   const handleAddMedication = (medication: any) => {
     if (!medication) return;
     
-    // Stelle sicher, dass medicationId eine String-ID ist, nicht ein Objekt
-    let medicationId: string | undefined = undefined;
+    // Stelle sicher, dass medicationId eine String-ID ist, nicht ein Objekt (für zukünftige Verwendung)
+    let _medicationId: string | undefined = undefined;
     if (medication._id) {
-      medicationId = typeof medication._id === 'string' ? medication._id : medication._id.toString();
+      _medicationId = typeof medication._id === 'string' ? medication._id : medication._id.toString();
     } else if (medication.id) {
-      medicationId = typeof medication.id === 'string' ? medication.id : medication.id.toString();
+      _medicationId = typeof medication.id === 'string' ? medication.id : medication.id.toString();
     } else if (medication.medicationId) {
-      // Wenn medicationId ein Objekt ist, extrahiere die _id
       if (typeof medication.medicationId === 'object' && medication.medicationId._id) {
-        medicationId = typeof medication.medicationId._id === 'string' 
+        _medicationId = typeof medication.medicationId._id === 'string' 
           ? medication.medicationId._id 
           : medication.medicationId._id.toString();
       } else if (typeof medication.medicationId === 'string') {
-        medicationId = medication.medicationId;
+        _medicationId = medication.medicationId;
       } else {
-        medicationId = medication.medicationId.toString();
+        _medicationId = medication.medicationId.toString();
       }
     }
-    
     // Öffne den erweiterten Dialog für Medikamentenverordnung
     setSelectedMedication(medication);
     setEditingMedicationIndex(null);
@@ -690,7 +681,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     if (entryId) {
       setUploadingPhoto(true);
       try {
-        const result = await dispatch(uploadDekursPhoto({ entryId, photoFile: file })).unwrap();
+        const _result = await dispatch(uploadDekursPhoto({ entryId, photoFile: file })).unwrap();
         // Lade Eintrag neu um Fotos zu aktualisieren
         const refreshedEntry = await dispatch(fetchDekursEntry(entryId)).unwrap();
         setCurrentEntry(refreshedEntry);
@@ -898,7 +889,7 @@ const DekursDialog: React.FC<DekursDialogProps> = ({
     }
   };
 
-  const handlePrint = () => {
+  const _handlePrint = () => {
     const entry = currentEntry || formData;
     const patient = patients.find(p => p._id === patientId);
     

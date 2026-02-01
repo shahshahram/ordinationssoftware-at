@@ -49,7 +49,6 @@ import {
   CheckCircle,
   Cancel,
   Send,
-  Visibility,
   Timeline,
   HelpOutline,
 } from '@mui/icons-material';
@@ -67,7 +66,6 @@ import {
   createDocumentTemplate,
   updateDocumentTemplate,
   deleteDocumentTemplate,
-  fetchStandaloneTemplates,
   fetchTemplateRevisions,
   createTemplateVersion,
   submitTemplateForApproval,

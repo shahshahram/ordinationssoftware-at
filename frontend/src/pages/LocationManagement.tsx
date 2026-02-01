@@ -6,7 +6,6 @@ import {
   Button,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -29,7 +28,6 @@ import {
   Tabs,
   Tab,
   Autocomplete,
-  Stack,
   Tooltip,
 } from '@mui/material';
 import {
@@ -43,7 +41,6 @@ import {
   CalendarToday as CalendarTodayIcon,
   ExpandMore as ExpandMoreIcon,
   Storage as StorageIcon,
-  Description as DescriptionIcon,
   BookOnline,
   HelpOutline as HelpOutlineIcon,
   Article,
@@ -52,7 +49,6 @@ import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import GradientDialogTitle from '../components/GradientDialogTitle';
-import RichTextEditor from '../components/RichTextEditor';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   fetchLocations,
@@ -76,7 +72,6 @@ import {
   LocationClosure,
   StaffLocationAssignment,
   LocationOwner,
-  setCurrentLocation
 } from '../store/slices/locationSlice';
 import {
   fetchLocationWeeklySchedules,
@@ -116,7 +111,7 @@ function TabPanel(props: TabPanelProps) {
 const LocationManagement: React.FC = () => {
   const dispatch = useAppDispatch();
   const { marginTopValue } = useGlobalNavigationOffset();
-  const { locations, locationHours, locationClosures, staffAssignments, loading, error, currentLocation } = useAppSelector(state => state.locations);
+  const { locations, locationHours, locationClosures, staffAssignments, loading, error, currentLocation: _currentLocation } = useAppSelector(state => state.locations);
   const { staffProfiles } = useAppSelector(state => state.staff);
   const { schedules: weeklySchedules } = useAppSelector(state => state.locationWeeklySchedules);
 
@@ -222,8 +217,8 @@ const LocationManagement: React.FC = () => {
     letterheadTemplates: {} as Record<string, 'template1' | 'template2' | 'template3' | 'custom'>
   });
   
-  const [logoPreview, setLogoPreview] = useState<string | null>(null);
-  const [logoUploading, setLogoUploading] = useState(false);
+  const [_logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [_logoUploading, setLogoUploading] = useState(false);
 
   const [hoursForm, setHoursForm] = useState({
     location_id: '',
@@ -545,7 +540,7 @@ const LocationManagement: React.FC = () => {
     }
   };
 
-  const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const _handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -590,7 +585,7 @@ const LocationManagement: React.FC = () => {
     }
   };
 
-  const handleLogoDelete = async () => {
+  const _handleLogoDelete = async () => {
     const targetLocation = editingLocation;
     if (!targetLocation || !targetLocation._id) return;
 
@@ -2342,14 +2337,14 @@ const LocationManagement: React.FC = () => {
               )}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => {
-                  const { key, ...tagProps } = getTagProps({ index });
+                  const { key: _key, ...tagProps } = getTagProps({ index });
                   const label = typeof option === 'string' 
                     ? (medicalSpecialties.find(s => s.code === option)?.name || option)
                     : (option as any).label || (option as any).value || '';
                   return (
                     <Chip
                       {...tagProps}
-                      key={key || index}
+                      key={_key || index}
                       label={label}
                       color="primary"
                       variant="outlined"
@@ -3091,7 +3086,7 @@ const LocationManagement: React.FC = () => {
               )}
               renderTags={(value, getTagProps) =>
                 value.map((option, index) => {
-                  const { key, ...tagProps } = getTagProps({ index });
+                  const { key: _key, ...tagProps } = getTagProps({ index });
                   return (
                     <Chip
                       {...tagProps}

@@ -19,8 +19,6 @@ import {
   CircularProgress,
   Divider,
   Stack,
-  Tooltip,
-  IconButton,
   FormControl,
   InputLabel,
   Select,
@@ -31,8 +29,6 @@ import {
   Info,
   LocationOn,
   LocalHospital,
-  Euro,
-  Percent,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSelector } from 'react-redux';
@@ -76,7 +72,7 @@ interface CalculationResult {
 }
 
 const TariffPreview: React.FC = () => {
-  const { user } = useSelector((state: any) => state.auth);
+  const { user: _user } = useSelector((state: any) => state.auth);
   const { marginTopValue } = useGlobalNavigationOffset();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

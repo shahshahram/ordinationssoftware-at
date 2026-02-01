@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Typography, List, ListItem, ListItemText, ListItemIcon, Chip, useMediaQuery, useTheme, Button } from '@mui/material';
+import { Box, Typography, List, ListItem, ListItemText, ListItemIcon, Chip, useMediaQuery, useTheme } from '@mui/material';
 import { DashboardWidget } from '../../store/slices/dashboardWidgetsSlice';
 import { AccessTime, Person } from '@mui/icons-material';
 

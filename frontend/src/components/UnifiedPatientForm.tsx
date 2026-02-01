@@ -17,25 +17,17 @@ import {
   CardContent,
   Divider,
   Alert,
-  Chip,
-  Autocomplete,
   Stack,
   IconButton,
-  Tooltip,
 } from '@mui/material';
 import {
   Person,
   MedicalServices,
   AdminPanelSettings,
   Security,
-  LocalHospital,
-  Medication,
-  Warning,
   PregnantWoman,
-  Bloodtype,
   Add,
   Delete,
-  Edit,
 } from '@mui/icons-material';
 import { PatientAdmissionData } from '../types/PatientExtended';
 import MedicationListInput, { convertMedicationsArrayToPatientFormat } from './MedicationListInput';
@@ -232,6 +224,7 @@ const UnifiedPatientForm: React.FC<UnifiedPatientFormProps> = ({
     if (formData.socialSecurityNumber && formData.firstName && formData.lastName) {
       checkForDuplicates();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- checkForDuplicates intentionally not in deps
   }, [formData.socialSecurityNumber, formData.firstName, formData.lastName]);
 
   const handleNext = () => {

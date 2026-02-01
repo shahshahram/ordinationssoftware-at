@@ -9,11 +9,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  TextField,
   Chip,
   List,
   ListItem,
@@ -21,16 +16,14 @@ import {
   ListItemSecondaryAction,
   IconButton,
   Alert,
-  Divider,
   Tooltip,
-  Badge
+  Badge,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Medication as MedicationIcon,
-  CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
   Refresh as RefreshIcon,
   Sync as SyncIcon,
@@ -46,30 +39,21 @@ import {
   fetchPatientMedications,
   fetchActiveMedications,
   fetchEncounterMedications,
-  createMedication,
-  updateMedication,
   deleteMedication,
   discontinueMedication,
   reactivateMedication,
-  setSelectedMedication,
   clearError,
   syncMedicationsWithELGA,
-  fetchELGAMedications,
   resolveMedicationConflict,
   clearSyncResult,
   createPrescription,
   sendPrescription,
-  fetchPrescriptions,
   checkPrescriptionStatus,
   cancelPrescription,
-  checkMedicationInteractions,
-  checkNewMedicationInteraction,
-  validateMedicationDosage
+  checkMedicationInteractions
 } from '../store/slices/medicationSlice';
-import { PatientMedication, CreateMedicationData, UpdateMedicationData, MedicationInteraction } from '../store/slices/medicationSlice';
-import MedicationAutocomplete from './MedicationAutocomplete';
+import { PatientMedication, CreateMedicationData, MedicationInteraction } from '../store/slices/medicationSlice';
 import MedicationDialog from './MedicationDialog';
-import { Medication } from '../types/Medication';
 
 interface MedicationManagerProps {
   patientId?: string;
@@ -91,15 +75,15 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
     patientMedications,
     encounterMedications,
     activeMedications,
-    selectedMedication,
+    selectedMedication: _selectedMedication,
     loading,
     error,
-    elgaMedications,
+    elgaMedications: _elgaMedications,
     syncResult,
     interactions,
     interactionCheckLoading,
-    dosageValidation,
-    dosageValidationLoading
+    dosageValidation: _dosageValidation,
+    dosageValidationLoading: _dosageValidationLoading
   } = useAppSelector(state => state.medications);
 
   const [openDialog, setOpenDialog] = useState(false);
@@ -111,7 +95,7 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
   const [selectedPrescription, setSelectedPrescription] = useState<PatientMedication | null>(null);
   const [editingMedication, setEditingMedication] = useState<PatientMedication | null>(null);
   const [elgaStatus, setElgaStatus] = useState<{ available: boolean; elgaId?: string } | null>(null);
-  const [formData, setFormData] = useState<CreateMedicationData>({
+  const [_formData, _setFormData] = useState<CreateMedicationData>({
     patientId: patientId || '',
     encounterId: encounterId,
     name: '',
@@ -472,7 +456,7 @@ const MedicationManager: React.FC<MedicationManagerProps> = ({
     );
   };
 
-  const getPrescriptionStatusColor = (status?: string) => {
+  const _getPrescriptionStatusColor = (status?: string) => {
     switch (status) {
       case 'draft': return 'default';
       case 'sent': return 'info';

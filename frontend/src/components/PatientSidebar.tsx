@@ -9,9 +9,6 @@ import {
   Button,
   IconButton,
   Avatar,
-  Badge,
-  Tooltip,
-  Paper,
   Card,
   CardContent,
   Collapse,
@@ -33,7 +30,7 @@ import {
   Timeline,
   Assignment
 } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
+import { useAppDispatch } from '../store/hooks';
 import { Patient } from '../store/slices/patientSlice';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
 import { fetchPatientDiagnoses } from '../store/slices/diagnosisSlice';

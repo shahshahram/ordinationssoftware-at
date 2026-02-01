@@ -32,7 +32,7 @@ interface CreateTaskDialogProps {
   patientId?: string;
 }
 
-const MEDICAL_ROLES = ['arzt', 'admin', 'super_admin'];
+const _MEDICAL_ROLES = ['arzt', 'admin', 'super_admin'];
 
 const CreateTaskDialog: React.FC<CreateTaskDialogProps> = ({
   open,

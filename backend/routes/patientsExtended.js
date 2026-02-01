@@ -228,6 +228,36 @@ const documentUpload = multer({
   }
 });
 
+// Multer für Avatar (ein Profilfoto pro Patient, URL: uploads/patient-photos/<filename>)
+const avatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '..', 'uploads', 'patient-photos');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    const patientId = req.params.id || 'unknown';
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `avatar-${patientId}-${Date.now()}${ext}`);
+  }
+});
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const ext = (path.extname(file.originalname) || '').toLowerCase();
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+    const isImageMime = !file.mimetype || file.mimetype.startsWith('image/');
+    const hasAllowedExt = allowedExt.includes(ext);
+    if (hasAllowedExt && isImageMime) {
+      return cb(null, true);
+    }
+    cb(new Error('Nur Bilddateien (JPEG, PNG, GIF, WebP) sind erlaubt.'));
+  }
+});
+
 // @route   GET /api/patients-extended/hints
 // @desc    Get patients with hints
 // @access  Private
@@ -1472,6 +1502,100 @@ const extractPatientId = (patientId) => {
   const str = String(patientId);
   return str !== '[object Object]' ? str : null;
 };
+
+// @route   POST /api/patients-extended/:id/photo
+// @desc    Avatar/Profilfoto des Patienten hochladen
+// @access  Private
+router.post('/:id/photo', auth, (req, res, next) => {
+  avatarUpload.single('photo')(req, res, (err) => {
+    if (err) {
+      const msg = err.message || 'Datei ungültig oder zu groß (max. 5MB).';
+      return res.status(400).json({ success: false, message: msg });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    const id = extractPatientId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Ungültige Patient-ID' });
+    }
+    if (!req.file) {
+      const contentType = req.headers['content-type'] || '';
+      console.warn('Avatar upload: no file received. Content-Type:', contentType, 'Body keys:', Object.keys(req.body || {}));
+      return res.status(400).json({
+        success: false,
+        message: 'Keine Datei erhalten. Bitte wählen Sie ein Bild (JPEG, PNG, GIF, WebP) und versuchen Sie es erneut.'
+      });
+    }
+    const patient = await PatientExtended.findById(id);
+    if (!patient) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(404).json({ success: false, message: 'Patient nicht gefunden' });
+    }
+    const canEdit = req.user.role === 'admin' || req.user.role === 'super_admin' ||
+      patient.userId?.toString() === req.user.id?.toString() || patient.status === 'self-checkin';
+    if (!canEdit) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+      return res.status(403).json({ success: false, message: 'Keine Berechtigung für diesen Patienten' });
+    }
+    const oldFilename = patient.photo?.filename;
+    const filename = req.file.filename;
+    patient.photo = { filename, uploadedAt: new Date() };
+    await patient.save();
+    if (oldFilename) {
+      const oldPath = path.join(__dirname, '..', 'uploads', 'patient-photos', oldFilename);
+      try { if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath); } catch (_) {}
+    }
+    const updated = await PatientExtended.findById(id).lean();
+    res.json({ success: true, data: updated, message: 'Foto gespeichert' });
+  } catch (error) {
+    if (req.file?.path) {
+      try { fs.unlinkSync(req.file.path); } catch (_) {}
+    }
+    console.error('Error uploading patient avatar:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Speichern des Fotos'
+    });
+  }
+});
+
+// @route   DELETE /api/patients-extended/:id/photo
+// @desc    Avatar/Profilfoto des Patienten löschen
+// @access  Private
+router.delete('/:id/photo', auth, async (req, res) => {
+  try {
+    const id = extractPatientId(req.params.id);
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'Ungültige Patient-ID' });
+    }
+    const patient = await PatientExtended.findById(id);
+    if (!patient) {
+      return res.status(404).json({ success: false, message: 'Patient nicht gefunden' });
+    }
+    const canEdit = req.user.role === 'admin' || req.user.role === 'super_admin' ||
+      patient.userId?.toString() === req.user.id?.toString() || patient.status === 'self-checkin';
+    if (!canEdit) {
+      return res.status(403).json({ success: false, message: 'Keine Berechtigung für diesen Patienten' });
+    }
+    const filename = patient.photo?.filename;
+    patient.photo = undefined;
+    await patient.save();
+    if (filename) {
+      const filePath = path.join(__dirname, '..', 'uploads', 'patient-photos', filename);
+      try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (_) {}
+    }
+    const updated = await PatientExtended.findById(id).lean();
+    res.json({ success: true, data: updated, message: 'Foto gelöscht' });
+  } catch (error) {
+    console.error('Error deleting patient avatar:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Fehler beim Löschen des Fotos'
+    });
+  }
+});
 
 // @route   GET /api/patients-extended/:id/photos
 // @desc    Alle Fotos eines Patienten abrufen

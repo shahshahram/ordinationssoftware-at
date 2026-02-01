@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef, memo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchPatients, loadMorePatients, createPatient, updatePatient, clearError, Patient } from '../store/slices/patientSlice';
 import { fetchAppointments, Appointment } from '../store/slices/appointmentSlice';
 import { useNavigate } from 'react-router-dom';
-import api from '../utils/api';
+import api, { getUploadsBaseUrl } from '../utils/api';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { Person as PersonIcon } from '@mui/icons-material';
@@ -21,7 +21,6 @@ import {
   IconButton,
   MenuItem,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   FormControl,
@@ -43,13 +42,11 @@ import {
   List,
   ListItem,
   ListItemAvatar,
-  ListItemText,
   CircularProgress,
   Switch,
   FormControlLabel,
   useTheme,
   useMediaQuery,
-  Collapse,
   Accordion,
   AccordionSummary,
   AccordionDetails,
@@ -87,7 +84,7 @@ const Patients: React.FC = () => {
   const navigate = useNavigate();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   const { patients, loading, error, pagination } = useAppSelector((state) => state.patients);
   const { appointments } = useAppSelector((state) => state.appointments);
   
@@ -107,7 +104,7 @@ const Patients: React.FC = () => {
   
   // Dialog state
   const [openDialog, setOpenDialog] = useState(false);
-  const [dialogMode, setDialogMode] = useState<'add' | 'edit' | 'view'>('add');
+  const [dialogMode, _setDialogMode] = useState<'add' | 'edit' | 'view'>('add');
   const [activeTab, setActiveTab] = useState(0);
   const [snackbar, setSnackbar] = useState({ 
     open: false, 
@@ -156,7 +153,8 @@ const Patients: React.FC = () => {
     
     // Nur laden wenn wirklich keine Daten vorhanden sind
     dispatch(fetchPatients(1));
-  }, [dispatch]); // Nur dispatch als Dependency - vermeidet unnötige Re-Runs
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when patients empty, avoid loop
+  }, [dispatch]);
   
   // Termine separat laden - verzögert, um Navigation zu beschleunigen
   useEffect(() => {
@@ -171,7 +169,8 @@ const Patients: React.FC = () => {
     }, 1000);
     
     return () => clearTimeout(timeoutId);
-  }, [dispatch]); // Nur dispatch als Dependency
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load once when appointments empty
+  }, [dispatch]);
 
   // Reset scroll position when component mounts or when switching from other pages
   useEffect(() => {
@@ -238,10 +237,10 @@ const Patients: React.FC = () => {
 
   const getPatientPhotoUrl = (patient: Patient): string | undefined => {
     if (!patient.photo?.filename) return undefined;
-    const base = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+    const base = getUploadsBaseUrl();
     const path = `uploads/patient-photos/${patient.photo.filename}`;
     const t = patient.photo.uploadedAt ? new Date(patient.photo.uploadedAt).getTime() : Date.now();
-    return `${base.replace(/\/api\/?$/, '')}/${path}?t=${t}`;
+    return `${base}/${path}?t=${t}`;
   };
 
   const getAge = (dateOfBirth: string) => {
@@ -813,6 +812,7 @@ const Patients: React.FC = () => {
     });
 
     return filtered;
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- getLastVisitDate stable
   }, [patients, searchTerm, activeFilters, sortBy, sortOrder, isOverdueRecall, hasAppointmentToday, hasAppointmentTomorrow]);
 
   // Filter handlers

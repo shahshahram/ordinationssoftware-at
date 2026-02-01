@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   Box,
   TextField,
@@ -12,11 +12,9 @@ import {
   Paper,
   Divider,
   Alert,
-  Chip,
   Grid,
-  Autocomplete,
 } from '@mui/material';
-import { FormFieldDefinition, FormSectionDefinition, FormLayoutDefinition } from '../types/ambulanzbefund';
+import { FormFieldDefinition, FormLayoutDefinition } from '../types/ambulanzbefund';
 
 interface AmbulanzbefundFormRendererProps {
   template: {
@@ -43,7 +41,7 @@ const AmbulanzbefundFormRenderer: React.FC<AmbulanzbefundFormRendererProps> = ({
   formData,
   onChange,
   selectedSections = [],
-  onSectionsChange,
+  onSectionsChange: _onSectionsChange,
   validationErrors = [],
 }) => {
   const layout = template.formDefinition.layout;

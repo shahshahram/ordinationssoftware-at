@@ -13,11 +13,9 @@ import {
   Chip,
   Breadcrumbs,
   Link,
-  Divider,
   CircularProgress,
   Alert,
   IconButton,
-  Tooltip,
   Accordion,
   AccordionSummary,
   AccordionDetails
@@ -29,9 +27,7 @@ import {
   Description as DescriptionIcon,
   Home as HomeIcon,
   NavigateNext as NavigateNextIcon,
-  Search as SearchIcon,
-  Star as StarIcon,
-  History as HistoryIcon
+  Search as SearchIcon
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -41,9 +37,7 @@ import {
   getIcd10Siblings,
   getIcd10Related,
   getIcd10Breadcrumb,
-  Icd10Code,
-  Icd10HierarchyChapter,
-  Icd10BreadcrumbItem
+  Icd10Code
 } from '../store/slices/icd10Slice';
 
 interface ICD10HierarchyProps {
@@ -62,14 +56,14 @@ const ICD10Hierarchy: React.FC<ICD10HierarchyProps> = ({
   year = new Date().getFullYear(),
   showBreadcrumb = true,
   showRelated = true,
-  showSiblings = true,
-  compact = false
+  showSiblings: _showSiblings = true,
+  compact: _compact = false
 }) => {
   const dispatch = useAppDispatch();
   const {
     hierarchy,
     children,
-    parent,
+    parent: _parent,
     siblings,
     related,
     breadcrumb,
@@ -165,7 +159,7 @@ const ICD10Hierarchy: React.FC<ICD10HierarchyProps> = ({
     return chapterNames[chapterId] || `Kapitel ${chapterId}`;
   };
 
-  const getCodeLevel = (code: string): number => {
+  const _getCodeLevel = (code: string): number => {
     return code.split('.').length - 1;
   };
 

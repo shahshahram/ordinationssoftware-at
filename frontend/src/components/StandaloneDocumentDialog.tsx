@@ -26,18 +26,16 @@ import {
   Close,
   Print,
   Save,
-  Delete,
-  Edit,
   Add,
   CheckCircle
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { createDocument, updateDocument } from '../store/slices/documentSlice';
 import { fetchDocuments } from '../store/slices/documentSlice';
-import { fetchDekursEntries, DekursEntry } from '../store/slices/dekursSlice';
+import { DekursEntry } from '../store/slices/dekursSlice';
 import { Location } from '../store/slices/locationSlice';
 import { Patient } from '../store/slices/patientSlice';
-import { fetchContacts, Contact } from '../store/slices/contactSlice';
+import { Contact } from '../store/slices/contactSlice';
 import { apiRequest } from '../utils/api';
 import api from '../utils/api';
 import RichTextEditor from './RichTextEditor';
@@ -45,7 +43,7 @@ import DataSourceSelector from './DataSourceSelector';
 import DocumentVersionHistory from './DocumentVersionHistory';
 import DocumentVersionComparison from './DocumentVersionComparison';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
-import { Document, createNewVersion, getDocumentVersion, compareVersions } from '../store/slices/documentSlice';
+import { Document, createNewVersion } from '../store/slices/documentSlice';
 import { DocumentTemplate, fetchStandaloneTemplate } from '../store/slices/documentTemplateSlice';
 
 interface StandaloneDocumentDialogProps {
@@ -71,7 +69,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
 }) => {
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.auth.user);
-  const dekursEntries = useAppSelector(state => state.dekurs.entries);
+  const _dekursEntries = useAppSelector(state => state.dekurs.entries);
 
   // State für Template
   const [template, setTemplate] = useState<DocumentTemplate | null>(null);
@@ -80,7 +78,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
   // State für Arztauswahl
   const [availableDoctors, setAvailableDoctors] = useState<any[]>([]);
   const [selectedDoctor, setSelectedDoctor] = useState<any | null>(null);
-  const [loadingDoctors, setLoadingDoctors] = useState(false);
+  const [_loadingDoctors, setLoadingDoctors] = useState(false);
 
   // State für Empfänger
   const [recipient, setRecipient] = useState<{
@@ -240,6 +238,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     };
     
     loadDocument();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- templateId intentionally not in deps
   }, [open, documentId, isEditMode, initialDocument, dispatch]);
 
   // Synchronisiere documentStatus mit editingDocument.status
@@ -318,6 +317,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     };
 
     loadTemplate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- template intentionally not in deps
   }, [templateId, open, dispatch, isEditMode]); // template entfernt aus Dependencies
 
   // Lade Ärzte
@@ -499,6 +499,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     // Übernehme aufgelösten Inhalt in Editor, damit er bearbeitbar ist
     setDocumentContent(processed);
     setPlaceholdersResolved(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isEditMode bewusst ausgelassen
   }, [template, patient, user, location, selectedDoctor, latestDekursEntry, selectedDocument, selectedDataSource, placeholdersResolved, documentContent]);
 
   // Reset-Funktion
@@ -518,6 +519,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
     if (open && patient?._id && template && !isEditMode) {
       setDataSourceSelectorOpen(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isEditMode intentionally not in deps
   }, [open, patient, template, isEditMode]);
 
   // Template-Auswahl basierend auf Dokumenttyp und Standort-Einstellungen
@@ -620,12 +622,12 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
         // E-Mail-Adressen gefolgt von Datum
         /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[\s\S]{0,200}?\d{2}\.\d{2}\.\d{4}/gi,
         // Telefonnummern gefolgt von Datum
-        /Tel\.:\s*[\d\s\+\-]+[\s\S]{0,200}?\d{2}\.\d{2}\.\d{4}/gi,
+        /Tel\.:\s*[\d\s+-]+[\s\S]{0,200}?\d{2}\.\d{2}\.\d{4}/gi,
         // Web-Adressen gefolgt von Datum
         /Web:\s*[^\n]+[\s\S]{0,200}?\d{2}\.\d{2}\.\d{4}/gi,
       ];
       
-      letterheadPatterns.forEach(pattern => {
+      for (const pattern of letterheadPatterns) {
         let patternRemoved = true;
         let patternIterations = 0;
         while (patternRemoved && patternIterations < 10) {
@@ -634,7 +636,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
           patternRemoved = (beforePattern !== cleaned);
           patternIterations++;
         }
-      });
+      }
       
       // 5. Entferne isolierte Datumszeilen, die möglicherweise vom Briefkopf übrig geblieben sind
       // Suche nach Datumszeilen, die alleine stehen (mit optionalem Whitespace davor/danach)
@@ -648,9 +650,9 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
       ];
       
       // Entferne isolierte Datumszeilen (nur Datum, keine anderen Zeichen)
-      datePatterns.forEach(datePattern => {
+      for (const datePattern of datePatterns) {
         cleaned = cleaned.replace(new RegExp(`(?:^|\\n|<p[^>]*>|<div[^>]*>|<span[^>]*>)\\s*(${datePattern.source})\\s*(?:\\n|</p>|</div>|</span>|$)`, 'gmi'), '\n');
-      });
+      }
       
       // 7. Entferne leere Zeilen und Whitespace
       cleaned = cleaned
@@ -1095,7 +1097,7 @@ const StandaloneDocumentDialog: React.FC<StandaloneDocumentDialogProps> = ({
   };
 
   // Speichern
-  const handleSave = async (finalize: boolean = false) => {
+  const handleSave = async (_finalize: boolean = false) => {
     if (!patient || !user || !location) {
       setError('Patient, Benutzer oder Standort fehlt. Bitte überprüfen Sie die Eingaben.');
       return;

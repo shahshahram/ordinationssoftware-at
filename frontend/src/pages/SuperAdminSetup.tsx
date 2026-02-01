@@ -125,7 +125,7 @@ const SuperAdminSetup: React.FC = () => {
       setCreating(true);
       setError(null);
       
-      const response = await api.post('/setup/super-admin', formData);
+      const _response = await api.post('/setup/super-admin', formData);
       
       setSuccess('Super Administrator erfolgreich erstellt!');
       setActiveStep(2);

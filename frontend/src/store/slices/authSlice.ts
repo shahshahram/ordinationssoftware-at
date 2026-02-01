@@ -211,7 +211,7 @@ export const loadUser = createAsyncThunk(
 
 export const logout = createAsyncThunk(
   'auth/logout',
-  async (_, { rejectWithValue }) => {
+  async (_, { rejectWithValue: _rejectWithValue }) => {
     try {
       await api.post('/auth/logout');
       localStorage.removeItem('token');
@@ -308,13 +308,13 @@ const authSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(register.fulfilled, (state, action) => {
+      .addCase(register.fulfilled, (state, _action) => {
         state.loading = false;
         state.error = null;
       })
       .addCase(register.rejected, (state, action) => {
         state.loading = false;
-        state.error = action.payload as string;
+        state.error = (action.payload as string) ?? null;
       })
       // Load User
       .addCase(loadUser.pending, (state) => {

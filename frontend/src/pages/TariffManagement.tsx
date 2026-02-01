@@ -41,7 +41,6 @@ import {
   CloudDownload,
   HelpOutline as HelpOutlineIcon,
   Delete,
-  Warning,
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import api from '../utils/api';

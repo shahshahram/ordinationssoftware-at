@@ -15,9 +15,6 @@ import {
   Snackbar,
   CircularProgress,
   Chip,
-  Switch,
-  FormControlLabel,
-  Divider,
   List,
   ListItem,
   ListItemText,
@@ -39,9 +36,6 @@ import {
   Lock,
   LockOpen,
   QrCode,
-  Download,
-  Visibility,
-  VisibilityOff,
   CheckCircle,
   Warning,
   Error,
@@ -111,6 +105,7 @@ const Security: React.FC = () => {
 
   useEffect(() => {
     fetchSecurityData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init load on token
   }, [token]);
 
   const fetchSecurityData = async () => {

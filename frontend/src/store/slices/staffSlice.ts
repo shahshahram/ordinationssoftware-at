@@ -328,7 +328,7 @@ const staffSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(fetchWorkShifts.fulfilled, (state, action) => {
+      .addCase(fetchWorkShifts.fulfilled, (state, _action) => {
         state.loading = false;
         // Handle work shifts data if needed
       })
@@ -341,7 +341,7 @@ const staffSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(fetchAbsences.fulfilled, (state, action) => {
+      .addCase(fetchAbsences.fulfilled, (state, _action) => {
         state.loading = false;
         // Handle absences data if needed
       })

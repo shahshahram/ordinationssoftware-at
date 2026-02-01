@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Box,
-  Card,
   Typography,
   Button,
   IconButton,
@@ -41,9 +40,6 @@ import {
   Edit as EditIcon,
   Delete as DeleteIcon,
   Refresh as RefreshIcon,
-  Visibility as VisibilityIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
   ExpandMore as ExpandMoreIcon,
   HealthAndSafety as HealthAndSafetyIcon,
   Settings as SettingsIcon,
@@ -276,6 +272,7 @@ const InsuranceProviderManagement: React.FC = () => {
 
   useEffect(() => {
     fetchProviders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProviders bewusst ausgelassen
   }, []);
 
   const fetchProviders = async () => {

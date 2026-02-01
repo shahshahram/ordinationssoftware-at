@@ -27,8 +27,6 @@ import {
   ListItemText,
   ListItemIcon,
   Divider,
-  Switch,
-  FormControlLabel,
   Badge,
   Tabs,
   Tab
@@ -42,9 +40,7 @@ import {
   Security,
   Extension,
   CheckCircle,
-  Warning,
   Error,
-  Info,
   HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
 import api from '../utils/api';

@@ -35,15 +35,13 @@ import {
   Delete,
   Reply,
   Forward,
-  PriorityHigh,
-  Person
+  PriorityHigh
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { 
   fetchMessages, 
   sendMessage, 
   markAsRead,
-  markAllAsRead,
   archiveMessage, 
   deleteMessage,
   fetchUnreadCount,

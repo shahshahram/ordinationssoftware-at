@@ -65,7 +65,6 @@ import {
   Schedule,
   Info,
   Cancel,
-  CameraAlt,
   Delete as DeleteIcon,
   Close,
   CreditCard,
@@ -120,7 +119,7 @@ import MedicalDataHistory from '../components/MedicalDataHistory';
 import { fetchDekursEntries } from '../store/slices/dekursSlice';
 import { fetchVitalSigns } from '../store/slices/vitalSignsSlice';
 import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, MonitorHeart, Receipt, Article } from '@mui/icons-material';
-import api from '../utils/api';
+import api, { getApiBaseUrl, getUploadsBaseUrl } from '../utils/api';
 import PerformanceForm from '../components/PerformanceForm';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
 import GradientDialogTitle from '../components/GradientDialogTitle';
@@ -178,13 +177,13 @@ const PatientOrganizer: React.FC = () => {
   
   // State für XDS-Dokumente
   const [xdsDocuments, setXdsDocuments] = useState<any[]>([]);
-  const [loadingXdsDocuments, setLoadingXdsDocuments] = useState(false);
+  const [_loadingXdsDocuments, setLoadingXdsDocuments] = useState(false);
   const [cdaViewerOpen, setCdaViewerOpen] = useState(false);
   const [viewingXdsDocument, setViewingXdsDocument] = useState<any | null>(null);
   
   // State für Ambulanzbefunde
   const [ambulanzbefunde, setAmbulanzbefunde] = useState<any[]>([]);
-  const [loadingAmbulanzbefunde, setLoadingAmbulanzbefunde] = useState(false);
+  const [_loadingAmbulanzbefunde, setLoadingAmbulanzbefunde] = useState(false);
   
   // State für MedicalDataHistory (um frühere Schwangerschaften zu prüfen)
   const [medicalDataHistory, setMedicalDataHistory] = useState<any[]>([]);
@@ -276,7 +275,7 @@ const PatientOrganizer: React.FC = () => {
       </Typography>
     );
   };
-  const [hasPreviousPregnancy, setHasPreviousPregnancy] = useState(false);
+  const [_hasPreviousPregnancy, setHasPreviousPregnancy] = useState(false);
   const [pregnancyAlertInfo, setPregnancyAlertInfo] = useState<{
     shouldShow: boolean;
     alertType: 'overdue' | 'week40' | 'week42' | 'previous' | null;
@@ -728,7 +727,7 @@ const PatientOrganizer: React.FC = () => {
         )}
       </Box>
     </Card>
-  )), [patientNotes, editingNote, medicalNotesEdit, patient]);
+  )), [patientNotes, editingNote, medicalNotesEdit, patient, dispatch]);
 
   React.useEffect(() => {
     if (!patients || (patients as Patient[]).length === 0) {
@@ -1323,7 +1322,7 @@ const PatientOrganizer: React.FC = () => {
     
     try {
       // QR-Code für Validierung generieren
-      const validationData = {
+      const _validationData = {
         patientId: patient._id || patient.id,
         firstName: patient.firstName,
         lastName: patient.lastName,
@@ -1923,22 +1922,49 @@ const PatientOrganizer: React.FC = () => {
       return;
     }
 
+    if (file.size === 0) {
+      setSnackbar({
+        open: true,
+        message: 'Die gewählte Datei ist leer. Bitte wählen Sie ein anderes Bild.',
+        severity: 'error'
+      });
+      return;
+    }
+
     setUploadingPhoto(true);
     try {
       const formData = new FormData();
-      formData.append('photo', file);
+      formData.append('photo', file, file.name || 'avatar.jpg');
 
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await fetch(`${API_BASE_URL}/patients-extended/${patientId}/photo`, {
+      if (!token) {
+        setSnackbar({ open: true, message: 'Nicht angemeldet. Bitte erneut einloggen.', severity: 'error' });
+        return;
+      }
+
+      const uploadUrl = `${getApiBaseUrl()}/patients-extended/${patientId}/photo`;
+      const response = await fetch(uploadUrl, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Authorization': `Bearer ${token}` },
         body: formData
       });
 
-      const result = await response.json();
+      const text = await response.text();
+      let result: { success?: boolean; message?: string; data?: unknown } = {};
+      if (text) {
+        try {
+          result = JSON.parse(text);
+        } catch (_) {
+          result = { success: false, message: 'Ungültige Server-Antwort' };
+        }
+      }
+
+      if (!response.ok) {
+        const msg = result.message || `Server antwortet mit ${response.status}. Prüfen Sie die Verbindung zum Backend.`;
+        console.error('Foto-Upload Fehler:', response.status, result);
+        setSnackbar({ open: true, message: msg, severity: 'error' });
+        return;
+      }
 
       if (result.success) {
         setSnackbar({
@@ -1946,22 +1972,10 @@ const PatientOrganizer: React.FC = () => {
           message: 'Foto erfolgreich hochgeladen',
           severity: 'success'
         });
-        // Patientenliste neu laden, um das Foto zu aktualisieren
         await dispatch(fetchPatients(1));
-        // Lade auch die Patientendaten direkt neu, falls der Patient nicht in der ersten Seite ist
-        if (patientId) {
-          try {
-            const patientResponse: any = await apiRequest.get(`/patients-extended/${patientId}`);
-            if (patientResponse.success && patientResponse.data) {
-              // API gibt zurück: { success: true, data: patient }
-              const updatedPatient = patientResponse.data.data || patientResponse.data;
-              console.log('Aktualisierter Patient nach Foto-Upload:', updatedPatient);
-              // Aktualisiere den Patienten in der Liste
-              dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
-            }
-          } catch (err) {
-            console.error('Fehler beim Neuladen der Patientendaten:', err);
-          }
+        const updatedPatient = result.data;
+        if (patientId && updatedPatient) {
+          dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
         }
       } else {
         setSnackbar({
@@ -1972,11 +1986,11 @@ const PatientOrganizer: React.FC = () => {
       }
     } catch (error: any) {
       console.error('Fehler beim Hochladen des Fotos:', error);
-      setSnackbar({
-        open: true,
-        message: error.message || 'Fehler beim Hochladen des Fotos',
-        severity: 'error'
-      });
+      const isNetwork = error?.message === 'Failed to fetch' || error?.name === 'TypeError';
+      const msg = isNetwork
+        ? 'Server nicht erreichbar. Bitte prüfen Sie die Verbindung (gleiches Netzwerk, Backend läuft auf Port 5001).'
+        : (error?.message || 'Fehler beim Hochladen des Fotos');
+      setSnackbar({ open: true, message: msg, severity: 'error' });
     } finally {
       setUploadingPhoto(false);
       // Input zurücksetzen
@@ -1996,8 +2010,7 @@ const PatientOrganizer: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await fetch(`${API_BASE_URL}/patients-extended/${patientId}/photo`, {
+      const response = await fetch(`${getApiBaseUrl()}/patients-extended/${patientId}/photo`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -2012,22 +2025,10 @@ const PatientOrganizer: React.FC = () => {
           message: 'Foto erfolgreich gelöscht',
           severity: 'success'
         });
-        // Patientenliste neu laden, um das Foto zu entfernen
         await dispatch(fetchPatients(1));
-        // Lade auch die Patientendaten direkt neu, falls der Patient nicht in der ersten Seite ist
-        if (patientId) {
-          try {
-            const patientResponse: any = await apiRequest.get(`/patients-extended/${patientId}`);
-            if (patientResponse.success && patientResponse.data) {
-              // API gibt zurück: { success: true, data: patient }
-              const updatedPatient = patientResponse.data.data || patientResponse.data;
-              console.log('Aktualisierter Patient nach Foto-Löschen:', updatedPatient);
-              // Aktualisiere den Patienten in der Liste
-              dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
-            }
-          } catch (err) {
-            console.error('Fehler beim Neuladen der Patientendaten:', err);
-          }
+        const updatedPatient = result.data;
+        if (patientId && updatedPatient) {
+          dispatch(updatePatient({ id: patientId, patientData: updatedPatient }));
         }
       } else {
         setSnackbar({
@@ -2695,8 +2696,7 @@ const PatientOrganizer: React.FC = () => {
                   <Avatar
                     src={(() => {
                       if (!patient.photo?.filename) return undefined;
-                      const base = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-                      const baseUrl = base.replace(/\/api\/?$/, '');
+                      const baseUrl = getUploadsBaseUrl();
                       return `${baseUrl}/uploads/patient-photos/${patient.photo.filename}?t=${patient.photo.uploadedAt ? new Date(patient.photo.uploadedAt).getTime() : Date.now()}`;
                     })()}
                     sx={{
@@ -3859,7 +3859,7 @@ const PatientOrganizer: React.FC = () => {
                               startIcon={<Description />}
                               onClick={() => {
                                 if (patient.allergyPassDocument) {
-                                  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+                                  const API_BASE_URL = getUploadsBaseUrl();
                                   // Der Pfad sollte bereits 'uploads/' enthalten, wenn nicht, füge es hinzu
                                   const documentPath = patient.allergyPassDocument.startsWith('uploads/') 
                                     ? patient.allergyPassDocument 
@@ -5042,7 +5042,7 @@ const PatientOrganizer: React.FC = () => {
                           formData.append('allergyPass', file);
                           
                           const token = localStorage.getItem('token');
-                          const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+                          const API_BASE_URL = getApiBaseUrl();
                           const response = await fetch(`${API_BASE_URL}/patients-extended/${patientId}/allergy-pass`, {
                             method: 'POST',
                             headers: {
@@ -5116,7 +5116,7 @@ const PatientOrganizer: React.FC = () => {
                           size="small"
                           onClick={() => {
                             if (medicalData.allergyPassDocument) {
-                              const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+                              const API_BASE_URL = getUploadsBaseUrl();
                               // Der Pfad sollte bereits 'uploads/' enthalten, wenn nicht, füge es hinzu
                               const documentPath = medicalData.allergyPassDocument.startsWith('uploads/') 
                                 ? medicalData.allergyPassDocument 
@@ -6086,7 +6086,7 @@ const PatientOrganizer: React.FC = () => {
         documentType={selectedDocumentType || 'patientenbrief'}
         source={selectedSource || 'leer'}
         selectedDekursEntry={selectedDekursForLetter}
-        onSaveSuccess={async (documentId) => {
+        onSaveSuccess={async (_documentId) => {
           // Lade Dokumente neu, um den aktualisierten Status zu sehen
           if (patient?._id || patient?.id) {
             await dispatch(fetchDocuments({ patientId: patient._id || patient.id }));
@@ -6361,7 +6361,7 @@ const PatientOrganizer: React.FC = () => {
         patient={patient || null}
         location={currentLocation || null}
         templateId={selectedStandaloneTemplateId}
-        onSaveSuccess={async (documentId) => {
+        onSaveSuccess={async (_documentId) => {
           // Lade Dokumente neu, um den aktualisierten Status zu sehen
           // Lade sowohl patientenspezifische als auch alle Dokumente (für Dokumentenverwaltung)
           if (patient?._id || patient?.id) {
@@ -6801,7 +6801,7 @@ const PatientOrganizer: React.FC = () => {
           try {
             const token = localStorage.getItem('token');
             const response = await fetch(
-              `${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/billing/performances`,
+              `${getApiBaseUrl()}/billing/performances`,
               {
                 method: 'POST',
                 headers: {

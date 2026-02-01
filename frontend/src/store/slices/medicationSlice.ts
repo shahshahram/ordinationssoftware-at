@@ -1,14 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
-
-// Dynamische API-URL basierend auf dem aktuellen Hostname
-const getApiBaseUrl = (): string => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
-  }
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  return `http://${hostname}:5001/api`;
-};
+import { getApiBaseUrl } from '../../utils/api';
 
 export interface PatientMedication {
   _id: string;
@@ -517,7 +509,7 @@ const medicationSlice = createSlice({
     clearEncounterMedications: (state) => {
       state.encounterMedications = [];
     },
-    resetMedicationState: (state) => {
+    resetMedicationState: (_state) => {
       return { ...initialState };
     },
     clearSyncResult: (state) => {

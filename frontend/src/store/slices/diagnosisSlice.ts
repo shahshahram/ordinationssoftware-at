@@ -1,14 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
-
-// Dynamische API-URL basierend auf dem aktuellen Hostname
-const getApiBaseUrl = (): string => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
-  }
-  const hostname = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  return `http://${hostname}:5001/api`;
-};
+import { getApiBaseUrl } from '../../utils/api';
 
 export interface PatientDiagnosis {
   _id: string;
@@ -261,7 +253,7 @@ const diagnosisSlice = createSlice({
     clearEncounterDiagnoses: (state) => {
       state.encounterDiagnoses = [];
     },
-    resetDiagnosisState: (state) => {
+    resetDiagnosisState: (_state) => {
       return { ...initialState };
     }
   },
@@ -409,21 +401,21 @@ const diagnosisSlice = createSlice({
         state.error = action.payload as string;
       })
       // Link Service
-      .addCase(linkDiagnosisToService.fulfilled, (state) => {
+      .addCase(linkDiagnosisToService.fulfilled, (_state) => {
         // Service linked successfully, no state change needed
       })
       .addCase(linkDiagnosisToService.rejected, (state, action) => {
         state.error = action.payload as string;
       })
       // Prepare Export
-      .addCase(prepareDiagnosisExport.fulfilled, (state) => {
+      .addCase(prepareDiagnosisExport.fulfilled, (_state) => {
         // Export prepared successfully, no state change needed
       })
       .addCase(prepareDiagnosisExport.rejected, (state, action) => {
         state.error = action.payload as string;
       })
       // Fetch Exports
-      .addCase(fetchDiagnosisExports.fulfilled, (state, action) => {
+      .addCase(fetchDiagnosisExports.fulfilled, (_state, _action) => {
         // Exports loaded, no state change needed
       })
       .addCase(fetchDiagnosisExports.rejected, (state, action) => {

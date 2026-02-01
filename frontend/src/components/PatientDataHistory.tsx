@@ -96,6 +96,7 @@ const PatientDataHistory: React.FC<PatientDataHistoryProps> = ({ patientId }) =>
     if (patientId && showInline) {
       loadHistory();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadHistory intentionally not in deps
   }, [patientId, showInline]);
 
   const loadHistory = async () => {
@@ -154,7 +155,7 @@ const PatientDataHistory: React.FC<PatientDataHistoryProps> = ({ patientId }) =>
     return fieldMap[field] || field;
   };
 
-  const formatValue = (value: any, fieldName?: string): string => {
+  const _formatValue = (value: any, fieldName?: string): string => {
     if (value === null || value === undefined) return 'Nicht erfasst';
     if (typeof value === 'boolean') return value ? 'Ja' : 'Nein';
     if (Array.isArray(value)) return value.length > 0 ? `${value.length} Einträge` : 'Keine';

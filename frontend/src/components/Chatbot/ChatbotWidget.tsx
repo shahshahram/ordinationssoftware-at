@@ -33,7 +33,7 @@ interface ChatbotWidgetProps {
   currentPage?: string;
 }
 
-const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ patientId: propPatientId, currentPage }) => {
+const ChatbotWidget: React.FC<ChatbotWidgetProps> = ({ patientId: propPatientId, currentPage: _currentPage }) => {
   const [open, setOpen] = useState(false);
   const [minimized, setMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);

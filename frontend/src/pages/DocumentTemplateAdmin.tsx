@@ -26,9 +26,6 @@ import {
   MenuItem,
   Alert,
   Stack,
-  Card,
-  CardContent,
-  Divider,
   Tooltip,
   Switch,
   FormControlLabel,
@@ -41,7 +38,6 @@ import {
   CheckCircle,
   Cancel,
   Article,
-  LocalHospital,
   Build,
 } from '@mui/icons-material';
 import { apiRequest } from '../utils/api';
@@ -107,6 +103,7 @@ const DocumentTemplateAdmin: React.FC = () => {
     if (isAdmin) {
       loadTemplates();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTemplates bewusst ausgelassen
   }, [isAdmin, tabValue]);
 
   // Debug: Log templates state

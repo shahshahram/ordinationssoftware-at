@@ -12,7 +12,6 @@ import {
   Paper,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -37,7 +36,6 @@ import {
   MedicalServices as MedicalServicesIcon,
   HelpOutline as HelpOutlineIcon
 } from '@mui/icons-material';
-import { useAppDispatch, useAppSelector } from '../store/hooks';
 import api from '../utils/api';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
@@ -87,6 +85,7 @@ const MedicalSpecialties: React.FC = () => {
 
   useEffect(() => {
     loadSpecialties();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init load once
   }, []);
 
   const loadSpecialties = async () => {

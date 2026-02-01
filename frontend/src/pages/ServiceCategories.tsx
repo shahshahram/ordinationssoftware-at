@@ -10,10 +10,6 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
   Chip,
   IconButton,
   Table,
@@ -24,17 +20,14 @@ import {
   TableHead,
   TableRow,
   TablePagination,
-  Snackbar,
   Alert,
   CircularProgress,
   Grid,
-  Divider,
   Autocomplete,
   List,
   ListItem,
   ListItemText,
   ListItemIcon,
-  Collapse,
   Tooltip,
 } from '@mui/material';
 import {
@@ -42,7 +35,6 @@ import {
   Edit,
   Delete,
   Refresh,
-  Category,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
@@ -88,6 +80,7 @@ const ServiceCategories: React.FC = () => {
 
   useEffect(() => {
     loadCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init load once
   }, []);
 
   const loadCategories = async () => {

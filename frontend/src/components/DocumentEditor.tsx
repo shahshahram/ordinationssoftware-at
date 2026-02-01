@@ -14,26 +14,17 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Alert,
   CircularProgress
 } from '@mui/material';
 import {
   Save,
   Preview,
   Download,
-  History,
   FormatBold,
   FormatItalic,
   FormatUnderlined,
   FormatListBulleted,
   FormatListNumbered,
-  InsertPhoto,
-  TableChart,
-  Code,
   Undo,
   Redo
 } from '@mui/icons-material';
@@ -78,7 +69,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     ],
     content: template?.content || '',
     editable: !readOnly,
-    onUpdate: ({ editor }) => {
+    onUpdate: ({ editor: _editor }) => {
       // Handle content updates
     },
   });
@@ -113,7 +104,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     }
   };
 
-  const insertPlaceholder = (placeholderName: string) => {
+  const _insertPlaceholder = (placeholderName: string) => {
     if (editor) {
       editor.commands.insertContent(`{{${placeholderName}}}`);
     }
@@ -133,7 +124,7 @@ const DocumentEditor: React.FC<DocumentEditorProps> = ({
     setShowPlaceholderDialog(false);
   };
 
-  const replacePlaceholders = (content: string) => {
+  const _replacePlaceholders = (content: string) => {
     let processedContent = content;
     Object.keys(placeholders).forEach(key => {
       const placeholder = `{{${key}}}`;

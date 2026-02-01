@@ -21,15 +21,10 @@ import {
   ListItemSecondaryAction,
   IconButton,
   Alert,
-  Divider,
-  Grid,
   Switch,
   FormControlLabel,
   Tooltip,
   Badge,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -38,13 +33,6 @@ import {
   Star as StarIcon,
   StarBorder as StarBorderIcon,
   MedicalServices as MedicalIcon,
-  Receipt as ReceiptIcon,
-  Assessment as AssessmentIcon,
-  ExpandMore as ExpandMoreIcon,
-  CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon,
-  Info as InfoIcon,
-  Schedule as ScheduleIcon
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
@@ -53,7 +41,6 @@ import {
   createDiagnosis,
   updateDiagnosis,
   deleteDiagnosis,
-  setSelectedDiagnosis,
   clearError
 } from '../store/slices/diagnosisSlice';
 import { PatientDiagnosis, CreateDiagnosisData, UpdateDiagnosisData } from '../store/slices/diagnosisSlice';
@@ -80,7 +67,7 @@ const DiagnosisManager: React.FC<DiagnosisManagerProps> = ({
   const {
     patientDiagnoses,
     encounterDiagnoses,
-    selectedDiagnosis,
+    selectedDiagnosis: _selectedDiagnosis,
     loading,
     error
   } = useAppSelector(state => state.diagnoses);
@@ -362,7 +349,7 @@ const DiagnosisManager: React.FC<DiagnosisManagerProps> = ({
               if (!a.isPrimary && b.isPrimary) return 1;
               return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             })
-            .map((diagnosis, index) => (
+            .map((diagnosis, _index) => (
               <React.Fragment key={diagnosis._id}>
                 <ListItem
                   sx={{

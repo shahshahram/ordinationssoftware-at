@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
+import { getApiBaseUrl } from '../../utils/api';
 
 export interface Icd10Code {
   _id: string;
@@ -123,8 +124,7 @@ export const searchIcd10Codes = createAsyncThunk(
       if (params.limit) queryParams.append('limit', params.limit.toString());
       if (params.offset) queryParams.append('offset', params.offset.toString());
 
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await axios.get(`${API_BASE_URL}/icd10/search?${queryParams.toString()}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/search?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -139,7 +139,6 @@ export const getTopIcd10Codes = createAsyncThunk(
   async (params: { scope?: string; scopeId?: string; year?: number; limit?: number; timeRange?: string }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
       const queryParams = new URLSearchParams();
       
       if (params.scope) queryParams.append('scope', params.scope);
@@ -148,7 +147,7 @@ export const getTopIcd10Codes = createAsyncThunk(
       if (params.limit) queryParams.append('limit', params.limit.toString());
       if (params.timeRange) queryParams.append('timeRange', params.timeRange);
 
-      const response = await axios.get(`${API_BASE_URL}/icd10/top?${queryParams.toString()}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/top?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -163,7 +162,6 @@ export const getRecentIcd10Codes = createAsyncThunk(
   async (params: { scope?: string; scopeId?: string; year?: number; limit?: number }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
       const queryParams = new URLSearchParams();
       
       if (params.scope) queryParams.append('scope', params.scope);
@@ -171,7 +169,7 @@ export const getRecentIcd10Codes = createAsyncThunk(
       if (params.year) queryParams.append('year', params.year.toString());
       if (params.limit) queryParams.append('limit', params.limit.toString());
 
-      const response = await axios.get(`${API_BASE_URL}/icd10/recent?${queryParams.toString()}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/recent?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -186,12 +184,11 @@ export const getIcd10Code = createAsyncThunk(
   async (params: { code: string; year?: number }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
       const queryParams = new URLSearchParams();
       
       if (params.year) queryParams.append('year', params.year.toString());
 
-      const response = await axios.get(`${API_BASE_URL}/icd10/code/${params.code}?${queryParams.toString()}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/code/${params.code}?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -206,12 +203,11 @@ export const getIcd10Chapters = createAsyncThunk(
   async (year: number = new Date().getFullYear(), { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
       const queryParams = new URLSearchParams();
       
       if (year) queryParams.append('year', year.toString());
 
-      const response = await axios.get(`${API_BASE_URL}/icd10/chapters?${queryParams.toString()}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/chapters?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -226,13 +222,12 @@ export const updateIcd10Usage = createAsyncThunk(
   async (params: { code: string; catalogYear: number; context?: string; scope?: string; scopeId?: string }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
       const queryParams = new URLSearchParams();
       
       if (params.scope) queryParams.append('scope', params.scope);
       if (params.scopeId) queryParams.append('scopeId', params.scopeId);
 
-      const response = await axios.post(`${API_BASE_URL}/icd10/usage?${queryParams.toString()}`, {
+      const response = await axios.post(`${getApiBaseUrl()}/icd10/usage?${queryParams.toString()}`, {
         code: params.code,
         catalogYear: params.catalogYear,
         context: params.context
@@ -251,7 +246,6 @@ export const getIcd10Analytics = createAsyncThunk(
   async (params: { scope?: string; scopeId?: string; year?: number; timeRange?: string }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
       const queryParams = new URLSearchParams();
       
       if (params.scope) queryParams.append('scope', params.scope);
@@ -259,7 +253,7 @@ export const getIcd10Analytics = createAsyncThunk(
       if (params.year) queryParams.append('year', params.year.toString());
       if (params.timeRange) queryParams.append('timeRange', params.timeRange);
 
-      const response = await axios.get(`${API_BASE_URL}/icd10/analytics?${queryParams.toString()}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/analytics?${queryParams.toString()}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -275,8 +269,7 @@ export const getIcd10Hierarchy = createAsyncThunk(
   async (year: number = new Date().getFullYear(), { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await axios.get(`${API_BASE_URL}/icd10/hierarchy?year=${year}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/hierarchy?year=${year}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -292,8 +285,7 @@ export const getIcd10Children = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const { parentCode, year = new Date().getFullYear() } = params;
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await axios.get(`${API_BASE_URL}/icd10/children/${parentCode}?year=${year}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/children/${parentCode}?year=${year}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -309,8 +301,7 @@ export const getIcd10Parent = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const { code, year = new Date().getFullYear() } = params;
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await axios.get(`${API_BASE_URL}/icd10/parent/${code}?year=${year}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/parent/${code}?year=${year}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -326,7 +317,7 @@ export const getIcd10Siblings = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const { code, year = new Date().getFullYear() } = params;
-      const response = await axios.get(`http://localhost:5001/api/icd10/siblings/${code}?year=${year}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/siblings/${code}?year=${year}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -342,8 +333,7 @@ export const getIcd10Related = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const { code, year = new Date().getFullYear(), limit = 10 } = params;
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await axios.get(`${API_BASE_URL}/icd10/related/${code}?year=${year}&limit=${limit}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/related/${code}?year=${year}&limit=${limit}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -359,8 +349,7 @@ export const getIcd10Breadcrumb = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const { code, year = new Date().getFullYear() } = params;
-      const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-      const response = await axios.get(`${API_BASE_URL}/icd10/breadcrumb/${code}?year=${year}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/icd10/breadcrumb/${code}?year=${year}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -386,7 +375,7 @@ const icd10Slice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
-    resetIcd10State: (state) => {
+    resetIcd10State: (_state) => {
       return { ...initialState };
     }
   },
@@ -463,7 +452,7 @@ const icd10Slice = createSlice({
         state.error = action.payload as string;
       })
       // Update Usage
-      .addCase(updateIcd10Usage.fulfilled, (state) => {
+      .addCase(updateIcd10Usage.fulfilled, (_state) => {
         // Usage update successful, no state change needed
       })
       .addCase(updateIcd10Usage.rejected, (state, action) => {

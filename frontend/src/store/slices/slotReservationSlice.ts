@@ -245,7 +245,7 @@ const slotReservationSlice = createSlice({
       })
       
       // Cleanup expired reservations
-      .addCase(cleanupExpiredReservations.fulfilled, (state, action) => {
+      .addCase(cleanupExpiredReservations.fulfilled, (state, _action) => {
         // Remove expired reservations from state
         state.reservations = state.reservations.filter(r => r.status !== 'expired');
         if (state.currentReservation?.status === 'expired') {

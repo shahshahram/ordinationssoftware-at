@@ -14,7 +14,6 @@ import {
   Select,
   MenuItem,
   Stack,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -26,17 +25,13 @@ import {
 } from '@mui/material';
 import {
   Search,
-  FilterList,
   Description,
   Edit,
   Preview,
-  Download,
-  History,
   Add,
-  Category
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { fetchDocumentTemplates, createDocumentTemplate, updateDocumentTemplate, deleteDocumentTemplate } from '../store/slices/documentTemplateSlice';
+import { fetchDocumentTemplates, createDocumentTemplate } from '../store/slices/documentTemplateSlice';
 
 interface TemplateLibraryProps {
   onSelectTemplate?: (template: any) => void;

@@ -13,7 +13,7 @@ export const validatePhone = (phone: string): boolean => {
   }
   
   // Entferne Leerzeichen, Bindestriche, etc.
-  const cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  const cleaned = phone.replace(/[\s\-()]/g, '');
   
   // Prüfe auf internationales Format: + gefolgt von 1-15 Ziffern
   // Oder österreichisches Format: 0 gefolgt von 4-14 Ziffern (wird dann normalisiert)
@@ -39,7 +39,7 @@ export const normalizePhoneNumber = (phone: string): string => {
   if (!phone) return '';
   
   // Entferne Leerzeichen, Bindestriche, etc.
-  let cleaned = phone.replace(/[\s\-\(\)]/g, '');
+  let cleaned = phone.replace(/[\s\-()]/g, '');
   
   // Wenn österreichische Nummer (beginnt mit 0), ersetze 0 durch +43
   if (cleaned.startsWith('0')) {

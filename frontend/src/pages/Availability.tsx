@@ -6,16 +6,10 @@ import {
   CardContent,
   Button,
   TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Chip,
   Table,
   TableBody,
   TableCell,
   TableContainer,
-  Paper,
   TableHead,
   TableRow,
   CircularProgress,
@@ -33,10 +27,8 @@ import {
 } from '@mui/material';
 import {
   Search,
-  Refresh,
   CalendarToday,
   Person,
-  AccessTime,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DatePicker, LocalizationProvider } from '@mui/x-date-pickers';
@@ -90,6 +82,7 @@ const Availability: React.FC = () => {
   useEffect(() => {
     loadStaffList();
     loadServiceList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nur beim Mount laden
   }, []);
 
   const loadStaffList = async () => {

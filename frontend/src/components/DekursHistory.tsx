@@ -4,8 +4,6 @@ import {
   Typography,
   Paper,
   List,
-  ListItem,
-  ListItemText,
   Chip,
   CircularProgress,
   Alert,
@@ -53,9 +51,7 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   fetchDekursEntries,
   deleteDekursEntry,
-  exportDekursForArztbrief,
   sendDekursToElga,
-  fetchDekursEntry,
   DekursEntry
 } from '../store/slices/dekursSlice';
 import DekursDialog from './DekursDialog';
@@ -66,9 +62,9 @@ interface DekursHistoryProps {
   onEntrySelect?: (entry: DekursEntry) => void;
 }
 
-const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect }) => {
+const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect: _onEntrySelect }) => {
   const dispatch = useAppDispatch();
-  const { entries, loading, pagination } = useAppSelector((state) => state.dekurs);
+  const { entries, loading, pagination: _pagination } = useAppSelector((state) => state.dekurs);
   const { patients } = useAppSelector((state) => state.patients);
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -94,6 +90,7 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
     if (patientId) {
       loadEntries();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadEntries intentionally not in deps to avoid refetch loops
   }, [patientId, statusFilter]);
 
   const loadEntries = async () => {
@@ -166,7 +163,7 @@ const DekursHistory: React.FC<DekursHistoryProps> = ({ patientId, onEntrySelect 
       setElgaErrorMessage(null);
       setElgaSuccessMessage(null);
 
-      const updatedEntry = await dispatch(sendDekursToElga(elgaEntryToSend._id)).unwrap();
+      const _updatedEntry = await dispatch(sendDekursToElga(elgaEntryToSend._id)).unwrap();
 
       // Backend gibt bereits die aktualisierte Entry zurück, aber wir laden die Liste trotzdem neu
       await loadEntries();

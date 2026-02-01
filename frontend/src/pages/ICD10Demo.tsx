@@ -5,16 +5,13 @@ import {
   Typography,
   Card,
   CardContent,
-  Grid,
   Button,
   Alert,
-  Divider,
   Chip,
   List,
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
-  IconButton,
   Paper,
   Tabs,
   Tab
@@ -22,10 +19,8 @@ import {
 import {
   Search as SearchIcon,
   MedicalServices as MedicalIcon,
-  Receipt as ReceiptIcon,
   Assessment as AssessmentIcon,
   Add as AddIcon,
-  Delete as DeleteIcon,
   Star as StarIcon,
   AccountTree as AccountTreeIcon
 } from '@mui/icons-material';
@@ -40,8 +35,7 @@ import {
 } from '../store/slices/icd10Slice';
 import {
   createDiagnosis,
-  fetchPatientDiagnoses,
-  deleteDiagnosis
+  fetchPatientDiagnoses
 } from '../store/slices/diagnosisSlice';
 import ICD10Autocomplete from '../components/ICD10Autocomplete';
 import EnhancedICD10Autocomplete from '../components/EnhancedICD10Autocomplete';
@@ -58,19 +52,19 @@ const ICD10Demo: React.FC = () => {
     recentCodes,
     chapters,
     analytics,
-    loading,
+    loading: _loading,
     error
   } = useAppSelector(state => state.icd10);
 
   const {
-    patientDiagnoses,
+    patientDiagnoses: _patientDiagnoses,
     loading: diagnosisLoading,
     error: diagnosisError
   } = useAppSelector(state => state.diagnoses);
 
   const [activeTab, setActiveTab] = useState(0);
   const [selectedCode, setSelectedCode] = useState<any>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [_searchQuery, setSearchQuery] = useState('');
   const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
 
   // Demo patient ID
@@ -272,7 +266,7 @@ const ICD10Demo: React.FC = () => {
                     Suchergebnisse ({searchResults.length}):
                   </Typography>
                   <List dense>
-                    {searchResults.map((code, index) => (
+                    {searchResults.map((code, _index) => (
                       <ListItem
                         key={code._id}
                         component="div"
@@ -350,7 +344,7 @@ const ICD10Demo: React.FC = () => {
                   </Typography>
                   {topCodes.length > 0 ? (
                     <List dense>
-                      {topCodes.map((code, index) => (
+                      {topCodes.map((code, _index) => (
                         <ListItem
                           key={code._id}
                           component="div"
@@ -393,7 +387,7 @@ const ICD10Demo: React.FC = () => {
                   </Typography>
                   {recentCodes.length > 0 ? (
                     <List dense>
-                      {recentCodes.map((code, index) => (
+                      {recentCodes.map((code, _index) => (
                         <ListItem
                           key={code._id}
                           component="div"

@@ -3,7 +3,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import { TextStyle, FontFamily } from '@tiptap/extension-text-style';
-import { Box, Paper, Stack, IconButton, Divider, Select, MenuItem, FormControl } from '@mui/material';
+import { Box, Paper, IconButton, Divider, Select, MenuItem, FormControl } from '@mui/material';
 import {
   FormatBold,
   FormatItalic,
@@ -90,7 +90,7 @@ const RichTextEditor = forwardRef<RichTextEditorRef, RichTextEditorProps>(({
       // Verhindere automatische Link-Erkennung beim Tippen
       handleDOMEvents: {
         // Verhindere, dass der Browser automatisch Links erstellt
-        beforeinput: (view, event) => {
+        beforeinput: (_view, _event) => {
           // Erlaube normales Input-Verhalten
           return false;
         },

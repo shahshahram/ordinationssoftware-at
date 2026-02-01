@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { CssBaseline, Box, Typography } from '@mui/material';
 import { SnackbarProvider } from 'notistack';
@@ -235,6 +235,13 @@ const getTheme = (mode: 'light' | 'dark') => createTheme({
 //   />
 // );
 
+/** Weiterleitung von /patients/:id auf /patient-organizer/:id (z. B. ?tab=fotos bleibt erhalten). */
+const NavigateToPatientOrganizer: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const { search } = useLocation();
+  return <Navigate to={`/patient-organizer/${id || ''}${search}`} replace />;
+};
+
 // Inner Content Component (muss innerhalb Router sein)
 const InnerAppContent: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -277,6 +284,26 @@ const InnerAppContent: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [searchOpen]);
+
+  // aria-hidden: Wenn MUI einen Dialog öffnet, setzt es aria-hidden auf #root.
+  // Liegt der Fokus noch auf einem Element in #root, warnt der Browser. Wir
+  // bluren das aktive Element, sobald aria-hidden gesetzt wird.
+  React.useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return;
+
+    const observer = new MutationObserver(() => {
+      if (root.getAttribute('aria-hidden') === 'true') {
+        const active = document.activeElement as HTMLElement | null;
+        if (active && root.contains(active) && typeof active.blur === 'function') {
+          active.blur();
+        }
+      }
+    });
+
+    observer.observe(root, { attributes: true, attributeFilter: ['aria-hidden'] });
+    return () => observer.disconnect();
+  }, []);
 
   return (
     <>
@@ -657,6 +684,7 @@ const InnerAppContent: React.FC = () => {
                           </ProtectedRoute>
                         } 
                       />
+                      <Route path="/patients/:id" element={<NavigateToPatientOrganizer />} />
                       <Route 
                         path="/patient-organizer/:id" 
                         element={

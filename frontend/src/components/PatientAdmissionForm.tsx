@@ -16,12 +16,10 @@ import {
   Card,
   CardContent,
   Alert,
-  Chip,
   Stack,
 } from '@mui/material';
 import {
   Person,
-  MedicalServices,
   AdminPanelSettings,
   Security,
 } from '@mui/icons-material';
@@ -131,7 +129,7 @@ const PatientAdmissionForm: React.FC<{
     }
   };
 
-  const handleArrayChange = (field: string, value: any[]) => {
+  const _handleArrayChange = (field: string, value: any[]) => {
     console.log(`handleArrayChange: ${field} =`, value);
     console.log(`Type of value:`, typeof value);
     console.log(`Is array:`, Array.isArray(value));

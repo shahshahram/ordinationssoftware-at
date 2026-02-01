@@ -29,11 +29,9 @@ import {
   Select,
   Chip,
   Autocomplete,
-  Snackbar,
 } from '@mui/material';
 import {
   Add,
-  Edit,
   Delete,
   People,
   Devices,
@@ -41,14 +39,11 @@ import {
   CheckCircle,
   Cancel,
   Pending,
-  CreditCard,
-  Link,
   QuestionAnswer,
 } from '@mui/icons-material';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
-import GinaBoxStatus from '../components/GinaBoxStatus';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -147,6 +142,7 @@ const AppointmentDetail: React.FC = () => {
       loadServiceCatalog();
     }
     return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load*-Funktionen bewusst ausgelassen
   }, [id]);
 
   const loadParticipants = async () => {

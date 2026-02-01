@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -17,7 +16,6 @@ import {
   Alert,
   Divider,
 } from '@mui/material';
-import api from '../utils/api';
 import { DekursVorlage, useDekursVorlagen } from '../hooks/useDekursVorlagen';
 import GradientDialogTitle from './GradientDialogTitle';
 
@@ -47,6 +45,7 @@ const DekursVorlagenAutocomplete: React.FC<DekursVorlagenAutocompleteProps> = ({
     if (open) {
       loadVorlagen();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadVorlagen intentionally not in deps
   }, [open, icd10, specialty, locationId]);
 
   const loadVorlagen = async () => {

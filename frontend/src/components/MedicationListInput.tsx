@@ -2,22 +2,14 @@ import React, { useState } from 'react';
 import {
   Box,
   Typography,
-  Chip,
   IconButton,
   Paper,
   List,
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  TextField,
-  Grid
 } from '@mui/material';
-import { Add as AddIcon, Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
+import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import MedicationAutocomplete from './MedicationAutocomplete';
 import MedicationDialog from './MedicationDialog';
 import { Medication } from '../types/Medication';

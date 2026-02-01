@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -18,7 +17,6 @@ import {
 import {
   LocationOn,
   CheckCircle,
-  Business,
 } from '@mui/icons-material';
 import { Location } from '../../store/slices/locationSlice';
 import GradientDialogTitle from '../GradientDialogTitle';

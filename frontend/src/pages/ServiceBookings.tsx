@@ -20,15 +20,12 @@ import {
   TableBody,
   TableCell,
   TableContainer,
-  Paper,
   TableHead,
   TableRow,
   TablePagination,
   Snackbar,
   Alert,
   CircularProgress,
-  Grid,
-  Divider,
   Tabs,
   Tab,
   Tooltip,
@@ -39,7 +36,6 @@ import {
   Delete as DeleteIcon,
   Search as SearchIcon,
   CalendarToday as CalendarIcon,
-  Person as PersonIcon,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
@@ -49,7 +45,6 @@ import { de } from 'date-fns/locale';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../store/store';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 
@@ -128,9 +123,9 @@ interface StaffProfile {
 }
 
 const ServiceBookings: React.FC = () => {
-  const dispatch = useDispatch();
+  const _dispatch = useDispatch();
   const navigate = useNavigate();
-  const { user } = useSelector((state: RootState) => state.auth);
+  const { user: _user } = useSelector((state: RootState) => state.auth);
   const { marginTopValue } = useGlobalNavigationOffset();
   
   const [bookings, setBookings] = useState<ServiceBooking[]>([]);
@@ -149,7 +144,7 @@ const ServiceBookings: React.FC = () => {
   const [filterLocation, setFilterLocation] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [filterType, setFilterType] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [filterDate, _setFilterDate] = useState('');
   const [tabValue, setTabValue] = useState(0);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
@@ -259,6 +254,7 @@ const ServiceBookings: React.FC = () => {
   useEffect(() => {
     fetchBookings();
     fetchHelperData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchBookings/fetchHelperData stable
   }, [page, rowsPerPage, searchTerm, filterLocation, filterStatus, filterType, filterDate]);
 
   const handleAddNew = () => {
@@ -367,7 +363,7 @@ const ServiceBookings: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (bookingId: string, newStatus: string) => {
+  const _handleStatusChange = async (bookingId: string, newStatus: string) => {
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`http://localhost:5001/api/service-bookings/${bookingId}`, {

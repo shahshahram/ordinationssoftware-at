@@ -4,8 +4,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Card,
-  CardContent,
   Button,
   Table,
   TableBody,
@@ -26,9 +24,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
-  Alert,
   CircularProgress,
-  Grid,
   TablePagination,
   Switch,
   FormControlLabel,
@@ -39,8 +35,6 @@ import {
   Add,
   Edit,
   Delete,
-  Visibility,
-  Refresh,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
@@ -90,6 +84,7 @@ const WorkShifts: React.FC = () => {
   useEffect(() => {
     loadWorkShifts();
     loadStaffMembers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load*-Funktionen bewusst ausgelassen
   }, [page, rowsPerPage]);
 
   const loadWorkShifts = async () => {

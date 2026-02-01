@@ -505,6 +505,12 @@ const PatientExtendedSchema = new mongoose.Schema({
     type: Date
   },
 
+  // Profilfoto (Avatar) – ein Bild pro Patient
+  photo: {
+    filename: { type: String, trim: true },
+    uploadedAt: { type: Date }
+  },
+
   // Medizinische Vorgeschichte
   medicalHistory: [{
     type: String,

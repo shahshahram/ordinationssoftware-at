@@ -12,7 +12,6 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
-  Fab,
   useMediaQuery,
   useTheme,
   Tabs,
@@ -46,7 +45,7 @@ import EldaMaintenanceAlert from '../components/Dashboard/EldaMaintenanceAlert';
 import QRCodeGenerator from '../components/QRCodeGenerator';
 import TabletMode from '../components/TabletMode';
 import InternalMessagesDialog from '../components/InternalMessagesDialog';
-import { fetchUnreadCount, fetchMessages, markAsRead, InternalMessage } from '../store/slices/internalMessagesSlice';
+import { fetchUnreadCount } from '../store/slices/internalMessagesSlice';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import {
@@ -56,13 +55,9 @@ import {
   TrendingUp,
   Schedule,
   Warning,
-  CheckCircle,
-  AttachMoney,
   EventNote,
   Assessment,
   Medication,
-  LocalHospital,
-  Science,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
@@ -73,11 +68,11 @@ const Dashboard: React.FC = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
-  const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+  const _isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   
   const { widgets, loading, error } = useAppSelector((state) => state.dashboardWidgets);
   const { qrCode, isLoading: qrLoading, error: qrError } = useAppSelector((state) => state.checkin);
-  const { user } = useAppSelector((state) => state.auth);
+  const { user: _user } = useAppSelector((state) => state.auth);
   const { marginTopValue } = useGlobalNavigationOffset();
   
   const [editMode, setEditMode] = useState(false);
@@ -92,7 +87,7 @@ const Dashboard: React.FC = () => {
   const [importantPatients, setImportantPatients] = useState<any[]>([]);
   const [newOnlineBookings, setNewOnlineBookings] = useState<any[]>([]);
   const [dashboardStats, setDashboardStats] = useState<any>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
+  const [_loadingStats, setLoadingStats] = useState(false);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
   
@@ -129,6 +124,7 @@ const Dashboard: React.FC = () => {
         onlineBookingsWidgetIdRef.current = onlineBookingsWidget._id;
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- widgets bewusst begrenzt
   }, [widgets.length]); // Nur wenn sich die Anzahl der Widgets ändert
 
   // Lade wichtige Patienten (mit Zusatzversicherungen)
@@ -155,7 +151,7 @@ const Dashboard: React.FC = () => {
           setImportantPatients(formattedPatients);
           
           // Update Widget-Daten nur wenn sich die Daten geändert haben
-          const itemsToSave = formattedPatients.map(({ onClick, ...rest }: any) => rest);
+          const itemsToSave = formattedPatients.map(({ onClick: _onClick, ...rest }: any) => rest);
           const itemsHash = JSON.stringify(itemsToSave);
           
           if (itemsHash !== lastImportantPatientsUpdateRef.current && importantPatientsWidgetIdRef.current) {
@@ -273,7 +269,7 @@ const Dashboard: React.FC = () => {
           // WICHTIG: Speichere KEINE onClick-Handler in der Widget-Konfiguration, da diese nicht serialisiert werden können
           if (laborWidgetIdRef.current) {
             // Entferne onClick-Handler und isNew Flag für Vergleich (werden nicht gespeichert)
-            const itemsToSave = formattedItems.map(({ onClick, isNew, ...rest }: any) => rest);
+            const itemsToSave = formattedItems.map(({ onClick: _onClick, isNew: _isNew, ...rest }: any) => rest);
             const itemsHash = JSON.stringify(itemsToSave);
             
             // Prüfe ob sich die Items geändert haben, um Endlosschleife zu vermeiden
@@ -367,7 +363,7 @@ const Dashboard: React.FC = () => {
           // Aktualisiere Widget-Konfiguration nur wenn sich die Items geändert haben
           if (dicomWidgetIdRef.current) {
             // Entferne onClick-Handler und isNew Flag für Vergleich (werden nicht gespeichert)
-            const itemsToSave = formattedItems.map(({ onClick, isNew, ...rest }: any) => rest);
+            const itemsToSave = formattedItems.map(({ onClick: _onClick, isNew: _isNew, ...rest }: any) => rest);
             const itemsHash = JSON.stringify(itemsToSave);
             
             // Prüfe ob sich die Items geändert haben, um Endlosschleife zu vermeiden
@@ -403,7 +399,7 @@ const Dashboard: React.FC = () => {
         // Berechne Datum vor 3 Tagen
         const threeDaysAgo = new Date();
         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
-        const threeDaysAgoISO = threeDaysAgo.toISOString();
+        const _threeDaysAgoISO = threeDaysAgo.toISOString();
         
         // Lade alle Termine und filtere nach Online-Buchungen der letzten 3 Tage
         const response = await api.get<any>('/appointments?limit=1000');
@@ -510,7 +506,7 @@ const Dashboard: React.FC = () => {
           
           // Aktualisiere Widget-Konfiguration nur wenn sich die Items geändert haben
           if (onlineBookingsWidgetIdRef.current) {
-            const itemsToSave = formattedItems.map(({ onClick, isNew, ...rest }: any) => rest);
+            const itemsToSave = formattedItems.map(({ onClick: _onClick, isNew: _isNew, ...rest }: any) => rest);
             const itemsHash = JSON.stringify(itemsToSave);
             
             if (itemsHash !== lastOnlineBookingsUpdateRef.current) {
@@ -540,7 +536,7 @@ const Dashboard: React.FC = () => {
   }, [dispatch, navigate]);
         
         // Handler für Nachrichten-Klicks
-        const handleMessageClick = (message: any) => {
+        const _handleMessageClick = (message: any) => {
           // Wenn die Nachricht eine patientId hat, navigiere zum Patienten
           if (message.patientId) {
             // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
@@ -612,7 +608,7 @@ const Dashboard: React.FC = () => {
       
       // Für Desktop und Tablet: Berechne die verfügbare Breite
       // Suche nach dem Hauptcontainer (Box mit Dashboard-Inhalt)
-      const mainContainer = document.querySelector('[class*="MuiBox-root"]');
+      const _mainContainer = document.querySelector('[class*="MuiBox-root"]');
       let availableWidth = window.innerWidth;
       
       // Prüfe ob Sidebar vorhanden ist
@@ -658,6 +654,19 @@ const Dashboard: React.FC = () => {
       }
     };
   }, [isMobile, isTablet]);
+
+  const handleGenerateQR = useCallback(async () => {
+    try {
+      await dispatch(generateCheckInCode()).unwrap();
+      setQrDialogOpen(true);
+    } catch (error) {
+      console.error('Error generating QR code:', error);
+    }
+  }, [dispatch]);
+
+  const handleOpenTabletMode = useCallback(() => {
+    setTabletModeOpen(true);
+  }, []);
 
   // Data providers with real API data
   const getWidgetData = useCallback((widget: DashboardWidget) => {
@@ -833,14 +842,14 @@ const Dashboard: React.FC = () => {
           {
             label: 'QR-Code generieren',
             icon: <QrCode />,
-            onClick: () => {},
+            onClick: handleGenerateQR,
             variant: 'contained' as const,
             color: 'primary' as const
           },
           {
             label: 'Tablet-Modus',
             icon: <Tablet />,
-            onClick: () => {},
+            onClick: handleOpenTabletMode,
             variant: 'outlined' as const,
             color: 'primary' as const
           }
@@ -969,6 +978,7 @@ const Dashboard: React.FC = () => {
       default:
         return null;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- newOnlineBookings bewusst ausgelassen
   }, [importantPatients, newLaborResults, newDicomStudies, dashboardStats, navigate]);
 
   // Update layout when widgets change
@@ -1353,16 +1363,7 @@ const Dashboard: React.FC = () => {
     } else {
       setLayout(newLayout);
     }
-  }, [widgets, isMobile, isTablet, dashboardStats, newLaborResults, newDicomStudies, newOnlineBookings, importantPatients, getWidgetData]);
-
-  const handleGenerateQR = async () => {
-    try {
-      await dispatch(generateCheckInCode()).unwrap();
-      setQrDialogOpen(true);
-    } catch (error) {
-      console.error('Error generating QR code:', error);
-    }
-  };
+  }, [widgets, isMobile, isTablet, dashboardStats, newLaborResults, newDicomStudies, newOnlineBookings, importantPatients, handleGenerateQR, handleOpenTabletMode]);
 
   const handleRefreshQR = async () => {
     try {

@@ -1,7 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import axios from 'axios';
-
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+import { getApiBaseUrl } from '../../utils/api';
 
 export interface Service {
   _id?: string;
@@ -154,7 +153,7 @@ export const fetchInvoices = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const queryParams = new URLSearchParams(params).toString();
-      const response = await axios.get(`${API_BASE_URL}/billing/invoices?${queryParams}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/billing/invoices?${queryParams}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       console.log('fetchInvoices response:', response.data);
@@ -172,7 +171,7 @@ export const fetchServices = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const queryParams = new URLSearchParams(params).toString();
-      const response = await axios.get(`${API_BASE_URL}/billing/services?${queryParams}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/billing/services?${queryParams}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       console.log('🔍 fetchServices response:', response.data);
@@ -189,7 +188,7 @@ export const createInvoice = createAsyncThunk(
   async (invoiceData: Partial<Invoice>, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.post(`${API_BASE_URL}/billing/invoices`, invoiceData, {
+      const response = await axios.post(`${getApiBaseUrl()}/billing/invoices`, invoiceData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -204,7 +203,7 @@ export const updateInvoice = createAsyncThunk(
   async ({ id, invoiceData }: { id: string; invoiceData: Partial<Invoice> }, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.put(`${API_BASE_URL}/billing/invoices/${id}`, invoiceData, {
+      const response = await axios.put(`${getApiBaseUrl()}/billing/invoices/${id}`, invoiceData, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;
@@ -219,7 +218,7 @@ export const deleteInvoice = createAsyncThunk(
   async (id: string, { rejectWithValue }) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.delete(`${API_BASE_URL}/billing/invoices/${id}`, {
+      await axios.delete(`${getApiBaseUrl()}/billing/invoices/${id}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return id;
@@ -235,7 +234,7 @@ export const fetchStatistics = createAsyncThunk(
     try {
       const token = localStorage.getItem('token');
       const queryParams = new URLSearchParams(params).toString();
-      const response = await axios.get(`${API_BASE_URL}/billing/statistics?${queryParams}`, {
+      const response = await axios.get(`${getApiBaseUrl()}/billing/statistics?${queryParams}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       return response.data.data;

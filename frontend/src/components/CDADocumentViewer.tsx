@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   Button,
@@ -20,7 +19,6 @@ import {
   Fullscreen,
   FullscreenExit,
 } from '@mui/icons-material';
-import { apiRequest } from '../utils/api';
 
 interface CDADocumentViewerProps {
   open: boolean;
@@ -46,7 +44,7 @@ const CDADocumentViewer: React.FC<CDADocumentViewerProps> = ({
   const [renderedHTML, setRenderedHTML] = useState<string | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const _iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     if (open && locationId && documentId) {
@@ -56,6 +54,7 @@ const CDADocumentViewer: React.FC<CDADocumentViewerProps> = ({
       setError(null);
       setLoading(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAndRenderCDA is stable, adding would cause infinite loop
   }, [open, locationId, documentId]);
 
   const loadAndRenderCDA = async () => {

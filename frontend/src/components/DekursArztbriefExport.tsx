@@ -15,7 +15,6 @@ import {
   MenuItem,
   Alert,
   CircularProgress,
-  Divider,
   Checkbox,
   FormControlLabel,
   Paper

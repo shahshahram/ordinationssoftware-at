@@ -21,9 +21,6 @@ import {
   TableHead,
   TableRow,
   Chip,
-  Divider,
-  Stack,
-  Grid,
   IconButton,
   Tooltip,
   Dialog,
@@ -103,6 +100,7 @@ const DicomTestPage: React.FC = () => {
 
   useEffect(() => {
     fetchProviders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchProviders bewusst ausgelassen
   }, []);
 
   const fetchProviders = async () => {

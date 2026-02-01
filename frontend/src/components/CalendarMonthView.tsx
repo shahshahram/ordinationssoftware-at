@@ -8,9 +8,8 @@ import {
   Chip,
   Tooltip
 } from '@mui/material';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, getDay, addMonths, subMonths, isPast, startOfDay } from 'date-fns';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, getDay, addMonths, subMonths, isPast, startOfDay } from 'date-fns';
 import { de } from 'date-fns/locale';
-import { CalendarToday } from '@mui/icons-material';
 
 interface CalendarMonthViewProps {
   selectedDate: Date | null;

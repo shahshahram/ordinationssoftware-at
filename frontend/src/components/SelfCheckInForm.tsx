@@ -13,7 +13,6 @@ import {
   Card,
   CardContent,
   Alert,
-  Chip,
   Stack,
   Divider,
   Paper,
@@ -23,7 +22,6 @@ import {
 } from '@mui/material';
 import {
   Person,
-  MedicalServices,
   Security,
   LocalHospital,
   CheckCircle,
@@ -45,8 +43,8 @@ interface SelfCheckInFormProps {
 const SelfCheckInForm: React.FC<SelfCheckInFormProps> = ({ 
   onComplete, 
   onCancel, 
-  appointmentId,
-  patientId 
+  appointmentId: _appointmentId,
+  patientId: _patientId 
 }) => {
   const [activeStep, setActiveStep] = useState(0);
   const [formData, setFormData] = useState<Partial<PatientAdmissionData>>({
@@ -120,7 +118,7 @@ const SelfCheckInForm: React.FC<SelfCheckInFormProps> = ({
     }
   };
 
-  const handleArrayChange = (field: string, value: any[]) => {
+  const _handleArrayChange = (field: string, value: any[]) => {
     setFormData((prev: any) => ({
       ...prev,
       [field]: value,

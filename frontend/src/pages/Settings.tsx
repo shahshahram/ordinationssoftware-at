@@ -175,6 +175,7 @@ const Settings: React.FC = () => {
     loadSmsSettings();
     loadBillingSettings();
     loadWidgetDoctors();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadWidgetDoctors stable, run on user
   }, [user]);
 
   const loadWidgetDoctors = async () => {

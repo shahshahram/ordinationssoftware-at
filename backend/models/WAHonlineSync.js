@@ -38,7 +38,6 @@ const WAHonlineSyncSchema = new mongoose.Schema({
   collection: 'wahonlinesync'
 });
 
-WAHonlineSyncSchema.index({ performanceId: 1 });
-WAHonlineSyncSchema.index({ status: 1 });
+// performanceId und status haben bereits index: true im Schema
 
 module.exports = mongoose.model('WAHonlineSync', WAHonlineSyncSchema);

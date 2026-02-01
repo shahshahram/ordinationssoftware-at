@@ -5,7 +5,6 @@ import {
   Button,
   IconButton,
   Dialog,
-  DialogTitle,
   DialogContent,
   DialogActions,
   TextField,
@@ -303,10 +302,12 @@ const EnhancedCalendar: React.FC = () => {
     dispatch(fetchLocationWeeklySchedules());
     dispatch(fetchWeeklySchedules());
     loadTimeBlocks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTimeBlocks bewusst ausgelassen
   }, [dispatch]);
 
   useEffect(() => {
     loadTimeBlocks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadTimeBlocks bewusst ausgelassen
   }, [currentDate, viewMode]);
 
   // Lade Diagnosen für alle Patienten in den Terminen
@@ -704,6 +705,7 @@ const EnhancedCalendar: React.FC = () => {
 
     console.log('Generated background events:', events);
     return events;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- locationSchedulesLoading, medicalFilter, staffProfiles, weeklySchedulesLoading bewusst ausgelassen
   }, [locationSchedules, weeklySchedules, selectedLocation, showLocationHours, showStaffHours, showBreaks, filteredStaff, currentDate, viewMode]);
 
   // Generate calendar events from appointments
@@ -920,6 +922,7 @@ const EnhancedCalendar: React.FC = () => {
           patientObj: patientObj,
         };
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- selectedLocations bewusst ausgelassen
   }, [appointments, filteredStaff, rooms, locations, selectedLocation, medicalFilter, currentDate, viewMode]);
 
   const handleDateChange = (direction: 'prev' | 'next' | 'today') => {

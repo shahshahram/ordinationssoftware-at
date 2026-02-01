@@ -26,7 +26,6 @@ import {
   Tab,
   Alert,
   Snackbar,
-  ListItem,
   ListItemButton,
   ListItemIcon,
   ListItemText,
@@ -39,7 +38,6 @@ import {
   Fab,
 } from '@mui/material';
 import {
-  Favorite,
   Search,
   Add,
   ArrowBackIos,
@@ -51,7 +49,6 @@ import {
   Euro,
   Help,
   Build,
-  Fullscreen,
   Folder,
   Event as EventIcon,
   Person,
@@ -74,7 +71,7 @@ import { format, startOfWeek, addDays, addWeeks, subWeeks, startOfMonth, endOfMo
 import { de } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { loadUser, updateCalendarSettings } from '../store/slices/authSlice';
+import { updateCalendarSettings } from '../store/slices/authSlice';
 import { fetchAppointments, createAppointment, updateAppointment, deleteAppointment, Appointment } from '../store/slices/appointmentSlice';
 import { fetchLocations, Location } from '../store/slices/locationSlice';
 import { fetchPatients, Patient } from '../store/slices/patientSlice';
@@ -83,9 +80,8 @@ import { fetchRooms } from '../store/slices/roomSlice';
 import { fetchPatientDiagnoses, PatientDiagnosis } from '../store/slices/diagnosisSlice';
 import { fetchWaitingListCount } from '../store/slices/waitingListSlice';
 import { fetchLocationWeeklySchedules } from '../store/slices/locationWeeklyScheduleSlice';
-import { fetchWeeklySchedules, deleteWeeklySchedulesByStaffId } from '../store/slices/weeklyScheduleSlice';
+import { fetchWeeklySchedules } from '../store/slices/weeklyScheduleSlice';
 import { eventBus, EVENTS } from '../utils/eventBus';
-import { isWithinInterval } from 'date-fns';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import DiagnosisManager from '../components/DiagnosisManager';
 import CreateTaskDialog from '../components/Tasks/CreateTaskDialog';
@@ -225,12 +221,12 @@ const ServiceDemoCalendar: React.FC = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
+  const _isTablet = useMediaQuery(theme.breakpoints.between('sm', 'md'));
   
   // Redux State
   const { appointments, loading: appointmentsLoading } = useAppSelector((state) => state.appointments);
-  const { locations, loading: locationsLoading, currentLocation } = useAppSelector((state) => state.locations);
-  const { patients, loading: patientsLoading } = useAppSelector((state) => state.patients);
+  const { locations, loading: locationsLoading, currentLocation: _currentLocation } = useAppSelector((state) => state.locations);
+  const { patients, loading: _patientsLoading } = useAppSelector((state) => state.patients);
   const { staffProfiles } = useAppSelector((state) => state.staff);
   const { rooms } = useAppSelector((state) => state.rooms);
   const { patientDiagnoses } = useAppSelector((state) => state.diagnoses);
@@ -262,8 +258,8 @@ const ServiceDemoCalendar: React.FC = () => {
   const [showLocationHours, setShowLocationHours] = useState(defaultSettings.showOpeningHours);
   const [showStaffHours, setShowStaffHours] = useState(defaultSettings.showWorkingHours);
   const [showBreaks, setShowBreaks] = useState(defaultSettings.showBreaks);
-  const [showOnlyOpeningHours, setShowOnlyOpeningHours] = useState(false);
-  const [hideWeekends, setHideWeekends] = useState(false);
+  const [_showOnlyOpeningHours, _setShowOnlyOpeningHours] = useState(false);
+  const [_hideWeekends, _setHideWeekends] = useState(false);
   const [openEventDialog, setOpenEventDialog] = useState(false);
   const [openTaskDialog, setOpenTaskDialog] = useState(false);
   const [openSearchDialog, setOpenSearchDialog] = useState(false);
@@ -276,7 +272,7 @@ const ServiceDemoCalendar: React.FC = () => {
   const [services, setServices] = useState<Service[]>([]);
   const [patientSearchValue, setPatientSearchValue] = useState<Patient | null>(null);
   const [patientSearchInput, setPatientSearchInput] = useState('');
-  const [patientSearchLoading, setPatientSearchLoading] = useState(false);
+  const [patientSearchLoading, _setPatientSearchLoading] = useState(false);
   const [serviceSearchInput, setServiceSearchInput] = useState('');
   const [selectedLocation, setSelectedLocation] = useState<string>(defaultSettings.selectedLocation);
   const [selectedStaff, setSelectedStaff] = useState<string>(defaultSettings.selectedStaff);
@@ -558,6 +554,7 @@ const ServiceDemoCalendar: React.FC = () => {
     }, 1000); // Debounce: Speichere 1 Sekunde nach der letzten Änderung
 
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- user not needed for debounced save
   }, [useStaffColumns, selectedStaffForColumns, selectedStaff, selectedLocation, showLocationHours, showStaffHours, showBreaks, viewMode, currentDate, saveCalendarSettings]);
 
   // Debug: Log appointments when they change
@@ -624,6 +621,7 @@ const ServiceDemoCalendar: React.FC = () => {
         console.log('🔍 First assigned_user (stringified):', JSON.stringify(firstUser, null, 2));
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- debug log only
   }, [appointments]);
 
   // Load data on mount
@@ -663,6 +661,7 @@ const ServiceDemoCalendar: React.FC = () => {
       }
     };
     loadDevices();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- init load once
   }, [dispatch]);
 
   // Lade Diagnosen für alle Patienten in den Terminen
@@ -904,7 +903,8 @@ const ServiceDemoCalendar: React.FC = () => {
     });
     
     return mapped.filter((apt): apt is CalendarAppointment => apt !== null);
-  }, [appointments, selectedLocations, searchQuery, patientMap, locationMap, services, rooms, openSearchDialog]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openSearchDialog not needed for mapping
+  }, [appointments, selectedLocations, searchQuery, patientMap, locationMap, services, rooms]);
 
   // Helper function for time parsing (from EnhancedCalendar)
   const parseTime = (timeString: string) => {
@@ -1527,7 +1527,7 @@ const ServiceDemoCalendar: React.FC = () => {
       console.log('📢 Current selectedLocation:', selectedLocation);
       
       // Extract location ID from exception data
-      const exceptionLocationId = typeof exceptionData?.location_id === 'object' && exceptionData?.location_id !== null
+      const _exceptionLocationId = typeof exceptionData?.location_id === 'object' && exceptionData?.location_id !== null
         ? exceptionData.location_id._id || exceptionData.location_id
         : exceptionData?.location_id;
       
@@ -1982,7 +1982,7 @@ const ServiceDemoCalendar: React.FC = () => {
       const time = formData.time || '09:00';
       const startTime = `${date}T${time}:00`;
       const duration = formData.duration || 30;
-      const [hours, minutes] = time.split(':').map(Number);
+      const [_hours, _minutes] = time.split(':').map(Number);
       const endDate = new Date(`${date}T${time}:00`);
       endDate.setMinutes(endDate.getMinutes() + duration);
       const endHours = endDate.getHours();
@@ -3448,7 +3448,7 @@ const ServiceDemoCalendar: React.FC = () => {
                       }
                     }}
                   >
-                    {selectedStaffForColumns.map((staffId, staffIndex) => {
+                    {selectedStaffForColumns.map((staffId, _staffIndex) => {
                       const staff = filteredStaff.find(s => s._id === staffId);
                       if (!staff) return null;
                       
@@ -3645,7 +3645,7 @@ const ServiceDemoCalendar: React.FC = () => {
                                     startSelection(day, time);
                                   }
                                 }}
-                                onMouseMove={(e) => {
+                                onMouseMove={(_e) => {
                                   if (isSelecting) {
                                     updateSelection(day, time);
                                   }
@@ -4664,7 +4664,7 @@ const ServiceDemoCalendar: React.FC = () => {
                         );
                       })}
                     
-                  {timeSlots.map((time, index) => {
+                  {timeSlots.map((time, _index) => {
                     const isInSelection = isSlotInSelection(day, time);
                     
                     return (
@@ -4692,7 +4692,7 @@ const ServiceDemoCalendar: React.FC = () => {
                             startSelection(day, time);
                           }
                         }}
-                        onMouseMove={(e) => {
+                        onMouseMove={(_e) => {
                           if (isSelecting) {
                             updateSelection(day, time);
                           }
@@ -4995,7 +4995,7 @@ const ServiceDemoCalendar: React.FC = () => {
         }}
         slotProps={{
           backdrop: {
-            onClick: (e: React.MouseEvent<HTMLDivElement>) => {
+            onClick: (_e: React.MouseEvent<HTMLDivElement>) => {
               if (dialogMode === 'view') {
                 handleCloseEventDialog();
               }
@@ -5404,7 +5404,7 @@ const ServiceDemoCalendar: React.FC = () => {
                       />
                     )}
                     renderOption={(props: any, option: Patient) => {
-                      const { key, ...otherProps } = props;
+                      const { key: _key, ...otherProps } = props;
                       return (
                         <Box component="li" key={option._id} {...otherProps}>
                           <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>

@@ -68,7 +68,7 @@ const WeeklySchedule: React.FC<WeeklyScheduleProps> = ({
   onCancel,
   initialData,
 }) => {
-  const [scheduleId, setScheduleId] = useState<string | null>(initialData?._id || null);
+  const [scheduleId, _setScheduleId] = useState<string | null>(initialData?._id || null);
   const [validFrom, setValidFrom] = useState<Date>(() => {
     if (initialData?.validFrom) {
       return new Date(initialData.validFrom);

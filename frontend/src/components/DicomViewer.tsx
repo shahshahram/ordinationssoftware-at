@@ -13,8 +13,7 @@ import {
 } from '@mui/material';
 import { Close, ZoomIn, ZoomOut, RotateLeft, RotateRight, Refresh, NavigateBefore, NavigateNext } from '@mui/icons-material';
 import * as dicomParser from 'dicom-parser';
-
-const API_BASE_URL = (process.env.REACT_APP_API_URL || 'http://localhost:5001/api').replace(/\/api$/, '') || 'http://localhost:5001';
+import { getApiBaseUrl } from '../utils/api';
 
 interface DicomViewerProps {
   open: boolean;
@@ -144,18 +143,21 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
       }
       loadDicomImage();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDicomImage/seriesImages intentionally omitted
   }, [open, studyId, studyInstanceUID, seriesInstanceUID, sopInstanceUID]);
 
   useEffect(() => {
     if (open && seriesImages && seriesImages.length > 0 && currentImageIndex >= 0 && currentImageIndex < seriesImages.length) {
       loadDicomImage();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadDicomImage/seriesImages intentionally omitted
   }, [currentImageIndex]);
 
   useEffect(() => {
     if (imageDataRef.current) {
       renderImage();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- renderImage intentionally omitted
   }, [scale, rotation, panX, panY]);
 
   useEffect(() => {
@@ -168,6 +170,7 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
     });
     resizeObserver.observe(container);
     return () => resizeObserver.disconnect();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- renderImage intentionally omitted
   }, []);
 
   // Stelle sicher, dass renderImage aufgerufen wird, wenn der Dialog geöffnet wird
@@ -183,6 +186,7 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
       };
       requestAnimationFrame(checkAndRender);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- renderImage intentionally omitted
   }, [open]);
 
   const loadDicomImage = async () => {
@@ -190,21 +194,21 @@ const DicomViewer: React.FC<DicomViewerProps> = ({
       setLoading(true);
       setError(null);
 
-      const backendUrl = API_BASE_URL;
+      const apiBase = getApiBaseUrl();
       let wadoUrl: string;
       
       // Wenn seriesImages vorhanden ist, verwende das aktuelle Bild
       if (seriesImages && seriesImages.length > 0 && currentImageIndex >= 0 && currentImageIndex < seriesImages.length) {
         const currentImage = seriesImages[currentImageIndex];
         if (currentImage.studyInstanceUID && currentImage.sopInstanceUID) {
-          wadoUrl = `${backendUrl}/api/dicom/wado?studyInstanceUID=${currentImage.studyInstanceUID}&seriesInstanceUID=${currentImage.seriesInstanceUID || ''}&objectUID=${currentImage.sopInstanceUID}`;
+          wadoUrl = `${apiBase}/dicom/wado?studyInstanceUID=${currentImage.studyInstanceUID}&seriesInstanceUID=${currentImage.seriesInstanceUID || ''}&objectUID=${currentImage.sopInstanceUID}`;
         } else {
-          wadoUrl = `${backendUrl}/api/dicom/studies/${currentImage._id}/file`;
+          wadoUrl = `${apiBase}/dicom/studies/${currentImage._id}/file`;
         }
       } else if (studyInstanceUID && sopInstanceUID) {
-        wadoUrl = `${backendUrl}/api/dicom/wado?studyInstanceUID=${studyInstanceUID}&seriesInstanceUID=${seriesInstanceUID || ''}&objectUID=${sopInstanceUID}`;
+        wadoUrl = `${apiBase}/dicom/wado?studyInstanceUID=${studyInstanceUID}&seriesInstanceUID=${seriesInstanceUID || ''}&objectUID=${sopInstanceUID}`;
       } else {
-        wadoUrl = `${backendUrl}/api/dicom/studies/${studyId}/file`;
+        wadoUrl = `${apiBase}/dicom/studies/${studyId}/file`;
       }
 
       const token = localStorage.getItem('token');

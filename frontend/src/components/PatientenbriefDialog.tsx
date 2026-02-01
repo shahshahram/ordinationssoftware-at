@@ -20,7 +20,6 @@ import {
   Alert,
   Tabs,
   Tab,
-  Grid,
   List,
   ListItemButton,
   ListItemText
@@ -45,7 +44,7 @@ import { fetchContacts, Contact } from '../store/slices/contactSlice';
 import ICD10Autocomplete from './ICD10Autocomplete';
 import MedicationAutocomplete from './MedicationAutocomplete';
 import MedicationDialog from './MedicationDialog';
-import { apiRequest } from '../utils/api';
+import { apiRequest, getUploadsBaseUrl } from '../utils/api';
 import Autocomplete from '@mui/material/Autocomplete';
 import RichTextEditor from './RichTextEditor';
 import DocumentSidebar from './DocumentSidebar';
@@ -888,30 +887,30 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   const formatPhoto = (photo: any): string => {
     const parts: string[] = [];
     if (photo.filename || photo.path) {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+      const baseUrl = getUploadsBaseUrl();
       let photoUrl: string;
       if (photo.path) {
         // Verwende path, falls vorhanden
         if (photo.path.startsWith('uploads/')) {
-          photoUrl = `${apiUrl}/${photo.path}`;
+          photoUrl = `${baseUrl}/${photo.path}`;
         } else if (photo.path.startsWith('/') || photo.path.startsWith('C:') || photo.path.startsWith('D:')) {
           // Absoluter Pfad - extrahiere relativen Teil
           const uploadsIndex = photo.path.indexOf('uploads');
           if (uploadsIndex !== -1) {
             const relativePath = photo.path.substring(uploadsIndex);
-            photoUrl = `${apiUrl}/${relativePath.replace(/\\/g, '/')}`;
+            photoUrl = `${baseUrl}/${relativePath.replace(/\\/g, '/')}`;
           } else {
-            photoUrl = `${apiUrl}/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
+            photoUrl = `${baseUrl}/uploads/patient-photos/${photo.filename || 'unknown.jpg'}`;
           }
         } else {
           // Relativer Pfad
           const normalizedPath = photo.path.replace(/\\/g, '/').replace(/\/+/g, '/');
-          photoUrl = `${apiUrl}/uploads/${normalizedPath}`;
+          photoUrl = `${baseUrl}/uploads/${normalizedPath}`;
         }
       } else if (photo.filename) {
-        photoUrl = `${apiUrl}/uploads/patient-photos/${photo.filename}`;
+        photoUrl = `${baseUrl}/uploads/patient-photos/${photo.filename}`;
       } else {
-        photoUrl = `${apiUrl}/uploads/patient-photos/unknown.jpg`;
+        photoUrl = `${baseUrl}/uploads/patient-photos/unknown.jpg`;
       }
       parts.push(`<img src="${photoUrl}" alt="Foto" style="max-width: 300px; height: auto; margin: 10px 0;" />`);
     }
@@ -1378,8 +1377,8 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
     // Briefkopf
     html += '<div style="display: flex; justify-content: space-between; margin-bottom: 30px;">';
     if (location?.logo?.filename) {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-      html += `<img src="${apiUrl}/uploads/location-logos/${location.logo.filename}" alt="${location.name}" style="max-height: 80px;" onerror="console.error('Failed to load logo:', this.src); this.style.display='none';" />`;
+      const baseUrl = getUploadsBaseUrl();
+      html += `<img src="${baseUrl}/uploads/location-logos/${location.logo.filename}" alt="${location.name}" style="max-height: 80px;" onerror="console.error('Failed to load logo:', this.src); this.style.display='none';" />`;
     } else {
       html += `<h2>${location?.name || ''}</h2>`;
     }
@@ -1479,14 +1478,14 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
 
   // Druck-Funktion
   const handlePrint = async () => {
-    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
+    const baseUrl = getUploadsBaseUrl();
     let logoUrl: string | null = null;
     
     if (location?.logo?.filename) {
-      logoUrl = `${apiUrl}/uploads/location-logos/${location.logo.filename}`;
+      logoUrl = `${baseUrl}/uploads/location-logos/${location.logo.filename}`;
     } else if (location?.logo?.path) {
       const cleanPath = location.logo.path.replace(/^\.\//, '').replace(/^\/+/, '');
-      logoUrl = `${apiUrl}/${cleanPath}`;
+      logoUrl = `${baseUrl}/${cleanPath}`;
     }
     
     // Konvertiere Logo zu Base64 für Print-Preview
@@ -2118,7 +2117,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
   };
 
   // Reset beim Schließen
-  const handleClose = (event?: {}, reason?: string) => {
+  const handleClose = (_event?: {}, _reason?: string) => {
     // Verhindere Schließen bei Backdrop-Klick, wenn gespeichert wird
     if (saving) {
       return;
@@ -2241,7 +2240,7 @@ const PatientenbriefDialog: React.FC<PatientenbriefDialogProps> = ({
             <Box>
               {location?.logo?.filename ? (
                 <img 
-                  src={`${process.env.REACT_APP_API_URL || 'http://localhost:5001'}/uploads/location-logos/${location.logo.filename}`} 
+                  src={`${getUploadsBaseUrl()}/uploads/location-logos/${location.logo.filename}`} 
                   alt={location.name}
                   style={{ maxHeight: '80px', maxWidth: '200px' }}
                   onError={(e) => {

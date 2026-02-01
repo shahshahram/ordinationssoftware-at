@@ -1,19 +1,49 @@
-// Dynamische API-URL basierend auf dem aktuellen Hostname
-const getApiBaseUrl = () => {
-  if (process.env.REACT_APP_API_URL) {
-    return process.env.REACT_APP_API_URL;
-  }
-  // Verwende den aktuellen Hostname statt localhost, damit es auch im Netzwerk funktioniert
-  const hostname = window.location.hostname;
-  return `http://${hostname}:5001/api`;
+/**
+ * Normalisiert eine absolute URL: doppeltes Protokoll (z. B. http://http://) und
+ * fehlerhafte Schreibweisen (http/ statt http://) werden korrigiert.
+ */
+export const normalizeAbsoluteUrl = (url: string): string => {
+  let u = (url || '').trim();
+  if (!u) return u;
+  // Hartnäckig: http://http/... und http://https/... (Host "http") entfernen
+  while (/^https?:\/\/http\//i.test(u)) u = u.replace(/^https?:\/\/http\//i, 'http://');
+  while (/^https?:\/\/https\//i.test(u)) u = u.replace(/^https?:\/\/https\//i, 'https://');
+  // Doppeltes Protokoll: http://http://host -> http://host
+  u = u.replace(/^(https?):\/\/(https?):\/\//i, (_, _p1, p2) => `${p2.toLowerCase()}://`);
+  // Nur http/ oder https/ (fehlender Doppelpunkt) am Anfang
+  if (/^http\/./i.test(u)) u = `http://${u.slice(5)}`;
+  else if (/^https\/./i.test(u)) u = `https://${u.slice(6)}`;
+  return u;
 };
 
-const API_BASE_URL = getApiBaseUrl();
+/**
+ * API-Basis-URL – immer zur Laufzeit aus dem aktuellen Host ermittelt.
+ * Im Browser wird stets window.location.hostname verwendet, damit die App auf dem anderen Gerät
+ * (z. B. Tablet unter 192.168.x.x) die API und Leistungsabrechnung korrekt erreicht.
+ * REACT_APP_API_URL wird nur genutzt, wenn kein window vorhanden ist (z. B. Build/SSR).
+ */
+export const getApiBaseUrl = (): string => {
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    return `http://${window.location.hostname}:5001/api`;
+  }
+  if (process.env.REACT_APP_API_URL) {
+    return normalizeAbsoluteUrl(process.env.REACT_APP_API_URL);
+  }
+  return 'http://localhost:5001/api';
+};
 
-/** Basis-URL für Uploads (ohne /api) */
+/** Basis-URL für Uploads (ohne /api). Immer absolute URL mit Protokoll und Host. */
 export const getUploadsBaseUrl = (): string => {
+  const hostname = typeof window !== 'undefined' ? window.location?.hostname : 'localhost';
+  const fallback = `http://${hostname || 'localhost'}:5001`;
   const base = getApiBaseUrl();
-  return base.replace(/\/api\/?$/, '');
+  let uploadsBase = base.replace(/\/api\/?$/, '');
+  uploadsBase = normalizeAbsoluteUrl(uploadsBase);
+  if (!uploadsBase || !/^https?:\/\/[^/]+/i.test(uploadsBase)) return fallback;
+  // Host darf nicht "http" oder "https" sein (fehlerhafte URL) – dann Fallback
+  const hostMatch = uploadsBase.match(/^https?:\/\/([^/:]+)/i);
+  if (hostMatch && /^https?$/i.test(hostMatch[1])) return fallback;
+  return uploadsBase;
 };
 
 /** URL für Benutzer-Profilfoto; User-Objekt mit optional profilePhoto.filename und _id/id */
@@ -36,10 +66,9 @@ interface ApiResponse<T = any> {
 // Removed unused ApiError interface
 
 class ApiClient {
-  private baseURL: string;
-
-  constructor(baseURL: string) {
-    this.baseURL = baseURL;
+  /** Basis-URL bei jedem Request neu ermitteln, damit andere Geräte (z. B. 192.168.x.x) korrekt angesprochen werden. */
+  private get baseURL(): string {
+    return getApiBaseUrl();
   }
 
   private async request<T>(
@@ -187,7 +216,7 @@ class ApiClient {
                 return result;
               } else {
                 // Refresh failed - prüfe ob es ein Netzwerkfehler ist
-                const errorData = await refreshResponse.json().catch(() => ({}));
+                const _errorData = await refreshResponse.json().catch(() => ({}));
                 const isNetworkError = refreshResponse.status === 0;
                 
                 if (isNetworkError) {
@@ -355,7 +384,7 @@ class ApiClient {
   }
 }
 
-const apiClient = new ApiClient(API_BASE_URL);
+const apiClient = new ApiClient();
 
 export const apiRequest = {
   get: <T>(endpoint: string, params?: Record<string, string | string[] | number | boolean>, headers?: Record<string, string>) => apiClient.get<T>(endpoint, params, headers),

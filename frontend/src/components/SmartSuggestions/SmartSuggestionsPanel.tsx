@@ -3,9 +3,6 @@ import {
   Box,
   Paper,
   Typography,
-  List,
-  ListItem,
-  ListItemText,
   Chip,
   Button,
   Alert,
@@ -15,8 +12,6 @@ import {
   AccordionDetails,
   Stack,
   IconButton,
-  Tooltip,
-  Divider,
   Card,
   CardContent,
 } from '@mui/material';
@@ -33,7 +28,6 @@ import {
   CheckCircle,
   Warning,
   Error,
-  ExpandLess,
 } from '@mui/icons-material';
 import api from '../../utils/api';
 import { useNavigate } from 'react-router-dom';
@@ -89,6 +83,7 @@ const SmartSuggestionsPanel: React.FC<SmartSuggestionsPanelProps> = ({ patientId
     if (patientId) {
       loadSuggestions();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadSuggestions intentionally not in deps
   }, [patientId]);
 
   const loadSuggestions = async () => {

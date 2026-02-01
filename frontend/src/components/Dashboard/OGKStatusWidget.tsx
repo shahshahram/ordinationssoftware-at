@@ -35,7 +35,7 @@ interface OGKStats {
   totalInsuranceAmount: number;
 }
 
-const OGKStatusWidget: React.FC<OGKStatusWidgetProps> = ({ widget, data }) => {
+const OGKStatusWidget: React.FC<OGKStatusWidgetProps> = ({ widget: _widget, data: _data }) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<OGKStats | null>(null);
   const [autoSubmitStatus, setAutoSubmitStatus] = useState<any>(null);
