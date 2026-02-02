@@ -6,15 +6,17 @@ const https = require('https');
 const fsSync = require('fs');
 const wahonlineConfig = require('../../config/wahonline.config');
 const wahonlineFormatGenerator = require('../wahonlineFormatGenerator');
+const eldaConnector = require('./eldaConnector');
 
 class WAHonlineConnector {
   constructor() {
     this.config = wahonlineConfig.getActiveConfig();
-    
+    this.isSIT = this.config.environment === 'sit';
+
     // HTTPS-Agent für API-Aufrufe (mit Zertifikaten falls vorhanden)
     this.httpsAgent = this.createHttpsAgent();
-    
-    // Axios-Instance mit Standard-Konfiguration
+
+    // Axios-Instance mit Standard-Konfiguration (nur für REST API, nicht für SIT)
     this.axiosInstance = axios.create({
       baseURL: this.config.api.baseUrl,
       timeout: this.config.timeout.request,
@@ -105,15 +107,25 @@ class WAHonlineConnector {
    */
   async send(payload, idempotencyKey, autoFormat = true) {
     try {
+      // Config bei jedem Aufruf neu lesen (process.env z. B. ELDA_ENVIRONMENT=sit)
+      this.config = wahonlineConfig.getActiveConfig();
+      this.isSIT = this.config.environment === 'sit';
+
       // Validiere Konfiguration
       const validation = wahonlineConfig.validate();
       if (!validation.valid && process.env.NODE_ENV === 'production') {
         throw new Error(`WAHonline-Konfiguration ungültig: ${validation.errors.join(', ')}`);
       }
-      
+
+      // SIT-Umgebung: ELDA-Webservice statt REST API (keine Simulation)
+      if (this.isSIT) {
+        const performanceId = payload?.performance?._id || payload?.performanceId || null;
+        return await this.sendViaELDAWebservice(payload, idempotencyKey, autoFormat, performanceId);
+      }
+
       let formattedPayload = payload;
-      
-      // Automatische Format-Generierung wenn aktiviert
+
+      // Automatische Format-Generierung wenn aktiviert (REST-Pfad: Objekt für JSON-API)
       if (autoFormat) {
         try {
           formattedPayload = wahonlineFormatGenerator.generateMeldung(payload);
@@ -121,9 +133,9 @@ class WAHonlineConnector {
           throw new Error(`Format-Generierung fehlgeschlagen: ${formatError.message}`);
         }
       }
-      
-      // Validiere Payload-Größe
-      const payloadSize = JSON.stringify(formattedPayload).length;
+
+      // Validiere Payload-Größe (bei REST: formattedPayload kann XML-String sein, Länge prüfen)
+      const payloadSize = typeof formattedPayload === 'string' ? formattedPayload.length : JSON.stringify(formattedPayload).length;
       if (payloadSize > this.config.limits.maxPayloadSize) {
         throw new Error(`Payload zu groß: ${payloadSize} bytes (Limit: ${this.config.limits.maxPayloadSize} bytes)`);
       }
@@ -166,7 +178,14 @@ class WAHonlineConnector {
       throw lastError;
       
     } catch (error) {
-      // Simuliere erfolgreiche Übermittlung im Test-Modus wenn API nicht konfiguriert
+      const errMsg = error?.message || String(error);
+      const isEldaError = errMsg.includes('ELDA') || errMsg.includes('elda-webservice');
+      // SIT/ELDA-Pfad: Nie simulieren – echten Fehler zurückgeben
+      if (this.isSIT || isEldaError) {
+        console.error('❌ WAHonline-Übermittlung via ELDA fehlgeschlagen:', errMsg);
+        throw new Error(`WAHonline-Übermittlung fehlgeschlagen: ${errMsg}`);
+      }
+      // Simuliere erfolgreiche Übermittlung im Test-Modus wenn REST-API nicht konfiguriert
       if (process.env.NODE_ENV === 'development' && !this.config.apiKey) {
         console.warn('⚠️ WAHonline-API nicht konfiguriert, simuliere erfolgreiche Übermittlung');
         return {
@@ -179,12 +198,68 @@ class WAHonlineConnector {
           simulated: true
         };
       }
-      
       console.error('❌ WAHonline-Übermittlung fehlgeschlagen:', error.message);
       throw new Error(`WAHonline-Übermittlung fehlgeschlagen: ${error.message}`);
     }
   }
-  
+
+  /**
+   * Sendet WAHonline-Meldung via ELDA-Webservice (SIT-Umgebung)
+   * @param {object} payload - Meldungsdaten (performance, patient, doctor)
+   * @param {string} idempotencyKey - Idempotency-Key
+   * @param {boolean} autoFormat - Automatisch Format generieren
+   * @param {string|null} performanceId - Performance-ID für Sync-Status (optional)
+   * @returns {Promise<object>} ELDA-Response
+   */
+  async sendViaELDAWebservice(payload, idempotencyKey, autoFormat = true, performanceId = null) {
+    if (!this.config.sit?.seriennummer || !this.config.sit?.passwort) {
+      throw new Error('WAHonline-SIT benötigt Seriennummer und Passwort (WAHONLINE_SIT_SERIENNUMMER, WAHONLINE_SIT_PASSWORT oder ELDA_SIT_*)');
+    }
+
+    let xmlContent = null;
+    try {
+      if (autoFormat) {
+        wahonlineFormatGenerator.setConfig(this.config);
+        const dataset = wahonlineFormatGenerator.generateMeldung(payload);
+        xmlContent = typeof dataset === 'string' ? dataset : wahonlineFormatGenerator.generateXML(dataset);
+      } else {
+        xmlContent = typeof payload === 'string' ? payload : JSON.stringify(payload);
+      }
+
+      const originalEnv = process.env.ELDA_ENVIRONMENT;
+      const originalSeriennummer = process.env.ELDA_SIT_SERIENNUMMER;
+      const originalPasswort = process.env.ELDA_SIT_PASSWORT;
+
+      process.env.ELDA_ENVIRONMENT = 'sit';
+      process.env.ELDA_SIT_SERIENNUMMER = this.config.sit.seriennummer;
+      process.env.ELDA_SIT_PASSWORT = this.config.sit.passwort;
+
+      try {
+        const eldaResult = await eldaConnector.sendViaWebservice(xmlContent, 'WA');
+        return {
+          success: true,
+          message: 'WAHonline-Meldung erfolgreich via ELDA-Webservice (SIT) übermittelt',
+          wahonlineRef: eldaResult.protokollnummer || idempotencyKey,
+          status: 'submitted',
+          submittedAt: new Date().toISOString(),
+          method: 'elda-webservice',
+          environment: 'sit',
+          details: eldaResult
+        };
+      } finally {
+        if (originalEnv !== undefined) process.env.ELDA_ENVIRONMENT = originalEnv;
+        else delete process.env.ELDA_ENVIRONMENT;
+        if (originalSeriennummer !== undefined) process.env.ELDA_SIT_SERIENNUMMER = originalSeriennummer;
+        else delete process.env.ELDA_SIT_SERIENNUMMER;
+        if (originalPasswort !== undefined) process.env.ELDA_SIT_PASSWORT = originalPasswort;
+        else delete process.env.ELDA_SIT_PASSWORT;
+      }
+    } catch (error) {
+      console.error('❌ WAHonline-Übermittlung via ELDA-Webservice fehlgeschlagen:', error.message);
+      throw new Error(`WAHonline-Übermittlung via ELDA-Webservice fehlgeschlagen: ${error.message}`);
+    }
+  }
+
   /**
    * Sendet eine Batch-Meldung (mehrere Leistungen)
    * @param {Array} performances - Array von Leistungen mit patient/doctor Daten

@@ -6,8 +6,8 @@ const path = require('path');
  * WAHonline = Wahlarzt-Abrechnung Online (System der Österreichischen Ärztekammer)
  */
 const wahonlineConfig = {
-  // Umgebung (production, test, sit)
-  environment: process.env.WAHONLINE_ENVIRONMENT || 'test',
+  // Umgebung (production, test, sit) – ELDA_ENVIRONMENT=sit wird für SIT-Test verwendet
+  environment: process.env.WAHONLINE_ENVIRONMENT || process.env.ELDA_ENVIRONMENT || 'test',
   
   // API-Konfiguration
   api: {
@@ -73,11 +73,10 @@ const wahonlineConfig = {
   },
   
   /**
-   * Gibt die aktive Konfiguration zurück
+   * Gibt die aktive Konfiguration zurück (environment bei jedem Aufruf aus process.env für SIT-Erkennung)
    */
   getActiveConfig() {
-    const env = this.environment;
-    
+    const env = process.env.WAHONLINE_ENVIRONMENT || process.env.ELDA_ENVIRONMENT || this.environment;
     return {
       environment: env,
       api: this.api[env],

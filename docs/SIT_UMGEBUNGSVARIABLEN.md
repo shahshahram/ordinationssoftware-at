@@ -24,6 +24,14 @@ WAHONLINE_ENVIRONMENT=sit
 ELDA_SIT_SERIENNUMMER=<Ihre Seriennummer hier>
 ELDA_SIT_PASSWORT=<Ihr Passwort hier>
 
+# Vertragspartnernummer (VPNR) für Honorarnoten-XML – genau 6 Stellen (z.B. 100014)
+ELDA_SIT_VPNR=100014
+
+# Optional: ELDA-Testdaten-CSVs (nur diese Daten sind in SIT eingerichtet)
+# SIT_STAMMDATEN_CSV=/Pfad/zu/Stammdaten_ASWH_MRSA_20251219.csv
+# SIT_VERTRAGSPARTNER_ARZT_CSV=/Pfad/zu/ASWH-VP-Arzt-Linz-A-Tabelle 1.csv
+# Ohne Angabe: Fallback-Daten (Mark, Vanessa) oder Dateien unter backend/data/sit-testdata/
+
 # Optional: Separate WAHonline-Credentials (falls abweichend)
 # WAHONLINE_SIT_SERIENNUMMER=<Alternative Seriennummer>
 # WAHONLINE_SIT_PASSWORT=<Alternatives Passwort>
@@ -35,8 +43,13 @@ ELDA_SIT_PASSWORT=<Ihr Passwort hier>
 # SIT-Plattform Konfiguration
 ELDA_ENVIRONMENT=sit
 WAHONLINE_ENVIRONMENT=sit
-ELDA_SIT_SERIENNUMMER=123456789
+ELDA_SIT_SERIENNUMMER=800062
 ELDA_SIT_PASSWORT=MeinSicheresPasswort123
+ELDA_SIT_VPNR=100014
+
+# Testdaten-CSVs (von ELDA/ÖGK) – optional, sonst Fallback oder backend/data/sit-testdata/
+# SIT_STAMMDATEN_CSV=/Users/Name/Downloads/Stammdaten_ASWH_MRSA_20251219.csv
+# SIT_VERTRAGSPARTNER_ARZT_CSV=/Users/Name/Downloads/ASWH_Vertragspartner_20250617/ASWH-VP-Arzt-Linz-A-Tabelle 1.csv
 ```
 
 ## Wichtige Hinweise

@@ -90,17 +90,22 @@ const eldaConfig = {
   defaultMethod: process.env.ELDA_DEFAULT_METHOD || (process.env.ELDA_ENVIRONMENT === 'sit' ? 'webservice' : 'ftps'),
   
   /**
-   * Gibt die aktive Konfiguration zurück
+   * Gibt die aktive Konfiguration zurück (environment und sit bei jedem Aufruf aus process.env, damit WAHonline-SIT gesetzte Env-Vars nutzt)
    */
   getActiveConfig() {
-    const env = this.environment;
-    
+    const env = process.env.ELDA_ENVIRONMENT || this.environment;
+    const sit = {
+      seriennummer: process.env.ELDA_SIT_SERIENNUMMER || process.env.ELDA_SERIENNUMMER || this.sit.seriennummer,
+      passwort: process.env.ELDA_SIT_PASSWORT || process.env.ELDA_PASSWORT || this.sit.passwort,
+      apiKey: process.env.ELDA_SIT_API_KEY || process.env.ELDA_API_KEY || this.sit.apiKey,
+      vpnr: process.env.ELDA_SIT_VPNR || this.sit.vpnr
+    };
     return {
       environment: env,
       ftps: this.ftps[env],
       webservice: this.webservice[env],
       apiKey: this.apiKey,
-      sit: this.sit,
+      sit,
       certificates: this.certificates,
       credentials: this.credentials,
       limits: this.limits,

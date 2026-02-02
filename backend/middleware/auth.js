@@ -13,9 +13,10 @@ module.exports = async function(req, res, next) {
     });
   }
 
-  // Verify token
+  // Verify token (gleicher Secret wie bei Login/Refresh – mit Fallback wenn JWT_SECRET nicht gesetzt)
+  const secret = process.env.JWT_SECRET || 'fallback-secret-key';
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, secret);
     
     // Session Management: Validiere Session (optional - nur Warnung, keine Abmeldung)
     // Wenn Session-Validierung fehlschlägt, aber JWT gültig ist, erlaube Zugriff

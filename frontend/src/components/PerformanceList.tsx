@@ -162,79 +162,35 @@ const PerformanceList: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pagination.page, pagination.limit, filters.status, filters.tariffType, filters.startDate, filters.endDate, filters.search]);
 
-  // Performance erstellen/bearbeiten
+  // Performance erstellen/bearbeiten – nutzt zentralen ApiClient (gleiche Basis-URL wie Auth)
   const handleSavePerformance = async (performanceData: any) => {
     try {
-      const token = localStorage.getItem('token');
-      const url = editingPerformance 
-        ? `${getApiBaseUrl()}/billing/performances/${editingPerformance._id}`
-        : `${getApiBaseUrl()}/billing/performances`;
-      
-      const method = editingPerformance ? 'PUT' : 'POST';
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'x-auth-token': token || '',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(performanceData)
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        console.error('Backend error response:', result);
-        console.error('Request body:', performanceData);
-        throw new Error(result.message || result.error || 'Leistung konnte nicht gespeichert werden');
+      if (editingPerformance) {
+        await api.put(`/billing/performances/${editingPerformance._id}`, performanceData);
+      } else {
+        await api.post('/billing/performances', performanceData);
       }
-
-      // Liste aktualisieren
       await loadPerformances();
-      
-      // Dialog schließen
       setFormOpen(false);
       setEditingPerformance(null);
-      
     } catch (error: any) {
       console.error('Leistung speichern Fehler:', error);
-      setError(error.message);
+      const msg = error?.response?.data?.message || error?.response?.data?.error || error?.message;
+      setError(msg || 'Leistung konnte nicht gespeichert werden');
     }
   };
 
-  // Performance löschen
+  // Performance löschen – nutzt zentralen ApiClient
   const handleDeletePerformance = async () => {
     if (!performanceToDelete) return;
-    
     try {
-      const token = localStorage.getItem('token');
-      
-      const response = await fetch(
-        `${getApiBaseUrl()}/billing/performances/${performanceToDelete._id}`,
-        {
-          method: 'DELETE',
-          headers: {
-            'x-auth-token': token || ''
-          }
-        }
-      );
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.message || 'Leistung konnte nicht gelöscht werden');
-      }
-
-      // Liste aktualisieren
+      await api.delete(`/billing/performances/${performanceToDelete._id}`);
       await loadPerformances();
-      
-      // Dialog schließen
       setDeleteDialogOpen(false);
       setPerformanceToDelete(null);
-      
     } catch (error: any) {
       console.error('Leistung löschen Fehler:', error);
-      setError(error.message);
+      setError(error?.response?.data?.message || error?.message || 'Leistung konnte nicht gelöscht werden');
     }
   };
 

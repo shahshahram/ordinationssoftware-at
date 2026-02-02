@@ -377,11 +377,20 @@ class ELDAConnector {
       // Konvertiere Payload zu XML (oder verwende direkt, wenn bereits XML)
       let xmlContent;
       try {
-        // Prüfe ob Payload bereits XML-String ist
-        if (typeof payload === 'string' && payload.trim().startsWith('<?xml')) {
+        // Payload bereits fertiges XML? (WAHonline liefert String; nie durch convertToXML jagen – sonst <0>,<1>,…)
+        const raw = typeof payload === 'string' ? payload : '';
+        const trimmed = raw.trim().replace(/^\uFEFF/, '');
+        const looksLikeXml =
+          raw.length > 0 &&
+          (trimmed.startsWith('<?xml') ||
+            trimmed.startsWith('<') ||
+            (datasetType === 'WA' &&
+              (trimmed.includes('honorarnotenMeldung') ||
+                trimmed.includes('<n1:WahOnlineAnfrage') ||
+                trimmed.includes('WahOnlineAnfrage'))));
+        if (typeof payload === 'string' && looksLikeXml) {
           xmlContent = payload;
         } else {
-          // Konvertiere Objekt zu XML
           xmlContent = this.convertToXML(payload, datasetType);
         }
         
@@ -433,7 +442,12 @@ class ELDAConnector {
       };
       
       if (isSIT) {
-        // SIT v4: Kein SOAPAction-Header – Server lehnt "senden" und URI ab, ermittelt Operation aus Body
+        // SIT v4: HTTP Basic Auth (Seriennummer:Passwort) – SIT erwartet oft Basic Auth zusätzlich zu SOAP securityParameters
+        const basicCredentials = Buffer.from(
+          `${String(this.config.sit.seriennummer)}:${String(this.config.sit.passwort)}`,
+          'utf8'
+        ).toString('base64');
+        headers['Authorization'] = `Basic ${basicCredentials}`;
         if (process.env.LOG_LEVEL === 'debug') {
           console.debug(`[ELDA SIT v4] Sende Request an: ${this.config.webservice.baseUrl}`);
           console.debug(`[ELDA SIT v4] Seriennummer: ${this.config.sit.seriennummer}`);
@@ -505,6 +519,7 @@ class ELDAConnector {
           }
           if (messages.some((m) => String(m).includes('WA001'))) {
             console.warn('[ELDA] Hinweis WA001: In den obigen <messages> steht oft im Klartext, welches Feld ungültig ist (z.B. „Feld X hat ungültiges Format“).');
+            console.warn('[ELDA] Vollständige SOAP-Antwort in Log-Datei – dort nach weiteren <messages>-Einträgen oder Fehlerdetails suchen.');
           }
           if (this.config.environment === 'sit') {
             await writeEldaSitFailedRequestLog({

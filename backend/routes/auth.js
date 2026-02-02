@@ -1104,8 +1104,8 @@ router.post('/refresh', async (req, res) => {
       });
     }
 
-    // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'fallback_secret');
+    // Verify refresh token (gleicher Secret wie Login und Middleware)
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET || 'fallback-secret-key');
     
     // Find user
     const user = await User.findById(decoded.userId).select('-password');
@@ -1116,16 +1116,17 @@ router.post('/refresh', async (req, res) => {
       });
     }
 
-    // Generate new tokens
+    // Generate new tokens (gleicher Secret wie Login und Middleware)
+    const secret = process.env.JWT_SECRET || 'fallback-secret-key';
     const token = jwt.sign(
       { userId: user._id, email: user.email, role: user.role },
-      process.env.JWT_SECRET || 'fallback_secret',
+      secret,
       { expiresIn: '1h' }
     );
 
     const newRefreshToken = jwt.sign(
       { userId: user._id },
-      process.env.JWT_SECRET || 'fallback_secret',
+      secret,
       { expiresIn: '7d' }
     );
 
