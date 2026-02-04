@@ -73,7 +73,7 @@ class ApiClient {
 
   private async request<T>(
     endpoint: string,
-    method: 'GET' | 'POST' | 'PUT' | 'DELETE' = 'GET',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' = 'GET',
     data?: any,
     headers: Record<string, string> = {}
   ): Promise<ApiResponse<T>> {
@@ -295,8 +295,25 @@ class ApiClient {
           }
         }
         
-        const errorData = await response.json().catch(() => ({}));
-        const error = new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        let errorData: Record<string, unknown> = {};
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          errorData = await response.json().catch(() => ({}));
+        } else {
+          const text = await response.text().catch(() => '');
+          if (process.env.NODE_ENV === 'development' && text) {
+            console.error('Non-JSON error response:', response.status, text.slice(0, 200));
+          }
+          try {
+            errorData = JSON.parse(text);
+          } catch {
+            errorData = { message: text || `HTTP ${response.status}` };
+          }
+        }
+        if (process.env.NODE_ENV === 'development') {
+          console.error('API error response:', response.status, errorData);
+        }
+        const error = new Error((errorData.message as string) || `HTTP error! status: ${response.status}`);
         (error as any).response = { data: errorData, status: response.status };
         throw error;
       }
@@ -379,6 +396,10 @@ class ApiClient {
     return this.request<T>(endpoint, 'PUT', data, headers);
   }
 
+  async patch<T>(endpoint: string, data?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
+    return this.request<T>(endpoint, 'PATCH', data, headers);
+  }
+
   async delete<T>(endpoint: string, data?: any, headers?: Record<string, string>): Promise<ApiResponse<T>> {
     return this.request<T>(endpoint, 'DELETE', data, headers);
   }
@@ -390,6 +411,7 @@ export const apiRequest = {
   get: <T>(endpoint: string, params?: Record<string, string | string[] | number | boolean>, headers?: Record<string, string>) => apiClient.get<T>(endpoint, params, headers),
   post: <T>(endpoint: string, data?: any, headers?: Record<string, string>) => apiClient.post<T>(endpoint, data, headers),
   put: <T>(endpoint: string, data?: any, headers?: Record<string, string>) => apiClient.put<T>(endpoint, data, headers),
+  patch: <T>(endpoint: string, data?: any, headers?: Record<string, string>) => apiClient.patch<T>(endpoint, data, headers),
   delete: <T>(endpoint: string, data?: any, headers?: Record<string, string>) => apiClient.delete<T>(endpoint, data, headers),
 };
 

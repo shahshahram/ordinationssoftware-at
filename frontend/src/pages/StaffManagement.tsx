@@ -727,9 +727,9 @@ const StaffManagement: React.FC = () => {
     }
   };
 
-  const handleApproveAbsence = async (id: string, status: 'approved' | 'rejected', _comment?: string) => {
+  const handleApproveAbsence = async (id: string, status: 'approved' | 'rejected', comment?: string) => {
     try {
-      await dispatch(approveAbsence(id)).unwrap();
+      await dispatch(approveAbsence({ id, status, comment })).unwrap();
       setSnackbar({ 
         open: true, 
         message: `Abwesenheit ${status === 'approved' ? 'genehmigt' : 'abgelehnt'}`, 

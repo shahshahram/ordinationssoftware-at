@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const auth = require('../middleware/auth');
@@ -6,8 +7,38 @@ const Absence = require('../models/Absence');
 const StaffProfile = require('../models/StaffProfile');
 const User = require('../models/User');
 const AuditLog = require('../models/AuditLog');
+const InternalMessage = require('../models/InternalMessage');
 
-// Alle Abwesenheiten abrufen
+const REASON_LABELS = {
+  vacation: 'Urlaub',
+  sick: 'Krankenstand',
+  personal: 'Persönlich',
+  training: 'Fortbildung',
+  conference: 'Konferenz',
+  other: 'Sonstige'
+};
+
+/** User-IDs aller Benutzer, die Abwesenheiten genehmigen dürfen (appointments.write, absences.approve oder Rolle admin/super_admin/arzt) */
+async function getApproverUserIds() {
+  const users = await User.find({
+    isActive: true,
+    $or: [
+      { role: { $in: ['admin', 'super_admin', 'arzt'] } },
+      { permissions: { $in: ['appointments.write', 'absences.approve'] } }
+    ]
+  })
+    .select('_id')
+    .lean();
+  return users.map((u) => u._id);
+}
+
+const canReadAbsences = (user) =>
+  user.permissions && (user.permissions.includes('appointments.read') || user.permissions.includes('appointments.write') || user.permissions.includes('absences.read') || user.permissions.includes('absences.self'));
+const canWriteAbsences = (user) =>
+  (user.permissions && user.permissions.includes('appointments.write')) || (user.role && ['admin', 'super_admin'].includes(user.role));
+const hasAbsencesSelfOnly = (user) => user.permissions && user.permissions.includes('absences.self') && !user.permissions.includes('appointments.write') && !user.permissions.includes('absences.read');
+
+// Alle Abwesenheiten abrufen (jeder authentifizierte User; bei absences.self nur eigene)
 router.get('/', auth, async (req, res) => {
   try {
     const { 
@@ -23,8 +54,18 @@ router.get('/', auth, async (req, res) => {
 
     const query = {};
 
-    // Mitarbeiterfilter
-    if (staffId) {
+    // Self-Service: nur eigene Abwesenheiten
+    if (hasAbsencesSelfOnly(req.user)) {
+      const ownProfile = await StaffProfile.findOne({ userId: req.user._id }).select('_id').lean();
+      if (!ownProfile) {
+        return res.json({
+          success: true,
+          data: [],
+          pagination: { current: parseInt(page) || 1, pages: 0, total: 0 }
+        });
+      }
+      query.staffId = ownProfile._id;
+    } else if (staffId) {
       query.staffId = staffId;
     }
 
@@ -90,7 +131,7 @@ router.get('/', auth, async (req, res) => {
 
 // Abwesenheit erstellen
 router.post('/', auth, [
-  body('staffId').notEmpty().withMessage('Mitarbeiter-ID ist erforderlich'),
+  body('staffId').trim().notEmpty().withMessage('Mitarbeiter-ID ist erforderlich'),
   body('startsAt').isISO8601().withMessage('Startdatum muss ein gültiges Datum sein'),
   body('endsAt').isISO8601().withMessage('Enddatum muss ein gültiges Datum sein'),
   body('reason').isIn(['vacation', 'sick', 'personal', 'training', 'conference', 'other']).withMessage('Ungültiger Grund'),
@@ -105,9 +146,19 @@ router.post('/', auth, [
         errors: errors.array()
       });
     }
+    req.body.staffId = typeof req.body.staffId === 'string' ? req.body.staffId.trim() : String(req.body.staffId || '');
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.write')) {
+    const canCreate = canWriteAbsences(req.user);
+    const selfOnly = req.user.permissions && req.user.permissions.includes('absences.self');
+    if (!canCreate && selfOnly) {
+      const ownProfile = await StaffProfile.findOne({ userId: req.user._id }).select('_id').lean();
+      if (!ownProfile || ownProfile._id.toString() !== req.body.staffId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Keine Berechtigung – Sie können nur eigene Abwesenheiten anlegen'
+        });
+      }
+    } else if (!canCreate) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Erstellen von Abwesenheiten'
@@ -123,13 +174,13 @@ router.post('/', auth, [
       });
     }
 
-    // Validierung: Enddatum muss nach Startdatum liegen
+    // Validierung: Enddatum darf nicht vor Startdatum liegen (gleicher Tag = ein Tag Abwesenheit)
     const startsAt = new Date(req.body.startsAt);
     const endsAt = new Date(req.body.endsAt);
-    if (endsAt <= startsAt) {
+    if (endsAt < startsAt) {
       return res.status(400).json({
         success: false,
-        message: 'Enddatum muss nach Startdatum liegen'
+        message: 'Enddatum darf nicht vor Startdatum liegen'
       });
     }
 
@@ -167,14 +218,45 @@ router.post('/', auth, [
       userRole: req.user.role,
       action: 'absences.create',
       description: 'Abwesenheit erstellt',
-      details: { 
-        absenceId: absence._id, 
+      details: {
+        absenceId: absence._id,
         staffId: absence.staffId._id,
         reason: absence.reason,
         startsAt: absence.startsAt,
         endsAt: absence.endsAt
       }
     });
+
+    // Benachrichtigung per interne Mail an alle Berechtigten (Genehmiger, inkl. Ersteller)
+    try {
+      const senderId = req.user._id;
+      let recipientIds = await getApproverUserIds();
+      // Fallback: Wenn keine Genehmiger gefunden, mindestens an Ersteller senden
+      if (recipientIds.length === 0) {
+        recipientIds = [senderId];
+      }
+      const displayName = staffProfile.displayName || 'Mitarbeiter/in';
+      const startStr = new Date(absence.startsAt).toLocaleDateString('de-AT');
+      const endStr = new Date(absence.endsAt).toLocaleDateString('de-AT');
+      const reasonLabel = REASON_LABELS[absence.reason] || absence.reason;
+      const subject = 'Neuer Antrag auf Urlaub/Abwesenheit';
+      const message = `${displayName} hat einen Antrag auf Abwesenheit gestellt.\n\nZeitraum: ${startStr} – ${endStr}\nGrund: ${reasonLabel}\n\nSie können den Antrag unter „Abwesenheiten“ genehmigen oder ablehnen.`;
+      const toId = (id) => (id && mongoose.Types.ObjectId.isValid(id) ? id : new mongoose.Types.ObjectId(String(id)));
+      for (const rid of recipientIds) {
+        try {
+          await InternalMessage.create({
+            senderId: toId(senderId),
+            recipientId: toId(rid),
+            subject,
+            message
+          });
+        } catch (createErr) {
+          console.error('InternalMessage.create (Abwesenheitsantrag) fehlgeschlagen:', createErr.message, { recipientId: String(rid) });
+        }
+      }
+    } catch (notifyErr) {
+      console.error('Benachrichtigung bei Abwesenheitsantrag:', notifyErr);
+    }
 
     res.status(201).json({
       success: true,
@@ -207,14 +289,6 @@ router.put('/:id', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.write')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Keine Berechtigung zum Aktualisieren von Abwesenheiten'
-      });
-    }
-
     const absence = await Absence.findById(req.params.id);
     if (!absence) {
       return res.status(404).json({
@@ -223,19 +297,42 @@ router.put('/:id', auth, [
       });
     }
 
-    // Validierung: Enddatum muss nach Startdatum liegen
+    const canUpdateAll = canWriteAbsences(req.user);
+    const selfOnlyUpdate = req.user.permissions && req.user.permissions.includes('absences.self');
+    if (!canUpdateAll && selfOnlyUpdate) {
+      const ownProfile = await StaffProfile.findOne({ userId: req.user._id }).select('_id').lean();
+      if (!ownProfile || absence.staffId.toString() !== ownProfile._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Keine Berechtigung – Sie können nur eigene Abwesenheiten bearbeiten'
+        });
+      }
+      if (req.body.status && (req.body.status === 'approved' || req.body.status === 'rejected')) {
+        return res.status(403).json({
+          success: false,
+          message: 'Nur Vorgesetzte können Abwesenheiten genehmigen oder ablehnen'
+        });
+      }
+    } else if (!canUpdateAll) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Aktualisieren von Abwesenheiten'
+      });
+    }
+
+    // Validierung: Enddatum darf nicht vor Startdatum liegen (gleicher Tag = ein Tag Abwesenheit)
     if (req.body.startsAt && req.body.endsAt) {
       const startsAt = new Date(req.body.startsAt);
       const endsAt = new Date(req.body.endsAt);
-      if (endsAt <= startsAt) {
+      if (endsAt < startsAt) {
         return res.status(400).json({
           success: false,
-          message: 'Enddatum muss nach Startdatum liegen'
+          message: 'Enddatum darf nicht vor Startdatum liegen'
         });
       }
     }
 
-    // Status-Änderung: Genehmigung erforderlich
+    // Status-Änderung: Genehmigung erforderlich (nur für Berechtigte)
     if (req.body.status && req.body.status !== absence.status) {
       if (req.body.status === 'approved' || req.body.status === 'rejected') {
         req.body.approvedBy = req.user._id;
@@ -276,19 +373,28 @@ router.put('/:id', auth, [
 // Abwesenheit löschen
 router.delete('/:id', auth, async (req, res) => {
   try {
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.delete')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Keine Berechtigung zum Löschen von Abwesenheiten'
-      });
-    }
-
     const absence = await Absence.findById(req.params.id);
     if (!absence) {
       return res.status(404).json({
         success: false,
         message: 'Abwesenheit nicht gefunden'
+      });
+    }
+
+    const canDeleteAll = (req.user.permissions && (req.user.permissions.includes('appointments.delete') || req.user.permissions.includes('appointments.write'))) || (req.user.role && ['admin', 'super_admin'].includes(req.user.role));
+    const selfOnlyDelete = req.user.permissions && req.user.permissions.includes('absences.self');
+    if (!canDeleteAll && selfOnlyDelete) {
+      const ownProfile = await StaffProfile.findOne({ userId: req.user._id }).select('_id').lean();
+      if (!ownProfile || absence.staffId.toString() !== ownProfile._id.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Keine Berechtigung – Sie können nur eigene Abwesenheiten löschen'
+        });
+      }
+    } else if (!canDeleteAll) {
+      return res.status(403).json({
+        success: false,
+        message: 'Keine Berechtigung zum Löschen von Abwesenheiten'
       });
     }
 
@@ -326,11 +432,14 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// Hilfsfunktion: darf Abwesenheiten genehmigen/ablehnen (absences.approve oder appointments.write oder Rolle admin/super_admin)
+const canApproveAbsences = (user) =>
+  (user.permissions && (user.permissions.includes('absences.approve') || user.permissions.includes('appointments.write'))) || (user.role && ['admin', 'super_admin'].includes(user.role));
+
 // Ausstehende Genehmigungen abrufen
 router.get('/pending-approvals', auth, async (req, res) => {
   try {
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.write')) {
+    if (!canApproveAbsences(req.user)) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Anzeigen von ausstehenden Genehmigungen'
@@ -398,8 +507,7 @@ router.patch('/:id/approve', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('appointments.write')) {
+    if (!canApproveAbsences(req.user)) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Genehmigen von Abwesenheiten'
@@ -438,12 +546,45 @@ router.patch('/:id/approve', auth, [
       userRole: req.user.role,
       action: 'absences.approve',
       description: `Abwesenheit ${req.body.status === 'approved' ? 'genehmigt' : 'abgelehnt'}`,
-      details: { 
-        absenceId: req.params.id, 
+      details: {
+        absenceId: req.params.id,
         status: req.body.status,
         comment: req.body.comment
       }
     });
+
+    // Benachrichtigung per interne Mail an den Antragsteller (Mitarbeiter)
+    try {
+      const staffIdRaw = absence.staffId && absence.staffId._id ? absence.staffId._id : absence.staffId;
+      const staffProfileDoc = await StaffProfile.findById(staffIdRaw)
+        .select('userId displayName')
+        .lean();
+      if (!staffProfileDoc) {
+        console.warn('Abwesenheit genehmigt, aber Personalprofil nicht gefunden:', staffIdRaw);
+      } else if (!staffProfileDoc.userId) {
+        console.warn('Abwesenheit genehmigt, aber Personalprofil hat keinen userId (kein Login):', staffProfileDoc.displayName);
+      } else {
+        const startStr = new Date(absence.startsAt).toLocaleDateString('de-AT');
+        const endStr = new Date(absence.endsAt).toLocaleDateString('de-AT');
+        const reasonLabel = REASON_LABELS[absence.reason] || absence.reason;
+        const isApproved = req.body.status === 'approved';
+        const subject = isApproved
+          ? 'Ihr Antrag auf Abwesenheit wurde genehmigt'
+          : 'Ihr Antrag auf Abwesenheit wurde abgelehnt';
+        let message = `Ihr Antrag auf Abwesenheit wurde ${isApproved ? 'genehmigt' : 'abgelehnt'}.\n\nZeitraum: ${startStr} – ${endStr}\nGrund: ${reasonLabel}`;
+        if (req.body.comment && req.body.comment.trim()) {
+          message += `\n\nKommentar: ${req.body.comment.trim()}`;
+        }
+        await InternalMessage.create({
+          senderId: req.user._id,
+          recipientId: staffProfileDoc.userId,
+          subject,
+          message
+        });
+      }
+    } catch (notifyErr) {
+      console.error('Benachrichtigung bei Genehmigung/Ablehnung:', notifyErr);
+    }
 
     res.json({
       success: true,

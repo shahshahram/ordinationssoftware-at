@@ -41,6 +41,7 @@ import BillingReports from './pages/BillingReports';
 import Journal from './pages/Journal';
 import Security from './pages/Security';
 import StaffManagement from './pages/StaffManagement';
+import StaffPlanning from './pages/StaffPlanning';
 import Calendar from './pages/Calendar';
 import DemoCalendar from './pages/DemoCalendar';
 // import EnhancedCalendar from './pages/EnhancedCalendar'; // Currently not used
@@ -720,6 +721,14 @@ const InnerAppContent: React.FC = () => {
                       <Route 
                         path="/super-admin-setup" 
                         element={<SuperAdminSetup />}
+                      />
+                      <Route 
+                        path="/staff-planning" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['staff.read']}>
+                            <StaffPlanning />
+                          </ProtectedRoute>
+                        } 
                       />
                       <Route 
                         path="/staff" 

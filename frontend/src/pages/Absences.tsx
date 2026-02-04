@@ -1,6 +1,7 @@
-// Abwesenheitsverwaltung
+// Abwesenheitsverwaltung / Mein Urlaubsantrag (Self-Service)
 
 import React, { useState, useEffect } from 'react';
+import { useAppSelector } from '../store/hooks';
 import {
   Box,
   Typography,
@@ -34,6 +35,7 @@ import {
   Edit,
   Delete,
   CheckCircle,
+  Cancel as CancelIcon,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
@@ -42,7 +44,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { de } from 'date-fns/locale';
 import api from '../utils/api';
 import { useSnackbar } from 'notistack';
-import { format } from 'date-fns';
+import { format, isSameDay, endOfDay } from 'date-fns';
 
 interface Absence {
   _id: string;
@@ -65,6 +67,10 @@ interface Absence {
 
 const Absences: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
+  const user = useAppSelector((state) => state.auth.user);
+  const permissions = user?.permissions ?? [];
+  const isSelfService = permissions.includes('absences.self') && !permissions.includes('appointments.write');
+
   const [absences, setAbsences] = useState<Absence[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
@@ -78,6 +84,8 @@ const Absences: React.FC = () => {
     notes: '',
   });
   const [staffMembers, setStaffMembers] = useState<any[]>([]);
+  const [myStaffId, setMyStaffId] = useState<string | null>(null);
+  const [myStaffName, setMyStaffName] = useState<string>('');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
@@ -89,6 +97,24 @@ const Absences: React.FC = () => {
     loadStaffMembers();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadAbsences/loadStaffMembers intentionally not in deps
   }, [activeTab, page, rowsPerPage]);
+
+  useEffect(() => {
+    if (isSelfService) {
+      api.get<{ success: boolean; data?: { _id: string; displayName?: string } }>('/staff-profiles/me').then((res) => {
+        if (res.data?.success && res.data?.data) {
+          const d = res.data.data as { _id: string; displayName?: string };
+          setMyStaffId(d._id);
+          setMyStaffName(d.displayName || '');
+        }
+      }).catch(() => {});
+    }
+  }, [isSelfService]);
+
+  useEffect(() => {
+    if (dialogOpen && isSelfService && myStaffId && !formData.staffId) {
+      setFormData((prev) => ({ ...prev, staffId: myStaffId }));
+    }
+  }, [dialogOpen, isSelfService, myStaffId, formData.staffId]);
 
   const loadAbsences = async () => {
     setLoading(true);
@@ -116,9 +142,19 @@ const Absences: React.FC = () => {
 
   const loadStaffMembers = async () => {
     try {
-      const response = await api.get<any>('/staff-profiles');
-      if (response.success && response.data) {
-        setStaffMembers(response.data.data || []);
+      if (isSelfService) {
+        const response = await api.get<any>('/staff-profiles/me');
+        if (response.data?.success && response.data?.data) {
+          const d = response.data.data as { _id: string; displayName?: string };
+          setStaffMembers([{ _id: d._id, displayName: d.displayName }]);
+          setMyStaffId(d._id);
+          setMyStaffName(d.displayName || '');
+        }
+      } else {
+        const response = await api.get<any>('/staff-profiles');
+        const raw = response?.data?.data ?? response?.data;
+        const list = Array.isArray(raw) ? raw : [];
+        setStaffMembers(list.map((s: any) => ({ ...s, _id: String(s._id ?? '') })));
       }
     } catch (error) {
       console.error('Error loading staff members:', error);
@@ -128,7 +164,7 @@ const Absences: React.FC = () => {
   const handleAdd = () => {
     setSelectedAbsence(null);
     setFormData({
-      staffId: '',
+      staffId: isSelfService && myStaffId ? myStaffId : '',
       startsAt: new Date(),
       endsAt: new Date(),
       reason: 'vacation',
@@ -150,18 +186,58 @@ const Absences: React.FC = () => {
   };
 
   const handleSave = async () => {
+    const staffIdRaw = isSelfService && myStaffId ? myStaffId : formData.staffId;
+    const staffId = typeof staffIdRaw === 'string' ? staffIdRaw.trim() : String(staffIdRaw ?? '').trim();
+    if (!staffId) {
+      enqueueSnackbar(
+        isSelfService
+          ? 'Mitarbeiter ist nicht zugeordnet. Bitte warten Sie kurz oder wenden Sie sich an die Verwaltung.'
+          : 'Bitte wählen Sie einen Mitarbeiter aus.',
+        { variant: 'error' }
+      );
+      return;
+    }
+    const startDate = formData.startsAt instanceof Date ? formData.startsAt : new Date(formData.startsAt);
+    let endDate = formData.endsAt instanceof Date ? formData.endsAt : new Date(formData.endsAt);
+    // Ein Tag Abwesenheit: gleicher Kalendertag → Ende auf Tagesende setzen
+    if (isSameDay(startDate, endDate)) {
+      endDate = endOfDay(endDate);
+    }
+    const startsAt = startDate.toISOString();
+    const endsAt = endDate.toISOString();
+    const payload = {
+      staffId,
+      startsAt,
+      endsAt,
+      reason: formData.reason,
+      notes: formData.notes?.trim() || undefined,
+    };
     try {
       if (selectedAbsence) {
-        await api.put(`/absences/${selectedAbsence._id}`, formData);
+        await api.put(`/absences/${selectedAbsence._id}`, payload);
         enqueueSnackbar('Abwesenheit erfolgreich aktualisiert', { variant: 'success' });
       } else {
-        await api.post('/absences', formData);
+        await api.post('/absences', payload);
         enqueueSnackbar('Abwesenheit erfolgreich erstellt', { variant: 'success' });
       }
       setDialogOpen(false);
       loadAbsences();
     } catch (error: any) {
-      enqueueSnackbar(error?.response?.data?.message || 'Fehler beim Speichern', { variant: 'error' });
+      const data = error?.response?.data;
+      const message =
+        (typeof data?.message === 'string' ? data.message : null) ||
+        (typeof error?.message === 'string' ? error.message : null) ||
+        'Fehler beim Speichern';
+      const errors = Array.isArray(data?.errors) ? data.errors : [];
+      const details = errors
+        .map((e: { msg?: string; message?: string }) => e?.msg ?? e?.message)
+        .filter(Boolean)
+        .join(' ');
+      const text = details ? `${message}: ${details}` : message;
+      if (process.env.NODE_ENV === 'development') {
+        console.error('Absences handleSave error:', { error, response: error?.response, data, message, details });
+      }
+      enqueueSnackbar(text, { variant: 'error' });
     }
   };
 
@@ -178,13 +254,16 @@ const Absences: React.FC = () => {
     }
   };
 
-  const handleApprove = async (id: string) => {
+  const handleApproveOrReject = async (id: string, status: 'approved' | 'rejected', comment?: string) => {
     try {
-      await api.put(`/absences/${id}/approve`, {});
-      enqueueSnackbar('Abwesenheit erfolgreich genehmigt', { variant: 'success' });
+      await api.patch(`/absences/${id}/approve`, { status, ...(comment ? { comment } : {}) });
+      enqueueSnackbar(
+        status === 'approved' ? 'Abwesenheit erfolgreich genehmigt' : 'Abwesenheit abgelehnt',
+        { variant: 'success' }
+      );
       loadAbsences();
     } catch (error: any) {
-      enqueueSnackbar('Fehler beim Genehmigen', { variant: 'error' });
+      enqueueSnackbar(status === 'approved' ? 'Fehler beim Genehmigen' : 'Fehler beim Ablehnen', { variant: 'error' });
     }
   };
 
@@ -225,7 +304,7 @@ const Absences: React.FC = () => {
       <Box sx={{ p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="h4">Abwesenheitsverwaltung</Typography>
+            <Typography variant="h4">{isSelfService ? 'Mein Urlaubsantrag' : 'Abwesenheitsverwaltung'}</Typography>
             <Tooltip title="Hilfe & Leitfaden">
               <IconButton
                 onClick={() => setHelpDialogOpen(true)}
@@ -236,7 +315,13 @@ const Absences: React.FC = () => {
               </IconButton>
             </Tooltip>
           </Box>
-          <Button variant="contained" startIcon={<Add />} onClick={handleAdd}>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={handleAdd}
+            disabled={isSelfService && !myStaffId}
+            aria-label={isSelfService ? 'Neue Abwesenheit anlegen' : 'Neue Abwesenheit'}
+          >
             Neue Abwesenheit
           </Button>
         </Box>
@@ -254,32 +339,32 @@ const Absences: React.FC = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Mitarbeiter</TableCell>
+                {!isSelfService && <TableCell>Mitarbeiter</TableCell>}
                 <TableCell>Von</TableCell>
                 <TableCell>Bis</TableCell>
                 <TableCell>Grund</TableCell>
                 <TableCell>Status</TableCell>
-                <TableCell>Genehmigt von</TableCell>
+                {!isSelfService && <TableCell>Genehmigt von</TableCell>}
                 <TableCell>Aktionen</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={isSelfService ? 5 : 7} align="center">
                     <CircularProgress />
                   </TableCell>
                 </TableRow>
               ) : absences.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} align="center">
+                  <TableCell colSpan={isSelfService ? 5 : 7} align="center">
                     <Typography>Keine Abwesenheiten gefunden</Typography>
                   </TableCell>
                 </TableRow>
               ) : (
                 absences.map((absence) => (
                   <TableRow key={absence._id} hover>
-                    <TableCell>{absence.staffId?.displayName || 'Unbekannt'}</TableCell>
+                    {!isSelfService && <TableCell>{absence.staffId?.displayName || 'Unbekannt'}</TableCell>}
                     <TableCell>{format(new Date(absence.startsAt), 'dd.MM.yyyy', { locale: de })}</TableCell>
                     <TableCell>{format(new Date(absence.endsAt), 'dd.MM.yyyy', { locale: de })}</TableCell>
                     <TableCell>{getReasonLabel(absence.reason)}</TableCell>
@@ -290,11 +375,13 @@ const Absences: React.FC = () => {
                         size="small"
                       />
                     </TableCell>
-                    <TableCell>
-                      {absence.approvedBy
-                        ? `${absence.approvedBy.firstName} ${absence.approvedBy.lastName}`
-                        : '-'}
-                    </TableCell>
+                    {!isSelfService && (
+                      <TableCell>
+                        {absence.approvedBy
+                          ? `${absence.approvedBy.firstName} ${absence.approvedBy.lastName}`
+                          : '-'}
+                      </TableCell>
+                    )}
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 1 }}>
                         <Tooltip title="Bearbeiten">
@@ -302,16 +389,29 @@ const Absences: React.FC = () => {
                             <Edit fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        {absence.status === 'pending' && (
-                          <Tooltip title="Genehmigen">
-                            <IconButton
-                              size="small"
-                              color="success"
-                              onClick={() => handleApprove(absence._id)}
-                            >
-                              <CheckCircle fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
+                        {!isSelfService && absence.status === 'pending' && (
+                          <>
+                            <Tooltip title="Genehmigen">
+                              <IconButton
+                                size="small"
+                                color="success"
+                                onClick={() => handleApproveOrReject(absence._id, 'approved')}
+                                aria-label="Abwesenheit genehmigen"
+                              >
+                                <CheckCircle fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title="Ablehnen">
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => handleApproveOrReject(absence._id, 'rejected')}
+                                aria-label="Abwesenheit ablehnen"
+                              >
+                                <CancelIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          </>
                         )}
                         <Tooltip title="Löschen">
                           <IconButton
@@ -346,24 +446,32 @@ const Absences: React.FC = () => {
 
         <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
           <DialogTitle>
-            {selectedAbsence ? 'Abwesenheit bearbeiten' : 'Neue Abwesenheit'}
+            {selectedAbsence ? 'Abwesenheit bearbeiten' : isSelfService ? 'Neue Abwesenheit anlegen' : 'Neue Abwesenheit'}
           </DialogTitle>
           <DialogContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-              <FormControl fullWidth>
-                <InputLabel>Mitarbeiter</InputLabel>
-                <Select
-                  value={formData.staffId}
-                  onChange={(e) => setFormData({ ...formData, staffId: e.target.value })}
-                  label="Mitarbeiter"
-                >
-                  {staffMembers.map((staff) => (
-                    <MenuItem key={staff._id} value={staff._id}>
-                      {staff.displayName || `${staff.firstName} ${staff.lastName}`}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+              {!isSelfService ? (
+                <FormControl fullWidth>
+                  <InputLabel>Mitarbeiter</InputLabel>
+                  <Select
+                    value={formData.staffId}
+                    onChange={(e) => setFormData({ ...formData, staffId: String(e.target.value) })}
+                    label="Mitarbeiter"
+                  >
+                    {staffMembers.map((staff: any) => (
+                      <MenuItem key={String(staff._id)} value={String(staff._id)}>
+                        {staff.displayName || staff.display_name || `${staff.first_name || ''} ${staff.last_name || ''}`.trim() || String(staff._id)}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              ) : (
+                myStaffName && (
+                  <Typography variant="body2" color="text.secondary">
+                    Ihre Abwesenheit ({(staffMembers[0] as any)?.displayName || myStaffName})
+                  </Typography>
+                )
+              )}
               <DatePicker
                 label="Von"
                 value={formData.startsAt}
@@ -405,7 +513,11 @@ const Absences: React.FC = () => {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setDialogOpen(false)}>Abbrechen</Button>
-            <Button variant="contained" onClick={handleSave}>
+            <Button
+              variant="contained"
+              onClick={handleSave}
+              disabled={isSelfService ? !myStaffId : !formData.staffId}
+            >
               Speichern
             </Button>
           </DialogActions>

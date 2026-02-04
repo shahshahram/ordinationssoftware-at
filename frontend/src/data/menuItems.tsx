@@ -74,6 +74,19 @@ export const menuItems: MenuItem[] = [
       { text: 'Warteliste', icon: <PendingActions />, path: '/waiting-list' },
     ]
   },
+  {
+    text: 'Mitarbeiterplanung',
+    icon: <Groups />,
+    path: '/staff-planning',
+    subItems: [
+      { text: 'Mitarbeiterplanung', icon: <DashboardIcon />, path: '/staff-planning' },
+      { text: 'Personal', icon: <Groups />, path: '/staff' },
+      { text: 'Arbeitszeiten', icon: <Schedule />, path: '/work-shifts' },
+      { text: 'Abwesenheiten', icon: <PendingActions />, path: '/absences' },
+      { text: 'Verfügbarkeiten', icon: <Schedule />, path: '/availability' },
+      { text: 'Online-Buchungen', icon: <BookOnline />, path: '/online-bookings' },
+    ]
+  },
   { 
     text: 'Abrechnung', 
     icon: <Receipt />, 

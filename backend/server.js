@@ -58,6 +58,7 @@ const roomsRoutes = require('./routes/rooms');
 const devicesRoutes = require('./routes/devices');
 const locationsRoutes = require('./routes/locations');
 const staffLocationAssignmentsRoutes = require('./routes/staffLocationAssignments');
+const staffPlanningRoutes = require('./routes/staffPlanning');
 const locationWeeklySchedulesRoutes = require('./routes/locationWeeklySchedules');
 const collisionDetectionRoutes = require('./routes/collisionDetection');
 const icd10Routes = require('./routes/icd10');
@@ -373,6 +374,7 @@ function registerStaticRoutes(app) {
   app.use('/api/devices', devicesRoutes);
   app.use('/api/locations', locationsRoutes);
   app.use('/api/staff-location-assignments', staffLocationAssignmentsRoutes);
+  app.use('/api/staff-planning', staffPlanningRoutes);
   app.use('/api/location-weekly-schedules', locationWeeklySchedulesRoutes);
   app.use('/api/collision-detection', collisionDetectionRoutes);
   app.use('/api/icd10', icd10Routes);

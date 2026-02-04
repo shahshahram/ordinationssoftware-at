@@ -275,6 +275,29 @@ router.get('/statistics', auth, async (req, res) => {
   }
 });
 
+// Eigenes Personalprofil des eingeloggten Benutzers (für Self-Service z. B. Mein Urlaubsantrag)
+router.get('/me', auth, async (req, res) => {
+  try {
+    const staffProfile = await StaffProfile.findOne({ userId: req.user._id })
+      .select('_id displayName roleHint colorHex')
+      .lean();
+    if (!staffProfile) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kein Personalprofil für diesen Benutzer vorhanden'
+      });
+    }
+    res.json({ success: true, data: staffProfile });
+  } catch (error) {
+    console.error('StaffProfile me fetch error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen des eigenen Personalprofils',
+      error: error.message
+    });
+  }
+});
+
 // Einzelnes Personalprofil abrufen
 router.get('/:id', auth, async (req, res) => {
   try {

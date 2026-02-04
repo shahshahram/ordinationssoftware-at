@@ -325,6 +325,7 @@ UserSchema.methods.getDefaultPermissions = function() {
     admin: [
       'patients.read', 'patients.write', 'patients.delete',
       'appointments.read', 'appointments.write', 'appointments.delete',
+      'absences.read', 'absences.approve',
       'billing.read', 'billing.write',
       'documents.read', 'documents.write', 'documents.delete',
       'users.read', 'users.write', 'users.delete',
@@ -334,6 +335,7 @@ UserSchema.methods.getDefaultPermissions = function() {
     arzt: [
       'patients.read', 'patients.write',
       'appointments.read', 'appointments.write',
+      'absences.read', 'absences.approve',
       'billing.read', 'billing.write',
       'documents.read', 'documents.write',
       'reports.read'
@@ -341,18 +343,21 @@ UserSchema.methods.getDefaultPermissions = function() {
     assistent: [
       'patients.read', 'patients.write',
       'appointments.read', 'appointments.write',
+      'absences.read', 'absences.approve',
       'billing.read',
       'documents.read', 'documents.write'
     ],
     rezeption: [
       'patients.read', 'patients.write',
       'appointments.read', 'appointments.write',
+      'absences.read', 'absences.approve',
       'billing.read',
       'documents.read', 'documents.write'
     ],
     billing: [
       'patients.read',
       'appointments.read',
+      'absences.self',
       'billing.read', 'billing.write', 'billing.delete',
       'documents.read'
     ],

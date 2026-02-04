@@ -198,11 +198,21 @@ export const deleteAbsence = createAsyncThunk(
   }
 );
 
+export type ApproveAbsencePayload = {
+  id: string;
+  status: 'approved' | 'rejected';
+  comment?: string;
+};
+
 export const approveAbsence = createAsyncThunk(
   'staff/approveAbsence',
-  async (id: string, { rejectWithValue }) => {
+  async (payload: ApproveAbsencePayload, { rejectWithValue }) => {
     try {
-      const response = await apiRequest.put<{ success: boolean; data: any }>(`/absences/${id}/approve`);
+      const { id, status, comment } = payload;
+      const response = await apiRequest.patch<{ success: boolean; data: any }>(`/absences/${id}/approve`, {
+        status,
+        ...(comment !== undefined && comment !== '' ? { comment } : {}),
+      });
       return response.data.data;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Fehler beim Genehmigen der Abwesenheit');
