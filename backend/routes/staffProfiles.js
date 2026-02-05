@@ -7,6 +7,7 @@ const StaffProfile = require('../models/StaffProfile');
 const User = require('../models/User');
 const StaffLocationAssignment = require('../models/StaffLocationAssignment');
 const AuditLog = require('../models/AuditLog');
+const Absence = require('../models/Absence');
 
 // Alle Personalprofile abrufen
 router.get('/', auth, async (req, res) => {
@@ -196,6 +197,8 @@ router.get('/', auth, async (req, res) => {
         // Online-Buchung: IMMER aus User.profile.onlineBookingEnabled
         isOnlineBookable: isOnlineBookable,
         locations: profile.locations || [],
+        weeklyHours: profile.weeklyHours ?? 40,
+        vacationDaysPerYear: profile.vacationDaysPerYear ?? 25,
         createdAt: profile.createdAt,
         updatedAt: profile.updatedAt
       };
@@ -293,6 +296,48 @@ router.get('/me', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Abrufen des eigenen Personalprofils',
+      error: error.message
+    });
+  }
+});
+
+// Urlaubskonto-Statistik des eingeloggten Benutzers (Kalenderjahr)
+router.get('/me/vacation-stats', auth, async (req, res) => {
+  try {
+    const profile = await StaffProfile.findOne({ userId: req.user._id }).lean();
+    if (!profile) {
+      return res.status(200).json({
+        success: true,
+        data: { total: 0, used: 0, remaining: 0 }
+      });
+    }
+    const total = profile.vacationDaysPerYear ?? 25;
+    const now = new Date();
+    const startOfYear = new Date(now.getFullYear(), 0, 1);
+    const endOfYear = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+    const absences = await Absence.find({
+      staffId: profile._id,
+      status: 'approved',
+      reason: 'vacation',
+      startsAt: { $gte: startOfYear },
+      endsAt: { $lte: endOfYear }
+    }).lean();
+    let used = 0;
+    for (const a of absences) {
+      const start = new Date(a.startsAt).getTime();
+      const end = new Date(a.endsAt).getTime();
+      used += Math.round((end - start) / (24 * 60 * 60 * 1000)) + 1;
+    }
+    const remaining = Math.max(0, total - used);
+    res.json({
+      success: true,
+      data: { total, used, remaining }
+    });
+  } catch (error) {
+    console.error('Vacation stats fetch error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Abrufen der Urlaubsstatistik',
       error: error.message
     });
   }

@@ -43,6 +43,7 @@ const reportRoutes = require('./routes/reports');
 const auditLogRoutes = require('./routes/auditLogs');
 const staffProfileRoutes = require('./routes/staffProfiles');
 const workShiftRoutes = require('./routes/workShifts');
+const timeEntriesRoutes = require('./routes/timeEntries');
 const absenceRoutes = require('./routes/absences');
 const availabilityRoutes = require('./routes/availability');
 const serviceCatalogRoutes = require('./routes/serviceCatalog');
@@ -358,6 +359,7 @@ function registerStaticRoutes(app) {
   app.use('/api/audit-logs', auditLogRoutes);
   app.use('/api/staff-profiles', staffProfileRoutes);
   app.use('/api/work-shifts', workShiftRoutes);
+  app.use('/api/time-entries', timeEntriesRoutes);
   app.use('/api/absences', absenceRoutes);
   app.use('/api/availability', availabilityRoutes);
   app.use('/api/service-catalog', serviceCatalogRoutes);

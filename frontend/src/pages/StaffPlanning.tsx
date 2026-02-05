@@ -35,6 +35,8 @@ import {
   Select,
   MenuItem,
   useTheme,
+  LinearProgress,
+  Snackbar,
 } from '@mui/material';
 import {
   Groups,
@@ -50,11 +52,20 @@ import {
   ChevronRight,
   CalendarMonth,
   HelpOutline as HelpOutlineIcon,
+  PlayArrow as PlayArrowIcon,
+  Stop as StopIcon,
+  Pause as PauseIcon,
+  AccessTime as AccessTimeIcon,
 } from '@mui/icons-material';
 import { format, startOfDay, endOfDay, endOfWeek, startOfWeek, addWeeks, subWeeks, getISODay } from 'date-fns';
 import { de } from 'date-fns/locale';
 import api from '../utils/api';
-import { useAppSelector } from '../store/hooks';
+import { useAppSelector, useAppDispatch } from '../store/hooks';
+import {
+  fetchTimeStatus,
+  startTimeTracking,
+  stopTimeTracking,
+} from '../store/slices/timeTrackingSlice';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 
@@ -135,10 +146,23 @@ const getStaffId = (staff: { _id?: string } | undefined): string => staff?._id ?
 const dayIsInRange = (day: Date, start: Date, end: Date): boolean =>
   day.getTime() >= startOfDay(start).getTime() && day.getTime() <= endOfDay(end).getTime();
 
+const formatElapsed = (ms: number): string => {
+  const totalSeconds = Math.floor(ms / 1000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+};
+
 const StaffPlanning: React.FC = () => {
   const theme = useTheme();
+  const dispatch = useAppDispatch();
   const { marginTopValue } = useGlobalNavigationOffset();
   const user = useAppSelector((state) => state.auth.user);
+  const { activeEntry: timeActiveEntry, loading: timeLoading, error: timeError } = useAppSelector(
+    (state) => state.timeTracking
+  );
   const permissions = user?.permissions ?? [];
   const isSelfService = permissions.includes('absences.self') && !permissions.includes('appointments.write');
   const isDark = theme.palette.mode === 'dark';
@@ -159,6 +183,10 @@ const StaffPlanning: React.FC = () => {
   const [locations, setLocations] = useState<LocationOption[]>([]);
   const [locationStaffIds, setLocationStaffIds] = useState<Set<string> | null>(null);
   const [minimumCoverage, setMinimumCoverage] = useState<MinimumCoverageEntry[]>([]);
+  const [myStaffId, setMyStaffId] = useState<string | null>(null);
+  const [vacationStats, setVacationStats] = useState<{ total: number; used: number; remaining: number } | null>(null);
+  const [elapsedDisplay, setElapsedDisplay] = useState<string>('');
+  const [timeSnackbar, setTimeSnackbar] = useState<{ open: boolean; message: string }>({ open: false, message: '' });
 
   const now = new Date();
   const todayStart = startOfDay(now);
@@ -313,6 +341,81 @@ const StaffPlanning: React.FC = () => {
     };
     if (viewTab === 1) loadMinimumCoverage();
   }, [viewTab]);
+
+  useEffect(() => {
+    const loadMyVacationStats = async () => {
+      if (viewTab !== 0 || !user) return;
+      try {
+        const meRes = await api.get<{ success?: boolean; data?: { _id: string } }>('/staff-profiles/me');
+        const meData = (meRes.data as { data?: { _id: string } })?.data;
+        if (!meData?._id) {
+          setMyStaffId(null);
+          setVacationStats(null);
+          return;
+        }
+        setMyStaffId(meData._id);
+        dispatch(fetchTimeStatus());
+        const statsRes = await api.get<{ success?: boolean; data?: { total: number; used: number; remaining: number } }>(
+          '/staff-profiles/me/vacation-stats'
+        );
+        const stats = (statsRes.data as { data?: { total: number; used: number; remaining: number } })?.data ?? null;
+        setVacationStats(stats);
+      } catch {
+        setMyStaffId(null);
+        setVacationStats(null);
+      }
+    };
+    loadMyVacationStats();
+  }, [viewTab, user, dispatch]);
+
+  useEffect(() => {
+    if (!timeActiveEntry || timeActiveEntry.end) {
+      setElapsedDisplay('');
+      return;
+    }
+    const tick = () => {
+      const start = new Date(timeActiveEntry.start).getTime();
+      setElapsedDisplay(formatElapsed(Date.now() - start));
+    };
+    tick();
+    const interval = setInterval(tick, 1000);
+    return () => clearInterval(interval);
+  }, [timeActiveEntry]);
+
+  useEffect(() => {
+    if (timeError) {
+      setTimeSnackbar({ open: true, message: timeError });
+    }
+  }, [timeError]);
+
+  const handleStartWork = async () => {
+    try {
+      await dispatch(startTimeTracking({ type: 'work' })).unwrap();
+    } catch (e) {
+      setTimeSnackbar({ open: true, message: (e as Error).message || 'Fehler beim Starten' });
+    }
+  };
+  const handleStopTracking = async () => {
+    try {
+      await dispatch(stopTimeTracking()).unwrap();
+    } catch (e) {
+      setTimeSnackbar({ open: true, message: (e as Error).message || 'Fehler beim Beenden' });
+    }
+  };
+  const handleStartBreak = async () => {
+    try {
+      await dispatch(startTimeTracking({ type: 'break' })).unwrap();
+    } catch (e) {
+      setTimeSnackbar({ open: true, message: (e as Error).message || 'Fehler beim Pause starten' });
+    }
+  };
+  const handleResumeWork = async () => {
+    try {
+      await dispatch(startTimeTracking({ type: 'work' })).unwrap();
+    } catch (e) {
+      setTimeSnackbar({ open: true, message: (e as Error).message || 'Fehler beim Weiterarbeiten' });
+    }
+  };
 
   const shiftsToday = shiftsInRange.filter((s) => {
     const start = new Date(s.startsAt).getTime();
@@ -596,6 +699,114 @@ const StaffPlanning: React.FC = () => {
 
       {viewTab === 0 && (
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
+        {/* Meine Zeiterfassung (ganz oben, nur mit Personalprofil) */}
+        {myStaffId != null && (
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" color="primary" gutterBottom>
+                  Meine Zeiterfassung
+                </Typography>
+                {!timeActiveEntry ? (
+                  <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
+                    <Button
+                      variant="contained"
+                      color="success"
+                      size="large"
+                      startIcon={<PlayArrowIcon />}
+                      onClick={handleStartWork}
+                      disabled={timeLoading}
+                      aria-label="Arbeitszeit starten"
+                    >
+                      Arbeitszeit starten (Kommen)
+                    </Button>
+                  </Stack>
+                ) : timeActiveEntry.type === 'work' ? (
+                  <>
+                    <Typography color="text.secondary" sx={{ mb: 1 }}>
+                      Du arbeitest seit {elapsedDisplay || '0:00'}
+                    </Typography>
+                    <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
+                      <Button
+                        variant="contained"
+                        color="error"
+                        size="large"
+                        startIcon={<StopIcon />}
+                        onClick={handleStopTracking}
+                        disabled={timeLoading}
+                        aria-label="Arbeitszeit beenden"
+                      >
+                        Arbeitszeit beenden (Gehen)
+                      </Button>
+                      <Button
+                        variant="outlined"
+                        size="medium"
+                        startIcon={<PauseIcon />}
+                        onClick={handleStartBreak}
+                        disabled={timeLoading}
+                        aria-label="Pause starten"
+                      >
+                        Pause
+                      </Button>
+                    </Stack>
+                  </>
+                ) : (
+                  <>
+                    <Typography color="text.secondary" sx={{ mb: 1 }}>
+                      Pause seit {elapsedDisplay || '0:00'}
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      startIcon={<PlayArrowIcon />}
+                      onClick={handleResumeWork}
+                      disabled={timeLoading}
+                      aria-label="Weiterarbeiten"
+                    >
+                      Weiterarbeiten
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </Box>
+        )}
+
+        {/* Mein Urlaubskonto (nur mit Personalprofil) */}
+        {myStaffId != null && (
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" color="primary" gutterBottom>
+                  Mein Urlaubskonto
+                </Typography>
+                {vacationStats != null && vacationStats.total > 0 ? (
+                  <>
+                    <Typography color="text.secondary" sx={{ mb: 1 }}>
+                      {vacationStats.remaining} von {vacationStats.total} Tagen verfügbar
+                    </Typography>
+                    <LinearProgress
+                      variant="determinate"
+                      value={vacationStats.total > 0 ? (vacationStats.remaining / vacationStats.total) * 100 : 0}
+                      sx={{ height: 8, borderRadius: 1, mb: 2 }}
+                    />
+                    <Button variant="contained" component={Link} to="/absences" startIcon={<BeachAccess />}>
+                      Urlaub beantragen
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Typography color="text.secondary">Kein Urlaubskonto (Vertragsdaten fehlen).</Typography>
+                    <Button variant="outlined" component={Link} to="/absences" startIcon={<BeachAccess />} sx={{ mt: 1 }}>
+                      Urlaub beantragen
+                    </Button>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          </Box>
+        )}
+
         {/* 1. Wer ist JETZT da? */}
         <Box sx={{ gridColumn: '1 / -1' }}>
           <Card>
@@ -823,6 +1034,11 @@ const StaffPlanning: React.FC = () => {
                 <Button variant="outlined" component={Link} to="/work-shifts" startIcon={<Schedule />}>
                   Arbeitszeiten
                 </Button>
+                {myStaffId != null && (
+                  <Button variant="outlined" component={Link} to="/timesheet" startIcon={<AccessTimeIcon />}>
+                    Stundenabrechnung
+                  </Button>
+                )}
                 <Button variant="outlined" component={Link} to="/absences" startIcon={<PendingActions />}>
                   Abwesenheiten
                 </Button>
@@ -839,6 +1055,17 @@ const StaffPlanning: React.FC = () => {
       </Box>
       )}
 
+      <Snackbar
+        open={timeSnackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setTimeSnackbar((s) => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="error" onClose={() => setTimeSnackbar((s) => ({ ...s, open: false }))}>
+          {timeSnackbar.message}
+        </Alert>
+      </Snackbar>
+
       <Dialog open={helpDialogOpen} onClose={() => setHelpDialogOpen(false)} maxWidth="md" fullWidth>
         <GradientDialogTitle title="Hilfe: Mitarbeiterplanung" onClose={() => setHelpDialogOpen(false)} />
         <DialogContent dividers>
@@ -846,17 +1073,22 @@ const StaffPlanning: React.FC = () => {
             <Tab label="Übersicht" id="help-tab-0" aria-controls="help-panel-0" />
             <Tab label="Dashboard" id="help-tab-1" aria-controls="help-panel-1" />
             <Tab label="Wochenübersicht" id="help-tab-2" aria-controls="help-panel-2" />
+            <Tab label="Abwesenheiten & Anträge" id="help-tab-3" aria-controls="help-panel-3" />
           </Tabs>
           {helpTab === 0 && (
             <Box role="tabpanel" id="help-panel-0" aria-labelledby="help-tab-0">
               <Typography variant="subtitle1" gutterBottom fontWeight={600}>Was ist die Mitarbeiterplanung?</Typography>
               <Typography paragraph>
-                Die Mitarbeiterplanung bündelt Anwesenheiten, Abwesenheiten (Urlaub, Krankenstand, Training) und Schnellzugriffe auf Personal, Arbeitszeiten und Abwesenheiten. Abwesenheiten werden in der Online-Buchung automatisch berücksichtigt.
+                Die Mitarbeiterplanung bündelt Anwesenheiten, Abwesenheiten (Urlaub, Krankenstand, Training), Zeiterfassung, Urlaubskonto, offene Anträge und Schnellzugriffe auf Personal, Arbeitszeiten, Abwesenheiten und Stundenabrechnung. Abwesenheiten werden in der Online-Buchung automatisch berücksichtigt.
               </Typography>
               <Typography variant="subtitle1" gutterBottom fontWeight={600}>Tabs</Typography>
               <Typography paragraph>
-                <strong>Dashboard:</strong> Wer ist jetzt da?, Anwesend heute/diese Woche, Abwesenheiten, Online-Buchung-Hinweis, Nächste Abwesenheiten, Schnellzugriff.<br />
+                <strong>Dashboard:</strong> Meine Zeiterfassung (Kommen/Gehen/Pause), Wer ist jetzt da?, Anwesend heute/diese Woche, Abwesenheiten, Offene Anträge (Genehmigung), Mein Urlaubskonto, Nächste Abwesenheiten, Schnellzugriff (inkl. Stundenabrechnung).<br />
                 <strong>Wochenübersicht:</strong> Matrix Mitarbeiter × Wochentage mit Schichten und Abwesenheiten (Farben: Urlaub=Grün, Krankenstand=Rot, Training=Blau). Konflikte (Schicht und Abwesenheit am selben Tag) werden angezeigt.
+              </Typography>
+              <Typography variant="subtitle1" gutterBottom fontWeight={600}>Benachrichtigungen</Typography>
+              <Typography paragraph>
+                Bei neuem Urlaubs- oder Abwesenheitsantrag erhalten alle Berechtigten (z. B. Admin, Genehmiger) eine interne Nachricht. Bei Genehmigung oder Ablehnung erhält der Antragsteller eine interne Nachricht. Sie finden diese unter „Interne Nachrichten“.
               </Typography>
             </Box>
           )}
@@ -864,11 +1096,14 @@ const StaffPlanning: React.FC = () => {
             <Box role="tabpanel" id="help-panel-1" aria-labelledby="help-tab-1">
               <Typography variant="subtitle1" gutterBottom fontWeight={600}>Dashboard-Widgets</Typography>
               <Typography paragraph>
+                <strong>Meine Zeiterfassung:</strong> Nur sichtbar mit Personalprofil. „Kommen“ startet die Arbeitszeit, „Gehen“ beendet sie, „Pause“ startet eine Pause („Weiterarbeiten“ beendet sie). Laufender Timer zeigt die Dauer an.<br />
                 <strong>Wer ist JETZT da?</strong> Zeigt Mitarbeiter, die gerade eine Schicht haben (aktueller Zeitpunkt zwischen Schichtbeginn und -ende).<br />
                 <strong>Anwesend heute / Diese Woche:</strong> Schichten heute bzw. in der aktuellen Woche.<br />
+                <strong>Offene Anträge:</strong> Nur sichtbar für Benutzer mit Genehmigungsrecht (z. B. appointments.write). Zeigt ausstehende Urlaubs-/Abwesenheitsanträge; Genehmigen bzw. Ablehnen mit einem Klick.<br />
                 <strong>Abwesenheiten:</strong> Nach Grund gefiltert (Urlaub, Krankenstand, Training, Sonstige).<br />
-                <strong>Nächste Abwesenheiten:</strong> Die nächsten 10 Abwesenheiten nach Startdatum.<br />
-                <strong>Schnellzugriff:</strong> Zur Wochenübersicht wechseln oder zu Personal, Arbeitszeiten, Abwesenheiten, Verfügbarkeiten, Online-Buchungen.
+                <strong>Mein Urlaubskonto:</strong> Nur sichtbar mit Personalprofil. Zeigt verbrauchte und verbleibende Urlaubstage (Jahresurlaub aus dem Personalprofil). Link „Urlaub beantragen“ führt zu Abwesenheiten.<br />
+                <strong>Nächste Abwesenheiten:</strong> Die nächsten Abwesenheiten nach Startdatum.<br />
+                <strong>Schnellzugriff:</strong> Zur Wochenübersicht, Personal, Arbeitszeiten, Abwesenheiten, Verfügbarkeiten, Online-Buchungen, Stundenabrechnung (mit Personalprofil).
               </Typography>
             </Box>
           )}
@@ -889,6 +1124,22 @@ const StaffPlanning: React.FC = () => {
               <Typography variant="subtitle1" gutterBottom fontWeight={600}>Farben</Typography>
               <Typography paragraph>
                 Urlaub = Grün, Krankenstand = Rot, Training = Blau, Sonstige = Grau. Woche mit Pfeilen wechseln (Montag als Wochenanfang).
+              </Typography>
+            </Box>
+          )}
+          {helpTab === 3 && (
+            <Box role="tabpanel" id="help-panel-3" aria-labelledby="help-tab-3">
+              <Typography variant="subtitle1" gutterBottom fontWeight={600}>Antrag stellen (Mitarbeiter)</Typography>
+              <Typography paragraph>
+                Unter „Abwesenheiten“ (Menü: Mitarbeiterplanung → Abwesenheiten) sehen Sie als Mitarbeiter „Mein Urlaubsantrag“. Über „Neue Abwesenheit“ legen Sie Von-/Bis-Datum, Grund (Urlaub, Krankenstand, Fortbildung, …) und optional Notiz fest. Sie können nur für sich selbst Anträge stellen. Nach dem Speichern erhält die Berechtigten eine interne Nachricht.
+              </Typography>
+              <Typography variant="subtitle1" gutterBottom fontWeight={600}>Genehmigung (Admin / Genehmiger)</Typography>
+              <Typography paragraph>
+                Benutzer mit Genehmigungsrecht (z. B. appointments.write) sehen auf der Seite „Abwesenheiten“ oder im Dashboard „Offene Anträge“ die ausstehenden Anträge. Mit „Genehmigen“ (Haken) oder „Ablehnen“ (Kreuz) wird der Status gesetzt; optional kann ein Kommentar eingegeben werden. Der Antragsteller erhält eine interne Nachricht über die Entscheidung.
+              </Typography>
+              <Typography variant="subtitle1" gutterBottom fontWeight={600}>Status & Sichtbarkeit</Typography>
+              <Typography paragraph>
+                In der Tabelle „Abwesenheiten“ sehen Sie den Status (Ausstehend, Genehmigt, Abgelehnt, Storniert). Genehmigte Abwesenheiten blockieren in der Online-Buchung die Slots des Mitarbeiters.
               </Typography>
             </Box>
           )}

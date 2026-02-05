@@ -38,6 +38,7 @@ import {
   Cancel as CancelIcon,
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
+import GradientDialogTitle from '../components/GradientDialogTitle';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -89,8 +90,8 @@ const Absences: React.FC = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [total, setTotal] = useState(0);
-  const [_helpDialogOpen, setHelpDialogOpen] = useState(false);
-  const [_helpTab, _setHelpTab] = useState(0);
+  const [helpDialogOpen, setHelpDialogOpen] = useState(false);
+  const [helpTab, setHelpTab] = useState(0);
 
   useEffect(() => {
     loadAbsences();
@@ -521,6 +522,68 @@ const Absences: React.FC = () => {
               Speichern
             </Button>
           </DialogActions>
+        </Dialog>
+
+        <Dialog open={helpDialogOpen} onClose={() => setHelpDialogOpen(false)} maxWidth="md" fullWidth>
+          <GradientDialogTitle title={isSelfService ? 'Hilfe: Mein Urlaubsantrag' : 'Hilfe: Abwesenheitsverwaltung'} onClose={() => setHelpDialogOpen(false)} />
+          <DialogContent dividers>
+            <Tabs value={helpTab} onChange={(_, v) => setHelpTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+              <Tab label="Übersicht" id="help-tab-0" aria-controls="help-panel-0" />
+              <Tab label="Antrag stellen" id="help-tab-1" aria-controls="help-panel-1" />
+              <Tab label="Genehmigung" id="help-tab-2" aria-controls="help-panel-2" />
+              <Tab label="Benachrichtigungen" id="help-tab-3" aria-controls="help-panel-3" />
+            </Tabs>
+            {helpTab === 0 && (
+              <Box role="tabpanel" id="help-panel-0" aria-labelledby="help-tab-0">
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Was ist diese Seite?</Typography>
+                <Typography paragraph>
+                  {isSelfService
+                    ? '„Mein Urlaubsantrag“ ermöglicht Ihnen, Abwesenheiten (Urlaub, Krankenstand, Fortbildung usw.) nur für sich selbst zu beantragen. Sie sehen alle Ihre Anträge mit Status (Ausstehend, Genehmigt, Abgelehnt) und erhalten interne Nachrichten bei Genehmigung oder Ablehnung.'
+                    : 'Die Abwesenheitsverwaltung dient der Erfassung und Genehmigung von Abwesenheiten (Urlaub, Krankenstand, Training usw.) für alle Mitarbeiter. Sie können Anträge anlegen, bearbeiten, genehmigen oder ablehnen. Genehmigte Abwesenheiten werden in der Online-Buchung berücksichtigt.'}
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Tabs</Typography>
+                <Typography paragraph>
+                  <strong>Alle:</strong> Alle Abwesenheiten. <strong>Ausstehend:</strong> Noch nicht genehmigt/abgelehnt. <strong>Genehmigt:</strong> Freigegebene Anträge. <strong>Abgelehnt:</strong> Abgelehnte Anträge.
+                </Typography>
+              </Box>
+            )}
+            {helpTab === 1 && (
+              <Box role="tabpanel" id="help-panel-1" aria-labelledby="help-tab-1">
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Antrag stellen (Mitarbeiter)</Typography>
+                <Typography paragraph>
+                  Klicken Sie auf „Neue Abwesenheit“. Wählen Sie Von-Datum und Bis-Datum (ein Tag ist möglich: z. B. 5.2.–5.2.). Wählen Sie den Grund (Urlaub, Krankenstand, Persönlich, Fortbildung, Konferenz, Sonstiges) und optional eine Notiz. Speichern. Der Antrag erscheint mit Status „Ausstehend“. Alle Berechtigten erhalten eine interne Nachricht.
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Nur für sich eintragen</Typography>
+                <Typography paragraph>
+                  Im Self-Service („Mein Urlaubsantrag“) können Sie nur für sich selbst Anträge stellen; das Feld „Mitarbeiter“ ist ausgeblendet und wird automatisch mit Ihrem Personalprofil befüllt.
+                </Typography>
+              </Box>
+            )}
+            {helpTab === 2 && (
+              <Box role="tabpanel" id="help-panel-2" aria-labelledby="help-tab-2">
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Wer darf genehmigen?</Typography>
+                <Typography paragraph>
+                  Benutzer mit Genehmigungsrecht (z. B. appointments.write oder absences.approve) sowie Admin/Super-Admin können Anträge genehmigen oder ablehnen. Die Genehmigung kann an weitere Rollen delegiert werden (Berechtigungsverwaltung).
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Genehmigen / Ablehnen</Typography>
+                <Typography paragraph>
+                  In der Tabelle bei Status „Ausstehend“: Grüner Haken = Genehmigen, rotes Kreuz = Ablehnen. Optional kann ein Kommentar eingegeben werden. Nach der Aktion erhält der Antragsteller eine interne Nachricht. Genehmigte Abwesenheiten blockieren in der Online-Buchung die Slots des Mitarbeiters.
+                </Typography>
+              </Box>
+            )}
+            {helpTab === 3 && (
+              <Box role="tabpanel" id="help-panel-3" aria-labelledby="help-tab-3">
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Bei neuem Antrag</Typography>
+                <Typography paragraph>
+                  Wenn ein Mitarbeiter eine Abwesenheit anlegt, erhalten alle Benutzer mit Genehmigungsrecht eine interne Nachricht (Betreff z. B. „Neuer Antrag auf Urlaub/Abwesenheit“) mit Mitarbeiter, Zeitraum und Grund. Sie können von dort zur Abwesenheitsverwaltung wechseln.
+                </Typography>
+                <Typography variant="subtitle1" gutterBottom fontWeight={600}>Bei Genehmigung oder Ablehnung</Typography>
+                <Typography paragraph>
+                  Der Antragsteller erhält eine interne Nachricht (z. B. „Ihr Antrag auf Abwesenheit wurde genehmigt“ bzw. „… wurde abgelehnt“) mit Zeitraum und optionalem Kommentar. Nachrichten finden Sie unter „Interne Nachrichten“ im Menü.
+                </Typography>
+              </Box>
+            )}
+          </DialogContent>
         </Dialog>
       </Box>
     </LocalizationProvider>

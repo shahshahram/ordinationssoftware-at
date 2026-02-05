@@ -87,6 +87,7 @@ import Reimbursements from './pages/Reimbursements';
 import Absences from './pages/Absences';
 import AddressBook from './pages/AddressBook';
 import WorkShifts from './pages/WorkShifts';
+import Timesheet from './pages/Timesheet';
 import ClinicHours from './pages/ClinicHours';
 import Availability from './pages/Availability';
 import ServiceCategories from './pages/ServiceCategories';
@@ -751,6 +752,14 @@ const InnerAppContent: React.FC = () => {
                         element={
                           <ProtectedRoute requiredPermissions={['staff.read']}>
                             <WorkShifts />
+                          </ProtectedRoute>
+                        } 
+                      />
+                      <Route 
+                        path="/timesheet" 
+                        element={
+                          <ProtectedRoute requiredPermissions={['staff.read']}>
+                            <Timesheet />
                           </ProtectedRoute>
                         } 
                       />

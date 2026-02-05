@@ -112,6 +112,8 @@ const StaffManagement: React.FC = () => {
     color_hex: '#2563EB',
     isActive: true,
     isOnlineBookable: false,
+    weeklyHours: 40,
+    vacationDaysPerYear: 25,
     // User-Daten
     firstName: '',
     lastName: '',
@@ -348,6 +350,8 @@ const StaffManagement: React.FC = () => {
           color_hex: colorHex,
           isActive: item.isActive !== undefined ? item.isActive : (user?.isActive !== undefined ? user.isActive : true),
           isOnlineBookable: isOnlineBookable,
+          weeklyHours: item.weeklyHours ?? 40,
+          vacationDaysPerYear: item.vacationDaysPerYear ?? 25,
           // User-Daten
           firstName: firstName,
           lastName: lastName,
@@ -379,6 +383,8 @@ const StaffManagement: React.FC = () => {
         color_hex: '#2563EB',
         isActive: true,
         isOnlineBookable: false,
+        weeklyHours: 40,
+        vacationDaysPerYear: 25,
         // User-Daten
         firstName: '',
         lastName: '',
@@ -651,6 +657,8 @@ const StaffManagement: React.FC = () => {
             specialization: profileForm.specialization,
             colorHex: profileForm.color_hex,
             isActive: profileForm.isActive,
+            weeklyHours: profileForm.weeklyHours,
+            vacationDaysPerYear: profileForm.vacationDaysPerYear,
             contact: {
               phone: profileForm.phone,
               email: profileForm.email
@@ -1353,6 +1361,24 @@ const StaffManagement: React.FC = () => {
                         />
                       }
                       label="Online-Buchung aktiviert"
+                    />
+                    <TextField
+                      fullWidth
+                      label="Wochenstunden"
+                      type="number"
+                      value={profileForm.weeklyHours}
+                      onChange={(e) => setProfileForm({ ...profileForm, weeklyHours: Number(e.target.value) || 0 })}
+                      inputProps={{ min: 0, max: 168, step: 0.5 }}
+                      InputLabelProps={{ shrink: true }}
+                    />
+                    <TextField
+                      fullWidth
+                      label="Jahresurlaub (Tage)"
+                      type="number"
+                      value={profileForm.vacationDaysPerYear}
+                      onChange={(e) => setProfileForm({ ...profileForm, vacationDaysPerYear: Number(e.target.value) || 0 })}
+                      inputProps={{ min: 0, max: 365, step: 1 }}
+                      InputLabelProps={{ shrink: true }}
                     />
                   </Box>
                 </>

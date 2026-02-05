@@ -50,7 +50,34 @@ Wenn neue Features implementiert werden, **MÜSSEN** die Hilfe-Dialoge aktualisi
   - [ ] Beispiele hinzufügen
   - [ ] Best Practices hinzufügen
 
-### 4. Andere Seiten
+### 4. Mitarbeiterplanung (StaffPlanning)
+**Datei:** `/frontend/src/pages/StaffPlanning.tsx`
+**Hilfe-Dialog:** Zeile ~1069
+
+- [ ] **Übersicht-Tab:** Zeiterfassung, Urlaubskonto, Offene Anträge, Schnellzugriff (Stundenabrechnung), Benachrichtigungen erwähnen
+- [ ] **Dashboard-Tab:** Meine Zeiterfassung, Offene Anträge, Mein Urlaubskonto, Schnellzugriff inkl. Stundenabrechnung
+- [ ] **Abwesenheiten & Anträge-Tab:** Antrag stellen (Mitarbeiter), Genehmigung (Admin/Genehmiger), Status & Sichtbarkeit
+
+### 5. Abwesenheiten / Mein Urlaubsantrag (Absences)
+**Datei:** `/frontend/src/pages/Absences.tsx`
+**Hilfe-Dialog:** Nach dem Haupt-Dialog (Dialog mit GradientDialogTitle)
+
+- [ ] **Übersicht:** Was ist die Seite? (Self-Service vs. Verwaltung), Tabs (Alle, Ausstehend, Genehmigt, Abgelehnt)
+- [ ] **Antrag stellen:** Von/Bis-Datum, Grund, nur für sich eintragen
+- [ ] **Genehmigung:** Wer darf genehmigen?, Genehmigen/Ablehnen mit Kommentar
+- [ ] **Benachrichtigungen:** Bei neuem Antrag an Berechtigte, bei Genehmigung/Ablehnung an Antragsteller
+
+### 6. Stundenabrechnung (Timesheet)
+**Datei:** `/frontend/src/pages/Timesheet.tsx`
+**Hilfe-Dialog:** Vor dem Snackbar (Dialog mit GradientDialogTitle)
+
+- [ ] **Übersicht:** Was ist die Stundenabrechnung?, Voraussetzung (Personalprofil, Zeiterfassung)
+- [ ] **Monat & Tabelle:** Monat wählen, Spalten (Datum, Arbeitszeit, Pause, Ist, Soll, Saldo, Status), Wochenende & Feiertage
+- [ ] **Bearbeiten:** Zeiteinträge bearbeiten am Tag (Start/Ende, Typ, Notiz, Löschen, Eintrag hinzufügen), Speichern
+- [ ] **Drucken & Export:** Drucken (Querformat, no-print), Export CSV/PDF
+- [ ] **Feiertage:** Österreichische Feiertage (Soll = 0, Status-Anzeige), feste und bewegliche Feiertage
+
+### 7. Andere Seiten
 **Prüfen:** Gibt es eine Hilfe-Funktion?
 - [ ] Hilfe-Dialog vorhanden?
 - [ ] Hilfe-Dialog aktualisiert?
@@ -130,6 +157,7 @@ Wenn neue Features implementiert werden, **MÜSSEN** die Hilfe-Dialoge aktualisi
 - **Konflikt-Regeln** → ServiceCatalog Hilfe erweitern
 - **Code-Mapping** → Eigene Hilfe-Dialoge
 - **Neue Abrechnungsoptionen** → Beide Hilfe-Dialoge
+- **HR-Modul (Mitarbeiterplanung, Abwesenheiten, Stundenabrechnung)** → StaffPlanning, Absences, Timesheet Hilfe-Dialoge aktualisieren
 
 ---
 

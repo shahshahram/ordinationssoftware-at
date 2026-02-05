@@ -91,6 +91,10 @@ const StaffProfileSchema = new mongoose.Schema({
     type: Boolean, 
     default: true 
   },
+
+  // Vertrag
+  weeklyHours: { type: Number, default: 40, min: 0, max: 168 },
+  vacationDaysPerYear: { type: Number, default: 25, min: 0 },
   
   // Metadaten
   createdAt: { 
