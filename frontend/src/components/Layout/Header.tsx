@@ -49,7 +49,7 @@ interface HeaderProps {
 const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen, onSearchClick }) => {
   const navigate = useNavigate();
   const dispatch = useAppDispatch();
-  const { user } = useAppSelector((state) => state.auth);
+  const { user, token } = useAppSelector((state) => state.auth);
   const { unreadCount } = useAppSelector((state) => state.internalMessages);
   const { currentLocation, availableLocations, hasNoAssignment } = useAppSelector((state) => state.locations);
   const { theme } = useAppSelector((state) => state.ui);
@@ -58,30 +58,22 @@ const Header: React.FC<HeaderProps> = ({ onMenuClick, navigationOpen, onSearchCl
   const [_messagesDialogOpen, _setMessagesDialogOpen] = React.useState(false);
   const [isFullscreen, setIsFullscreen] = React.useState(false);
 
-  // Lade unreadCount beim Mount und alle 30 Sekunden
+  // Lade unreadCount beim Mount und alle 30 Sekunden (nur wenn Token vorhanden, vermeidet 401)
   useEffect(() => {
-    // Prüfe, ob User authentifiziert ist, bevor unreadCount geladen wird
-    if (!user) {
+    if (!user || !token) {
       return;
     }
-    
-    // Warte kurz, damit der User-Token gesetzt ist
     const timer = setTimeout(() => {
       dispatch(fetchUnreadCount());
-    }, 1000);
-    
+    }, 500);
     const interval = setInterval(() => {
-      // Prüfe erneut, ob User noch authentifiziert ist
-      if (user) {
-        dispatch(fetchUnreadCount());
-      }
-    }, 30000); // Alle 30 Sekunden aktualisieren (reduziert von 10 Sekunden)
-    
+      dispatch(fetchUnreadCount());
+    }, 30000);
     return () => {
       clearTimeout(timer);
       clearInterval(interval);
     };
-  }, [dispatch, user]);
+  }, [dispatch, user, token]);
 
   const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);

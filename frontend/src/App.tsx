@@ -288,23 +288,47 @@ const InnerAppContent: React.FC = () => {
   }, [searchOpen]);
 
   // aria-hidden: Wenn MUI einen Dialog öffnet, setzt es aria-hidden auf #root.
-  // Liegt der Fokus noch auf einem Element in #root, warnt der Browser. Wir
-  // bluren das aktive Element, sobald aria-hidden gesetzt wird.
+  // Blur des aktiven Elements VOR dem Setzen von aria-hidden reduziert die Browser-Warnung.
   React.useEffect(() => {
     const root = document.getElementById('root');
     if (!root) return;
 
-    const observer = new MutationObserver(() => {
-      if (root.getAttribute('aria-hidden') === 'true') {
-        const active = document.activeElement as HTMLElement | null;
-        if (active && root.contains(active) && typeof active.blur === 'function') {
-          active.blur();
+    const blurFocusInRoot = () => {
+      const active = document.activeElement as HTMLElement | null;
+      if (active && root.contains(active) && typeof active.blur === 'function') {
+        active.blur();
+      }
+    };
+
+    // Sobald aria-hidden auf #root gesetzt wird: Fokus aus #root entfernen
+    const ariaObserver = new MutationObserver(() => {
+      if (root.getAttribute('aria-hidden') === 'true') blurFocusInRoot();
+    });
+    ariaObserver.observe(root, { attributes: true, attributeFilter: ['aria-hidden'] });
+
+    // Wenn ein Modal/Overlay ins DOM kommt: sofort bluren (läuft oft vor aria-hidden)
+    const bodyObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.addedNodes.length) {
+          for (const node of Array.from(mutation.addedNodes)) {
+            if (node instanceof HTMLElement && (
+              node.getAttribute('role') === 'presentation' ||
+              node.classList?.contains('MuiModal-root') ||
+              (node.querySelector && node.querySelector('[role="dialog"]'))
+            )) {
+              blurFocusInRoot();
+              return;
+            }
+          }
         }
       }
     });
+    bodyObserver.observe(document.body, { childList: true, subtree: true });
 
-    observer.observe(root, { attributes: true, attributeFilter: ['aria-hidden'] });
-    return () => observer.disconnect();
+    return () => {
+      ariaObserver.disconnect();
+      bodyObserver.disconnect();
+    };
   }, []);
 
   return (

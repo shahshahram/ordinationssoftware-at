@@ -1363,7 +1363,7 @@ const Dashboard: React.FC = () => {
     } else {
       setLayout(newLayout);
     }
-  }, [widgets, isMobile, isTablet, dashboardStats, newLaborResults, newDicomStudies, newOnlineBookings, importantPatients, handleGenerateQR, handleOpenTabletMode]);
+  }, [widgets, isMobile, isTablet, dashboardStats, newLaborResults, newDicomStudies, newOnlineBookings, importantPatients, handleGenerateQR, handleOpenTabletMode, getWidgetData]);
 
   const handleRefreshQR = async () => {
     try {

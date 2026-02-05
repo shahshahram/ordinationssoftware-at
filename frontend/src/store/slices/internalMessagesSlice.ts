@@ -90,7 +90,11 @@ export const fetchMessages = createAsyncThunk(
 
 export const fetchUnreadCount = createAsyncThunk(
   'internalMessages/fetchUnreadCount',
-  async (_, { rejectWithValue }) => {
+  async (_, { getState, rejectWithValue }) => {
+    const state = getState() as { auth?: { token: string | null } };
+    if (!state.auth?.token) {
+      return rejectWithValue(0);
+    }
     try {
       const response = await api.get('/internal-messages/unread-count');
       return (response.data as any).data?.count || 0;
