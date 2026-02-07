@@ -50,6 +50,7 @@ interface CalendarEvent {
   type: string;
   status: string;
   patientId?: string;
+  patientIsTemporary?: boolean;
   color: string;
 }
 
@@ -308,6 +309,8 @@ interface NewEventState {
         }
         
         const roomName = rooms.find((r: any) => r._id === appointment.room)?.name;
+        const patientId = (appointment as any).patient?._id || (appointment as any).patient?.id;
+        const patientIsTemporary = !!(appointment as any).patient?.isTemporary;
         
         // Konvertiere doctor zu string für staffId
         const staffIdString = typeof appointment.doctor === 'string' 
@@ -325,6 +328,8 @@ interface NewEventState {
           roomName: roomName,
           type: appointment.type,
           status: appointment.status,
+          patientId: patientId,
+          patientIsTemporary: patientIsTemporary,
           color: eventColor,
           tooltipText: `${patientName}\n${format(new Date(appointment.startTime), 'HH:mm')} - ${format(new Date(appointment.endTime), 'HH:mm')}\nPersonal: ${staffName || 'Unbekannt'}${roomName ? `\nRaum: ${roomName}` : ''}\nStatus: ${appointment.status}`
         };
@@ -1040,6 +1045,28 @@ interface NewEventState {
         />
         <DialogContent sx={{ pt: 3 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 400 }}>
+            {selectedEvent?.patientIsTemporary && selectedEvent?.patientId && (
+              <Alert
+                severity="warning"
+                icon={<Warning />}
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => {
+                      handleCloseEventDialog();
+                      navigate(`/patients/organizer/${selectedEvent.patientId}`);
+                    }}
+                  >
+                    Stammdaten vervollständigen
+                  </Button>
+                }
+              >
+                <Typography variant="body2">
+                  Temporärer Patient (z.&nbsp;B. aus Online-Buchung). Bitte Stammdaten vor der Behandlung vervollständigen.
+                </Typography>
+              </Alert>
+            )}
             <TextField
               label="Titel"
               fullWidth

@@ -1393,7 +1393,9 @@ router.post('/book', [
     if (!location) {
       location = await Location.findOne({ is_active: true }).select('onlineBooking').lean();
     }
-    const doubleOptInRequired = location?.onlineBooking?.doubleOptInRequired !== false;
+    // Nur wenn Standort Double Opt-In explizit aktiviert hat: für Neupatienten verlangen.
+    // Fehlt die Location oder das Feld, gilt: kein Double Opt-In (Termin sofort anlegen).
+    const doubleOptInRequired = location?.onlineBooking?.doubleOptInRequired === true;
     const autoConfirmKnownPatients = location?.onlineBooking?.autoConfirmKnownPatients !== false;
 
     const bookingData = {

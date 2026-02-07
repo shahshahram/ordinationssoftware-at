@@ -40,7 +40,7 @@ router.get('/', auth, async (req, res) => {
       .sort({ startTime: -1 })
       .limit(parsedLimit)
       .skip((parsedPage - 1) * parsedLimit)
-        .populate('patient', 'firstName lastName email phone dateOfBirth gender allergies preExistingConditions medicalHistory isPregnant pregnancyWeek isBreastfeeding hasPacemaker hasDefibrillator currentMedications')
+        .populate('patient', 'firstName lastName email phone dateOfBirth gender isTemporary allergies preExistingConditions medicalHistory isPregnant pregnancyWeek isBreastfeeding hasPacemaker hasDefibrillator currentMedications')
         .populate('doctor', 'firstName lastName email')
         .populate('service', 'name code color_hex category description base_duration_min price_cents isMedical')
       .populate('assigned_users', 'firstName lastName email role display_name first_name last_name')
@@ -741,7 +741,7 @@ router.post('/', [
     await SlotReservation.confirm(reservation._id, appointment._id);
 
     // Populate patient before sending response
-    await appointment.populate('patient', 'firstName lastName email phone dateOfBirth gender');
+    await appointment.populate('patient', 'firstName lastName email phone dateOfBirth gender isTemporary');
 
     res.status(201).json({
       success: true,
