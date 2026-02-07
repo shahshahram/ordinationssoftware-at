@@ -4,6 +4,7 @@ import {
   Box,
   Typography,
   Card,
+  CardContent,
   Button,
   TextField,
   InputAdornment,
@@ -35,6 +36,8 @@ import {
   Tooltip,
   Tabs,
   Tab,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
@@ -59,6 +62,8 @@ import {
   LockOpen,
   HelpOutline as HelpOutlineIcon,
   PhotoCamera,
+  ViewModule as ViewModuleIcon,
+  ViewList as ViewListIcon,
 } from '@mui/icons-material';
 
 interface User {
@@ -110,6 +115,7 @@ const Users: React.FC = () => {
   const [helpTabUsers, setHelpTabUsers] = useState(0);
   const [photoFileInputRef, setPhotoFileInputRef] = useState<HTMLInputElement | null>(null);
   const [photoUploading, setPhotoUploading] = useState(false);
+  const [viewMode, setViewMode] = useState<'list' | 'cards'>('list');
 
   const [formData, setFormData] = useState<Partial<User>>({
     email: '',
@@ -501,7 +507,7 @@ const Users: React.FC = () => {
       <Card sx={{ mb: 3 }}>
         <Box p={3}>
           <Grid container spacing={2} alignItems="center">
-            <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+            <Grid size={{ xs: 12, sm: 6, md: 3 }}>
               <TextField
                 fullWidth
                 placeholder="Benutzer suchen..."
@@ -549,11 +555,29 @@ const Users: React.FC = () => {
                 </Select>
               </FormControl>
             </Grid>
+            <Grid size={{ xs: 12, sm: 6, md: 2 }} sx={{ display: 'flex', alignItems: 'center' }}>
+              <ToggleButtonGroup
+                value={viewMode}
+                exclusive
+                onChange={(_, newMode) => newMode && setViewMode(newMode)}
+                size="small"
+                aria-label="Ansicht umschalten"
+              >
+                <ToggleButton value="list" aria-label="Listenansicht">
+                  <ViewListIcon />
+                </ToggleButton>
+                <ToggleButton value="cards" aria-label="Kartenansicht">
+                  <ViewModuleIcon />
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </Grid>
           </Grid>
         </Box>
       </Card>
 
       <Card>
+        {viewMode === 'list' ? (
+        <>
         <TableContainer>
           <Table>
             <TableHead>
@@ -667,6 +691,90 @@ const Users: React.FC = () => {
           onPageChange={handleChangePage}
           onRowsPerPageChange={handleChangeRowsPerPage}
         />
+        </>
+        ) : (
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              sm: 'repeat(2, 1fr)',
+              md: 'repeat(3, 1fr)',
+              lg: 'repeat(4, 1fr)',
+            },
+            gap: 2,
+            p: 2,
+          }}
+        >
+          {loading ? (
+            <Box sx={{ gridColumn: '1 / -1', display: 'flex', justifyContent: 'center', p: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : users.length === 0 ? (
+            <Box sx={{ gridColumn: '1 / -1', textAlign: 'center', py: 4 }}>
+              <Typography variant="body2" color="text.secondary">
+                Keine Benutzer gefunden
+              </Typography>
+            </Box>
+          ) : (
+            users.map((user) => (
+              <Card key={user._id || user.id} sx={{ transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 4 } }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Avatar
+                        sx={{ bgcolor: 'primary.main' }}
+                        src={getUserPhotoUrl(user) ?? undefined}
+                        alt={`${user.firstName} ${user.lastName}`}
+                      >
+                        {!getUserPhotoUrl(user) && getRoleIcon(user.role)}
+                      </Avatar>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="subtitle1" fontWeight={600} noWrap>
+                          {user.firstName} {user.lastName}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          {user.email}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
+                    <Chip
+                      icon={getRoleIcon(user.role)}
+                      label={getRoleLabel(user.role)}
+                      color={getRoleColor(user.role) as any}
+                      size="small"
+                    />
+                    <Chip
+                      label={user.isActive ? 'Aktiv' : 'Inaktiv'}
+                      color={user.isActive ? 'success' : 'default'}
+                      size="small"
+                    />
+                  </Box>
+                  {user.lastLogin && (
+                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                      Letzter Login: {new Date(user.lastLogin).toLocaleDateString('de-DE')}
+                    </Typography>
+                  )}
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        setAnchorEl(e.currentTarget);
+                        setSelectedUser(user);
+                      }}
+                      title="Aktionen"
+                    >
+                      <MoreVert />
+                    </IconButton>
+                  </Box>
+                </CardContent>
+              </Card>
+            ))
+          )}
+        </Box>
+        )}
       </Card>
 
       <Menu

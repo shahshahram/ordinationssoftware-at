@@ -339,6 +339,7 @@ const InnerAppContent: React.FC = () => {
         <Route path="/unauthorized" element={<Unauthorized />} />
         <Route path="/online-booking" element={<OnlineBooking />} />
         <Route path="/booking/widget/:doctorId" element={<BookingWidgetPage />} />
+        <Route path="/booking/preview/:locationId" element={<BookingWidgetPage />} />
         <Route path="/patient-booking/:token" element={<PatientBooking />} />
         <Route path="/portal/appointment/:token" element={<AppointmentManagementPage />} />
         <Route path="/waiting-list-reservation/:token" element={<WaitingListReservation />} />

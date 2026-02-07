@@ -352,14 +352,15 @@ router.get('/', auth, async (req, res) => {
     } = req.query;
 
     // Build query - show all patients for admin/super_admin users, or filter by userId for regular users
-    // ZUSÄTZLICH: Normale Benutzer sehen auch Patienten mit Status "self-checkin"
+    // ZUSÄTZLICH: Normale Benutzer sehen auch Patienten mit Status "self-checkin" und temporäre Patienten (z. B. aus Online-Buchung)
     let query = {};
     
     if (req.user.role !== 'admin' && req.user.role !== 'super_admin') {
-      // Für normale Benutzer: eigene Patienten ODER Patienten mit Status "self-checkin"
+      // Für normale Benutzer: eigene Patienten ODER self-checkin ODER temporäre Patienten (damit alle Mitarbeiter Online-Buchungen sehen)
       query.$or = [
         { userId: req.user.id },
-        { status: 'self-checkin' }
+        { status: 'self-checkin' },
+        { isTemporary: true }
       ];
     }
     

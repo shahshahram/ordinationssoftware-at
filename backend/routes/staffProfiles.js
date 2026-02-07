@@ -114,8 +114,7 @@ router.get('/', auth, async (req, res) => {
     const staffProfiles = await StaffProfile.find(query)
       .populate({
         path: 'userId',
-        select: 'firstName lastName email color_hex profile',
-        // Stelle sicher, dass profile vollständig geladen wird
+        select: 'firstName lastName email color_hex profile profilePhoto',
       })
       .sort({ createdAt: -1 })
       .limit(limitNum)
@@ -226,8 +225,14 @@ router.get('/', auth, async (req, res) => {
 // Statistiken abrufen
 router.get('/statistics', auth, async (req, res) => {
   try {
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('users.read')) {
+    // Berechtigung per RBAC prüfen (konsistent mit GET-Route)
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung für Personalstatistiken'
@@ -456,8 +461,14 @@ router.post('/', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('users.write')) {
+    // Berechtigung per RBAC prüfen (konsistent mit GET-Route)
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    const authResult = await authorize(req.user, ACTIONS.CREATE, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Erstellen von Personalprofilen'
@@ -529,8 +540,14 @@ router.put('/:id', auth, [
       });
     }
 
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('users.write')) {
+    // Berechtigung per RBAC prüfen (konsistent mit GET-Route)
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Aktualisieren von Personalprofilen'
@@ -577,12 +594,24 @@ router.put('/:id', auth, [
 // Personalprofil-Status umschalten
 router.patch('/:id/toggle-status', auth, async (req, res) => {
   try {
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('users.write')) {
-      return res.status(403).json({
-        success: false,
-        message: 'Keine Berechtigung zum Ändern des Personalprofil-Status'
-      });
+    const role = req.user.role != null ? String(req.user.role) : '';
+    const isAdminOrSuperAdmin = role === 'super_admin' || role === 'admin';
+    const hasLegacyWrite = Array.isArray(req.user.permissions) && req.user.permissions.includes('users.write');
+
+    if (!isAdminOrSuperAdmin && !hasLegacyWrite) {
+      const context = {
+        ip: req.ip,
+        userAgent: req.get('User-Agent'),
+        timestamp: new Date()
+      };
+      const userForAuth = req.user.toObject ? req.user.toObject() : { _id: req.user._id, role, permissions: req.user.permissions || [], rbac: req.user.rbac };
+      const authResult = await authorize(userForAuth, ACTIONS.UPDATE, RESOURCES.STAFF, null, context);
+      if (!authResult.allowed) {
+        return res.status(403).json({
+          success: false,
+          message: 'Keine Berechtigung zum Ändern des Personalprofil-Status'
+        });
+      }
     }
 
     const staffProfile = await StaffProfile.findById(req.params.id);
@@ -625,8 +654,14 @@ router.patch('/:id/toggle-status', auth, async (req, res) => {
 // Personalprofil löschen
 router.delete('/:id', auth, async (req, res) => {
   try {
-    // Berechtigung prüfen
-    if (!req.user.permissions.includes('users.delete')) {
+    // Berechtigung per RBAC prüfen (konsistent mit GET-Route)
+    const context = {
+      ip: req.ip,
+      userAgent: req.get('User-Agent'),
+      timestamp: new Date()
+    };
+    const authResult = await authorize(req.user, ACTIONS.DELETE, RESOURCES.STAFF, null, context);
+    if (!authResult.allowed) {
       return res.status(403).json({
         success: false,
         message: 'Keine Berechtigung zum Löschen von Personalprofilen'

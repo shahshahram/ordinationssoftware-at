@@ -346,7 +346,17 @@ const locationSchema = new mongoose.Schema({
       default: true
     }
   },
-  
+
+  // Widget-Design für Online-Buchung (pro Standort, Einbettung auf Praxis-Webseite)
+  widgetTheme: {
+    primaryColor: { type: String, default: '#1976d2', trim: true },
+    secondaryColor: { type: String, default: '#dc004e', trim: true },
+    background: { type: String, default: '#f5f5f5', trim: true },
+    fontFamily: { type: String, default: 'Roboto', trim: true },
+    layout: { type: String, enum: ['horizontal', 'vertical'], default: 'vertical' },
+    style: { type: String, enum: ['classic', 'minimal', 'modern'], default: 'modern' }
+  },
+
   // XDS Registry Konfiguration
   xdsRegistry: {
     enabled: {

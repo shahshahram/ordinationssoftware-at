@@ -985,6 +985,118 @@ router.get('/exceptions', auth, async (req, res) => {
   }
 });
 
+// Widget-Design für Online-Buchung (pro Standort) – MUSS VOR /:id stehen
+router.get('/:id/widget-theme', auth, async (req, res) => {
+  try {
+    const context = { ip: req.ip, userAgent: req.get('User-Agent'), timestamp: new Date() };
+    const authResult = await authorize(req.user, ACTIONS.READ, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({ success: false, message: 'Keine Berechtigung für Standortverwaltung' });
+    }
+    const location = await Location.findById(req.params.id).select('widgetTheme');
+    if (!location) {
+      return res.status(404).json({ success: false, message: 'Standort nicht gefunden' });
+    }
+    const widgetTheme = location.widgetTheme || {};
+    res.json({
+      success: true,
+      data: {
+        primaryColor: widgetTheme.primaryColor || '#1976d2',
+        secondaryColor: widgetTheme.secondaryColor || '#dc004e',
+        background: widgetTheme.background || '#f5f5f5',
+        fontFamily: widgetTheme.fontFamily || 'Roboto',
+        layout: widgetTheme.layout || 'vertical',
+        style: widgetTheme.style || 'modern'
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching widget theme:', error);
+    res.status(500).json({ success: false, message: 'Fehler beim Laden des Widget-Designs', error: error.message });
+  }
+});
+
+router.put('/:id/widget-theme', [
+  auth,
+  body('primaryColor').optional().trim(),
+  body('secondaryColor').optional().trim(),
+  body('background').optional().trim(),
+  body('fontFamily').optional().trim(),
+  body('layout').optional().isIn(['horizontal', 'vertical']),
+  body('style').optional().isIn(['classic', 'minimal', 'modern'])
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ success: false, message: 'Validierungsfehler', errors: errors.array() });
+    }
+    const context = { ip: req.ip, userAgent: req.get('User-Agent'), timestamp: new Date() };
+    const authResult = await authorize(req.user, ACTIONS.UPDATE, RESOURCES.LOCATION, null, context);
+    if (!authResult.allowed) {
+      return res.status(403).json({ success: false, message: 'Keine Berechtigung zum Aktualisieren des Standorts' });
+    }
+    const location = await Location.findById(req.params.id).select('widgetTheme').lean();
+    if (!location) {
+      return res.status(404).json({ success: false, message: 'Standort nicht gefunden' });
+    }
+    const updates = req.body;
+    const defaults = {
+      primaryColor: '#1976d2',
+      secondaryColor: '#dc004e',
+      background: '#f5f5f5',
+      fontFamily: 'Roboto',
+      layout: 'vertical',
+      style: 'modern'
+    };
+    const current = location.widgetTheme && typeof location.widgetTheme === 'object' ? location.widgetTheme : {};
+    const widgetTheme = { ...defaults, ...current, ...updates };
+    const updated = await Location.findByIdAndUpdate(
+      req.params.id,
+      { $set: { widgetTheme } },
+      { new: true, runValidators: true }
+    ).select('widgetTheme').lean();
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Standort nicht gefunden' });
+    }
+    const wt = updated.widgetTheme || widgetTheme;
+    try {
+      await AuditLog.create({
+        userId: req.user._id || req.user.id,
+        userEmail: req.user.email || '',
+        userRole: req.user.role || 'user',
+        action: 'locations.widget_theme.update',
+        resource: 'Location',
+        resourceId: req.params.id,
+        description: 'Widget-Design aktualisiert',
+        details: { widgetTheme: wt },
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+    } catch (auditErr) {
+      console.error('Audit log failed for widget-theme update:', auditErr);
+    }
+    res.json({
+      success: true,
+      data: {
+        primaryColor: wt.primaryColor || defaults.primaryColor,
+        secondaryColor: wt.secondaryColor || defaults.secondaryColor,
+        background: wt.background || defaults.background,
+        fontFamily: wt.fontFamily || defaults.fontFamily,
+        layout: wt.layout || defaults.layout,
+        style: wt.style || defaults.style
+      },
+      message: 'Widget-Design gespeichert'
+    });
+  } catch (error) {
+    console.error('Error updating widget theme:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Speichern des Widget-Designs',
+      error: error.message,
+      ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    });
+  }
+});
+
 // Einzelnen Standort abrufen
 router.get('/:id', auth, async (req, res) => {
   try {

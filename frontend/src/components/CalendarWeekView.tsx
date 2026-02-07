@@ -115,8 +115,8 @@ const CalendarWeekView: React.FC<CalendarWeekViewProps> = ({
       {/* Kalender-Grid */}
       <Box sx={{ bgcolor: 'white', borderRadius: 1, overflow: 'hidden' }}>
         <Grid container>
-          {/* Zeit-Spalte */}
-          <Grid size={{ xs: 1.5 }} sx={{ borderRight: '1px solid #e0e0e0' }}>
+          {/* Zeit-Spalte – breit genug für "08:00" */}
+          <Grid size={{ xs: 2.5 }} sx={{ borderRight: '1px solid #e0e0e0', minWidth: 56 }}>
             <Box
               sx={{
                 height: 60,
@@ -148,6 +148,7 @@ const CalendarWeekView: React.FC<CalendarWeekViewProps> = ({
                   variant="caption"
                   fontWeight={isFullHour(time) ? 'bold' : 'normal'}
                   color="text.secondary"
+                  sx={{ whiteSpace: 'nowrap' }}
                 >
                   {time}
                 </Typography>
@@ -169,7 +170,8 @@ const CalendarWeekView: React.FC<CalendarWeekViewProps> = ({
                 key={format(day, 'yyyy-MM-dd')}
                 sx={{
                   borderRight: dayIndex < weekDays.length - 1 ? '1px solid #e0e0e0' : 'none',
-                  opacity: hasAvailableSlots && !isPastDate ? 1 : 0.3
+                  opacity: hasAvailableSlots && !isPastDate ? 1 : 0.3,
+                  minWidth: 48
                 }}
               >
                 {/* Tages-Header */}
@@ -192,14 +194,14 @@ const CalendarWeekView: React.FC<CalendarWeekViewProps> = ({
                     {format(day, 'dd.MM.')}
                   </Typography>
                   {!hasAvailableSlots && (
-                    <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem', mt: 0.5 }}>
-                      Keine Slots
+                    <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.7rem', mt: 0.25 }}>
+                      —
                     </Typography>
                   )}
                 </Box>
 
                 {/* Zeit-Slots für diesen Tag */}
-                {timeSlots.map((time) => {
+                {(timeSlots.map((time) => {
                   const slotAvailable = isSlotAvailable(day, time);
                   const slotSelected = isSlotSelected(day, time);
                   const _isHour = isFullHour(time);
@@ -256,7 +258,7 @@ const CalendarWeekView: React.FC<CalendarWeekViewProps> = ({
                       )}
                     </Box>
                   );
-                })}
+                }))}
               </Grid>
             );
           })}

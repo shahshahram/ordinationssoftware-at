@@ -44,6 +44,9 @@ import {
   BookOnline,
   HelpOutline as HelpOutlineIcon,
   Article,
+  Palette as PaletteIcon,
+  ContentCopy as ContentCopyIcon,
+  OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
@@ -83,6 +86,7 @@ import {
 } from '../store/slices/locationWeeklyScheduleSlice';
 import { fetchStaffProfiles } from '../store/slices/staffSlice';
 import LocationWeeklyScheduleComponent from '../components/LocationWeeklySchedule';
+import WidgetThemeDialog from '../components/WidgetThemeDialog';
 import api from '../utils/api';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 
@@ -139,6 +143,8 @@ const LocationManagement: React.FC = () => {
   const [helpTabWeeklySchedule, setHelpTabWeeklySchedule] = useState(0);
   const [helpTabClosures, setHelpTabClosures] = useState(0);
   const [helpTabAssignments, setHelpTabAssignments] = useState(0);
+  const [widgetThemeDialogOpen, setWidgetThemeDialogOpen] = useState(false);
+  const [selectedLocationForWidgetTheme, setSelectedLocationForWidgetTheme] = useState<{ id: string; name: string } | null>(null);
 
   // Form states
   const [locationForm, setLocationForm] = useState({
@@ -1330,7 +1336,9 @@ const LocationManagement: React.FC = () => {
                 <TableRow>
                   <TableCell>Name</TableCell>
                   <TableCell>Code</TableCell>
+                  <TableCell>ID</TableCell>
                   <TableCell>Adresse</TableCell>
+                  <TableCell>Fachrichtungen</TableCell>
                   <TableCell>Praxistyp</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Aktionen</TableCell>
@@ -1354,6 +1362,24 @@ const LocationManagement: React.FC = () => {
                       </Box>
                     </TableCell>
                     <TableCell>{location.code || '-'}</TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <Tooltip title={location._id}>
+                          <Typography variant="caption" component="code" sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>
+                            {location._id.slice(-8)}
+                          </Typography>
+                        </Tooltip>
+                        <Tooltip title="ID kopieren">
+                          <IconButton
+                            size="small"
+                            onClick={() => navigator.clipboard.writeText(location._id)}
+                            aria-label="ID kopieren"
+                          >
+                            <ContentCopyIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
                     <TableCell>
                       {location.address_line1}, {location.postal_code} {location.city}
                     </TableCell>
@@ -1407,9 +1433,31 @@ const LocationManagement: React.FC = () => {
                       />
                     </TableCell>
                     <TableCell>
+                      <Tooltip title="Vorschau der Online-Buchung (Widget) öffnen">
+                        <IconButton
+                          size="small"
+                          onClick={() => window.open(`/booking/preview/${location._id}`, '_blank', 'noopener,noreferrer')}
+                          aria-label="Vorschau öffnen"
+                        >
+                          <OpenInNewIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Widget-Design (Online-Buchung)">
+                        <IconButton
+                          size="small"
+                          onClick={() => {
+                            setSelectedLocationForWidgetTheme({ id: location._id, name: location.name });
+                            setWidgetThemeDialogOpen(true);
+                          }}
+                          aria-label="Widget-Design"
+                        >
+                          <PaletteIcon />
+                        </IconButton>
+                      </Tooltip>
                       <IconButton
                         size="small"
                         onClick={() => handleLocationDialogOpen(location)}
+                        aria-label="Bearbeiten"
                       >
                         <EditIcon />
                       </IconButton>
@@ -1417,6 +1465,7 @@ const LocationManagement: React.FC = () => {
                         size="small"
                         onClick={() => handleLocationDelete(location._id)}
                         color="error"
+                        aria-label="Löschen"
                       >
                         <DeleteIcon />
                       </IconButton>
@@ -2809,6 +2858,19 @@ const LocationManagement: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Widget-Design Dialog (pro Standort) */}
+      {selectedLocationForWidgetTheme && (
+        <WidgetThemeDialog
+          open={widgetThemeDialogOpen}
+          onClose={() => {
+            setWidgetThemeDialogOpen(false);
+            setSelectedLocationForWidgetTheme(null);
+          }}
+          locationId={selectedLocationForWidgetTheme.id}
+          locationName={selectedLocationForWidgetTheme.name}
+        />
+      )}
 
       {/* Hours Dialog */}
       <Dialog open={hoursDialogOpen} onClose={handleHoursDialogClose} maxWidth="sm" fullWidth

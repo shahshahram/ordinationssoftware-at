@@ -1,6 +1,7 @@
 // Erweiterte Abrechnungsberichte
 
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const auth = require('../middleware/auth');
 const Invoice = require('../models/Invoice');
@@ -9,6 +10,8 @@ const PatientExtended = require('../models/PatientExtended');
 const ServiceCatalog = require('../models/ServiceCatalog');
 const Appointment = require('../models/Appointment');
 const ServiceBooking = require('../models/ServiceBooking');
+const Performance = require('../models/Performance');
+const User = require('../models/User');
 
 // Helper-Funktion: Konvertiert Cent zu Euro (automatische Erkennung)
 // Wenn Wert > 1000, wird angenommen, dass es in Cent ist
@@ -604,6 +607,88 @@ router.get('/service-analysis', auth, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Fehler beim Generieren der Leistungsanalyse',
+      error: error.message
+    });
+  }
+});
+
+// GET /api/billing-reports/performances-by-user - Auswertung: welche Leistungen welcher Benutzer erbracht hat
+router.get('/performances-by-user', auth, async (req, res) => {
+  try {
+    const { startDate, endDate, userId } = req.query;
+
+    const matchStage = {};
+    if (startDate || endDate) {
+      matchStage.serviceDatetime = {};
+      if (startDate) matchStage.serviceDatetime.$gte = new Date(startDate);
+      if (endDate) matchStage.serviceDatetime.$lte = new Date(endDate);
+    }
+    if (userId) {
+      matchStage.doctorId = new mongoose.Types.ObjectId(userId);
+    }
+
+    const aggregated = await Performance.aggregate([
+      { $match: Object.keys(matchStage).length ? matchStage : {} },
+      {
+        $group: {
+          _id: {
+            doctorId: '$doctorId',
+            serviceCode: '$serviceCode',
+            serviceDescription: '$serviceDescription'
+          },
+          count: { $sum: 1 },
+          totalQuantity: { $sum: '$quantity' },
+          totalAmount: { $sum: '$totalPrice' }
+        }
+      },
+      { $sort: { '_id.doctorId': 1, totalAmount: -1 } }
+    ]);
+
+    const byUser = {};
+    for (const row of aggregated) {
+      const docId = row._id.doctorId?.toString();
+      if (!docId) continue;
+      if (!byUser[docId]) {
+        byUser[docId] = {
+          userId: docId,
+          userDisplayName: null,
+          services: [],
+          totalCount: 0,
+          totalAmount: 0
+        };
+      }
+      byUser[docId].services.push({
+        serviceCode: row._id.serviceCode || '-',
+        serviceDescription: row._id.serviceDescription || '-',
+        count: row.count,
+        totalQuantity: row.totalQuantity,
+        totalAmount: toEuro(row.totalAmount)
+      });
+      byUser[docId].totalCount += row.count;
+      byUser[docId].totalAmount += toEuro(row.totalAmount);
+    }
+
+    const userIds = Object.keys(byUser);
+    const users = await User.find({ _id: { $in: userIds } }).select('firstName lastName').lean();
+    const userMap = {};
+    users.forEach((u) => {
+      userMap[u._id.toString()] = [u.firstName, u.lastName].filter(Boolean).join(' ') || u._id.toString();
+    });
+    userIds.forEach((id) => {
+      if (byUser[id]) byUser[id].userDisplayName = userMap[id] || id;
+    });
+
+    const data = Object.values(byUser).sort((a, b) => (b.totalAmount || 0) - (a.totalAmount || 0));
+
+    res.json({
+      success: true,
+      data
+    });
+  } catch (error) {
+    console.error('Error generating performances-by-user:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler bei der Auswertung Leistungen pro Benutzer',
       error: error.message
     });
   }

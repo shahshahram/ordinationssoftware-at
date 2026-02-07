@@ -31,6 +31,8 @@ import {
   Snackbar,
   Badge,
   Divider,
+  ToggleButtonGroup,
+  ToggleButton,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -45,11 +47,13 @@ import {
   Refresh as RefreshIcon,
   LocationOn as LocationOnIcon,
   CalendarToday as CalendarTodayIcon,
+  ViewModule as ViewModuleIcon,
+  ViewList as ViewListIcon,
 } from '@mui/icons-material';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { eventBus, EVENTS } from '../utils/eventBus';
-import api from '../utils/api';
+import api, { getUserPhotoUrl } from '../utils/api';
 import { useGlobalNavigationOffset } from '../hooks/useGlobalNavigationOffset';
 import {
   fetchStaffProfiles,
@@ -98,6 +102,7 @@ const StaffManagement: React.FC = () => {
   } = useAppSelector((state) => state.staff);
 
   const [activeTab, setActiveTab] = useState(0);
+  const [viewModeProfile, setViewModeProfile] = useState<'list' | 'cards'>('list');
   const [openDialog, setOpenDialog] = useState(false);
   const [dialogMode, setDialogMode] = useState<'add' | 'edit'>('add');
   const [dialogType, setDialogType] = useState<'profile' | 'absence' | 'weekly-schedule'>('profile');
@@ -526,6 +531,7 @@ const StaffManagement: React.FC = () => {
     dispatch(fetchStaffProfiles());
     dispatch(fetchAbsences());
     dispatch(fetchStaffStatistics());
+    loadAbsencesAndStatistics();
     setSnackbar({ open: true, message: 'Daten werden aktualisiert...', severity: 'info' });
   };
 
@@ -702,7 +708,7 @@ const StaffManagement: React.FC = () => {
           await dispatch(updateAbsence({ id: formData._id, absenceData })).unwrap();
           setSnackbar({ open: true, message: 'Abwesenheit erfolgreich aktualisiert', severity: 'success' });
         }
-        dispatch(fetchAbsences());
+        loadAbsencesAndStatistics();
       }
       handleCloseDialog();
     } catch (error: any) {
@@ -719,6 +725,7 @@ const StaffManagement: React.FC = () => {
         } else if (type === 'absence') {
           await dispatch(deleteAbsence(id)).unwrap();
           setSnackbar({ open: true, message: 'Abwesenheit erfolgreich gelöscht', severity: 'success' });
+          loadAbsencesAndStatistics();
         }
       } catch (error: any) {
         setSnackbar({ open: true, message: error.message || 'Fehler beim Löschen', severity: 'error' });
@@ -743,7 +750,7 @@ const StaffManagement: React.FC = () => {
         message: `Abwesenheit ${status === 'approved' ? 'genehmigt' : 'abgelehnt'}`, 
         severity: 'success' 
       });
-      dispatch(fetchAbsences());
+      loadAbsencesAndStatistics();
     } catch (error: any) {
       setSnackbar({ open: true, message: error.message || 'Fehler beim Genehmigen', severity: 'error' });
     }
@@ -782,6 +789,38 @@ const StaffManagement: React.FC = () => {
     return colors[urgency] || '#757575';
   };
 
+  const getReasonLabel = (reason: string) => {
+    const labels: Record<string, string> = {
+      vacation: 'Urlaub',
+      sick: 'Krankenstand',
+      personal: 'Persönlich',
+      training: 'Fortbildung',
+      conference: 'Konferenz',
+      other: 'Sonstige',
+    };
+    return labels[reason] || reason;
+  };
+
+  const getAbsenceStatusLabel = (status: string) => {
+    const labels: Record<string, string> = {
+      pending: 'Ausstehend',
+      approved: 'Genehmigt',
+      rejected: 'Abgelehnt',
+      cancelled: 'Storniert',
+    };
+    return labels[status] || status;
+  };
+
+  const getUrgencyLabel = (urgency: string) => {
+    const labels: Record<string, string> = {
+      low: 'Niedrig',
+      medium: 'Mittel',
+      high: 'Hoch',
+      urgent: 'Dringend',
+    };
+    return labels[urgency] || urgency;
+  };
+
   const filteredProfiles = (Array.isArray(staffProfiles) ? staffProfiles : []).filter(profile => {
     const displayName = profile.display_name || '';
     const email = profile.email || '';
@@ -814,58 +853,70 @@ const StaffManagement: React.FC = () => {
   // Absences State
   const [absences, setAbsences] = useState<any[]>([]);
   const [pendingAbsences, setPendingAbsences] = useState<any[]>([]);
-  const [statistics, setStatistics] = useState<any>({
-    totalStaff: filteredProfiles.length,
-    activeStaff: filteredProfiles.filter(p => p.isActive).length,
-    inactiveStaff: filteredProfiles.filter(p => !p.isActive).length,
-    pendingAbsences: 0,
+  const [statistics, setStatistics] = useState<{
+    totalProfiles: number;
+    activeProfiles: number;
+    pendingApprovals: number;
+    totalAbsences: number;
+  }>({
+    totalProfiles: 0,
+    activeProfiles: 0,
+    pendingApprovals: 0,
     totalAbsences: 0
   });
 
-  // Load absences data
-  useEffect(() => {
-    const loadAbsences = async () => {
-      try {
-        // Mock data for now - replace with actual API call
-        const mockAbsences = [
-          {
-            id: '1',
-            staffId: '1',
-            staffName: 'Dr. Mustermann',
-            type: 'Urlaub',
-            startDate: '2024-01-15',
-            endDate: '2024-01-20',
-            status: 'approved',
-            reason: 'Familienurlaub'
-          },
-          {
-            id: '2',
-            staffId: '2',
-            staffName: 'Maria Schmidt',
-            type: 'Krankheit',
-            startDate: '2024-01-10',
-            endDate: '2024-01-12',
-            status: 'pending',
-            reason: 'Grippe'
-          }
-        ];
-        
-        setAbsences(mockAbsences);
-        setPendingAbsences(mockAbsences.filter(a => a.status === 'pending'));
-        
-        // Update statistics
-        setStatistics((prev: any) => ({
-          ...prev,
-          pendingAbsences: mockAbsences.filter(a => a.status === 'pending').length,
-          totalAbsences: mockAbsences.length
-        }));
-      } catch (error) {
-        console.error('Error loading absences:', error);
-      }
-    };
+  // Normalisiere Abwesenheit für Anzeige (Backend liefert ggf. camelCase)
+  const normalizeAbsence = (a: any) => ({
+    ...a,
+    staffId: a.staffId ? {
+      _id: a.staffId._id,
+      display_name: a.staffId.display_name ?? a.staffId.displayName,
+      color_hex: a.staffId.color_hex ?? a.staffId.colorHex ?? '#757575'
+    } : a.staffId
+  });
 
-    loadAbsences();
+  // Lade Abwesenheiten und Statistiken aus API (ersetzt Mock-Daten)
+  const loadAbsencesAndStatistics = React.useCallback(async () => {
+    try {
+      const [absencesRes, statsRes] = await Promise.all([
+        api.get<{ success: boolean; data: any[]; pagination?: { total: number } }>('/absences', { limit: 500 }),
+        api.get<{ success: boolean; data: { total: number; active: number; inactive: number } }>('/staff-profiles/statistics')
+      ]);
+      const absList = Array.isArray((absencesRes.data as any)?.data) ? (absencesRes.data as any).data : [];
+      const normalizedAbsences = absList.map(normalizeAbsence);
+      const pending = normalizedAbsences.filter((a: any) => a.status === 'pending');
+      setAbsences(normalizedAbsences);
+      setPendingAbsences(pending);
+      const statsData = (statsRes.data as any)?.data;
+      setStatistics((prev) => ({
+        ...prev,
+        totalProfiles: statsData?.total ?? prev.totalProfiles,
+        activeProfiles: statsData?.active ?? prev.activeProfiles,
+        pendingApprovals: pending.length,
+        totalAbsences: normalizedAbsences.length
+      }));
+    } catch (err) {
+      console.error('Error loading absences/statistics:', err);
+      setStatistics((prev) => ({ ...prev, pendingApprovals: 0, totalAbsences: 0 }));
+    }
   }, []);
+
+  useEffect(() => {
+    loadAbsencesAndStatistics();
+  }, [loadAbsencesAndStatistics]);
+
+  // Statistiken aus staffProfiles setzen, wenn API noch nicht geladen (z. B. Berechtigung Statistics)
+  useEffect(() => {
+    if (staffProfiles.length === 0) return;
+    setStatistics((prev) => {
+      const fromProfiles = {
+        totalProfiles: staffProfiles.length,
+        activeProfiles: staffProfiles.filter((p) => p.isActive).length
+      };
+      if (prev.totalProfiles === 0 && prev.activeProfiles === 0) return { ...prev, ...fromProfiles };
+      return prev;
+    });
+  }, [staffProfiles]);
 
   return (
     <Box sx={{ 
@@ -958,7 +1009,21 @@ const StaffManagement: React.FC = () => {
                 </Select>
               </FormControl>
             </Box>
-            <Box sx={{ display: 'flex', gap: 2 }}>
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+              <ToggleButtonGroup
+                value={viewModeProfile}
+                exclusive
+                onChange={(_, newMode) => newMode && setViewModeProfile(newMode)}
+                size="small"
+                aria-label="Ansicht umschalten"
+              >
+                <ToggleButton value="list" aria-label="Listenansicht">
+                  <ViewListIcon />
+                </ToggleButton>
+                <ToggleButton value="cards" aria-label="Kartenansicht">
+                  <ViewModuleIcon />
+                </ToggleButton>
+              </ToggleButtonGroup>
               <Button
                 variant="outlined"
                 startIcon={<RefreshIcon />}
@@ -993,6 +1058,7 @@ const StaffManagement: React.FC = () => {
             </Box>
           </Box>
 
+          {viewModeProfile === 'list' ? (
           <TableContainer component={Paper}>
             <Table>
               <TableHead>
@@ -1011,8 +1077,12 @@ const StaffManagement: React.FC = () => {
                   <TableRow key={profile._id}>
                     <TableCell>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Avatar sx={{ bgcolor: profile.color_hex || '#757575' }}>
-                          {(profile.display_name || 'U').charAt(0)}
+                        <Avatar
+                          sx={{ bgcolor: profile.color_hex || '#757575' }}
+                          src={getUserPhotoUrl(profile.userId) ?? undefined}
+                          alt={profile.display_name || 'Mitarbeiter'}
+                        >
+                          {!getUserPhotoUrl(profile.userId) && (profile.display_name || 'U').charAt(0)}
                         </Avatar>
                         <Box>
                           <Typography variant="subtitle2">
@@ -1091,15 +1161,13 @@ const StaffManagement: React.FC = () => {
                       >
                         <EditIcon />
                       </IconButton>
-                      <IconButton
+                      <Switch
+                        checked={profile.isActive}
                         size="small"
-                        onClick={() => handleToggleStatus(profile._id)}
-                      >
-                        <Switch
-                          checked={profile.isActive}
-                          size="small"
-                        />
-                      </IconButton>
+                        onChange={() => handleToggleStatus(profile._id)}
+                        onClick={(e) => e.stopPropagation()}
+                        title={profile.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                      />
                       <IconButton
                         size="small"
                         onClick={() => handleDelete(profile._id, 'profile')}
@@ -1113,6 +1181,127 @@ const StaffManagement: React.FC = () => {
               </TableBody>
             </Table>
           </TableContainer>
+          ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: 'repeat(2, 1fr)',
+                md: 'repeat(3, 1fr)',
+                lg: 'repeat(4, 1fr)',
+              },
+              gap: 2,
+              pt: 1,
+            }}
+          >
+            {filteredProfiles.map((profile) => (
+              <Card key={profile._id} sx={{ transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 4 } }}>
+                <CardContent>
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Avatar
+                        sx={{ bgcolor: profile.color_hex || '#757575' }}
+                        src={getUserPhotoUrl(profile.userId) ?? undefined}
+                        alt={profile.display_name || 'Mitarbeiter'}
+                      >
+                        {!getUserPhotoUrl(profile.userId) && (profile.display_name || 'U').charAt(0)}
+                      </Avatar>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="subtitle1" fontWeight={600} noWrap>
+                          {profile.display_name || 'Unbekannt'}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>
+                          {profile.email || '-'}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
+                    <Chip
+                      label={profile.role === 'doctor' ? 'Arzt' : profile.role}
+                      size="small"
+                      sx={{ bgcolor: getRoleColor(profile.role), color: 'white' }}
+                    />
+                    <Chip
+                      label={profile.isOnlineBookable ? 'Online-Buchung' : 'Keine Buchung'}
+                      size="small"
+                      color={profile.isOnlineBookable ? 'success' : 'default'}
+                    />
+                    <Chip
+                      label={profile.isActive ? 'Aktiv' : 'Inaktiv'}
+                      size="small"
+                      color={profile.isActive ? 'success' : 'default'}
+                    />
+                  </Box>
+                  {profile.department && (
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                      {profile.department}
+                    </Typography>
+                  )}
+                  {profile.locations && profile.locations.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 1.5 }}>
+                      {profile.locations.slice(0, 2).map((location: any, index: number) => (
+                        <Chip
+                          key={index}
+                          label={typeof location === 'string' ? location : location.name}
+                          size="small"
+                          variant="outlined"
+                          icon={<LocationOnIcon sx={{ fontSize: 14 }} />}
+                          sx={{ fontSize: '0.7rem' }}
+                        />
+                      ))}
+                      {profile.locations.length > 2 && (
+                        <Typography variant="caption" color="text.secondary">
+                          +{profile.locations.length - 2}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                  <Divider sx={{ my: 1 }} />
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, justifyContent: 'flex-end', alignItems: 'center' }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleOpenLocationAssignments(profile)}
+                      title="Standort-Zuweisungen"
+                      color="primary"
+                    >
+                      <LocationOnIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleOpenWeeklySchedule(profile)}
+                      title="Arbeitszeiten"
+                    >
+                      <ScheduleIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleOpenDialog('edit', 'profile', profile)}
+                      title="Bearbeiten"
+                    >
+                      <EditIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={() => handleDelete(profile._id, 'profile')}
+                      color="error"
+                      title="Löschen"
+                    >
+                      <DeleteIcon fontSize="small" />
+                    </IconButton>
+                    <Switch
+                      checked={profile.isActive}
+                      size="small"
+                      onChange={() => handleToggleStatus(profile._id)}
+                      title={profile.isActive ? 'Deaktivieren' : 'Aktivieren'}
+                    />
+                  </Box>
+                </CardContent>
+              </Card>
+            ))}
+          </Box>
+          )}
         </TabPanel>
 
 
@@ -1168,21 +1357,21 @@ const StaffManagement: React.FC = () => {
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={absence.reason}
+                        label={getReasonLabel(absence.reason)}
                         size="small"
                         color="primary"
                       />
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={absence.urgency}
+                        label={getUrgencyLabel(absence.urgency)}
                         size="small"
                         sx={{ bgcolor: getUrgencyColor(absence.urgency), color: 'white' }}
                       />
                     </TableCell>
                     <TableCell>
                       <Chip
-                        label={absence.status}
+                        label={getAbsenceStatusLabel(absence.status)}
                         size="small"
                         sx={{ bgcolor: getStatusColor(absence.status), color: 'white' }}
                       />

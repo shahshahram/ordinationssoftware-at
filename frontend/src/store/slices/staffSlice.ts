@@ -225,7 +225,7 @@ export const toggleStaffStatus = createAsyncThunk(
   'staff/toggleStaffStatus',
   async (id: string, { rejectWithValue }) => {
     try {
-      const response = await apiRequest.put<{ success: boolean; data: any }>(`/staff-profiles/${id}/toggle-status`);
+      const response = await apiRequest.patch<{ success: boolean; data: any }>(`/staff-profiles/${id}/toggle-status`);
       return response.data.data;
     } catch (error: any) {
       return rejectWithValue(error.message || 'Fehler beim Ändern des Mitarbeiterstatus');
@@ -330,6 +330,17 @@ const staffSlice = createSlice({
         state.staffProfiles = state.staffProfiles.filter((profile) => profile._id !== action.payload);
       })
       .addCase(deleteStaffProfile.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload as string;
+      })
+      .addCase(toggleStaffStatus.fulfilled, (state, action: PayloadAction<StaffProfile>) => {
+        state.loading = false;
+        const index = state.staffProfiles.findIndex((p) => p._id === action.payload._id);
+        if (index !== -1) {
+          state.staffProfiles[index] = { ...state.staffProfiles[index], isActive: action.payload.isActive };
+        }
+      })
+      .addCase(toggleStaffStatus.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
       })

@@ -13,7 +13,6 @@ import {
   Stepper,
   Step,
   StepLabel,
-  StepContent,
   Grid,
   Chip,
   Alert,
@@ -28,6 +27,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Container,
+  Paper,
 } from '@mui/material';
 import {
   CalendarToday,
@@ -40,10 +41,14 @@ import {
   QuestionAnswer,
   Category as CategoryIcon,
   MedicalServices,
+  EventBusy,
 } from '@mui/icons-material';
-import CalendarMonthView from '../components/CalendarMonthView';
-import CalendarWeekView from '../components/CalendarWeekView';
-import { startOfMonth, format, startOfWeek, endOfWeek } from 'date-fns';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { StaticDatePicker } from '@mui/x-date-pickers/StaticDatePicker';
+import { PickersDay, PickersDayProps } from '@mui/x-date-pickers/PickersDay';
+import { startOfMonth, format, startOfWeek, endOfWeek, isSameMonth } from 'date-fns';
+import { de } from 'date-fns/locale';
 import {
   Autocomplete,
   Checkbox,
@@ -53,6 +58,7 @@ import api from '../utils/api';
 import { useAppDispatch } from '../store/hooks';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
 import { validatePhone, getPhoneErrorMessage, validateEmail, getEmailErrorMessage } from '../utils/validation';
+import type { WidgetThemeConfig } from '../hooks/useWidgetThemeConfig';
 
 interface Category {
   _id?: string | null;
@@ -153,6 +159,7 @@ interface BookingData {
     socialSecurityNumber?: string;
     address?: {
       street: string;
+      streetNumber?: string;
       zipCode: string;
       city: string;
       country: string;
@@ -181,21 +188,35 @@ const toEuro = (value: number | undefined | null): number => {
   return value > 100000 ? value / 100 : value;
 };
 
+/** HTML-Tags entfernen für Anzeige als Klartext */
+const stripHtml = (html: string): string => {
+  if (!html || typeof html !== 'string') return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return (tmp.textContent || tmp.innerText || '').replace(/\s+/g, ' ').trim();
+};
+
+/** Text auf max. Zeichen kürzen, mit … */
+const truncateText = (text: string, maxChars: number): string => {
+  if (!text || typeof text !== 'string') return '';
+  const t = text.trim();
+  if (t.length <= maxChars) return t;
+  return t.slice(0, maxChars).trim() + '…';
+};
+
 export interface OnlineBookingProps {
   /** Pre-select this doctor (e.g. from widget URL). */
   initialDoctorId?: string;
   /** Compact/embedded mode (e.g. iframe widget). */
   widgetMode?: boolean;
+  /** Widget theme from standort (layout, style). */
+  widgetThemeConfig?: WidgetThemeConfig;
 }
 
-const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMode: _widgetMode = false }) => {
+const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMode: _widgetMode = false, widgetThemeConfig }) => {
   const dispatch = useAppDispatch();
   const [activeStep, setActiveStep] = useState(0);
   
-  // Debug: Log activeStep changes
-  useEffect(() => {
-    console.log('[OnlineBooking] activeStep changed to:', activeStep);
-  }, [activeStep]);
 
   // Neue States für erweiterten Workflow
   const [categories, setCategories] = useState<Category[]>([]);
@@ -246,6 +267,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
       socialSecurityNumber: '',
       address: {
         street: '',
+        streetNumber: '',
         zipCode: '',
         city: '',
         country: 'Österreich'
@@ -290,17 +312,19 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
     // eslint-disable-next-line react-hooks/exhaustive-deps -- formData.doctor.id sync only on selectedDoctor
   }, [selectedDoctor]);
 
-  // Lade Kalender-Daten wenn Arzt und Service ausgewählt sind
+  // Lade Kalender-Daten wenn Arzt und Service ausgewählt sind (Schritt 3 = Monat, sonst Woche wenn calendarView so)
   useEffect(() => {
     if (selectedDoctor && selectedService) {
-      if (calendarView === 'month') {
+      if (activeStep === 3) {
         loadCalendarAvailability();
-      } else {
+      } else if (calendarView === 'week') {
         loadWeekAvailability();
+      } else {
+        loadCalendarAvailability();
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadCalendar/WeekAvailability stable
-  }, [selectedDoctor, selectedService, currentMonth, currentWeek, calendarView]);
+  }, [selectedDoctor, selectedService, currentMonth, currentWeek, calendarView, activeStep]);
 
   // Öffne Bestätigungsdialog automatisch, wenn bookingResult gesetzt wird (nur einmal)
   useEffect(() => {
@@ -773,7 +797,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
       }
     }));
     console.log('[OnlineBooking] Switching to step 3 (data entry)');
-    setActiveStep(3); // Schritt 4: Daten eingeben (Index 3)
+    setActiveStep(5); // Schritt 6: Daten eingeben (Index 5)
   };
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -981,27 +1005,44 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
         ? stripHtmlTags(formData.appointment.notes) 
         : (formData.appointment.type ? stripHtmlTags(formData.appointment.type) : 'Online-Buchung');
       
+      const addr = formData.patient.address || { street: '', streetNumber: '', zipCode: '', city: '', country: 'Österreich' };
+      const fullStreet = [addr.street, addr.streetNumber].filter(Boolean).join(' ').trim();
+      const doctorId = selectedDoctor?.id ?? formData.doctor?.id;
+      if (!doctorId) {
+        setSnackbar({ open: true, message: 'Bitte wählen Sie einen Behandler aus.', severity: 'error' });
+        setActiveStep(2);
+        return;
+      }
       const bookingData = {
-        ...formData,
         patient: {
-          ...formData.patient,
-          address: formData.patient.address || {
-            street: '',
-            zipCode: '',
-            city: '',
-            country: 'Österreich'
+          firstName: formData.patient.firstName?.trim() ?? '',
+          lastName: formData.patient.lastName?.trim() ?? '',
+          email: formData.patient.email?.trim() ?? '',
+          phone: formData.patient.phone?.trim() ?? '',
+          dateOfBirth: formData.patient.dateOfBirth || '',
+          gender: formData.patient.gender ?? '',
+          socialSecurityNumber: formData.patient.socialSecurityNumber ?? '',
+          address: {
+            street: fullStreet || addr.street,
+            zipCode: addr.zipCode ?? '',
+            city: addr.city ?? '',
+            country: addr.country ?? 'Österreich'
           }
         },
         appointment: {
-          ...formData.appointment,
-          type: cleanAppointmentType || 'Allgemeine Beratung', // Bereinigter Service-Name ohne HTML
-          serviceId: selectedService?._id,
-          duration: totalDuration, // Sende die korrekte Dauer mit Pufferzeiten
-          reason: cleanReason, // Bereinigter Grund ohne HTML
-          notes: formData.appointment.notes ? stripHtmlTags(formData.appointment.notes) : ''
+          date: formData.appointment.date || '',
+          startTime: formData.appointment.startTime || '',
+          type: cleanAppointmentType || 'Allgemeine Beratung',
+          serviceId: selectedService?._id ?? undefined,
+          duration: totalDuration,
+          reason: cleanReason,
+          notes: formData.appointment.notes ? stripHtmlTags(formData.appointment.notes) : '',
+          assigned_rooms: formData.appointment.assigned_rooms,
+          assigned_devices: formData.appointment.assigned_devices
         },
-        anamnesisResponses: anamnesisResponses,
-        gdprConsent: gdprConsent
+        doctor: { id: String(doctorId) },
+        anamnesisResponses: anamnesisResponses ?? [],
+        gdprConsent: gdprConsent === true
       };
       
       const response = await api.post('/online-booking/book', bookingData);
@@ -1059,20 +1100,34 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
           severity: 'success' 
         });
       } else {
-        const errorMessage = (response.data as any)?.message || response.message || 'Fehler beim Buchen des Termins';
+        const errData = response.data as any;
+        const errorMessage = errData?.message || response.message || 'Fehler beim Buchen des Termins';
+        const validationErrors = Array.isArray(errData?.errors) ? errData.errors as Array<{ path?: string; msg?: string }> : [];
+        const detailMsg = validationErrors.length > 0
+          ? validationErrors.map((e: { path?: string; msg?: string }) => e.msg || e.path || '').filter(Boolean).join('. ')
+          : '';
         setSnackbar({ 
           open: true, 
-          message: errorMessage, 
+          message: detailMsg ? `${errorMessage}: ${detailMsg}` : errorMessage, 
           severity: 'error' 
         });
       }
     } catch (error: any) {
-      console.error('Error booking appointment:', error);
-      setSnackbar({ 
-        open: true, 
-        message: error?.response?.data?.message || 'Fehler beim Buchen des Termins', 
-        severity: 'error' 
-      });
+      const errRes = error?.response?.data;
+      if (process.env.NODE_ENV === 'development' && errRes) {
+        console.error('[OnlineBooking] Book error response:', errRes);
+        if (Array.isArray(errRes.errors) && errRes.errors.length > 0) {
+          console.error('[OnlineBooking] Validation errors:', errRes.errors);
+        }
+      }
+      const validationErrors = Array.isArray(errRes?.errors) ? errRes.errors as Array<{ path?: string; msg?: string }> : [];
+      const detailMsg = validationErrors.length > 0
+        ? validationErrors.map((e: { path?: string; msg?: string }) => e.msg || e.path || '').filter(Boolean).join('. ')
+        : '';
+      const message = detailMsg
+        ? `${errRes?.message || 'Fehler beim Buchen'}: ${detailMsg}`
+        : (errRes?.message || error?.message || 'Fehler beim Buchen des Termins');
+      setSnackbar({ open: true, message, severity: 'error' });
     } finally {
       setLoading(false);
     }
@@ -1102,36 +1157,32 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
     }
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const steps = [
-    'Arzt auswählen',
-    'Datum wählen',
-    'Zeit wählen',
-    'Daten eingeben',
-    'Bestätigung'
-  ];
+  const stepLabels = ['Kategorie', 'Leistung', 'Personal', 'Datum & Zeit', 'Zeit', 'Daten', 'Überprüfung'];
 
   return (
-    <Box sx={{ maxWidth: 800, mx: 'auto', p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom align="center">
+    <Container maxWidth="md" sx={{ py: { xs: 2, sm: 3 }, px: { xs: 1.5, sm: 2 } }}>
+      <Typography variant="h4" component="h1" gutterBottom align="center" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
         Online-Terminbuchung
       </Typography>
-      
-      <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 4 }}>
-        Buchen Sie Ihren Termin bequem online - 24/7 verfügbar
+      <Typography variant="body1" color="text.secondary" align="center" sx={{ mb: 2, px: 1 }}>
+        Buchen Sie Ihren Termin bequem online – 24/7 verfügbar
       </Typography>
 
-      <Card sx={{ p: 3 }}>
-        <Stepper activeStep={activeStep} orientation="vertical" nonLinear={false}>
-          {/* Schritt 0: Kategorie auswählen */}
-          <Step>
-            <StepLabel>
-              <Box display="flex" alignItems="center" gap={1}>
-                <CategoryIcon />
-                Kategorie auswählen
-              </Box>
-            </StepLabel>
-            <StepContent>
+      <Card sx={{ boxShadow: 3, borderRadius: 4, bgcolor: 'white', overflow: 'visible' }}>
+        <Box sx={{ px: { xs: 2, sm: 3 }, pt: 3 }}>
+          <Stepper activeStep={activeStep} alternativeLabel orientation="horizontal">
+            {stepLabels.map((label, index) => (
+              <Step key={index} completed={activeStep > index}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+        </Box>
+
+        <Box sx={{ px: { xs: 2, sm: 3 }, py: 3, minHeight: 280, display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2, alignItems: 'flex-start' }}>
+          <Box sx={{ flex: 1, minWidth: 0, width: '100%' }}>
+          {activeStep === 0 && (
+            <>
               <Typography variant="h6" gutterBottom>
                 Wählen Sie eine Kategorie
               </Typography>
@@ -1140,74 +1191,58 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
                   <CircularProgress />
                 </Box>
               ) : categories.length === 0 ? (
-                <Alert severity="info">
-                  Keine Kategorien verfügbar
-                </Alert>
+                <Alert severity="info">Keine Kategorien verfügbar</Alert>
               ) : (
-                <Grid container spacing={2} sx={{ mt: 2 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 2, mt: 2 }}>
                   {categories.map((category) => (
-                    <Grid size={{ xs: 12, sm: 6, md: 4 }} key={category.name}>
-                      <Card
-                        sx={{
-                          cursor: 'pointer',
-                          border: selectedCategory?.name === category.name ? 2 : 1,
-                          borderColor: selectedCategory?.name === category.name ? 'primary.main' : 'divider',
-                          '&:hover': {
-                            borderColor: 'primary.main',
-                            boxShadow: 2
-                          }
-                        }}
-                        onClick={() => handleCategorySelect(category)}
-                      >
-                        <CardContent>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                            {category.color_hex && (
-                              <Box
-                                sx={{
-                                  width: 16,
-                                  height: 16,
-                                  borderRadius: '50%',
-                                  bgcolor: category.color_hex
-                                }}
-                              />
-                            )}
-                            <Typography variant="h6">{category.name}</Typography>
-                          </Box>
-                          {category.description && (
-                            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                              {category.description}
-                            </Typography>
+                    <Card
+                      key={category.name}
+                      sx={{
+                        cursor: 'pointer',
+                        height: '100%',
+                        border: selectedCategory?.name === category.name ? 3 : 1,
+                        borderColor: selectedCategory?.name === category.name ? 'primary.main' : 'divider',
+                        bgcolor: selectedCategory?.name === category.name ? 'primary.main' : undefined,
+                        color: selectedCategory?.name === category.name ? 'primary.contrastText' : undefined,
+                        '& .MuiTypography-root': selectedCategory?.name === category.name ? { color: 'inherit' } : {},
+                        '&:hover': { borderColor: 'primary.main', boxShadow: 2 },
+                      }}
+                      onClick={() => handleCategorySelect(category)}
+                    >
+                      <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 1 }}>
+                          {category.color_hex && (
+                            <Box sx={{ width: 20, height: 20, flexShrink: 0, borderRadius: '50%', bgcolor: category.color_hex }} />
                           )}
-                          <Chip
-                            label={`${category.serviceCount} Leistung${category.serviceCount !== 1 ? 'en' : ''}`}
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                          />
-                        </CardContent>
-                      </Card>
-                    </Grid>
+                          <Box sx={{ minWidth: 0, flex: 1 }}>
+                            <Typography variant="subtitle1" fontWeight={600}>
+                              {category.name}
+                            </Typography>
+                            {category.description && (
+                              <Typography variant="body2" sx={{ mt: 0.5, opacity: selectedCategory?.name === category.name ? 0.9 : 1 }} color="text.secondary">
+                                {truncateText(category.description, 80)}
+                              </Typography>
+                            )}
+                          </Box>
+                        </Box>
+                        <Chip label={`${category.serviceCount} Leistung${category.serviceCount !== 1 ? 'en' : ''}`} size="small" variant="outlined" sx={{ mt: 1 }} />
+                      </CardContent>
+                    </Card>
                   ))}
-                </Grid>
-              )}
-            </StepContent>
-          </Step>
-
-          {/* Schritt 1: Leistung auswählen */}
-          {selectedCategory && (
-            <Step>
-              <StepLabel>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <MedicalServices />
-                  Leistung auswählen
                 </Box>
-              </StepLabel>
-              <StepContent>
-                <Typography variant="h6" gutterBottom>
-                  Wählen Sie eine Leistung aus der Kategorie "{selectedCategory.name}"
-                </Typography>
-                {loading ? (
-                  <Box display="flex" justifyContent="center" p={3}>
+              )}
+            </>
+          )}
+
+          {activeStep === 1 && (
+            <>
+              <Typography variant="h6" gutterBottom>
+                Wählen Sie eine Leistung
+              </Typography>
+              {!selectedCategory ? (
+                <Alert severity="info" sx={{ mt: 2 }}>Bitte wählen Sie zuerst eine Kategorie (Schritt zurück).</Alert>
+              ) : loading ? (
+                <Box display="flex" justifyContent="center" p={3}>
                     <CircularProgress />
                   </Box>
                 ) : services.length === 0 ? (
@@ -1215,124 +1250,52 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
                     Keine Leistungen in dieser Kategorie verfügbar
                   </Alert>
                 ) : (
-                  <>
-                    <Grid container spacing={2} sx={{ mt: 2 }}>
-                      {services.map((service) => (
-                        <Grid size={{ xs: 12, sm: 6, md: 4 }} key={service._id}>
-                          <Card
-                            sx={{
-                              cursor: 'pointer',
-                              border: selectedService?._id === service._id ? 2 : 1,
-                              borderColor: selectedService?._id === service._id ? 'primary.main' : 'divider',
-                              '&:hover': {
-                                borderColor: 'primary.main',
-                                boxShadow: 3
-                              },
-                              height: '100%'
-                            }}
-                            onClick={() => handleServiceSelect(service)}
-                          >
-                            <CardContent>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                <MedicalServices color="primary" />
-                                <Typography 
-                                  variant="h6" 
-                                  fontWeight="bold"
-                                  dangerouslySetInnerHTML={{ __html: service.name }}
-                                />
-                              </Box>
-                              {service.code && (
-                                <Chip
-                                  label={service.code}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{ mb: 1 }}
-                                />
-                              )}
-                              {service.description && (
-                                <Typography 
-                                  variant="body2" 
-                                  color="text.secondary" 
-                                  sx={{ mb: 1 }}
-                                  dangerouslySetInnerHTML={{ __html: service.description }}
-                                />
-                              )}
-                              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1 }}>
-                                <Chip
-                                  label={`${(service.base_duration_min || service.duration || 30) + (service.buffer_before_min || 0) + (service.buffer_after_min || 0)} Min.`}
-                                  size="small"
-                                  color="primary"
-                                  variant="outlined"
-                                  title={`Grunddauer: ${service.base_duration_min || service.duration || 30} Min.${(service.buffer_before_min || 0) + (service.buffer_after_min || 0) > 0 ? ` + Puffer: ${(service.buffer_before_min || 0) + (service.buffer_after_min || 0)} Min.` : ''}`}
-                                />
-                                {(service.price_cents || service.price) && (
-                                  <Chip
-                                    label={`€${toEuro(service.price || service.price_cents || 0).toFixed(2)}`}
-                                    size="small"
-                                    color="secondary"
-                                    variant="outlined"
-                                  />
-                                )}
-                              </Box>
-                            </CardContent>
-                          </Card>
-                        </Grid>
-                      ))}
-                    </Grid>
-                    {selectedService && (
-                      <Alert severity="success" sx={{ mt: 2 }}>
-                        <Typography 
-                          variant="body1" 
-                          fontWeight="bold"
-                          dangerouslySetInnerHTML={{ __html: `Ausgewählte Leistung: ${selectedService.name}` }}
-                        />
-                        {selectedService.description && (
-                          <Typography 
-                            variant="body2" 
-                            sx={{ mt: 0.5 }}
-                            dangerouslySetInnerHTML={{ __html: selectedService.description }}
-                          />
-                        )}
-                        <Box sx={{ display: 'flex', gap: 2, mt: 1, flexWrap: 'wrap' }}>
-                          <Typography variant="body2">
-                            <strong>Dauer:</strong> {
-                              (selectedService.base_duration_min || selectedService.duration || 30) + 
-                              (selectedService.buffer_before_min || 0) + 
-                              (selectedService.buffer_after_min || 0)
-                            } Min.
-                            {(selectedService.buffer_before_min || 0) + (selectedService.buffer_after_min || 0) > 0 && (
-                              <span style={{ fontSize: '0.85em', color: '#666' }}>
-                                {' '}(Grund: {selectedService.base_duration_min || selectedService.duration || 30} Min. + Puffer: {(selectedService.buffer_before_min || 0) + (selectedService.buffer_after_min || 0)} Min.)
-                              </span>
-                            )}
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 2, mt: 2 }}>
+                  {services.map((service) => {
+                    const isSelected = selectedService?._id === service._id;
+                    const duration = (service.base_duration_min || service.duration || 30) + (service.buffer_before_min || 0) + (service.buffer_after_min || 0);
+                    const price = toEuro(service.price ?? service.price_cents ?? 0);
+                    return (
+                      <Card
+                        key={service._id}
+                        sx={{
+                          cursor: 'pointer',
+                          height: '100%',
+                          border: isSelected ? 3 : 1,
+                          borderColor: isSelected ? 'primary.main' : 'divider',
+                          bgcolor: isSelected ? 'primary.main' : undefined,
+                          color: isSelected ? 'primary.contrastText' : undefined,
+                          '& .MuiTypography-root': isSelected ? { color: 'inherit' } : {},
+                          '&:hover': { borderColor: 'primary.main', boxShadow: 2 },
+                        }}
+                        onClick={() => handleServiceSelect(service)}
+                      >
+                        <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                          <Typography variant="subtitle1" fontWeight={600} sx={{ wordBreak: 'break-word' }}>
+                            {stripHtml(service.name || '')}
                           </Typography>
-                          {selectedService.price_cents && (
-                            <Typography variant="body2">
-                              <strong>Preis:</strong> €{toEuro(selectedService.price_cents || selectedService.price || 0).toFixed(2)}
+                          {service.description && (
+                            <Typography variant="body2" sx={{ mt: 0.5, opacity: isSelected ? 0.9 : 1 }} color="text.secondary">
+                              {truncateText(stripHtml(service.description), 120)}
                             </Typography>
                           )}
-                        </Box>
-                      </Alert>
-                    )}
-                  </>
-                )}
-                <Box sx={{ mt: 2 }}>
-                  <Button onClick={() => setActiveStep(0)}>Zurück</Button>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
+                            <Chip label={`${duration} Min.`} size="small" variant="outlined" sx={{ ...(isSelected && { borderColor: 'inherit', color: 'inherit' }) }} />
+                            {price > 0 && (
+                              <Chip label={`€${price.toFixed(2)}`} size="small" variant="outlined" sx={{ ...(isSelected && { borderColor: 'inherit', color: 'inherit' }) }} />
+                            )}
+                          </Box>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </Box>
-              </StepContent>
-            </Step>
+              )}
+            </>
           )}
 
-          {/* Schritt 2: Personal auswählen */}
-          {selectedService && (
-            <Step>
-              <StepLabel>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <Person />
-                  Personal auswählen
-                </Box>
-              </StepLabel>
-              <StepContent>
+          {activeStep === 2 && selectedService && (
+            <>
               <Typography variant="h6" gutterBottom>
                 Wählen Sie Ihr Personal
               </Typography>
@@ -1342,545 +1305,254 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
                 </Box>
               ) : doctors.length === 0 ? (
                 <Alert severity="info" sx={{ mt: 2 }}>
-                  <Typography variant="body1" gutterBottom>
-                    <strong>Kein Personal verfügbar</strong>
-                  </Typography>
-                  <Typography variant="body2">
-                    Es ist derzeit kein Personal für Online-Buchungen verfügbar. 
-                    Bitte aktivieren Sie die Online-Buchung für einen Mitarbeiter:
-                  </Typography>
-                  <Box component="ol" sx={{ mt: 1, pl: 2 }}>
-                    <li>Gehen Sie zu "Personalverwaltung" → "Mitarbeiter"</li>
-                    <li>Bearbeiten Sie einen Mitarbeiter</li>
-                    <li>Aktivieren Sie "Online-Buchung aktiviert"</li>
-                    <li>Speichern Sie die Änderungen</li>
-                  </Box>
+                  Kein Personal für Online-Buchungen verfügbar. Bitte in der Personalverwaltung aktivieren.
                 </Alert>
               ) : (
-                <Grid container spacing={2}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 2, mt: 2 }}>
                   {doctors.map((doctor) => (
-                    <Grid size={{ xs: 12, sm: 6 }} key={doctor.id}>
-                      <Card 
-                        sx={{ 
-                          p: 2, 
-                          cursor: 'pointer',
-                          '&:hover': { bgcolor: 'action.hover' }
-                        }}
-                        onClick={() => handleDoctorSelect(doctor)}
-                      >
-                        <Box display="flex" alignItems="center" gap={2}>
-                          <Avatar sx={{ bgcolor: 'primary.main' }}>
-                            <LocalHospital />
-                          </Avatar>
-                          <Box>
-                            <Typography variant="subtitle1" fontWeight="bold">
-                              {doctor.name}
-                            </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {doctor.specialization}
-                            </Typography>
-                          </Box>
+                    <Card
+                      key={doctor.id}
+                      sx={{ p: 2, cursor: 'pointer', height: '100%', '&:hover': { bgcolor: 'action.hover', boxShadow: 2 } }}
+                      onClick={() => handleDoctorSelect(doctor)}
+                    >
+                      <Box display="flex" alignItems="center" gap={2}>
+                        <Avatar sx={{ bgcolor: 'primary.main', flexShrink: 0 }}>
+                          <LocalHospital />
+                        </Avatar>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="subtitle1" fontWeight={600}>{doctor.name}</Typography>
+                          <Typography variant="body2" color="text.secondary">{doctor.specialization || '—'}</Typography>
                         </Box>
-                      </Card>
-                    </Grid>
+                      </Box>
+                    </Card>
                   ))}
-                </Grid>
+                </Box>
               )}
-              <Box sx={{ mt: 2 }}>
-                <Button onClick={() => setActiveStep(1)}>Zurück</Button>
-              </Box>
-            </StepContent>
-          </Step>
+            </>
           )}
 
-          {/* Schritt 3: Kalender (Woche/Monat) */}
-          {selectedDoctor && selectedService && (
-            <Step>
-              <StepLabel>
-                <Box display="flex" alignItems="center" gap={1}>
-                  <CalendarToday />
-                  Datum & Zeit wählen
-                </Box>
-              </StepLabel>
-              <StepContent>
-                <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
-                  <Button
-                    variant={calendarView === 'week' ? 'contained' : 'outlined'}
-                    size="small"
-                    onClick={() => setCalendarView('week')}
-                  >
-                    Woche
-                  </Button>
-                  <Button
-                    variant={calendarView === 'month' ? 'contained' : 'outlined'}
-                    size="small"
-                    onClick={() => setCalendarView('month')}
-                  >
-                    Monat
-                  </Button>
-                </Box>
-                <Typography variant="h6" gutterBottom>
-                  Wählen Sie ein Datum und eine Zeit
-                </Typography>
-                {loading ? (
-                  <Box display="flex" justifyContent="center" p={3}>
-                    <CircularProgress />
+          {activeStep === 3 && selectedDoctor && selectedService && (
+            <>
+              <Typography variant="h6" gutterBottom>
+                Datum & Zeit wählen
+              </Typography>
+              <Grid container spacing={3}>
+                <Grid size={{ xs: 12, md: 7 }}>
+                  {loading ? (
+                    <Box display="flex" justifyContent="center" alignItems="center" minHeight={340} p={3}>
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
+                      <StaticDatePicker
+                        displayStaticWrapperAs="desktop"
+                        value={selectedDateObj}
+                        onChange={(date: Date | null) => {
+                          if (date) {
+                            setSelectedDateObj(date);
+                            setSelectedDate(format(date, 'yyyy-MM-dd'));
+                          }
+                        }}
+                        onMonthChange={(date: Date) => {
+                          setCurrentMonth(startOfMonth(date));
+                        }}
+                        minDate={new Date()}
+                        maxDate={new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)}
+                        slots={{
+                          day: (slotProps: PickersDayProps) => {
+                            const { day, ...other } = slotProps;
+                            const dateStr = format(day, 'yyyy-MM-dd');
+                            const hasSlots = (calendarSlots[dateStr]?.length ?? 0) > 0;
+                            const isCurrentMonth = isSameMonth(day, currentMonth);
+                            return (
+                              <PickersDay
+                                {...other}
+                                day={day}
+                                sx={{
+                                  ...(hasSlots && isCurrentMonth
+                                    ? {
+                                        fontWeight: 700,
+                                        '&::after': {
+                                          content: '""',
+                                          position: 'absolute',
+                                          bottom: 4,
+                                          left: '50%',
+                                          transform: 'translateX(-50%)',
+                                          width: 4,
+                                          height: 4,
+                                          borderRadius: '50%',
+                                          bgcolor: 'primary.main'
+                                        }
+                                      }
+                                    : {})
+                                }}
+                              />
+                            );
+                          }
+                        }}
+                        sx={{ width: '100%', maxWidth: '100%' }}
+                      />
+                    </LocalizationProvider>
+                  )}
+                </Grid>
+                <Grid size={{ xs: 12, md: 5 }}>
+                  <Box sx={{ minHeight: 320, display: 'flex', flexDirection: 'column' }}>
+                    <Typography variant="subtitle1" fontWeight={600} gutterBottom>
+                      {selectedDate
+                        ? `Verfügbare Zeiten am ${format(new Date(selectedDate + 'T12:00:00'), 'dd.MM.yyyy', { locale: de })}`
+                        : 'Verfügbare Zeiten'}
+                    </Typography>
+                    {selectedDate ? (
+                      <Grid container spacing={1} sx={{ mt: 1 }}>
+                        {(calendarSlots[selectedDate] || []).map((time) => {
+                          const [hours, minutes] = time.split(':').map(Number);
+                          const baseDuration = selectedService?.base_duration_min || selectedService?.duration || 30;
+                          const bufferBefore = selectedService?.buffer_before_min || 0;
+                          const bufferAfter = selectedService?.buffer_after_min || 0;
+                          const totalDuration = baseDuration + bufferBefore + bufferAfter;
+                          const endDate = new Date(selectedDate);
+                          endDate.setHours(hours, minutes + totalDuration, 0, 0);
+                          const endStr = format(endDate, 'HH:mm');
+                          const slot: TimeSlot = { start: time, end: endStr, duration: totalDuration };
+                          const isSelected = formData.appointment.startTime === time && formData.appointment.date === selectedDate;
+                          return (
+                            <Grid size={{ xs: 4 }} key={time}>
+                              <Button
+                                fullWidth
+                                variant={isSelected ? 'contained' : 'outlined'}
+                                size="small"
+                                onClick={() => {
+                                  setFormData(prev => ({ ...prev, appointment: { ...prev.appointment, startTime: time, date: selectedDate } }));
+                                  setSelectedSlot(slot);
+                                  setActiveStep(5);
+                                }}
+                                sx={{ minHeight: 44 }}
+                              >
+                                {time}
+                              </Button>
+                            </Grid>
+                          );
+                        })}
+                      </Grid>
+                    ) : (
+                      <Box sx={{ flex: 1, py: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', bgcolor: 'action.hover', borderRadius: 2, mt: 1 }}>
+                        <EventBusy sx={{ fontSize: 48, mb: 1, opacity: 0.6 }} />
+                        <Typography variant="body2" textAlign="center">
+                          Bitte wählen Sie ein Datum im Kalender.
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
-                ) : calendarView === 'week' ? (
-                  <CalendarWeekView
-                    selectedDate={selectedDateObj}
-                    onDateSelect={handleCalendarDateSelect}
-                    availableSlots={calendarSlots}
-                    currentWeek={currentWeek}
-                    onWeekChange={setCurrentWeek}
-                    doctorName={selectedDoctor.name}
-                  />
-                ) : (
-                  <CalendarMonthView
-                    selectedDate={selectedDateObj}
-                    onDateSelect={(date) => handleCalendarDateSelect(date)}
-                    availableSlots={calendarSlots}
-                    currentMonth={currentMonth}
-                    onMonthChange={setCurrentMonth}
-                  />
-                )}
-                <Box sx={{ mt: 2 }}>
-                  <Button onClick={() => setActiveStep(2)}>Zurück</Button>
-                </Box>
-              </StepContent>
-            </Step>
+                </Grid>
+              </Grid>
+            </>
           )}
 
-          {/* Schritt 4: Zeit wählen */}
-          <Step>
-            <StepLabel>
-              <Box display="flex" alignItems="center" gap={1}>
-                <AccessTime />
-                Zeit wählen
-              </Box>
-            </StepLabel>
-            <StepContent>
+          {activeStep === 4 && (
+            <>
               <Typography variant="h6" gutterBottom>
                 Wählen Sie eine Zeit
               </Typography>
               {loading ? (
-                <Box display="flex" justifyContent="center" p={3}>
-                  <CircularProgress />
-                </Box>
+                <Box display="flex" justifyContent="center" p={3}><CircularProgress /></Box>
               ) : availableSlots.length > 0 ? (
-                <>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    {availableSlots.length} verfügbare Termine gefunden
-                  </Typography>
-                  <Grid container spacing={1}>
-                    {availableSlots.map((slot, index) => (
-                      <Grid size={{ xs: 6, sm: 4, md: 3 }} key={index}>
-                        <Chip
-                          label={`${slot.start} - ${slot.end}`}
-                          onClick={() => handleSlotSelect(slot)}
-                          color={selectedSlot?.start === slot.start && selectedSlot?.end === slot.end ? 'primary' : 'default'}
-                          variant={selectedSlot?.start === slot.start && selectedSlot?.end === slot.end ? 'filled' : 'outlined'}
-                          sx={{ width: '100%', cursor: 'pointer' }}
-                        />
-                      </Grid>
-                    ))}
-                  </Grid>
-                </>
+                <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 1, mt: 2 }}>
+                  {availableSlots.map((slot, index) => {
+                    const isSelected = selectedSlot?.start === slot.start && selectedSlot?.end === slot.end;
+                    return (
+                      <Button
+                        key={index}
+                        variant={isSelected ? 'contained' : 'outlined'}
+                        size="small"
+                        onClick={() => handleSlotSelect(slot)}
+                        sx={{ minHeight: 40 }}
+                      >
+                        {slot.start}
+                      </Button>
+                    );
+                  })}
+                </Box>
               ) : selectedDate ? (
-                <Alert severity="warning">
-                  Keine verfügbaren Termine für dieses Datum
-                </Alert>
+                <Alert severity="warning" sx={{ mt: 2 }}>Keine verfügbaren Termine für dieses Datum</Alert>
               ) : (
-                <Alert severity="info">
-                  Bitte wählen Sie zuerst ein Datum aus
-                </Alert>
+                <Alert severity="info" sx={{ mt: 2 }}>Bitte wählen Sie zuerst ein Datum aus</Alert>
               )}
-            </StepContent>
-          </Step>
+            </>
+          )}
 
-          {/* Schritt 4: Daten eingeben */}
-          <Step>
-            <StepLabel>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Person />
-                Daten eingeben
-              </Box>
-            </StepLabel>
-            <StepContent>
+          {activeStep === 5 && (
+            <>
               <Typography variant="h6" gutterBottom>
                 Ihre Kontaktdaten
               </Typography>
               <Grid container spacing={2}>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Vorname"
-                    value={formData.patient.firstName}
-                    onChange={(e) => handleNestedFormChange('patient', 'firstName', e.target.value)}
-                    required
-                  />
+                  <TextField size="small" fullWidth variant="outlined" label="Vorname" InputLabelProps={{ shrink: true }} value={formData.patient.firstName} onChange={(e) => handleNestedFormChange('patient', 'firstName', e.target.value)} required />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Nachname"
-                    value={formData.patient.lastName}
-                    onChange={(e) => handleNestedFormChange('patient', 'lastName', e.target.value)}
-                    required
-                  />
+                  <TextField size="small" fullWidth variant="outlined" label="Nachname" InputLabelProps={{ shrink: true }} value={formData.patient.lastName} onChange={(e) => handleNestedFormChange('patient', 'lastName', e.target.value)} required />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="E-Mail"
-                    type="email"
-                    value={formData.patient.email}
-                    onChange={(e) => handleNestedFormChange('patient', 'email', e.target.value)}
-                    onBlur={(e) => {
-                      const value = e.target.value;
-                      if (value && !validateEmail(value)) {
-                        setEmailError(getEmailErrorMessage());
-                      } else {
-                        setEmailError(null);
-                      }
-                    }}
-                    error={!!emailError}
-                    helperText={emailError || ''}
-                    required
-                  />
+                  <TextField size="small" fullWidth variant="outlined" type="email" label="E-Mail" InputLabelProps={{ shrink: true }} value={formData.patient.email} onChange={(e) => handleNestedFormChange('patient', 'email', e.target.value)} onBlur={(e) => { const v = e.target.value; if (v && !validateEmail(v)) setEmailError(getEmailErrorMessage()); else setEmailError(null); }} error={!!emailError} helperText={emailError || ''} required />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Telefon"
-                    value={formData.patient.phone}
-                    onChange={(e) => handleNestedFormChange('patient', 'phone', e.target.value)}
-                    onBlur={(e) => {
-                      const value = e.target.value;
-                      if (value && !validatePhone(value)) {
-                        setPhoneError(getPhoneErrorMessage());
-                      } else {
-                        setPhoneError(null);
-                      }
-                    }}
-                    error={!!phoneError}
-                    helperText={phoneError || getPhoneErrorMessage()}
-                    required
-                  />
+                  <TextField size="small" fullWidth variant="outlined" label="Telefon" placeholder="z.B. +43 664 1234567" InputLabelProps={{ shrink: true }} value={formData.patient.phone} onChange={(e) => handleNestedFormChange('patient', 'phone', e.target.value)} onBlur={(e) => { const v = e.target.value; if (v && !validatePhone(v)) setPhoneError(getPhoneErrorMessage()); else setPhoneError(null); }} error={!!phoneError} helperText={phoneError || 'z.B. +43 664 1234567'} required />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 8 }}>
+                  <TextField size="small" fullWidth variant="outlined" label="Straße" InputLabelProps={{ shrink: true }} value={formData.patient.address?.street || ''} onChange={(e) => setFormData({ ...formData, patient: { ...formData.patient, address: { ...formData.patient.address!, street: e.target.value } } })} required />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField size="small" fullWidth variant="outlined" label="Hausnummer" InputLabelProps={{ shrink: true }} value={formData.patient.address?.streetNumber || ''} onChange={(e) => setFormData({ ...formData, patient: { ...formData.patient, address: { ...formData.patient.address!, streetNumber: e.target.value } } })} />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 4 }}>
+                  <TextField size="small" fullWidth variant="outlined" label="PLZ" InputLabelProps={{ shrink: true }} value={formData.patient.address?.zipCode || ''} onChange={(e) => setFormData({ ...formData, patient: { ...formData.patient, address: { ...formData.patient.address!, zipCode: e.target.value } } })} required />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 8 }}>
+                  <TextField size="small" fullWidth variant="outlined" label="Ort" InputLabelProps={{ shrink: true }} value={formData.patient.address?.city || ''} onChange={(e) => setFormData({ ...formData, patient: { ...formData.patient, address: { ...formData.patient.address!, city: e.target.value } } })} required />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Geburtsdatum"
-                    type="date"
-                    value={formData.patient.dateOfBirth}
-                    onChange={(e) => handleNestedFormChange('patient', 'dateOfBirth', e.target.value)}
-                    InputLabelProps={{ shrink: true }}
-                    required
-                  />
+                  <TextField size="small" fullWidth variant="outlined" type="date" label="Geburtsdatum" InputLabelProps={{ shrink: true }} value={formData.patient.dateOfBirth} onChange={(e) => handleNestedFormChange('patient', 'dateOfBirth', e.target.value)} required />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
-                  <FormControl fullWidth required>
+                  <FormControl fullWidth size="small" required>
                     <InputLabel>Geschlecht</InputLabel>
-                    <Select
-                      value={formData.patient.gender}
-                      onChange={(e) => handleNestedFormChange('patient', 'gender', e.target.value)}
-                      label="Geschlecht"
-                    >
+                    <Select variant="outlined" value={formData.patient.gender} onChange={(e) => handleNestedFormChange('patient', 'gender', e.target.value)} label="Geschlecht">
                       <SelectMenuItem value="m">Männlich</SelectMenuItem>
                       <SelectMenuItem value="w">Weiblich</SelectMenuItem>
                       <SelectMenuItem value="d">Divers</SelectMenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
-                    fullWidth
-                    label="Versicherungsnummer (optional)"
-                    value={formData.patient.socialSecurityNumber}
-                    onChange={(e) => handleNestedFormChange('patient', 'socialSecurityNumber', e.target.value)}
-                  />
+                <Grid size={{ xs: 12 }}>
+                  <TextField size="small" fullWidth variant="outlined" label="Versicherungsnummer (optional)" InputLabelProps={{ shrink: true }} value={formData.patient.socialSecurityNumber} onChange={(e) => handleNestedFormChange('patient', 'socialSecurityNumber', e.target.value)} />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
-                  <Typography variant="subtitle2" sx={{ mb: 1, mt: 1 }}>
-                    Adresse
-                  </Typography>
+                  <TextField size="small" fullWidth variant="outlined" label="Land" InputLabelProps={{ shrink: true }} value={formData.patient.address?.country || 'Österreich'} onChange={(e) => setFormData({ ...formData, patient: { ...formData.patient, address: { ...formData.patient.address!, country: e.target.value } } })} />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Straße und Hausnummer"
-                    value={formData.patient.address?.street || ''}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        patient: {
-                          ...formData.patient,
-                          address: {
-                            ...formData.patient.address!,
-                            street: e.target.value
-                          }
-                        }
-                      });
-                    }}
-                    required
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    fullWidth
-                    label="Postleitzahl"
-                    value={formData.patient.address?.zipCode || ''}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        patient: {
-                          ...formData.patient,
-                          address: {
-                            ...formData.patient.address!,
-                            zipCode: e.target.value
-                          }
-                        }
-                      });
-                    }}
-                    required
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    fullWidth
-                    label="Stadt"
-                    value={formData.patient.address?.city || ''}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        patient: {
-                          ...formData.patient,
-                          address: {
-                            ...formData.patient.address!,
-                            city: e.target.value
-                          }
-                        }
-                      });
-                    }}
-                    required
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 4 }}>
-                  <TextField
-                    fullWidth
-                    label="Land"
-                    value={formData.patient.address?.country || 'Österreich'}
-                    onChange={(e) => {
-                      setFormData({
-                        ...formData,
-                        patient: {
-                          ...formData.patient,
-                          address: {
-                            ...formData.patient.address!,
-                            country: e.target.value
-                          }
-                        }
-                      });
-                    }}
-                    required
-                  />
+                  <TextField size="small" fullWidth variant="outlined" label="Zusätzliche Notizen (optional)" multiline rows={2} value={formData.appointment.notes} onChange={(e) => handleNestedFormChange('appointment', 'notes', e.target.value)} placeholder="Anmerkungen..." />
                 </Grid>
                 <Grid size={{ xs: 12 }}>
-                  <Autocomplete
-                    options={services}
-                    getOptionLabel={(option) => {
-                      const stripHtmlTags = (html: string): string => {
-                        if (!html) return '';
-                        const tmp = document.createElement('DIV');
-                        tmp.innerHTML = html;
-                        return tmp.textContent || tmp.innerText || '';
-                      };
-                      const cleanName = stripHtmlTags(option.name || '');
-                      return `${option.code || ''} - ${cleanName}`;
-                    }}
-                    value={selectedService}
-                    onChange={(event, newValue) => {
-                      setSelectedService(newValue);
-                      if (newValue) {
-                        handleNestedFormChange('appointment', 'type', newValue.name);
-                        handleFormChange('appointment', {
-                          ...formData.appointment,
-                          serviceId: newValue._id,
-                          type: newValue.name
-                        });
-                      } else {
-                        handleNestedFormChange('appointment', 'type', '');
-                        handleFormChange('appointment', {
-                          ...formData.appointment,
-                          serviceId: undefined,
-                          type: ''
-                        });
-                      }
-                    }}
-                    renderInput={(params) => (
-                      <TextField
-                        {...params}
-                        label="Leistung/Service (optional)"
-                        placeholder="Wählen Sie eine Leistung aus"
-                      />
-                    )}
-                    isOptionEqualToValue={(option, value) => option._id === value._id}
-                  />
-                </Grid>
-                {!selectedService && (
-                  <Grid size={{ xs: 12 }}>
-                    <FormControl fullWidth>
-                      <InputLabel>Art der Behandlung</InputLabel>
-                      <Select
-                        value={formData.appointment.type}
-                        onChange={(e) => handleNestedFormChange('appointment', 'type', e.target.value)}
-                        label="Art der Behandlung"
-                      >
-                        <SelectMenuItem value="Allgemeine Beratung">Allgemeine Beratung</SelectMenuItem>
-                        <SelectMenuItem value="Kontrolle">Kontrolle</SelectMenuItem>
-                        <SelectMenuItem value="Impfung">Impfung</SelectMenuItem>
-                        <SelectMenuItem value="Untersuchung">Untersuchung</SelectMenuItem>
-                        <SelectMenuItem value="Notfall">Notfall</SelectMenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                )}
-                <Grid size={{ xs: 12 }}>
-                  <TextField
-                    fullWidth
-                    label="Zusätzliche Notizen (optional)"
-                    multiline
-                    rows={3}
-                    value={formData.appointment.notes}
-                    onChange={(e) => handleNestedFormChange('appointment', 'notes', e.target.value)}
-                    placeholder="Hier können Sie zusätzliche Informationen oder Anmerkungen eingeben..."
-                  />
-                </Grid>
-                <Grid size={{ xs: 12 }}>
-                  <FormControlLabel
-                    control={
-                      <Checkbox
-                        checked={gdprConsent}
-                        onChange={(e) => setGdprConsent(e.target.checked)}
-                        required
-                      />
-                    }
-                    label={
-                      <Typography variant="body2">
-                        Ich stimme der <strong>Datenschutzerklärung (DSGVO)</strong> zu und erlaube die Speicherung und Verarbeitung meiner Daten für die Terminbuchung und Kommunikation.
-                      </Typography>
-                    }
-                  />
+                  <FormControlLabel control={<Checkbox checked={gdprConsent} onChange={(e) => setGdprConsent(e.target.checked)} required />} label={<Typography variant="body2">Ich stimme der Datenschutzerklärung zu und erlaube die Verarbeitung meiner Daten für die Terminbuchung.</Typography>} />
                 </Grid>
               </Grid>
-              
-              {/* Anamnese-Fragen */}
               {anamnesisQuestions.length > 0 && (
-                <Box sx={{ mt: 4 }}>
-                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <QuestionAnswer />
-                    Anamnese-Vorabfrage
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                    Bitte beantworten Sie die folgenden Fragen vor Ihrem Termin:
-                  </Typography>
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><QuestionAnswer /> Anamnese</Typography>
                   <Grid container spacing={2}>
                     {anamnesisQuestions.map((question, index) => {
                       const questionId = question._id || question.questionText;
                       const currentAnswer = anamnesisAnswers[questionId] ?? question.defaultValue ?? '';
-                      
                       return (
                         <Grid size={{ xs: 12 }} key={index}>
                           <Box sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                            <Typography variant="subtitle1" gutterBottom>
-                              {question.questionText}
-                              {question.isRequired && <span style={{ color: 'red' }}> *</span>}
-                            </Typography>
-                            
-                            {question.questionType === 'text' && (
-                              <TextField
-                                fullWidth
-                                value={currentAnswer}
-                                onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
-                                required={question.isRequired}
-                                error={question.isRequired && !currentAnswer}
-                              />
-                            )}
-                            
-                            {question.questionType === 'textarea' && (
-                              <TextField
-                                fullWidth
-                                multiline
-                                rows={3}
-                                value={currentAnswer}
-                                onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
-                                required={question.isRequired}
-                                error={question.isRequired && !currentAnswer}
-                              />
-                            )}
-                            
-                            {question.questionType === 'number' && (
-                              <TextField
-                                fullWidth
-                                type="number"
-                                value={currentAnswer}
-                                onChange={(e) => handleAnamnesisAnswer(questionId, parseFloat(e.target.value) || 0)}
-                                required={question.isRequired}
-                                error={question.isRequired && !currentAnswer}
-                              />
-                            )}
-                            
-                            {question.questionType === 'boolean' && (
-                              <FormControlLabel
-                                control={
-                                  <Checkbox
-                                    checked={currentAnswer === true || currentAnswer === 'true'}
-                                    onChange={(e) => handleAnamnesisAnswer(questionId, e.target.checked)}
-                                  />
-                                }
-                                label={currentAnswer === true || currentAnswer === 'true' ? 'Ja' : 'Nein'}
-                              />
-                            )}
-                            
-                            {question.questionType === 'select' && question.options && (
-                              <FormControl fullWidth required={question.isRequired}>
-                                <InputLabel>{question.questionText}</InputLabel>
-                                <Select
-                                  value={currentAnswer}
-                                  onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
-                                  label={question.questionText}
-                                  error={question.isRequired && !currentAnswer}
-                                >
-                                  {question.options.map((option) => (
-                                    <SelectMenuItem key={option} value={option}>
-                                      {option}
-                                    </SelectMenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                            )}
-                            
-                            {question.questionType === 'multiselect' && question.options && (
-                              <FormControl fullWidth required={question.isRequired}>
-                                <InputLabel>{question.questionText}</InputLabel>
-                                <Select
-                                  multiple
-                                  value={Array.isArray(currentAnswer) ? currentAnswer : []}
-                                  onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)}
-                                  label={question.questionText}
-                                  error={question.isRequired && (!currentAnswer || (Array.isArray(currentAnswer) && currentAnswer.length === 0))}
-                                  renderValue={(selected) => (selected as string[]).join(', ')}
-                                >
-                                  {question.options.map((option) => (
-                                    <SelectMenuItem key={option} value={option}>
-                                      <Checkbox checked={(Array.isArray(currentAnswer) ? currentAnswer : []).indexOf(option) > -1} />
-                                      {option}
-                                    </SelectMenuItem>
-                                  ))}
-                                </Select>
-                              </FormControl>
-                            )}
+                            <Typography variant="body2" gutterBottom>{question.questionText}{question.isRequired && ' *'}</Typography>
+                            {question.questionType === 'text' && <TextField size="small" fullWidth variant="outlined" value={currentAnswer} onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)} required={question.isRequired} error={question.isRequired && !currentAnswer} />}
+                            {question.questionType === 'textarea' && <TextField size="small" fullWidth variant="outlined" multiline rows={2} value={currentAnswer} onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)} required={question.isRequired} error={question.isRequired && !currentAnswer} />}
+                            {question.questionType === 'number' && <TextField size="small" fullWidth variant="outlined" type="number" value={currentAnswer} onChange={(e) => handleAnamnesisAnswer(questionId, parseFloat(e.target.value) || 0)} required={question.isRequired} error={question.isRequired && !currentAnswer} />}
+                            {question.questionType === 'boolean' && <FormControlLabel control={<Checkbox checked={currentAnswer === true || currentAnswer === 'true'} onChange={(e) => handleAnamnesisAnswer(questionId, e.target.checked)} />} label="Ja" />}
+                            {question.questionType === 'select' && question.options && <FormControl fullWidth size="small" required={question.isRequired}><InputLabel>{question.questionText}</InputLabel><Select variant="outlined" value={currentAnswer} onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)} label={question.questionText}><SelectMenuItem value="">—</SelectMenuItem>{question.options.map((o) => <SelectMenuItem key={o} value={o}>{o}</SelectMenuItem>)}</Select></FormControl>}
+                            {question.questionType === 'multiselect' && question.options && <FormControl fullWidth size="small" required={question.isRequired}><InputLabel>{question.questionText}</InputLabel><Select variant="outlined" multiple value={Array.isArray(currentAnswer) ? currentAnswer : []} onChange={(e) => handleAnamnesisAnswer(questionId, e.target.value)} label={question.questionText} renderValue={(s) => (s as string[]).join(', ')}>{question.options.map((o) => <SelectMenuItem key={o} value={o}><Checkbox checked={(Array.isArray(currentAnswer) ? currentAnswer : []).indexOf(o) > -1} />{o}</SelectMenuItem>)}</Select></FormControl>}
                           </Box>
                         </Grid>
                       );
@@ -1888,19 +1560,76 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
                   </Grid>
                 </Box>
               )}
-              <Box sx={{ mt: 2 }}>
-                <Button
-                  variant="contained"
-                  onClick={handleBooking}
-                  disabled={loading}
-                  startIcon={loading ? <CircularProgress size={20} /> : <Check />}
-                >
-                  {loading ? 'Buche...' : 'Termin buchen'}
-                </Button>
-              </Box>
-            </StepContent>
-          </Step>
-        </Stepper>
+            </>
+          )}
+
+          {activeStep === 6 && (
+            <>
+              <Typography variant="h6" gutterBottom>
+                Bitte überprüfen Sie Ihre Daten
+              </Typography>
+              <Grid container spacing={2} sx={{ mt: 1 }}>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" fontWeight={600} gutterBottom color="primary">Termin-Details</Typography>
+                    <List dense disablePadding>
+                      <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="Behandler" secondary={selectedDoctor?.name ?? '—'} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                      <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="Leistung" secondary={stripHtml(selectedService?.name ?? '—')} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                      <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="Datum & Zeit" secondary={formData.appointment.date && formData.appointment.startTime ? `${format(new Date(formData.appointment.date + 'T12:00:00'), 'dd.MM.yyyy')} · ${formData.appointment.startTime}` : '—'} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                      <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="Ort" secondary="Ihre Ordination" primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                      {selectedService && (toEuro(selectedService.price ?? selectedService.price_cents ?? 0) > 0) && (
+                        <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="Preis" secondary={`€${toEuro(selectedService.price ?? selectedService.price_cents ?? 0).toFixed(2)}`} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                      )}
+                    </List>
+                  </Paper>
+                </Grid>
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Paper variant="outlined" sx={{ p: 2 }}>
+                    <Typography variant="subtitle2" fontWeight={600} gutterBottom color="primary">Ihre Kontaktdaten</Typography>
+                    <List dense disablePadding>
+                      <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="Name" secondary={`${formData.patient.firstName} ${formData.patient.lastName}`.trim() || '—'} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                      <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="E-Mail" secondary={formData.patient.email || '—'} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                      <ListItem disablePadding sx={{ py: 0.25 }}><ListItemText primary="Telefon" secondary={formData.patient.phone || '—'} primaryTypographyProps={{ variant: 'body2' }} secondaryTypographyProps={{ variant: 'body2' }} /></ListItem>
+                    </List>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </>
+          )}
+          </Box>
+
+          {activeStep >= 1 && (
+            <Card sx={{ width: { xs: '100%', md: 280 }, flexShrink: 0, position: { md: 'sticky' }, top: { md: 16 }, alignSelf: { md: 'flex-start' } }}>
+              <CardContent sx={{ p: 2 }}>
+                <Typography variant="subtitle2" fontWeight={600} gutterBottom>Ihre Buchung bisher</Typography>
+                {selectedCategory && <Typography variant="body2" color="text.secondary">{selectedCategory.name}</Typography>}
+                {selectedService && (
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    {stripHtml(selectedService.name || '')}
+                    {(() => { const d = (selectedService.base_duration_min || selectedService.duration || 30) + (selectedService.buffer_before_min || 0) + (selectedService.buffer_after_min || 0); const p = toEuro(selectedService.price ?? selectedService.price_cents ?? 0); return (d ? ` · ${d} Min.` : '') + (p > 0 ? ` · €${p.toFixed(2)}` : ''); })()}
+                  </Typography>
+                )}
+                {selectedDoctor && <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{selectedDoctor.name}</Typography>}
+                {formData.appointment.date && formData.appointment.startTime && (
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                    {format(new Date(formData.appointment.date + 'T12:00:00'), 'dd.MM.yy')} · {formData.appointment.startTime}
+                  </Typography>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </Box>
+
+        <Box sx={{ px: { xs: 2, sm: 3 }, py: 2, borderTop: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+          <Button onClick={() => setActiveStep(Math.max(0, activeStep - 1))} disabled={activeStep === 0}>Zurück</Button>
+          {activeStep < 5 ? (
+            <Button variant="contained" onClick={() => setActiveStep(Math.min(6, activeStep + 1))}>Weiter</Button>
+          ) : activeStep === 5 ? (
+            <Button variant="contained" onClick={() => setActiveStep(6)}>Weiter zur Überprüfung</Button>
+          ) : (
+            <Button variant="contained" onClick={handleBooking} disabled={loading} startIcon={loading ? <CircularProgress size={20} /> : <Check />}>{loading ? 'Buche...' : 'Jetzt verbindlich buchen'}</Button>
+          )}
+        </Box>
       </Card>
 
       {/* Double Opt-In Dialog */}
@@ -2107,12 +1836,13 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
                   <Typography variant="subtitle2" fontWeight="bold" gutterBottom color="text.secondary">
                     Beschreibung
                   </Typography>
-                  <Card variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                    <Typography 
+                  <Card variant="outlined" sx={{ p: 2, bgcolor: 'grey.50', maxHeight: 200, overflow: 'auto' }}>
+                    <Typography
                       variant="body1"
-                      sx={{ 
+                      sx={{
                         whiteSpace: 'pre-wrap',
-                        lineHeight: 1.8
+                        lineHeight: 1.8,
+                        wordBreak: 'break-word',
                       }}
                       dangerouslySetInnerHTML={{ __html: pendingService.description }}
                     />
@@ -2196,7 +1926,7 @@ const OnlineBooking: React.FC<OnlineBookingProps> = ({ initialDoctorId, widgetMo
           </Button>
         </DialogActions>
       </Dialog>
-    </Box>
+    </Container>
   );
 };
 

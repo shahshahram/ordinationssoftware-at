@@ -22,6 +22,7 @@ import {
   Visibility,
   Refresh,
   BookOnline,
+  Event,
 } from '@mui/icons-material';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { fetchAppointments } from '../store/slices/appointmentSlice';
@@ -130,12 +131,12 @@ const OnlineBookings: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadOnlineBookings stable, visibility listener
   }, [dispatch]);
 
-  // Gruppiere Buchungen nach Erstellungsdatum
+  // Gruppiere Buchungen nach Termindatum (startTime)
   const groupedBookings = useMemo(() => {
     const groups: { [key: string]: { date: Date; appointments: Appointment[] } } = {};
     
     appointments.forEach((apt) => {
-      const date = new Date(apt.createdAt);
+      const date = new Date(apt.startTime);
       const dateKey = date.toLocaleDateString('de-DE', {
         year: 'numeric',
         month: 'long',
@@ -154,6 +155,15 @@ const OnlineBookings: React.FC = () => {
   const formatTime = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('de-DE', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
   };
 
   const formatDateTime = (dateString: string) => {
@@ -293,6 +303,12 @@ const OnlineBookings: React.FC = () => {
                           </Box>
                           
                           <Stack spacing={1.5}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              <Event color="action" fontSize="small" />
+                              <Typography variant="body2" color="text.secondary">
+                                Termin: {formatDate(apt.startTime)}
+                              </Typography>
+                            </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               <Person color="action" fontSize="small" />
                               <Typography variant="body1" fontWeight={500}>
