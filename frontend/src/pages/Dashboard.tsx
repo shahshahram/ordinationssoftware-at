@@ -40,6 +40,7 @@ import {
 } from '../store/slices/dashboardWidgetsSlice';
 import { generateCheckInCode, clearError } from '../store/slices/checkinSlice';
 import WidgetRenderer from '../components/Dashboard/WidgetRenderer';
+import DashboardWidgetWrapper from '../components/Dashboard/DashboardWidgetWrapper';
 import WidgetSelectorDialog, { AVAILABLE_WIDGETS } from '../components/Dashboard/WidgetSelectorDialog';
 import EldaMaintenanceAlert from '../components/Dashboard/EldaMaintenanceAlert';
 import QRCodeGenerator from '../components/QRCodeGenerator';
@@ -61,6 +62,29 @@ import {
   HelpOutline as HelpOutlineIcon,
 } from '@mui/icons-material';
 import api from '../utils/api';
+
+/** Mindestgrößen für Bento-Grid: klein (KPI) 3x2, mittel (Listen) 4x4, groß (Charts/Kalender) 6x4. */
+function getWidgetMinSize(widget: DashboardWidget): { minW: number; minH: number } {
+  switch (widget.widgetType) {
+    case 'statistic':
+    case 'quick-action':
+      return { minW: 3, minH: 2 };
+    case 'list':
+    case 'status':
+    case 'messages':
+      return { minW: 4, minH: 4 };
+    case 'chart':
+      return { minW: 6, minH: 4 };
+    case 'custom':
+      if (widget.widgetId === 'calendar-week') return { minW: 6, minH: 4 };
+      if (['tasks', 'todos', 'queue', 'waiting-room', 'reimbursements', 'important-patients', 'new-labor-results', 'new-dicom-studies', 'new-online-bookings', 'ogk-status', 'elda-status', 'time-tracking', 'weather'].includes(widget.widgetId)) {
+        return { minW: 4, minH: 4 };
+      }
+      return { minW: 6, minH: 4 };
+    default:
+      return { minW: 3, minH: 2 };
+  }
+}
 
 const Dashboard: React.FC = () => {
   const dispatch = useAppDispatch();
@@ -975,6 +999,10 @@ const Dashboard: React.FC = () => {
             }
           }
         };
+      case 'time-tracking':
+        return {};
+      case 'weather':
+        return {};
       default:
         return null;
     }
@@ -993,6 +1021,8 @@ const Dashboard: React.FC = () => {
           const statValue = (data as any)?.value;
           return !(statValue === '0' || statValue === 0 || !statValue || statValue === '');
         case 'list':
+          // Erstattungen immer anzeigen, auch wenn leer (Nutzer kann Einträge anlegen)
+          if (widget.widgetId === 'reimbursements') return true;
           return Array.isArray(data) && data.length > 0;
         case 'chart':
           const chartData = (data as any)?.data || (data as any)?.series || data;
@@ -1006,6 +1036,8 @@ const Dashboard: React.FC = () => {
           const statusItems = (data as any)?.items || data;
           return Array.isArray(statusItems) && statusItems.length > 0;
         case 'custom':
+          // Aufgaben/Todos und Arbeitszeiterfassung immer anzeigen, auch wenn leer
+          if (widget.widgetId === 'tasks' || widget.widgetId === 'todos' || widget.widgetId === 'time-tracking' || widget.widgetId === 'weather') return true;
           const customData = (data as any)?.tasks || (data as any)?.items || data;
           if (Array.isArray(customData)) {
             return customData.length > 0;
@@ -1024,7 +1056,7 @@ const Dashboard: React.FC = () => {
       .filter(w => w.isVisible && checkWidgetHasContent(w))
       .sort((a, b) => a.order - b.order)
       .map((widget, index) => {
-        // Adjust widget sizes for mobile
+        const minSize = getWidgetMinSize(widget);
         let w = widget.position.w;
         let h = widget.position.h;
         let x = widget.position.x;
@@ -1223,8 +1255,12 @@ const Dashboard: React.FC = () => {
           // On tablet, adjust widths
           if (w > 6) w = 12;
           if (x > 6) x = 0;
+          w = Math.max(w, minSize.minW);
+          h = Math.max(h, minSize.minH);
         } else {
-          // Desktop: Dynamische Höhenanpassung basierend auf Inhalt - kompakter
+          // Desktop: Mindestgrößen aus getWidgetMinSize, dynamische Höhe basierend auf Inhalt
+          w = Math.max(w, minSize.minW);
+          h = Math.max(h, minSize.minH);
           if (widget.widgetType === 'statistic') {
             // Statistic Widgets: Sehr kompakt
             h = 3;
@@ -1321,8 +1357,8 @@ const Dashboard: React.FC = () => {
           y,
           w,
           h,
-          minW: isMobile ? 12 : 2,
-          minH: 2
+          minW: isMobile ? 12 : minSize.minW,
+          minH: isMobile ? 2 : minSize.minH
         };
       });
     
@@ -1551,7 +1587,8 @@ const Dashboard: React.FC = () => {
         </Alert>
       )}
 
-      <EldaMaintenanceAlert />
+      {/* ELDA-Wartungshinweis nur im Widget, nicht dauerhaft im Header */}
+      {false && <EldaMaintenanceAlert />}
 
       {widgets.length === 0 ? (
         <Box
@@ -1620,6 +1657,7 @@ const Dashboard: React.FC = () => {
                     const statValue = (data as any)?.value;
                     return !(statValue === '0' || statValue === 0 || !statValue || statValue === '');
                   case 'list':
+                    if (w.widgetId === 'reimbursements') return true;
                     return Array.isArray(data) && data.length > 0;
                   case 'chart':
                     const chartData = (data as any)?.data || (data as any)?.series || data;
@@ -1634,6 +1672,7 @@ const Dashboard: React.FC = () => {
                     return Array.isArray(statusItems) && statusItems.length > 0;
                   case 'custom':
                     if (w.widgetId === 'elda-status') return true;
+                    if (w.widgetId === 'tasks' || w.widgetId === 'todos') return true;
                     const customData = (data as any)?.tasks || (data as any)?.items || data;
                     if (Array.isArray(customData)) {
                       return customData.length > 0;
@@ -1652,35 +1691,30 @@ const Dashboard: React.FC = () => {
                   sx={{
                     height: '100%',
                     width: '100%',
-                    maxWidth: '100%',
-                    boxSizing: 'border-box',
                     overflow: 'hidden',
-                    '& > *': {
-                      height: '100%',
-                      width: '100%',
-                      maxWidth: '100%'
-                    }
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <WidgetRenderer
-                    widget={widget}
-                    onDelete={editMode ? handleDeleteWidget : undefined}
-                    data={getWidgetData(widget)}
-                    isEditMode={editMode}
-                    onMessageClick={(message: any) => {
-                      // Wenn die Nachricht eine patientId hat, navigiere zum Patienten
-                      if (message.patientId) {
-                        // Konvertiere patientId zu String (falls es ein ObjectId-Objekt ist)
-                        const patientIdStr = typeof message.patientId === 'string' ? message.patientId : String(message.patientId);
-                        console.log('Dashboard: Navigating to patient labor values from WidgetRenderer', { patientId: patientIdStr, originalPatientId: message.patientId, fullMessage: message });
-                        // Verwende window.location für zuverlässige Navigation
-                        window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
-                      } else {
-                        // Sonst navigiere zur Interne-Nachrichten-Seite
-                        navigate('/internal-messages');
-                      }
-                    }}
-                  />
+                  <DashboardWidgetWrapper
+                    title={widget.title}
+                    onRemove={() => handleDeleteWidget(widget)}
+                    onEdit={undefined}
+                  >
+                    <WidgetRenderer
+                      widget={widget}
+                      data={getWidgetData(widget)}
+                      isEditMode={false}
+                      noWrapper
+                      onMessageClick={(message: any) => {
+                        if (message.patientId) {
+                          const patientIdStr = typeof message.patientId === 'string' ? message.patientId : String(message.patientId);
+                          window.location.href = `/patient-organizer/${patientIdStr}?tab=laborwerte`;
+                        } else {
+                          navigate('/internal-messages');
+                        }
+                      }}
+                    />
+                  </DashboardWidgetWrapper>
                 </Box>
               ))}
           </GridLayout>

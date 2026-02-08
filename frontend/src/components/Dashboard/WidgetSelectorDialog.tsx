@@ -38,7 +38,8 @@ import {
   Mail,
   Science,
   BookOnline,
-  CloudUpload
+  CloudUpload,
+  WbSunny
 } from '@mui/icons-material';
 
 export interface AvailableWidget {
@@ -320,6 +321,24 @@ const AVAILABLE_WIDGETS: AvailableWidget[] = [
     icon: <BookOnline />,
     defaultConfig: { items: [] },
     defaultPosition: { x: 6, y: 47, w: 6, h: 8 }
+  },
+  {
+    widgetId: 'time-tracking',
+    widgetType: 'custom',
+    title: 'Arbeitszeiterfassung',
+    description: 'Kommen, Gehen, Pause – Zeiterfassung direkt vom Dashboard',
+    icon: <AccessTime />,
+    defaultConfig: {},
+    defaultPosition: { x: 0, y: 55, w: 4, h: 5 }
+  },
+  {
+    widgetId: 'weather',
+    widgetType: 'custom',
+    title: 'Wetter',
+    description: 'Aktuelles Wetter (Temperatur, Beschreibung, Wind) – Standardort Wien',
+    icon: <WbSunny />,
+    defaultConfig: {},
+    defaultPosition: { x: 4, y: 55, w: 4, h: 4 }
   }
 ];
 

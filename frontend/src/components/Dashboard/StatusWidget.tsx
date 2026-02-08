@@ -10,28 +10,34 @@ interface StatusWidgetProps {
     value: number;
     color?: 'primary' | 'secondary' | 'success' | 'warning' | 'error';
   }>;
+  noWrapper?: boolean;
 }
 
-const StatusWidget: React.FC<StatusWidgetProps> = ({ widget, data }) => {
+const StatusWidget: React.FC<StatusWidgetProps> = ({ widget, data, noWrapper = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const items = data || widget.config?.items || [];
 
   return (
     <Box sx={{ 
-      minHeight: '100%',
-      height: 'auto',
-      display: 'flex', 
-      flexDirection: 'column', 
-      p: { xs: 1.5, sm: 3 } 
+minHeight: noWrapper ? 0 : '100%',
+      height: noWrapper ? '100%' : 'auto',
+      width: noWrapper ? '100%' : undefined,
+      display: 'flex',
+      flexDirection: 'column',
+      p: noWrapper ? 0 : { xs: 1.5, sm: 3 },
+      flex: noWrapper ? 1 : undefined,
+      overflow: noWrapper ? 'hidden' : undefined,
     }}>
-      <Typography 
-        variant={isMobile ? 'subtitle1' : 'h6'} 
-        gutterBottom 
-        sx={{ fontWeight: 600, mb: { xs: 1, sm: 2 } }}
-      >
-        {widget.title}
-      </Typography>
+      {!noWrapper && (
+        <Typography 
+          variant={isMobile ? 'subtitle1' : 'h6'} 
+          gutterBottom 
+          sx={{ fontWeight: 600, mb: { xs: 1, sm: 2 } }}
+        >
+          {widget.title}
+        </Typography>
+      )}
       <Box sx={{ 
         display: 'flex', 
         flexDirection: 'column', 

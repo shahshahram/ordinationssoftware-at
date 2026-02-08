@@ -26,9 +26,10 @@ import { de } from 'date-fns/locale';
 interface MessagesWidgetProps {
   widget: DashboardWidget;
   onMessageClick?: (message: InternalMessage) => void;
+  noWrapper?: boolean;
 }
 
-const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick }) => {
+const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick, noWrapper = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const dispatch = useAppDispatch();
@@ -89,39 +90,69 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
   };
 
 
+  const listScrollbarSx = noWrapper
+    ? {
+        flexGrow: 1,
+        minHeight: 0,
+        overflowY: 'auto' as const,
+        scrollbarWidth: 'thin' as const,
+        '&::-webkit-scrollbar': { width: 6 },
+        '&::-webkit-scrollbar-track': {
+          bgcolor: theme.palette.mode === 'dark' ? 'action.hover' : 'divider',
+          borderRadius: 1,
+        },
+        '&::-webkit-scrollbar-thumb': {
+          bgcolor: theme.palette.mode === 'dark' ? 'action.selected' : 'action.hover',
+          borderRadius: 1,
+        },
+      }
+    : undefined;
+
   return (
     <Box sx={{ 
-      minHeight: '100%',
-      height: 'auto',
+      minHeight: noWrapper ? 0 : '100%',
+      height: noWrapper ? '100%' : 'auto',
+      width: noWrapper ? '100%' : undefined,
       display: 'flex', 
       flexDirection: 'column', 
-      p: { xs: 1.5, sm: 2 } 
+      p: noWrapper ? 0 : { xs: 1.5, sm: 2 },
+      flex: noWrapper ? 1 : undefined,
+      overflow: noWrapper ? 'hidden' : undefined,
+      bgcolor: noWrapper ? 'transparent' : undefined,
     }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: { xs: 1, sm: 1.5 } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Badge badgeContent={unreadCount} color="error">
-            <Mail color="primary" />
-          </Badge>
-          <Typography 
-            variant={isMobile ? 'subtitle1' : 'h6'} 
-            sx={{ fontWeight: 600 }}
-          >
-            {widget.title}
-          </Typography>
+      {!noWrapper && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: { xs: 1, sm: 1.5 } }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Badge badgeContent={unreadCount} color="error">
+              <Mail color="primary" />
+            </Badge>
+            <Typography 
+              variant={isMobile ? 'subtitle1' : 'h6'} 
+              sx={{ fontWeight: 600 }}
+            >
+              {widget.title}
+            </Typography>
+          </Box>
+          {unreadCount > 0 && (
+            <Chip 
+              label={`${unreadCount} ungelesen`} 
+              size="small" 
+              color="error"
+              sx={{ ml: 1 }}
+            />
+          )}
         </Box>
-        {unreadCount > 0 && (
-          <Chip 
-            label={`${unreadCount} ungelesen`} 
-            size="small" 
-            color="error"
-            sx={{ ml: 1 }}
-          />
-        )}
-      </Box>
+      )}
+      {noWrapper && unreadCount > 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
+          <Chip label={`${unreadCount} ungelesen`} size="small" color="error" />
+        </Box>
+      )}
       <Box sx={{ 
         flex: inbox.length === 0 ? 'none' : 1,
-        overflow: inbox.length > 4 ? 'auto' : 'visible',
-        minHeight: inbox.length === 0 ? 'auto' : 'none'
+        overflow: noWrapper ? 'hidden' : inbox.length > 4 ? 'auto' : 'visible',
+        minHeight: inbox.length === 0 ? 'auto' : noWrapper ? 0 : 'none',
+        ...(noWrapper && { display: 'flex', flexDirection: 'column' }),
       }}>
         {loading ? (
           <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
@@ -132,7 +163,7 @@ const MessagesWidget: React.FC<MessagesWidgetProps> = ({ widget, onMessageClick 
             Keine Nachrichten
           </Typography>
         ) : (
-          <List sx={{ py: 0 }}>
+          <List sx={{ py: 0, ...listScrollbarSx }}>
             {/* Sortiere Nachrichten nach Datum: neueste zuerst */}
             {[...inbox].sort((a, b) => {
               const dateA = new Date(a.createdAt).getTime();

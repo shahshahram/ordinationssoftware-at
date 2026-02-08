@@ -238,7 +238,7 @@ const ServiceDemoCalendar: React.FC = () => {
   // Default settings - immer mit diesen Werten initialisieren
   // WICHTIG: currentDate wird immer dynamisch berechnet, nicht als statischer Wert
   const defaultSettings = {
-    useStaffColumns: false,
+    useStaffColumns: true,
     selectedStaffForColumns: [] as string[],
     selectedStaff: 'all',
     selectedLocation: 'all',
@@ -278,6 +278,7 @@ const ServiceDemoCalendar: React.FC = () => {
   const [selectedStaff, setSelectedStaff] = useState<string>(defaultSettings.selectedStaff);
   const [selectedStaffForColumns, setSelectedStaffForColumns] = useState<string[]>(defaultSettings.selectedStaffForColumns); // Für Personenspalten-Auswahl
   const [useStaffColumns, setUseStaffColumns] = useState(defaultSettings.useStaffColumns); // Toggle zwischen alter und neuer Ansicht
+  const hasInitializedStaffColumnsRef = useRef(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' | 'warning' | 'info' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileMenuAnchor, setMobileMenuAnchor] = useState<null | HTMLElement>(null);
@@ -936,6 +937,19 @@ const ServiceDemoCalendar: React.FC = () => {
     
     return filtered;
   }, [staffProfiles, medicalFilter, selectedLocations]);
+
+  // Beim ersten Laden: Personenspalten mit allen gefilterten Personen vorbelegen, damit „wer was zu tun hat“ sofort sichtbar ist
+  useEffect(() => {
+    if (
+      useStaffColumns &&
+      !hasInitializedStaffColumnsRef.current &&
+      filteredStaff.length > 0 &&
+      selectedStaffForColumns.length === 0
+    ) {
+      setSelectedStaffForColumns(filteredStaff.map((s) => s._id));
+      hasInitializedStaffColumnsRef.current = true;
+    }
+  }, [useStaffColumns, filteredStaff, selectedStaffForColumns.length]);
 
   // Generate background events (location hours and staff hours) - from EnhancedCalendar
   const backgroundEvents = useMemo(() => {
@@ -3300,10 +3314,10 @@ const ServiceDemoCalendar: React.FC = () => {
                                   },
                                 }}
                               >
-                            {/* Online-Badge oben rechts */}
+                            {/* Online-Badge oben rechts (wie im Terminkalender) */}
                             {(() => {
                               const apt = appointment.appointment;
-                              const isOnline = apt?.bookingType === 'online' || apt?.onlineBookingRef;
+                              const isOnline = apt?.bookingType === 'online' || apt?.onlineBookingRef || (apt as any)?.isOnlineBooking === true;
                               if (!isOnline) return null;
                               return (
                                 <Chip
@@ -4117,10 +4131,10 @@ const ServiceDemoCalendar: React.FC = () => {
                                     },
                                   }}
                                 >
-                                  {/* Online-Badge oben rechts */}
+                                  {/* Online-Badge oben rechts (wie im Terminkalender) */}
                                   {(() => {
                                     const apt = appointment.appointment;
-                                    const isOnline = apt?.bookingType === 'online' || apt?.onlineBookingRef;
+                                    const isOnline = apt?.bookingType === 'online' || apt?.onlineBookingRef || (apt as any)?.isOnlineBooking === true;
                                     if (!isOnline) return null;
                                     return (
                                       <Chip
@@ -4847,6 +4861,30 @@ const ServiceDemoCalendar: React.FC = () => {
                           },
                         }}
                       >
+                        {/* Online-Badge oben rechts (wie im Terminkalender) */}
+                        {(() => {
+                          const apt = appointment.appointment;
+                          const isOnline = apt?.bookingType === 'online' || apt?.onlineBookingRef || (apt as any)?.isOnlineBooking === true;
+                          if (!isOnline) return null;
+                          return (
+                            <Chip
+                              label="Online"
+                              size="small"
+                              sx={{
+                                position: 'absolute',
+                                top: 2,
+                                right: 2,
+                                height: 16,
+                                fontSize: '0.6rem',
+                                fontWeight: 600,
+                                bgcolor: 'rgba(255, 255, 255, 0.9)',
+                                color: 'primary.main',
+                                zIndex: 1,
+                                '& .MuiChip-label': { px: 0.5 },
+                              }}
+                            />
+                          );
+                        })()}
                         <Box>
                           {(() => {
                             const apt = appointment.appointment;

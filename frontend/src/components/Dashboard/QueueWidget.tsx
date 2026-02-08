@@ -12,9 +12,10 @@ interface QueueWidgetProps {
     waitingTime?: number;
     status: 'waiting' | 'in_progress' | 'next';
   }>;
+  noWrapper?: boolean;
 }
 
-const QueueWidget: React.FC<QueueWidgetProps> = ({ widget, data }) => {
+const QueueWidget: React.FC<QueueWidgetProps> = ({ widget, data, noWrapper = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const items = data || widget.config?.items || [];
@@ -38,15 +39,26 @@ const QueueWidget: React.FC<QueueWidgetProps> = ({ widget, data }) => {
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1.5, sm: 2 } }}>
-      <Typography 
-        variant={isMobile ? 'subtitle1' : 'h6'} 
-        gutterBottom 
-        sx={{ fontWeight: 600, mb: { xs: 1, sm: 1.5 } }}
-      >
-        {widget.title}
-      </Typography>
-      <Box sx={{ flex: 1, overflow: 'auto' }}>
+    <Box sx={{ 
+      height: noWrapper ? '100%' : 'auto',
+      width: noWrapper ? '100%' : undefined,
+      display: 'flex', 
+      flexDirection: 'column', 
+      p: noWrapper ? 0 : { xs: 1.5, sm: 2 },
+      flex: noWrapper ? 1 : undefined,
+      minHeight: noWrapper ? 0 : undefined,
+      overflow: noWrapper ? 'hidden' : undefined,
+    }}>
+      {!noWrapper && (
+        <Typography 
+          variant={isMobile ? 'subtitle1' : 'h6'} 
+          gutterBottom 
+          sx={{ fontWeight: 600, mb: { xs: 1, sm: 1.5 } }}
+        >
+          {widget.title}
+        </Typography>
+      )}
+      <Box sx={{ flex: 1, overflow: 'auto', minHeight: noWrapper ? 0 : undefined }}>
         {items.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body2" color="text.secondary">

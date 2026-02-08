@@ -65,9 +65,10 @@ interface ListWidgetProps {
     hint?: string;
     isNew?: boolean; // Flag für farbliche Hervorhebung neuer Items
   }>;
+  noWrapper?: boolean;
 }
 
-const ListWidget: React.FC<ListWidgetProps> = ({ widget, data }) => {
+const ListWidget: React.FC<ListWidgetProps> = ({ widget, data, noWrapper = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
@@ -121,23 +122,28 @@ const ListWidget: React.FC<ListWidgetProps> = ({ widget, data }) => {
   return (
     <>
       <Box sx={{ 
-        minHeight: '100%',
-        height: 'auto',
-        display: 'flex', 
-        flexDirection: 'column', 
-        p: { xs: 1.5, sm: 2 } 
+minHeight: noWrapper ? 0 : '100%',
+        height: noWrapper ? '100%' : 'auto',
+        width: noWrapper ? '100%' : undefined,
+        display: 'flex',
+        flexDirection: 'column',
+        p: noWrapper ? 0 : { xs: 1.5, sm: 2 },
+        flex: noWrapper ? 1 : undefined,
+        overflow: noWrapper ? 'hidden' : undefined,
       }}>
-        <Typography 
-          variant={isMobile ? 'subtitle1' : 'h6'} 
-          gutterBottom 
-          sx={{ fontWeight: 600, mb: 1, px: { xs: 0.5, sm: 1 } }}
-        >
-          {widget.title}
-        </Typography>
+        {!noWrapper && (
+          <Typography 
+            variant={isMobile ? 'subtitle1' : 'h6'} 
+            gutterBottom 
+            sx={{ fontWeight: 600, mb: 1, px: { xs: 0.5, sm: 1 } }}
+          >
+            {widget.title}
+          </Typography>
+        )}
         <Box sx={{ 
           flex: items.length === 0 ? 'none' : 1,
           overflow: items.length > 4 ? 'auto' : 'visible',
-          minHeight: items.length === 0 ? 'auto' : 'none'
+          minHeight: items.length === 0 ? 'auto' : noWrapper ? 0 : 'none'
         }}>
           <List sx={{ py: 0 }}>
             {items.map((item: any, index: number) => {

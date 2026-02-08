@@ -755,16 +755,29 @@ const StaffPlanning: React.FC = () => {
                     <Typography color="text.secondary" sx={{ mb: 1 }}>
                       Pause seit {elapsedDisplay || '0:00'}
                     </Typography>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      startIcon={<PlayArrowIcon />}
-                      onClick={handleResumeWork}
-                      disabled={timeLoading}
-                      aria-label="Weiterarbeiten"
-                    >
-                      Weiterarbeiten
-                    </Button>
+                    <Stack direction="row" alignItems="center" spacing={2} flexWrap="wrap">
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<PlayArrowIcon />}
+                        onClick={handleResumeWork}
+                        disabled={timeLoading}
+                        aria-label="Weiterarbeiten"
+                      >
+                        Weiterarbeiten
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="error"
+                        size="large"
+                        startIcon={<StopIcon />}
+                        onClick={handleStopTracking}
+                        disabled={timeLoading}
+                        aria-label="Arbeitszeit beenden"
+                      >
+                        Arbeitszeit beenden (Gehen)
+                      </Button>
+                    </Stack>
                   </>
                 )}
               </CardContent>

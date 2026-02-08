@@ -25,6 +25,7 @@ import { de } from 'date-fns/locale';
 interface OGKStatusWidgetProps {
   widget: any;
   data?: any;
+  noWrapper?: boolean;
 }
 
 interface OGKStats {
@@ -35,7 +36,7 @@ interface OGKStats {
   totalInsuranceAmount: number;
 }
 
-const OGKStatusWidget: React.FC<OGKStatusWidgetProps> = ({ widget: _widget, data: _data }) => {
+const OGKStatusWidget: React.FC<OGKStatusWidgetProps> = ({ widget: _widget, data: _data, noWrapper = false }) => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<OGKStats | null>(null);
   const [autoSubmitStatus, setAutoSubmitStatus] = useState<any>(null);
@@ -82,24 +83,26 @@ const OGKStatusWidget: React.FC<OGKStatusWidgetProps> = ({ widget: _widget, data
   }
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6">ÖGK-Abrechnung</Typography>
-        <Box>
-          <Tooltip title="Aktualisieren">
-            <IconButton size="small" onClick={loadData}>
-              <Refresh fontSize="small" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Öffnen">
-            <IconButton size="small" onClick={() => navigate('/ogk-billing')}>
-              <GetApp fontSize="small" />
-            </IconButton>
-          </Tooltip>
+    <Box sx={{ height: '100%', width: noWrapper ? '100%' : undefined, display: 'flex', flexDirection: 'column', flex: noWrapper ? 1 : undefined, minHeight: noWrapper ? 0 : undefined, overflow: noWrapper ? 'hidden' : undefined }}>
+      {!noWrapper && (
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">ÖGK-Abrechnung</Typography>
+          <Box>
+            <Tooltip title="Aktualisieren">
+              <IconButton size="small" onClick={loadData}>
+                <Refresh fontSize="small" />
+              </IconButton>
+            </Tooltip>
+            <Tooltip title="Öffnen">
+              <IconButton size="small" onClick={() => navigate('/ogk-billing')}>
+                <GetApp fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Box>
-      </Box>
+      )}
       
-      <Box sx={{ p: 2, flex: 1 }}>
+      <Box sx={{ p: noWrapper ? 1 : 2, flex: 1, minHeight: 0, overflow: 'auto' }}>
         {stats ? (
           <>
             <Grid container spacing={2} sx={{ mb: 2 }}>

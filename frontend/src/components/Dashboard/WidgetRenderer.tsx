@@ -13,6 +13,8 @@ import TasksWidget from './TasksWidget';
 import MessagesWidget from './MessagesWidget';
 import OGKStatusWidget from './OGKStatusWidget';
 import EldaStatusWidget from './EldaStatusWidget';
+import TimeTrackingWidget from './TimeTrackingWidget';
+import WeatherWidget from './WeatherWidget';
 
 interface WidgetRendererProps {
   widget: DashboardWidget;
@@ -21,6 +23,8 @@ interface WidgetRendererProps {
   data?: any;
   isEditMode?: boolean;
   onMessageClick?: (message: any) => void;
+  /** Wenn true: kein Paper, keine Edit/Delete-Buttons; nur Inhalt (für DashboardWidgetWrapper). */
+  noWrapper?: boolean;
 }
 
 const WidgetRenderer: React.FC<WidgetRendererProps> = ({
@@ -29,7 +33,8 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
   onDelete,
   data,
   isEditMode = false,
-  onMessageClick
+  onMessageClick,
+  noWrapper = false,
 }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -37,37 +42,43 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
   const renderWidget = () => {
     switch (widget.widgetType) {
       case 'statistic':
-        return <StatisticWidget widget={widget} data={data} />;
+        return <StatisticWidget widget={widget} data={data} noWrapper={noWrapper} />;
       case 'list':
-        return <ListWidget widget={widget} data={data} />;
+        return <ListWidget widget={widget} data={data} noWrapper={noWrapper} />;
       case 'status':
-        return <StatusWidget widget={widget} data={data} />;
+        return <StatusWidget widget={widget} data={data} noWrapper={noWrapper} />;
       case 'quick-action':
-        return <QuickActionWidget widget={widget} actions={data} />;
+        return <QuickActionWidget widget={widget} actions={data} noWrapper={noWrapper} />;
       case 'chart':
-        return <ChartWidget widget={widget} data={data} />;
+        return <ChartWidget widget={widget} data={data} noWrapper={noWrapper} />;
       case 'messages':
-        return <MessagesWidget widget={widget} onMessageClick={onMessageClick || data?.onMessageClick} />;
+        return <MessagesWidget widget={widget} onMessageClick={onMessageClick || data?.onMessageClick} noWrapper={noWrapper} />;
       case 'custom':
         // Check for special widget IDs
         if (widget.widgetId === 'calendar-week') {
-          return <CalendarWidget widget={widget} data={data} />;
+          return <CalendarWidget widget={widget} data={data} noWrapper={noWrapper} />;
         }
         if (widget.widgetId === 'queue' || widget.widgetId === 'waiting-room') {
-          return <QueueWidget widget={widget} data={data} />;
+          return <QueueWidget widget={widget} data={data} noWrapper={noWrapper} />;
         }
         if (widget.widgetId === 'tasks' || widget.widgetId === 'todos') {
-          return <TasksWidget widget={widget} data={data} />;
+          return <TasksWidget widget={widget} data={data} noWrapper={noWrapper} />;
         }
         if (widget.widgetId === 'reimbursements') {
           const ReimbursementsWidget = require('./ReimbursementsWidget').default;
-          return <ReimbursementsWidget widget={widget} data={data} />;
+          return <ReimbursementsWidget widget={widget} data={data} noWrapper={noWrapper} />;
         }
         if (widget.widgetId === 'ogk-status') {
-          return <OGKStatusWidget widget={widget} data={data} />;
+          return <OGKStatusWidget widget={widget} data={data} noWrapper={noWrapper} />;
         }
         if (widget.widgetId === 'elda-status') {
-          return <EldaStatusWidget widget={widget} data={data} />;
+          return <EldaStatusWidget widget={widget} data={data} noWrapper={noWrapper} />;
+        }
+        if (widget.widgetId === 'time-tracking') {
+          return <TimeTrackingWidget widget={widget} noWrapper={noWrapper} />;
+        }
+        if (widget.widgetId === 'weather') {
+          return <WeatherWidget widget={widget} noWrapper={noWrapper} />;
         }
         return (
           <Box sx={{ p: 2 }}>
@@ -86,6 +97,26 @@ const WidgetRenderer: React.FC<WidgetRendererProps> = ({
         );
     }
   };
+
+  if (noWrapper) {
+    return (
+      <Box
+        sx={{
+          height: '100%',
+          width: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+          minHeight: 0,
+          bgcolor: 'transparent',
+        }}
+      >
+        <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+          {renderWidget()}
+        </Box>
+      </Box>
+    );
+  }
 
   return (
     <Paper

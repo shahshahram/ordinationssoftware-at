@@ -11,9 +11,10 @@ interface CalendarWidgetProps {
     appointments: number;
     status?: 'normal' | 'busy' | 'full';
   }>;
+  noWrapper?: boolean;
 }
 
-const CalendarWidget: React.FC<CalendarWidgetProps> = ({ widget, data }) => {
+const CalendarWidget: React.FC<CalendarWidgetProps> = ({ widget, data, noWrapper = false }) => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
@@ -36,15 +37,26 @@ const CalendarWidget: React.FC<CalendarWidgetProps> = ({ widget, data }) => {
   };
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 1.5, sm: 2 } }}>
-      <Typography 
-        variant={isMobile ? 'subtitle1' : 'h6'} 
-        gutterBottom 
-        sx={{ fontWeight: 600, mb: { xs: 1, sm: 1.5 } }}
-      >
-        {widget.title}
-      </Typography>
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: { xs: 0.5, sm: 1 } }}>
+    <Box sx={{ 
+      height: noWrapper ? '100%' : 'auto',
+      width: noWrapper ? '100%' : undefined,
+      display: 'flex', 
+      flexDirection: 'column', 
+      p: noWrapper ? 0 : { xs: 1.5, sm: 2 },
+      flex: noWrapper ? 1 : undefined,
+      minHeight: noWrapper ? 0 : undefined,
+      overflow: noWrapper ? 'hidden' : undefined,
+    }}>
+      {!noWrapper && (
+        <Typography 
+          variant={isMobile ? 'subtitle1' : 'h6'} 
+          gutterBottom 
+          sx={{ fontWeight: 600, mb: { xs: 1, sm: 1.5 } }}
+        >
+          {widget.title}
+        </Typography>
+      )}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: { xs: 0.5, sm: 1 }, minHeight: noWrapper ? 0 : undefined }}>
         {weekDays.map((day, index) => {
           const count = getAppointmentsForDay(day);
           const isTodayDate = isToday(day);

@@ -82,7 +82,7 @@ export const menuItems: MenuItem[] = [
       { text: 'Mitarbeiterplanung', icon: <DashboardIcon />, path: '/staff-planning' },
       { text: 'Personal', icon: <Groups />, path: '/staff' },
       { text: 'Arbeitszeiten', icon: <Schedule />, path: '/work-shifts' },
-      { text: 'Stundenabrechnung', icon: <AccessTime />, path: '/timesheet' },
+      { text: 'Zeiterfassung', icon: <AccessTime />, path: '/timesheet' },
       { text: 'Abwesenheiten', icon: <PendingActions />, path: '/absences' },
       { text: 'Verfügbarkeiten', icon: <Schedule />, path: '/availability' },
       { text: 'Online-Buchungen', icon: <BookOnline />, path: '/online-bookings' },

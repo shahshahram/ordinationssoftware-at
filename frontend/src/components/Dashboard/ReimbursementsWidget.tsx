@@ -41,9 +41,10 @@ interface Reimbursement {
 interface ReimbursementsWidgetProps {
   widget: any;
   data?: any;
+  noWrapper?: boolean;
 }
 
-const ReimbursementsWidget: React.FC<ReimbursementsWidgetProps> = ({ widget: _widget, data: _data }) => {
+const ReimbursementsWidget: React.FC<ReimbursementsWidgetProps> = ({ widget: _widget, data: _data, noWrapper = false }) => {
   const navigate = useNavigate();
   const [reimbursements, setReimbursements] = useState<Reimbursement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -127,24 +128,26 @@ const ReimbursementsWidget: React.FC<ReimbursementsWidgetProps> = ({ widget: _wi
   }
 
   return (
-    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="h6">Erstattungen</Typography>
-        <Chip
-          label={`${stats.pending} ausstehend`}
-          color="warning"
-          size="small"
-        />
-      </Box>
+    <Box sx={{ height: '100%', width: noWrapper ? '100%' : undefined, display: 'flex', flexDirection: 'column', flex: noWrapper ? 1 : undefined, minHeight: noWrapper ? 0 : undefined, overflow: noWrapper ? 'hidden' : undefined }}>
+      {!noWrapper && (
+        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6">Erstattungen</Typography>
+          <Chip
+            label={`${stats.pending} ausstehend`}
+            color="warning"
+            size="small"
+          />
+        </Box>
+      )}
       
       {reimbursements.length === 0 ? (
-        <Box sx={{ p: 2, textAlign: 'center' }}>
+        <Box sx={{ p: noWrapper ? 1 : 2, textAlign: 'center' }}>
           <Typography variant="body2" color="text.secondary">
             Keine ausstehenden Erstattungen
           </Typography>
         </Box>
       ) : (
-        <List sx={{ flex: 1, overflow: 'auto' }}>
+        <List sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
           {reimbursements.map((reimbursement) => (
             <ListItem
               key={reimbursement._id}
