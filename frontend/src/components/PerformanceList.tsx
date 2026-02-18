@@ -13,6 +13,7 @@ import {
   TableRow,
   Paper,
   Chip,
+  Avatar,
   IconButton,
   Tooltip,
   TextField,
@@ -24,6 +25,7 @@ import {
   Grid,
   Alert,
   CircularProgress,
+  Snackbar,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -40,10 +42,14 @@ import {
   Euro as EuroIcon,
   FilterList as FilterIcon,
   Refresh as RefreshIcon,
-  HelpOutline as HelpOutlineIcon
+  HelpOutline as HelpOutlineIcon,
+  Input as InputIcon,
+  Stars as StarsIcon,
+  LocalHospital as LocalHospitalIcon
 } from '@mui/icons-material';
 import { useDispatch, useSelector } from 'react-redux';
 import api from '../utils/api';
+import { stripHtmlTags } from '../utils/textUtils';
 import OneClickBillingButton from './OneClickBillingButton';
 import PerformanceForm from './PerformanceForm';
 import GradientDialogTitle from './GradientDialogTitle';
@@ -105,7 +111,15 @@ const PerformanceList: React.FC = () => {
   const [performanceToDelete, setPerformanceToDelete] = useState<Performance | null>(null);
   const [helpDialogOpen, setHelpDialogOpen] = useState(false);
   const [helpTab, setHelpTab] = useState(0);
-  
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [invoicesForImport, setInvoicesForImport] = useState<any[]>([]);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
+  const [loadingInvoices, setLoadingInvoices] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({ open: false, message: '', severity: 'success' });
+  const [quickServices, setQuickServices] = useState<any[]>([]);
+  const [preFillService, setPreFillService] = useState<any | null>(null);
+
   // Filter State
   const [filters, setFilters] = useState({
     status: '',
@@ -122,6 +136,43 @@ const PerformanceList: React.FC = () => {
     total: 0,
     pages: 0
   });
+
+  // Schnell-Leistungen (quick_select) laden
+  useEffect(() => {
+    const loadQuickServices = async () => {
+      try {
+        const res = await api.get<{ success?: boolean; data?: any[] }>('/billing/services', {});
+        const list = (res.data as any)?.data ?? [];
+        const quick = Array.isArray(list) ? list.filter((s: any) => s.quick_select === true || s.quick_select === 'true' || s.quick_select === 1) : [];
+        setQuickServices(quick);
+      } catch {
+        setQuickServices([]);
+      }
+    };
+    loadQuickServices();
+  }, []);
+
+  const getServicePriceInEuro = (service: any): number => {
+    if (service?.price != null) return Number(service.price);
+    if (service?.prices?.privat != null) return Number(service.prices.privat);
+    if (service?.prices?.wahlarzt != null) return Number(service.prices.wahlarzt);
+    if (service?.wahlarzt?.price != null) return Number(service.wahlarzt.price);
+    if (service?.private?.price != null) return Number(service.private.price);
+    return 0;
+  };
+
+  const handleQuickServiceClick = (service: any) => {
+    setPreFillService({
+      code: service.code,
+      name: stripHtmlTags(service.name || service.description || ''),
+      serviceCode: service.code,
+      serviceDescription: stripHtmlTags(service.name || service.description || ''),
+      unitPrice: getServicePriceInEuro(service),
+      tariffType: 'wahl' as const
+    });
+    setEditingPerformance(null);
+    setFormOpen(true);
+  };
 
   // Performances laden – nutzt zentralen ApiClient (gleiche Basis-URL wie Auth)
   const loadPerformances = async () => {
@@ -173,6 +224,7 @@ const PerformanceList: React.FC = () => {
       await loadPerformances();
       setFormOpen(false);
       setEditingPerformance(null);
+      setPreFillService(null);
     } catch (error: any) {
       console.error('Leistung speichern Fehler:', error);
       const msg = error?.response?.data?.message || error?.response?.data?.error || error?.message;
@@ -204,6 +256,43 @@ const PerformanceList: React.FC = () => {
   const handleDeleteClick = (performance: Performance) => {
     setPerformanceToDelete(performance);
     setDeleteDialogOpen(true);
+  };
+
+  // Rechnungen laden für Import-Dialog
+  const handleOpenImportDialog = async () => {
+    setImportDialogOpen(true);
+    setSelectedInvoiceId('');
+    setLoadingInvoices(true);
+    try {
+      const res = await api.get<{ success?: boolean; data?: any[] }>('/billing/invoices', { limit: 500, page: 1 });
+      const payload = res.data as any;
+      const list = payload?.data ?? [];
+      setInvoicesForImport(Array.isArray(list) ? list : []);
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err?.response?.data?.message || 'Rechnungen konnten nicht geladen werden', severity: 'error' });
+      setInvoicesForImport([]);
+    } finally {
+      setLoadingInvoices(false);
+    }
+  };
+
+  // Leistungen aus Rechnung übernehmen
+  const handleImportFromInvoice = async () => {
+    if (!selectedInvoiceId) return;
+    setImporting(true);
+    try {
+      const res = await api.post<{ message?: string; data?: { count?: number } }>('/billing/performances/from-invoice', { invoiceId: selectedInvoiceId });
+      const data = res.data as any;
+      const count = data?.data?.count ?? 0;
+      setSnackbar({ open: true, message: data?.message || `${count} Leistung(en) übernommen`, severity: 'success' });
+      setImportDialogOpen(false);
+      setSelectedInvoiceId('');
+      loadPerformances();
+    } catch (err: any) {
+      setSnackbar({ open: true, message: err?.response?.data?.message || 'Import fehlgeschlagen', severity: 'error' });
+    } finally {
+      setImporting(false);
+    }
   };
 
   // Status-Chip
@@ -287,14 +376,97 @@ const PerformanceList: React.FC = () => {
           </Tooltip>
         </Box>
         
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setFormOpen(true)}
-        >
-          Neue Leistung
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button
+            variant="outlined"
+            startIcon={<InputIcon />}
+            onClick={handleOpenImportDialog}
+          >
+            Aus Rechnung übernehmen
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setFormOpen(true)}
+          >
+            Neue Leistung
+          </Button>
+        </Box>
       </Box>
+
+      {/* Schnell-Leistungen */}
+      <Card sx={{ mb: 3, p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <StarsIcon sx={{ color: 'warning.main', fontSize: 32 }} />
+          <Box>
+            <Typography variant="h5" fontWeight="bold">
+              Schnell-Leistungen
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Häufig gebrauchte Leistungen für schnelle Abrechnung
+            </Typography>
+          </Box>
+        </Box>
+        {quickServices.length === 0 ? (
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <LocalHospitalIcon sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+            <Typography variant="h6" color="text.secondary" gutterBottom>
+              Keine Schnell-Leistungen definiert
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Markieren Sie Leistungen im Leistungskatalog als „Schnellauswahl“
+            </Typography>
+          </Box>
+        ) : (
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 2 }}>
+            {quickServices.map((service) => (
+              <Card
+                key={service._id || service.code}
+                sx={{
+                  p: 2,
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    transform: 'translateY(-4px)',
+                    boxShadow: 4
+                  }
+                }}
+                onClick={() => handleQuickServiceClick(service)}
+                variant="outlined"
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => e.key === 'Enter' && handleQuickServiceClick(service)}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Avatar
+                    sx={{
+                      bgcolor: service.color_hex || 'primary.main',
+                      width: 40,
+                      height: 40
+                    }}
+                  >
+                    <LocalHospitalIcon />
+                  </Avatar>
+                  <Box sx={{ flex: 1, textAlign: 'left' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                      {stripHtmlTags(service.name || service.description || '')}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      {service.code}
+                    </Typography>
+                    <Chip
+                      label={`€${getServicePriceInEuro(service).toFixed(2)}`}
+                      size="small"
+                      color="success"
+                      sx={{ mt: 0.5 }}
+                    />
+                  </Box>
+                </Box>
+              </Card>
+            ))}
+          </Box>
+        )}
+      </Card>
 
       {/* Filter */}
       <Card sx={{ mb: 3 }}>
@@ -436,7 +608,7 @@ const PerformanceList: React.FC = () => {
                 <TableCell>
                   <Box>
                     <Typography variant="body2" fontWeight="medium">
-                      {performance.serviceDescription}
+                      {stripHtmlTags(performance.serviceDescription || '')}
                     </Typography>
                     <Typography variant="caption" color="textSecondary">
                       Code: {performance.serviceCode}
@@ -537,9 +709,11 @@ const PerformanceList: React.FC = () => {
         onClose={() => {
           setFormOpen(false);
           setEditingPerformance(null);
+          setPreFillService(null);
         }}
         onSave={handleSavePerformance}
         performance={editingPerformance}
+        initialServiceData={preFillService || undefined}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -550,7 +724,7 @@ const PerformanceList: React.FC = () => {
         <DialogTitle>Leistung löschen</DialogTitle>
         <DialogContent>
           <Typography>
-            Möchten Sie die Leistung "{performanceToDelete?.serviceDescription}" 
+            Möchten Sie die Leistung "{stripHtmlTags(performanceToDelete?.serviceDescription || '')}" 
             {performanceToDelete?.patientId 
               ? `für ${performanceToDelete.patientId.firstName} ${performanceToDelete.patientId.lastName}`
               : ''} 
@@ -566,6 +740,78 @@ const PerformanceList: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Import aus Rechnung Dialog */}
+      <Dialog
+        open={importDialogOpen}
+        onClose={() => !importing && setImportDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Leistungen aus Rechnung übernehmen</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Wählen Sie eine Rechnung. Die enthaltenen Leistungen werden als Einzelleistungen in die Leistungsabrechnung übernommen.
+          </Typography>
+          {loadingInvoices ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <FormControl fullWidth size="small">
+              <InputLabel>Rechnung wählen</InputLabel>
+              <Select
+                value={selectedInvoiceId}
+                label="Rechnung wählen"
+                onChange={(e) => setSelectedInvoiceId(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>Bitte wählen</em>
+                </MenuItem>
+                {invoicesForImport.map((inv) => {
+                  const patient = inv.patient?.id || inv.patient;
+                  const patientName = patient ? `${patient.firstName || ''} ${patient.lastName || ''}`.trim() : inv.patient?.name || 'Unbekannt';
+                  const svcCount = Array.isArray(inv.services) ? inv.services.length : 0;
+                  return (
+                    <MenuItem key={inv._id || inv.id} value={inv._id || inv.id}>
+                      {inv.invoiceNumber || inv._id} – {patientName} ({svcCount} Leistung{svcCount !== 1 ? 'en' : ''})
+                    </MenuItem>
+                  );
+                })}
+              </Select>
+            </FormControl>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setImportDialogOpen(false)} disabled={importing}>
+            Abbrechen
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleImportFromInvoice}
+            disabled={!selectedInvoiceId || importing}
+            startIcon={importing ? <CircularProgress size={20} /> : <InputIcon />}
+          >
+            {importing ? 'Wird übernommen…' : 'Übernehmen'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar für Import-Benachrichtigungen */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
 
       {/* Hilfe-Dialog mit Leitfaden */}
       <Dialog 
@@ -593,6 +839,12 @@ const PerformanceList: React.FC = () => {
 
           {helpTab === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Alert severity="info">
+                <Typography variant="body2">
+                  Die Leistungsabrechnung ist Teil der Abrechnungsseite. Im Tab „Rechnungen“ 
+                  können Sie Rechnungen verwalten, drucken und versenden.
+                </Typography>
+              </Alert>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
                   Leistungsabrechnung
@@ -610,6 +862,8 @@ const PerformanceList: React.FC = () => {
                 </Typography>
                 <Box component="ul" sx={{ pl: 3, mb: 2 }}>
                   <li>📝 <strong>Leistung erfassen:</strong> Neue Leistungen für Patienten anlegen</li>
+                  <li>⭐ <strong>Schnell-Leistungen:</strong> Häufig gebrauchte Leistungen aus dem Katalog (Schnellauswahl) mit einem Klick hinzufügen</li>
+                  <li>📥 <strong>Aus Rechnung übernehmen:</strong> Leistungen aus einer bestehenden Rechnung als Einzelleistungen importieren</li>
                   <li>✏️ <strong>Leistung bearbeiten:</strong> Bestehende Leistungen ändern</li>
                   <li>🗑️ <strong>Leistung löschen:</strong> Leistungen entfernen</li>
                   <li>🔍 <strong>Suche & Filter:</strong> Nach Patient, Status, Tariftyp, Datum filtern</li>

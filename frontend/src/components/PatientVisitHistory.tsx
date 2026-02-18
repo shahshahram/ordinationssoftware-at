@@ -23,6 +23,7 @@ import {
   Description
 } from '@mui/icons-material';
 import api from '../utils/api';
+import { stripHtmlTags } from '../utils/textUtils';
 
 interface VisitHistoryItem {
   type: 'appointment' | 'service' | 'checkin' | 'visit';
@@ -78,7 +79,7 @@ const PatientVisitHistory: React.FC<PatientVisitHistoryProps> = ({ patientId, li
             type: 'appointment',
             date: apt.startTime || apt.date || new Date().toISOString(),
             checkInTime: apt.checkInTime || null,
-            reason: apt.reason || apt.visitReason || apt.service?.name || 'Termin',
+            reason: stripHtmlTags(apt.reason || apt.visitReason || apt.service?.name || 'Termin'),
             status: apt.status || 'geplant',
             doctor: apt.doctor ? (typeof apt.doctor === 'object' ? `${apt.doctor.firstName || ''} ${apt.doctor.lastName || ''}`.trim() : apt.doctor) : null,
             diagnosis: apt.diagnosis || null,

@@ -42,6 +42,7 @@ import {
   QuestionAnswer,
 } from '@mui/icons-material';
 import api from '../utils/api';
+import { stripHtmlTags } from '../utils/textUtils';
 import { useSnackbar } from 'notistack';
 import { format } from 'date-fns';
 
@@ -552,7 +553,7 @@ const AppointmentDetail: React.FC = () => {
                       return (
                         <TableRow key={s._id}>
                           <TableCell>
-                            <span dangerouslySetInnerHTML={{ __html: service?.name || 'Unbekannt' }} />
+                            {stripHtmlTags(service?.name || 'Unbekannt')}
                           </TableCell>
                           <TableCell>{service?.code || '—'}</TableCell>
                           <TableCell>{s.quantity}</TableCell>

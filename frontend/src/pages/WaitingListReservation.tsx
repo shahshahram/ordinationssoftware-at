@@ -14,6 +14,7 @@ import { CheckCircle, AccessTime } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import { de } from 'date-fns/locale';
 import api from '../utils/api';
+import { stripHtmlTags } from '../utils/textUtils';
 
 interface ReservationData {
   waitingListEntry: {
@@ -180,9 +181,9 @@ const WaitingListReservation: React.FC = () => {
             <Typography><strong>Uhrzeit:</strong> {format(appointmentStartTime, 'HH:mm', { locale: de })} - {format(appointmentEndTime, 'HH:mm', { locale: de })} Uhr</Typography>
             <Typography><strong>Arzt:</strong> {reservationData.appointment.doctor.firstName} {reservationData.appointment.doctor.lastName}</Typography>
             {reservationData.appointment.service && (
-              <Typography
-                dangerouslySetInnerHTML={{ __html: `<strong>Leistung:</strong> ${reservationData.appointment.service.name} (${reservationData.appointment.service.code})` }}
-              />
+              <Typography>
+                <strong>Leistung:</strong> {stripHtmlTags(reservationData.appointment.service.name)} ({reservationData.appointment.service.code})
+              </Typography>
             )}
             <Typography><strong>Art:</strong> {reservationData.appointment.type}</Typography>
           </Paper>
@@ -225,11 +226,11 @@ const WaitingListReservation: React.FC = () => {
           <Typography><strong>Datum:</strong> {format(appointmentStartTime, 'EEEE, dd. MMMM yyyy', { locale: de })}</Typography>
           <Typography><strong>Uhrzeit:</strong> {format(appointmentStartTime, 'HH:mm', { locale: de })} - {format(appointmentEndTime, 'HH:mm', { locale: de })} Uhr</Typography>
           <Typography><strong>Arzt:</strong> {reservationData.appointment.doctor.firstName} {reservationData.appointment.doctor.lastName}</Typography>
-          {reservationData.appointment.service && (
-            <Typography
-              dangerouslySetInnerHTML={{ __html: `<strong>Leistung:</strong> ${reservationData.appointment.service.name} (${reservationData.appointment.service.code})` }}
-            />
-          )}
+            {reservationData.appointment.service && (
+              <Typography>
+                <strong>Leistung:</strong> {stripHtmlTags(reservationData.appointment.service.name)} ({reservationData.appointment.service.code})
+              </Typography>
+            )}
           <Typography><strong>Art:</strong> {reservationData.appointment.type}</Typography>
         </Paper>
 

@@ -28,6 +28,7 @@ import {
 import { format, formatDistanceToNow, isBefore } from 'date-fns';
 import { de } from 'date-fns/locale';
 import api from '../utils/api';
+import { stripHtmlTags } from '../utils/textUtils';
 import { useSnackbar } from 'notistack';
 
 interface UpdateService {
@@ -218,16 +219,12 @@ const UpdateMonitoring: React.FC<UpdateMonitoringProps> = ({ refreshInterval = 3
                     {getServiceIcon(service.name)}
                   </Box>
                   <Box sx={{ flex: 1 }}>
-                    <Typography 
-                      variant="h6" 
-                      gutterBottom
-                      dangerouslySetInnerHTML={{ __html: service.name }}
-                    />
-                    <Typography 
-                      variant="body2" 
-                      color="text.secondary"
-                      dangerouslySetInnerHTML={{ __html: service.description }}
-                    />
+                    <Typography variant="h6" gutterBottom>
+                      {stripHtmlTags(service.name || '')}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {stripHtmlTags(service.description || '')}
+                    </Typography>
                   </Box>
                   <Chip
                     icon={getStatusIcon(service.lastStatus, service.isRunning)}

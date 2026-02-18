@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import QRCodeGenerator from '../components/QRCodeGenerator';
@@ -60,6 +60,7 @@ import {
   useTheme,
   useMediaQuery,
 } from '@mui/material';
+import PerformanceList from '../components/PerformanceList';
 import {
   Search,
   Add,
@@ -105,6 +106,7 @@ const getServicePriceInEuro = (service: Service): number => {
 const Billing: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -115,6 +117,20 @@ const Billing: React.FC = () => {
   
   // Sicherheitsprüfung für invoices
   const safeInvoices = Array.isArray(invoices) ? invoices : [];
+  
+  // Haupt-Tab: Rechnungen (0) oder Leistungen (1) – aus URL ?tab=leistungen
+  const mainTab = searchParams.get('tab') === 'leistungen' ? 1 : 0;
+  const handleMainTabChange = (_e: React.SyntheticEvent, newValue: number) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (newValue === 1) {
+        next.set('tab', 'leistungen');
+      } else {
+        next.delete('tab');
+      }
+      return next;
+    });
+  };
   
   // Lese Status-Filter aus URL Query-Parametern
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -1280,6 +1296,18 @@ const Billing: React.FC = () => {
       mt: marginTopValue !== '0px' ? marginTopValue : 0,
       transition: marginTopValue !== '0px' ? 'margin-top 0.3s ease' : 'none',
     }}>
+      {/* Haupt-Tabs: Rechnungen | Leistungen */}
+      <Tabs
+        value={mainTab}
+        onChange={handleMainTabChange}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab label="Rechnungen" id="billing-tab-0" aria-controls="billing-panel-0" />
+        <Tab label="Leistungen" id="billing-tab-1" aria-controls="billing-panel-1" />
+      </Tabs>
+
+      {mainTab === 0 && (
+        <>
       <Box 
         display="flex" 
         justifyContent="space-between" 
@@ -1472,8 +1500,9 @@ const Billing: React.FC = () => {
                       variant="subtitle2" 
                       fontWeight="bold" 
                       gutterBottom
-                      dangerouslySetInnerHTML={{ __html: service.name }}
-                    />
+                    >
+                      {stripHtmlTags(service.name || '')}
+                    </Typography>
                     <Typography variant="caption" color="text.secondary" display="block">
                       {service.code}
                     </Typography>
@@ -2193,7 +2222,7 @@ const Billing: React.FC = () => {
                                     placeholder="Beschreibung"
                                   />
                                 ) : (
-                                  <span dangerouslySetInnerHTML={{ __html: service.description || '' }} />
+                                  <span>{stripHtmlTags(service.description || '')}</span>
                                 )}
                               </TableCell>
                               <TableCell>
@@ -2905,6 +2934,12 @@ const Billing: React.FC = () => {
 
           {helpTab === 0 && (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              <Alert severity="info">
+                <Typography variant="body2">
+                  <strong>Tab „Leistungen“:</strong> Die Leistungsabrechnung (einzelne Leistungen erfassen, filtern, abrechnen) 
+                  ist im Tab „Leistungen“ dieser Seite erreichbar.
+                </Typography>
+              </Alert>
               <Box>
                 <Typography variant="h6" gutterBottom color="primary">
                   Rechnungen verwalten
@@ -3523,6 +3558,9 @@ const Billing: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+        </>
+      )}
+      {mainTab === 1 && <PerformanceList />}
     </Box>
   );
 };

@@ -105,7 +105,6 @@ const menuItems: MenuItemType[] = [
         path: '/billing',
         subItems: [
           { text: 'Rechnungen', icon: <Receipt />, path: '/billing' },
-          { text: 'Leistungsabrechnung', icon: <Receipt />, path: '/performance-billing' },
           { text: 'Erstattungen', icon: <Receipt />, path: '/reimbursements' },
           { text: 'Abrechnungsberichte', icon: <Assessment />, path: '/billing-reports' },
           { text: 'Journal', icon: <Article />, path: '/journal' },

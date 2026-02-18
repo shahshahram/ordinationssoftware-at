@@ -5,6 +5,7 @@ const billingService = require('../services/billingService');
 const Performance = require('../models/Performance');
 const BillingJob = require('../models/BillingJob');
 const BillingAudit = require('../models/BillingAudit');
+const Invoice = require('../models/Invoice');
 
 /**
  * @route   POST /api/billing/one-click/:performanceId
@@ -12,13 +13,22 @@ const BillingAudit = require('../models/BillingAudit');
  * @access  Private
  */
 router.post('/one-click/:performanceId', auth, async (req, res) => {
+  const { performanceId } = req.params;
+
   try {
-    const { performanceId } = req.params;
-    const options = req.body.options || {};
-    
+    // MongoDB ObjectId-Validierung (24 Hex-Zeichen)
+    if (!performanceId || !/^[a-fA-F0-9]{24}$/.test(performanceId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Ungültige Leistungs-ID'
+      });
+    }
+
+    const options = req.body?.options || {};
+
     // One-Click-Billing ausführen
     const result = await billingService.oneClickBill(performanceId, req.user, options);
-    
+
     res.json({
       success: true,
       message: result.message,
@@ -29,12 +39,12 @@ router.post('/one-click/:performanceId', auth, async (req, res) => {
         existing: result.existing || false
       }
     });
-    
   } catch (error) {
-    console.error('One-Click-Billing API Fehler:', error);
+    console.error('One-Click-Billing API Fehler [performanceId=%s]:', performanceId, error);
+    const message = error.message || 'One-Click-Abrechnung fehlgeschlagen';
     res.status(400).json({
       success: false,
-      message: error.message
+      message
     });
   }
 });
@@ -232,6 +242,91 @@ router.get('/performances/:id', auth, async (req, res) => {
     
   } catch (error) {
     console.error('Performance Detail API Fehler:', error);
+    res.status(400).json({
+      success: false,
+      message: error.message
+    });
+  }
+});
+
+/**
+ * @route   POST /api/billing/performances/from-invoice
+ * @desc    Leistungen aus Rechnung als Einzelleistungen übernehmen
+ * @access  Private
+ */
+router.post('/performances/from-invoice', auth, async (req, res) => {
+  try {
+    const { invoiceId } = req.body;
+
+    if (!invoiceId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rechnungs-ID fehlt'
+      });
+    }
+
+    const invoice = await Invoice.findById(invoiceId)
+      .populate('patient.id', 'firstName lastName');
+
+    if (!invoice) {
+      return res.status(404).json({
+        success: false,
+        message: 'Rechnung nicht gefunden'
+      });
+    }
+
+    const patientId = invoice.patient?.id?._id || invoice.patient?.id;
+    if (!patientId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rechnung hat keinen zugeordneten Patienten'
+      });
+    }
+
+    const services = invoice.services || [];
+    if (services.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Rechnung hat keine Leistungen'
+      });
+    }
+
+    const tariffTypeMap = {
+      kassenarzt: 'kassa',
+      wahlarzt: 'wahl',
+      privat: 'privat'
+    };
+    const tariffType = tariffTypeMap[invoice.billingType] || 'wahl';
+
+    const created = [];
+    for (const svc of services) {
+      const serviceDate = svc.date ? new Date(svc.date) : invoice.invoiceDate || new Date();
+      const totalPrice = svc.totalPrice ?? (svc.unitPrice * (svc.quantity || 1));
+
+      const performance = new Performance({
+        patientId,
+        doctorId: req.user._id,
+        serviceCode: svc.serviceCode || '',
+        serviceDescription: svc.description || 'Leistung',
+        serviceDatetime: serviceDate,
+        unitPrice: svc.unitPrice || 0,
+        quantity: svc.quantity || 1,
+        totalPrice,
+        tariffType,
+        createdBy: req.user._id,
+        status: 'recorded'
+      });
+      await performance.save();
+      created.push(performance);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: `${created.length} Leistung(en) aus Rechnung übernommen`,
+      data: { count: created.length, performances: created }
+    });
+  } catch (error) {
+    console.error('Performances from Invoice API Fehler:', error);
     res.status(400).json({
       success: false,
       message: error.message

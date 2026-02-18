@@ -29,6 +29,8 @@ interface PerformanceFormProps {
   onClose: () => void;
   onSave: (data: any) => void;
   performance?: any;
+  /** Schnell-Leistung: Vorausfüllung für neue Leistung (serviceCode, name/description, unitPrice, tariffType) */
+  initialServiceData?: { code?: string; name?: string; serviceCode?: string; serviceDescription?: string; unitPrice?: number; tariffType?: 'kassa' | 'wahl' | 'privat' };
   patientDiagnoses?: Array<{
     _id?: string;
     icd10Code: string;
@@ -43,6 +45,7 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
   onClose,
   onSave,
   performance,
+  initialServiceData,
   patientDiagnoses = []
 }) => {
   const dispatch = useDispatch();
@@ -110,15 +113,16 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
         autoBill: false // Beim Bearbeiten immer false (nur für neue Leistungen)
       });
     } else {
+      const prefill = initialServiceData;
       setFormData({
         patientId: '',
         appointmentId: '',
-        serviceCode: '',
-        serviceDescription: '',
+        serviceCode: prefill?.serviceCode || prefill?.code || '',
+        serviceDescription: prefill?.serviceDescription || prefill?.name || '',
         serviceDatetime: new Date().toISOString().slice(0, 16),
-        unitPrice: 0,
+        unitPrice: prefill?.unitPrice ?? 0,
         quantity: 1,
-        tariffType: 'privat',
+        tariffType: prefill?.tariffType || 'wahl',
         notes: '',
         diagnosisCodes: [],
         medicationCodes: [],
@@ -126,7 +130,7 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
       });
     }
     setErrors({});
-  }, [performance, open, systemAutoBillingEnabled]);
+  }, [performance, open, systemAutoBillingEnabled, initialServiceData]);
 
   // Patienten und Termine laden
   useEffect(() => {
@@ -377,9 +381,18 @@ const PerformanceForm: React.FC<PerformanceFormProps> = ({
             {/* Service-Code und Beschreibung */}
             <Grid size={{ xs: 12, sm: 6 }}>
               <Autocomplete
-                options={serviceCatalog}
+                options={(() => {
+                  const catalogMatch = serviceCatalog.find(s => s.code === formData.serviceCode);
+                  const hasPreFill = formData.serviceCode && formData.serviceDescription && !catalogMatch;
+                  if (hasPreFill) {
+                    const virtualOption = { code: formData.serviceCode, description: formData.serviceDescription, price: formData.unitPrice || 0 };
+                    return [virtualOption, ...serviceCatalog];
+                  }
+                  return serviceCatalog;
+                })()}
                 getOptionLabel={(option) => `${option.code} - ${option.description}`}
-                value={serviceCatalog.find(s => s.code === formData.serviceCode) || null}
+                value={serviceCatalog.find(s => s.code === formData.serviceCode) || (formData.serviceCode && formData.serviceDescription ? { code: formData.serviceCode, description: formData.serviceDescription, price: formData.unitPrice || 0 } : null)}
+                isOptionEqualToValue={(option, value) => option?.code === value?.code}
                 onChange={(_, value) => handleServiceSelect(value)}
                 renderInput={(params) => (
                   <TextField

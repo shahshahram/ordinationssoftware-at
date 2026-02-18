@@ -431,7 +431,8 @@ class BillingService {
    * Idempotency-Key generieren
    */
   generateIdempotencyKey(performance, route) {
-    return `${performance._id}:${performance.updatedAt.getTime()}:${route}`;
+    const timestamp = (performance.updatedAt || performance.createdAt || new Date()).getTime();
+    return `${performance._id}:${timestamp}:${route}`;
   }
 
   /**
@@ -567,17 +568,21 @@ class BillingService {
    * Billing-Job erstellen
    */
   async createBillingJob(performance, route, payload, idempotencyKey, user) {
+    // ObjectIds extrahieren (falls populated)
+    const doctorId = (performance.doctorId && (performance.doctorId._id || performance.doctorId)) || performance.doctorId;
+    const patientId = (performance.patientId && (performance.patientId._id || performance.patientId)) || performance.patientId;
+
     const job = new BillingJob({
       performanceId: performance._id,
-      doctorId: performance.doctorId,
-      patientId: performance.patientId,
+      doctorId,
+      patientId,
       target: route,
       payload,
       idempotencyKey,
       createdBy: user._id,
       status: 'PENDING'
     });
-    
+
     return await job.save();
   }
 

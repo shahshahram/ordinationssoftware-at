@@ -60,6 +60,7 @@ import { fetchDekursEntries, resetDekursState } from '../store/slices/dekursSlic
 import { fetchVitalSigns, clearVitalSigns } from '../store/slices/vitalSignsSlice';
 import { fetchPatientMedications } from '../store/slices/medicationSlice';
 import api from '../utils/api';
+import { stripHtmlTags } from '../utils/textUtils';
 import { format } from 'date-fns';
 import { de } from 'date-fns/locale';
 import VitalSignsChart from './VitalSignsChart';
@@ -498,11 +499,9 @@ const EPADateCard = memo(({
                               </Typography>
                             )}
                             {groupedEntry.metadata.service?.name && (
-                              <Typography 
-                                variant="caption" 
-                                color="text.secondary"
-                                dangerouslySetInnerHTML={{ __html: `<strong>Leistung:</strong> ${groupedEntry.metadata.service.name}` }}
-                              />
+                              <Typography variant="caption" color="text.secondary">
+                                <strong>Leistung:</strong> {stripHtmlTags(groupedEntry.metadata.service.name)}
+                              </Typography>
                             )}
                             {groupedEntry.metadata.type && (
                               <Typography variant="caption" color="text.secondary">

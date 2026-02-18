@@ -223,10 +223,11 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
         }
       );
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(result.message || 'One-Click-Abrechnung fehlgeschlagen');
+        const errorMsg = result?.message || result?.error || 'One-Click-Abrechnung fehlgeschlagen';
+        throw new Error(errorMsg);
       }
 
       setSnackbar({
@@ -250,12 +251,26 @@ const OneClickBillingButton: React.FC<OneClickBillingButtonProps> = ({
       // dispatch(fetchInvoices({}));
 
     } catch (error: any) {
-      console.error('One-Click-Billing Fehler:', error);
-      setSnackbar({
-        open: true,
-        message: `❌ ${error.message}`,
-        severity: 'error'
-      });
+      const msg = error?.message || '';
+      const isAlreadyBilled = msg.includes('bereits abgerechnet');
+
+      if (isAlreadyBilled) {
+        setSnackbar({
+          open: true,
+          message: 'ℹ️ Diese Leistung wurde bereits abgerechnet.',
+          severity: 'info'
+        });
+        if (onStatusChange) {
+          onStatusChange('sent');
+        }
+      } else {
+        console.error('One-Click-Billing Fehler:', error);
+        setSnackbar({
+          open: true,
+          message: `❌ ${msg || 'One-Click-Abrechnung fehlgeschlagen'}`,
+          severity: 'error'
+        });
+      }
     } finally {
       setLoading(false);
       setConfirmDialogOpen(false);

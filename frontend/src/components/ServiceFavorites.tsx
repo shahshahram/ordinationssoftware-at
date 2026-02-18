@@ -16,6 +16,7 @@ import {
   Euro as EuroIcon,
   LocationOn as LocationIcon
 } from '@mui/icons-material';
+import { stripHtmlTags } from '../utils/textUtils';
 
 interface ServiceFavorite {
   _id: string;
@@ -171,19 +172,18 @@ const ServiceFavorites: React.FC<ServiceFavoritesProps> = ({
                   )}
                 </Box>
                 
-                <Typography 
-                  variant="h6" 
-                  gutterBottom
-                  dangerouslySetInnerHTML={{ __html: service.name }}
-                />
+                <Typography variant="h6" gutterBottom>
+                  {stripHtmlTags(service.name || '')}
+                </Typography>
                 
                 {service.description && (
                   <Typography 
                     variant="body2" 
                     color="text.secondary" 
                     sx={{ mb: 1 }}
-                    dangerouslySetInnerHTML={{ __html: service.description }}
-                  />
+                  >
+                    {stripHtmlTags(service.description)}
+                  </Typography>
                 )}
                 
                 {service.category && (

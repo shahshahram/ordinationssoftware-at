@@ -122,6 +122,7 @@ import { Assignment, Science, Image, AccountCircle, CalendarToday, PhotoCamera, 
 import api, { getApiBaseUrl, getUploadsBaseUrl } from '../utils/api';
 import PerformanceForm from '../components/PerformanceForm';
 import { replacePlaceholders, PlaceholderContext } from '../utils/placeholders';
+import { stripHtmlTags } from '../utils/textUtils';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import SmartSuggestionsPanel from '../components/SmartSuggestions/SmartSuggestionsPanel';
 
@@ -4369,7 +4370,7 @@ const PatientOrganizer: React.FC = () => {
                           }}
                         >
                           <ListItemText
-                          primary={doc.title || doc.name || 'Unbenanntes Dokument'}
+                          primary={stripHtmlTags(doc.title || doc.name || 'Unbenanntes Dokument')}
                             secondary={
                               <Box>
                                 <Typography variant="caption" color="text.secondary">
@@ -4526,10 +4527,10 @@ const PatientOrganizer: React.FC = () => {
                     }} />
                     <Box sx={{ flexGrow: 1 }}>
                       <Typography variant="body2" fontWeight="medium">
-                        {template.name}
+                        {stripHtmlTags(template.name || '')}
                       </Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                        {template.description || 'Keine Beschreibung'}
+                        {stripHtmlTags(template.description || 'Keine Beschreibung')}
                       </Typography>
                     </Box>
                   </Stack>
@@ -4594,7 +4595,7 @@ const PatientOrganizer: React.FC = () => {
                   }} />
                   <Box sx={{ flexGrow: 1 }}>
                     <Typography variant="body2" fontWeight="medium">
-                      {letterType.name}
+                      {stripHtmlTags(letterType.name || '')}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                       {letterType.type} - Wichtigkeit: {letterType.importance}
@@ -6278,7 +6279,7 @@ const PatientOrganizer: React.FC = () => {
                         <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                           <Stack spacing={1} sx={{ flex: 1 }}>
                             <Typography variant="h6" component="div" sx={{ fontSize: '1rem', fontWeight: 600 }}>
-                              {template.name}
+                              {stripHtmlTags(template.name || '')}
                             </Typography>
                             {template.description && (
                               <Typography variant="body2" color="text.secondary" sx={{ 
@@ -6289,7 +6290,7 @@ const PatientOrganizer: React.FC = () => {
                                 textOverflow: 'ellipsis',
                                 flex: 1
                               }}>
-                                {template.description}
+                                {stripHtmlTags(template.description)}
                               </Typography>
                             )}
                             <Stack direction="row" spacing={0.5} flexWrap="wrap" sx={{ mt: 'auto', pt: 1 }}>

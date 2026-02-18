@@ -1810,8 +1810,8 @@ const Appointments: React.FC = () => {
           // Legacy appointment types für Rückwärtskompatibilität
           const appointmentTypes = servicesData.map((service: Service) => ({
             value: service._id,
-            label: service.name,
-            description: service.description,
+            label: stripHtmlTags(service.name || ''),
+            description: stripHtmlTags(service.description || ''),
             duration: service.base_duration_min,
             color: service.color_hex || '#2563EB',
             category: service.category
@@ -1875,8 +1875,8 @@ const Appointments: React.FC = () => {
       setServices(mockServices);
       const appointmentTypes = mockServices.map((service: Service) => ({
         value: service._id,
-        label: service.name,
-        description: service.description,
+        label: stripHtmlTags(service.name || ''),
+        description: stripHtmlTags(service.description || ''),
         duration: service.base_duration_min,
         color: service.color_hex || '#2563EB',
         category: service.category
@@ -3301,8 +3301,9 @@ const Appointments: React.FC = () => {
                             display="block" 
                             mt={1.5} 
                             sx={{ fontStyle: 'italic' }}
-                            dangerouslySetInnerHTML={{ __html: appointment.service.description }}
-                          />
+                          >
+                            {stripHtmlTags(appointment.service.description)}
+                          </Typography>
                         )}
                         {appointment.notes && (
                           <Typography variant="body2" color="text.secondary" mt={1} sx={{ fontStyle: 'italic' }}>

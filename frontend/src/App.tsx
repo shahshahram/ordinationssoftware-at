@@ -70,7 +70,6 @@ import TemplateManagement from './pages/TemplateManagement';
 import DocumentTemplateAdmin from './pages/DocumentTemplateAdmin';
 import AmbulanzbefundEditor from './pages/AmbulanzbefundEditor';
 import SuperAdminSetup from './pages/SuperAdminSetup';
-import PerformanceList from './components/PerformanceList';
 import MedicationImport from './pages/MedicationImport';
 
 // Patient Admission Forms
@@ -560,11 +559,7 @@ const InnerAppContent: React.FC = () => {
                       />
                       <Route 
                         path="/performance-billing" 
-                        element={
-                          <ProtectedRoute requiredPermissions={['billing.read']}>
-                            <PerformanceList />
-                          </ProtectedRoute>
-                        } 
+                        element={<Navigate to="/billing?tab=leistungen" replace />}
                       />
                       <Route 
                         path="/reimbursements" 

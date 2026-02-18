@@ -101,6 +101,7 @@ const Patients: React.FC = () => {
   
   // Ref for scroll container
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   
   // Dialog state
   const [openDialog, setOpenDialog] = useState(false);
@@ -1572,19 +1573,25 @@ const Patients: React.FC = () => {
           flexWrap="wrap"
           width={{ xs: '100%', sm: 'auto' }}
         >
-          <Button
-            variant="outlined"
-            startIcon={<Search />}
-            sx={{ 
-              borderRadius: 2,
-              fontSize: { xs: '0.875rem', sm: '1rem' },
-              minHeight: { xs: '44px', sm: 'auto' },
-              flex: { xs: 1, sm: 'none' }
-            }}
-            fullWidth={isMobile}
-          >
-            Suche
-          </Button>
+          <Tooltip title="Zum Suchfeld springen und suchen">
+            <Button
+              variant="outlined"
+              startIcon={<Search />}
+              onClick={() => {
+                searchInputRef.current?.focus();
+                searchInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }}
+              sx={{ 
+                borderRadius: 2,
+                fontSize: { xs: '0.875rem', sm: '1rem' },
+                minHeight: { xs: '44px', sm: 'auto' },
+                flex: { xs: 1, sm: 'none' }
+              }}
+              fullWidth={isMobile}
+            >
+              Suche
+            </Button>
+          </Tooltip>
           <Button
             variant="contained"
             startIcon={<Add />}
@@ -1611,6 +1618,7 @@ const Patients: React.FC = () => {
           <Stack spacing={{ xs: 2, sm: 3 }}>
             {/* Modern Search Bar */}
             <TextField
+              inputRef={searchInputRef}
               fullWidth
               placeholder="Suche nach Name, Ort, Vers.-Nr.…"
               value={searchTerm}
