@@ -167,11 +167,15 @@ app.use(helmet({
 // app.use(limiter);
 
 // CORS configuration
-// In Entwicklung: Origin reflektieren, damit Zugriff von anderen Geräten im LAN funktioniert (z. B. Tablet/Handy)
+// Produktion: FRONTEND_URL aus .env (z.B. https://mymedicloud.at)
+// Entwicklung: Origin reflektieren für Tablet/LAN
+const corsOrigins = process.env.NODE_ENV === 'production' && process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL, process.env.FRONTEND_URL.replace(/^https?:\/\/(www\.)?/, 'https://www.')]
+  : process.env.NODE_ENV === 'production'
+    ? []
+    : true;
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production'
-    ? ['https://yourdomain.com']
-    : true,
+  origin: corsOrigins.length ? corsOrigins : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-auth-token', 'Accept', 'X-Requested-With'],
@@ -207,8 +211,14 @@ app.use(mongoSanitize());
 app.use(compression());
 
 // Static files with CORS headers - muss VOR den Routes kommen
+function getProductionOrigins() {
+  const u = process.env.FRONTEND_URL;
+  if (!u) return [];
+  const withWww = u.replace(/^(https?:\/\/)(?!www\.)/, '$1www.');
+  return [...new Set([u, withWww])];
+}
 const allowedOrigins = process.env.NODE_ENV === 'production'
-  ? ['https://yourdomain.com']
+  ? getProductionOrigins()
   : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://192.168.178.163:3000'];
 
 // Custom handler for static files to ensure CORS headers are always set

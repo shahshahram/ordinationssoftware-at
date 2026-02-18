@@ -17,17 +17,21 @@ export const normalizeAbsoluteUrl = (url: string): string => {
 };
 
 /**
- * API-Basis-URL – immer zur Laufzeit aus dem aktuellen Host ermittelt.
- * Im Browser wird stets window.location.hostname verwendet, damit die App auf dem anderen Gerät
- * (z. B. Tablet unter 192.168.x.x) die API und Leistungsabrechnung korrekt erreicht.
- * REACT_APP_API_URL wird nur genutzt, wenn kein window vorhanden ist (z. B. Build/SSR).
+ * API-Basis-URL – zur Laufzeit ermittelt.
+ * - REACT_APP_API_URL hat Priorität (wird beim Build gesetzt, z.B. für mymedicloud.at)
+ * - Produktion (echte Domain): Same-Origin /api über Nginx – kein Port 5001
+ * - Lokal (localhost): Port 5001 für Dev
  */
 export const getApiBaseUrl = (): string => {
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    return `http://${window.location.hostname}:5001/api`;
-  }
   if (process.env.REACT_APP_API_URL) {
     return normalizeAbsoluteUrl(process.env.REACT_APP_API_URL);
+  }
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const host = window.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1') {
+      return `${window.location.origin}/api`;
+    }
+    return `http://${host}:5001/api`;
   }
   return 'http://localhost:5001/api';
 };
