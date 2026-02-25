@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import GradientDialogTitle from '../components/GradientDialogTitle';
 import { useTheme } from '@mui/material/styles';
@@ -306,6 +306,8 @@ const ServiceCatalogPage: React.FC = () => {
   const [devices, setDevices] = useState<Device[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [categories, setCategories] = useState<Array<{ _id?: string; name: string; code: string; color_hex?: string; is_active?: boolean }>>([]);
+  const [filterCategories, setFilterCategories] = useState<string[]>([]);
+  const [distinctCategoriesFromApi, setDistinctCategoriesFromApi] = useState<string[]>([]);
   const [selectedDeviceLocation, setSelectedDeviceLocation] = useState<string>('');
   const [selectedRoomLocation, setSelectedRoomLocation] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -430,7 +432,30 @@ const ServiceCatalogPage: React.FC = () => {
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Kategorien laden - nur aus ServiceCategories-Tabelle (strukturierte Kategorien)
+  const fetchFilterCategories = async () => {
+    try {
+      const response = await api.get<any>('/service-catalog/distinct-categories');
+      const raw = response?.data;
+      const data = raw?.data ?? (Array.isArray(raw) ? raw : []);
+      const arr = Array.isArray(data) ? data : [];
+      const distinct = arr.filter(Boolean);
+      setDistinctCategoriesFromApi(distinct);
+    } catch (error) {
+      console.error('Error fetching filter categories:', error);
+      setDistinctCategoriesFromApi([]);
+    }
+  };
+
+  // Merge: (1) distinct aus API (2) Service-Kategorien (3) aus aktuell geladenen Leistungen (Fallback)
+  useEffect(() => {
+    const fromApi = distinctCategoriesFromApi || [];
+    const fromCats = (categories || []).map((c) => c?.name).filter((x): x is string => Boolean(x));
+    const fromLoadedServices = (services || []).map((s) => (s as ServiceCatalog).category).filter((x): x is string => Boolean(x));
+    const merged = Array.from(new Set([...fromApi, ...fromCats, ...fromLoadedServices])).sort((a, b) => a.localeCompare(b, 'de'));
+    setFilterCategories(merged);
+  }, [distinctCategoriesFromApi, categories, services]);
+
+  // Kategorien laden - nur aus ServiceCategories-Tabelle (strukturierte Kategorien, für Formular)
   const fetchCategories = async () => {
     try {
       const response = await api.get<{data: Array<{ _id?: string; name: string; code: string; color_hex?: string }>}>('/service-categories');
@@ -626,6 +651,7 @@ const ServiceCatalogPage: React.FC = () => {
     fetchDevices();
     fetchRooms();
     fetchCategories();
+    fetchFilterCategories();
   }, []);
 
   // Gefilterte Geräte basierend auf ausgewähltem Standort
@@ -986,6 +1012,7 @@ const ServiceCatalogPage: React.FC = () => {
         enqueueSnackbar(editingService ? 'Leistung erfolgreich aktualisiert' : 'Leistung erfolgreich erstellt', { variant: 'success' });
         setDialogOpen(false);
         fetchServices();
+        fetchFilterCategories();
       } else {
         throw new Error(response.message || 'Fehler beim Speichern');
       }
@@ -1006,6 +1033,7 @@ const ServiceCatalogPage: React.FC = () => {
       if (response.success) {
         enqueueSnackbar('Leistung erfolgreich gelöscht', { variant: 'success' });
         fetchServices();
+        fetchFilterCategories();
       } else {
         throw new Error(response.message || 'Fehler beim Löschen');
       }
@@ -1153,10 +1181,11 @@ const ServiceCatalogPage: React.FC = () => {
                   label="Kategorie"
                 >
                   <MenuItem value="">Alle Kategorien</MenuItem>
-                  <MenuItem value="Diagnostik">Diagnostik</MenuItem>
-                  <MenuItem value="Therapie">Therapie</MenuItem>
-                  <MenuItem value="Beratung">Beratung</MenuItem>
-                  <MenuItem value="Behandlung">Behandlung</MenuItem>
+                  {filterCategories.map((cat) => (
+                    <MenuItem key={cat} value={cat}>
+                      {cat}
+                    </MenuItem>
+                  ))}
                 </Select>
               </FormControl>
             </Box>

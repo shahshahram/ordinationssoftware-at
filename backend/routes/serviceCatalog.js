@@ -99,6 +99,26 @@ router.get('/favorites', auth, checkPermission('services.read'), async (req, res
   }
 });
 
+// GET /api/service-catalog/distinct-categories - Alle in Leistungen verwendeten Kategorien (für Filter)
+router.get('/distinct-categories', auth, checkPermission('services.read'), async (req, res) => {
+  try {
+    const categories = await ServiceCatalog.distinct('category');
+    const sorted = (categories || [])
+      .filter(Boolean)
+      .sort((a, b) => String(a).localeCompare(String(b), 'de'));
+    res.json({
+      success: true,
+      data: sorted
+    });
+  } catch (error) {
+    console.error('Error fetching distinct categories:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Kategorien'
+    });
+  }
+});
+
 // GET /api/service-catalog - Alle Services abrufen
 router.get('/', auth, checkPermission('services.read'), async (req, res) => {
   try {
